@@ -7,5 +7,17 @@
   // next to the module it covers, which `scripts/run-tests.ts` globs `src/**` to collect.
   // Without it those compile into `dist/`: the production build shipped
   // `dist/integration/app-git.test.js` for as long as that directory sat outside `src/tests`.
-  "exclude": ["node_modules", "dist", "src/tests", "**/*.test.ts"]
+  //
+  // `src/exe-bundle-entry.ts` is excluded for a related reason: it is the entry point
+  // `bun build --compile` consumes, not a server module. It statically imports
+  // `typescript` (a devDependency) purely to force it into the binary, so emitting it into
+  // `dist/` would put that import in a plain server install where nothing needs it. It is
+  // still typechecked — `tsconfig.json` includes all of `src/**`.
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/tests",
+    "**/*.test.ts",
+    "src/exe-bundle-entry.ts"
+  ]
 }

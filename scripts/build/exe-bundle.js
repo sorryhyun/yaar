@@ -6,19 +6,35 @@
  *   bun scripts/build/exe-bundle.js --target windows
  *   bun scripts/build/exe-bundle.js --target linux
  *
- * Generates a temporary entry point that imports all frontend dist files
- * and pre-bundled libraries using `with { type: "file" }`, which tells Bun
- * to embed them as-is (without parsing HTML/CSS/JS). At runtime they're
- * accessible via `Bun.embeddedFiles`. The resulting executable is fully
- * self-contained with app development support built in.
+ * The three asset trees — the built frontend, the prebundled `@bundled/*` libraries, and
+ * the onnxruntime-web artifacts — ride inside the binary via `bun build --compile --asset`,
+ * which embeds a directory as-is (no HTML/CSS/JS parsing) and preserves each file's path
+ * under the directory's own basename. At runtime they come back as `Bun.embeddedFiles`,
+ * read by `packages/server/src/exe-assets.ts`.
+ *
+ * That basename is the contract, so this script does not pass the source directories
+ * directly — `packages/frontend/dist` would embed everything under `dist/`. It builds a
+ * small link farm under `dist/.exe-assets/` whose entries are named by
+ * `EMBEDDED_ASSET_DIRS`, and passes those. Links, not copies: `--asset` follows a symlink
+ * given to it directly (though not one it finds *inside* a directory it is walking, which
+ * is why the ML artifacts are hard links).
+ *
+ * This replaced a generated entry point — a `_build-entry.generated.ts` holding one
+ * `import … with { type: "file" }` per embedded file. The entry is now a checked-in file,
+ * `packages/server/src/exe-bundle-entry.ts`.
  *
  * Provider is selected at runtime via config/settings.json or PROVIDER env var.
  */
 
 import { execFileSync } from 'child_process';
-import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs';
-import { join, dirname, relative, basename } from 'path';
+import {
+  readdirSync, readFileSync, existsSync,
+  mkdirSync, rmSync, symlinkSync, linkSync, copyFileSync,
+} from 'fs';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
+
+import { EMBEDDED_ASSET_DIRS } from '../../packages/server/src/exe-assets.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..', '..');
@@ -55,58 +71,31 @@ const ext = target === 'windows' ? '.exe' : '';
 const exeName = 'yaar';
 const outfile = join(rootDir, 'dist', `${exeName}${ext}`);
 
-// ── Collect frontend dist files ──────────────────────────────────────
+// ── Locate the asset trees ───────────────────────────────────────────
 
-const frontendDist = join(rootDir, 'packages', 'frontend', 'dist');
-
-function collectFiles(dir) {
-  const files = [];
+/** Count files under `dir`, recursively — for the log lines, nothing else. */
+function countFiles(dir, match = () => true) {
+  let n = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...collectFiles(full));
-    } else {
-      files.push(full);
-    }
+    if (entry.isDirectory()) n += countFiles(join(dir, entry.name), match);
+    else if (match(entry.name)) n++;
   }
-  return files;
+  return n;
 }
 
-let frontendFiles;
-try {
-  frontendFiles = collectFiles(frontendDist);
-} catch {
+const frontendDist = join(rootDir, 'packages', 'frontend', 'dist');
+if (!existsSync(frontendDist)) {
   console.error(`Frontend dist not found at ${frontendDist}`);
   console.error('Run "bun run build" first.');
   process.exit(1);
 }
-
-console.log(`Embedding ${frontendFiles.length} frontend files into executable...`);
-
-// ── Collect pre-bundled library files ────────────────────────────────
+console.log(`Embedding ${countFiles(frontendDist)} frontend files into executable...`);
 
 const bundledLibsDir = join(rootDir, 'dist', 'bundled-libs');
-let bundledLibFiles = [];
-
-/** Recursively collect .js files, returning library names with subdirectory paths (e.g. "solid-js/html"). */
-function collectLibFiles(dir, prefix = '') {
-  const entries = readdirSync(dir, { withFileTypes: true });
-  const results = [];
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...collectLibFiles(full, prefix ? `${prefix}/${entry.name}` : entry.name));
-    } else if (entry.name.endsWith('.js')) {
-      const name = prefix ? `${prefix}/${basename(entry.name, '.js')}` : basename(entry.name, '.js');
-      results.push({ name, absPath: full });
-    }
-  }
-  return results;
-}
-
-if (existsSync(bundledLibsDir)) {
-  bundledLibFiles = collectLibFiles(bundledLibsDir);
-  console.log(`Embedding ${bundledLibFiles.length} bundled libraries...`);
+const hasBundledLibs = existsSync(bundledLibsDir);
+if (hasBundledLibs) {
+  const libCount = countFiles(bundledLibsDir, (n) => n.endsWith('.js'));
+  console.log(`Embedding ${libCount} bundled libraries...`);
 } else {
   console.warn('Warning: dist/bundled-libs/ not found. Run "bun run build:exe:libs" first.');
   console.warn('Bundled exe will not be able to resolve @bundled/* imports at runtime.');
@@ -158,100 +147,48 @@ try {
   process.exit(1);
 }
 
-// ── Generate temporary entry point ──────────────────────────────────
+// ── Stage the asset trees under the names they are embedded as ───────
+//
+// `--asset <path>` names its entries after `basename(path)`, so the staging names *are*
+// the runtime prefixes. Symlinks for the two directories (followed when handed to
+// `--asset` directly) and hard links for the ML artifacts, which have to sit *inside* a
+// directory — `--asset` skips a symlink it encounters while walking one. Both are free;
+// nothing here copies 24MB of onnxruntime on every build.
 
-const generatedEntry = join(rootDir, 'packages', 'server', 'src', '_build-entry.generated.ts');
-const serverSrcDir = join(rootDir, 'packages', 'server', 'src');
+const assetsDir = join(rootDir, 'dist', '.exe-assets');
+rmSync(assetsDir, { recursive: true, force: true });
+mkdirSync(assetsDir, { recursive: true });
 
-// Build import lines for each frontend file using { type: "file" }
-// so Bun embeds them as-is without parsing HTML/CSS/JS.
-// Each import returns a /$bunfs/ path at runtime; we map URL paths to these.
-const importLines = [];
-const mapEntries = [];
+/** Link `target` into the staging dir under `name`, and return the path to pass to --asset. */
+function stageDir(name, target) {
+  const link = join(assetsDir, name);
+  symlinkSync(target, link, 'dir');
+  return link;
+}
 
-frontendFiles.forEach((absPath, i) => {
-  // Relative path from generated file to frontend file (posix separators)
-  const rel = relative(serverSrcDir, absPath).split('\\').join('/');
-  const importPath = rel.startsWith('.') ? rel : `./${rel}`;
-  importLines.push(`import _f${i} from ${JSON.stringify(importPath)} with { type: "file" };`);
+const assetPaths = [stageDir(EMBEDDED_ASSET_DIRS.frontend, frontendDist)];
+if (hasBundledLibs) assetPaths.push(stageDir(EMBEDDED_ASSET_DIRS.bundledLibs, bundledLibsDir));
 
-  // URL path: strip frontendDist prefix → e.g. "/index.html", "/assets/index-xxx.js"
-  const urlPath = '/' + relative(frontendDist, absPath).split('\\').join('/');
-  mapEntries.push(`  ${JSON.stringify(urlPath)}: _f${i},`);
-});
-
-// Build import lines for each bundled library file
-const libImportLines = [];
-const libMapEntries = [];
-
-bundledLibFiles.forEach(({ name, absPath }, i) => {
-  const rel = relative(serverSrcDir, absPath).split('\\').join('/');
-  const importPath = rel.startsWith('.') ? rel : `./${rel}`;
-  libImportLines.push(`import _lib${i} from ${JSON.stringify(importPath)} with { type: "file" };`);
-  libMapEntries.push(`  ${JSON.stringify(name)}: _lib${i},`);
-});
-
-// Build import lines for each ML runtime artifact. `type: "file"` is what keeps the
-// .mjs ones intact — ORT's loader re-enters itself as a worker from its own script
-// URL, so it has to be served as-is rather than parsed and rebundled here.
-const mlImportLines = [];
-const mlMapEntries = [];
-
-mlRuntimeFiles.forEach(({ name, absPath }, i) => {
-  const rel = relative(serverSrcDir, absPath).split('\\').join('/');
-  const importPath = rel.startsWith('.') ? rel : `./${rel}`;
-  mlImportLines.push(`import _ml${i} from ${JSON.stringify(importPath)} with { type: "file" };`);
-  mlMapEntries.push(`  ${JSON.stringify(name)}: _ml${i},`);
-});
-
-const generatedSource = [
-  '// @ts-nocheck',
-  '// Auto-generated by build-exe-bundle.js — do not edit',
-  '',
-  ...importLines,
-  ...libImportLines,
-  ...mlImportLines,
-  '',
-  '// Embed the `typescript` module so the AST protocol extractor runs in the exe.',
-  '// load-typescript.ts hides its own import from the bundler (typescript is a',
-  '// devDependency that may be absent in a plain server install), so a static',
-  '// import here is what forces Bun to compile it into the binary. Without it the',
-  '// exe could not read an `app.register()` protocol at all: the AST extractor is',
-  '// its only reader, and without it those apps are refused rather than guessed at.',
-  "import * as __ts from 'typescript';",
-  '',
-  '// Set globals BEFORE importing server code.',
-  '// Using dynamic import() for exe-entry ensures these assignments',
-  '// run first — static imports execute before the module body.',
-  '',
-  '(globalThis as any).__YAAR_TYPESCRIPT = __ts.default ?? __ts;',
-  '',
-  '// Map URL paths to embedded file paths (/$bunfs/root/...)',
-  '(globalThis as any).__YAAR_EMBEDDED_FRONTEND = {',
-  ...mapEntries,
-  '};',
-  '',
-  ...(libMapEntries.length > 0 ? [
-    '// Map library names to embedded file paths for @bundled/* resolution',
-    '(globalThis as any).__YAAR_BUNDLED_LIBS = {',
-    ...libMapEntries,
-    '};',
-    '',
-  ] : []),
-  '// Map ORT artifact names to embedded file paths, served at /api/ml-runtime/',
-  '(globalThis as any).__YAAR_ML_RUNTIME = {',
-  ...mlMapEntries,
-  '};',
-  '',
-  `await import('./exe-entry.js');`,
-  '',
-].join('\n');
-
-writeFileSync(generatedEntry, generatedSource, 'utf-8');
+const mlStaging = join(assetsDir, EMBEDDED_ASSET_DIRS.mlRuntime);
+mkdirSync(mlStaging, { recursive: true });
+for (const { name, absPath } of mlRuntimeFiles) {
+  const dest = join(mlStaging, name);
+  // Hard link where possible; `dist/` and `node_modules/` are normally the same device,
+  // but a bind-mounted or containerised checkout need not be.
+  try {
+    linkSync(absPath, dest);
+  } catch {
+    copyFileSync(absPath, dest);
+  }
+}
+assetPaths.push(mlStaging);
 
 // ── Build ────────────────────────────────────────────────────────────
 
-const entrypoint = relative(rootDir, generatedEntry);
+const entrypoint = relative(
+  rootDir,
+  join(rootDir, 'packages', 'server', 'src', 'exe-bundle-entry.ts'),
+);
 
 // The binary has to carry its own version: PROJECT_ROOT for an exe is whatever
 // directory the user dropped it in, so config/env.ts has no package.json to read
@@ -275,6 +212,7 @@ const buildArgs = [
   `--outfile=${relative(rootDir, outfile)}`,
   '--minify',
   '--external', 'cpu-features',
+  ...assetPaths.flatMap((p) => ['--asset', relative(rootDir, p)]),
   ...defines,
 ];
 
@@ -284,6 +222,7 @@ try {
   execFileSync('bun', buildArgs, { cwd: rootDir, stdio: 'inherit' });
   console.log(`\nBuilt: ${outfile}`);
 } finally {
-  // Clean up generated entry point
-  try { unlinkSync(generatedEntry); } catch { /* ignore */ }
+  // The link farm has served its purpose; leaving it would put a symlink to the frontend
+  // build inside `dist/`, which the release step archives.
+  rmSync(assetsDir, { recursive: true, force: true });
 }
