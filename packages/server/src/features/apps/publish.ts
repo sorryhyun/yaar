@@ -52,6 +52,16 @@ export interface PublishResult {
  * That is fine for the freeze-and-ship model (`publish-staging.ts`): the artifact
  * digest attests *these exact frozen bytes*, and source-drift detection uses
  * `computeSourceHash` over `src/` content, never a re-tar comparison.
+ *
+ * **Why this is still a spawn when the two extract paths are not.** `Bun.Archive`
+ * replaced the `tar` spawns in `apps/archive.ts` and `update/installer.ts`; this one
+ * stayed, deliberately. Measured on 1.4.0: `Bun.Archive` emits `ustar\0`00 with
+ * *regular-file entries only* — no directory members — mode 0644, and an mtime from
+ * the current clock (so no determinism is gained either, which was the gate for
+ * touching creation at all). Every entry here crosses the wire to the marketplace's
+ * own server-side extractor, which this repo cannot test; swapping a reader is
+ * reversible in one process, swapping what a *published* artifact looks like is not.
+ * Revisit when there is a way to verify the far end.
  */
 export async function packageAppTarball(appId: string, appDir: string): Promise<Buffer> {
   const proc = spawn(

@@ -140,20 +140,23 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * Extract the apps archive with the system `tar`.
+ * Extract the apps archive.
  *
- * The same tool both installers use, and present by default on macOS, Linux, and
- * Windows 10+. Bun ships no tar reader, and vendoring one to save a spawn would be
- * a larger surface than the spawn is.
+ * `Bun.Archive` reads the tarball in-process, so the update no longer depends on a
+ * system `tar` being on PATH — which was always thinnest on the Windows standalone
+ * exe, the one platform where an update failing halfway is hardest to recover from.
+ * Entry names are sanitized by `extract()` itself, so nothing here can write outside
+ * `into`.
+ *
+ * The bytes are read eagerly: `Bun.Archive` rejects a lazy `Bun.file()` with
+ * "Unrecognized archive format". The asset was just downloaded and checksummed, so
+ * its size is known and bounded.
  */
 async function extractApps(archive: string, into: string): Promise<void> {
-  const proc = Bun.spawn(['tar', '-xzf', archive, '-C', into], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
-  if (code !== 0) {
-    throw new Error(`Could not unpack ${APPS_ASSET} (tar exited ${code}): ${stderr.trim()}`);
+  try {
+    await new Bun.Archive(await Bun.file(archive).bytes()).extract(into);
+  } catch (err) {
+    throw new Error(`Could not unpack ${APPS_ASSET}: ${err instanceof Error ? err.message : err}`);
   }
   if (!(await exists(join(into, 'apps')))) {
     throw new Error(`${APPS_ASSET} did not contain an apps/ directory.`);
