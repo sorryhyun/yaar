@@ -44,7 +44,7 @@ INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Install path (default: ~/.lo
 
 Bundled apps ship separately as `yaar-apps.tar.gz`; the install scripts extract them next to the binary automatically.
 
-**Build from source** (requires [Bun](https://bun.sh/) >= 1.3):
+**Build from source** (requires [Bun](https://bun.sh/) >= 1.4):
 ```bash
 git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install

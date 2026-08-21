@@ -45,7 +45,7 @@ INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 (기본: ~/.lo
 
 번들 앱은 바이너리와 별도로 `yaar-apps.tar.gz`로 배포되며, 설치 스크립트가 바이너리 옆에 자동으로 풀어줍니다.
 
-**소스에서 빌드** ([Bun](https://bun.sh/) >= 1.3 필요):
+**소스에서 빌드** ([Bun](https://bun.sh/) >= 1.4 필요):
 ```bash
 git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
