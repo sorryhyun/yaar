@@ -26,6 +26,12 @@ async function build() {
     target: 'browser',
     minify: true,
     splitting: true,
+    // React Compiler (Bun 1.4): auto-memoizes components and hooks — 41 functions
+    // here. It bails out per function rather than miscompiling, and measured on this
+    // tree every site the stricter react-hooks rules flag for refs-during-render or
+    // immutability is one it declined to compile. Note `bun test` transpiles without
+    // this flag, so the suite cannot catch a compiler-only regression.
+    reactCompiler: true,
     sourcemap: 'linked',
     naming: '[dir]/[name]-[hash].[ext]',
     plugins: [pathAliasPlugin],

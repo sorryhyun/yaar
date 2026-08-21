@@ -56,6 +56,9 @@ const result = await Bun.build({
   outdir: outDir,
   target: 'browser',
   splitting: true,
+  // Kept in step with packages/frontend/build.ts: dev must compile the same way
+  // prod does, or a React Compiler behavior change only ever shows up in a release.
+  reactCompiler: true,
   sourcemap: 'linked',
   naming: '[dir]/[name]-[hash].[ext]',
   plugins: [pathAliasPlugin],
