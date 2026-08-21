@@ -107,7 +107,7 @@
   },
   "devDependencies": {
     "@e965/xlsx": "catalog:",
-    "@types/bun": "^1.3.14",
+    "@types/bun": "^1.4.0",
     "animejs": "catalog:",
     "cannon-es": "catalog:",
     "chart.js": "catalog:",

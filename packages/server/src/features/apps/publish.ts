@@ -11,8 +11,8 @@
  * instant: the response says "live in ~1 minute", once the redeploy lands.
  */
 
-import { dirname, basename } from 'path';
-import { spawn } from 'bun';
+import { basename, join } from 'path';
+import { readdir } from 'fs/promises';
 import { MARKET_URL } from '../../config.js';
 import { getAuthStatus, getIdToken } from '../market/google-auth.js';
 import { termsGateError } from './publisher-terms.js';
@@ -41,68 +41,83 @@ export interface PublishResult {
 }
 
 /**
- * tar.gz of the app directory, entries prefixed `{appId}/` — the same shape
- * `GET /api/apps/{id}/download` produces, so the round trip is symmetric.
+ * Every entry name in the tarball is `{appId}/...`, so a directory named after the
+ * app is what the archive unpacks to — the shape `GET /api/apps/{id}/download`
+ * produces and `extractAppArchive` strips one component from, so the round trip is
+ * symmetric.
+ */
+const SKIPPED_DIRS = new Set(['dist']);
+
+/** macOS cruft that has no business on the marketplace, at any depth. */
+function isMacCruft(name: string): boolean {
+  // Finder drops `.DS_Store` into every directory it browses; macOS writes a `._{name}`
+  // AppleDouble sidecar next to a file when it crosses a filesystem that cannot hold
+  // xattrs (a zip extract, a USB/network share).
+  return name === '.DS_Store' || name.startsWith('._');
+}
+
+/**
+ * Collect the app's publishable files as `{ 'appId/rel/path': bytes }`.
  *
  * `dist/` is excluded: the marketplace ships source and YAAR compiles on install,
  * so uploading build output would only bloat the archive and stale the repo.
  *
- * Note the gzip stream is **not** byte-deterministic — `tar czf` stamps an mtime
- * into the gzip header — so two archives of identical source hash differently.
- * That is fine for the freeze-and-ship model (`publish-staging.ts`): the artifact
- * digest attests *these exact frozen bytes*, and source-drift detection uses
- * `computeSourceHash` over `src/` content, never a re-tar comparison.
+ * Regular files only. `readdir` with `withFileTypes` tells us what each entry is, and
+ * anything that is neither a file nor a directory — a symlink, a socket, a device node —
+ * is skipped rather than followed. An app is source text and has never needed one, and
+ * this is the same posture `extractAppArchive` takes on the way back in.
+ */
+async function collectAppFiles(appDir: string): Promise<Record<string, Uint8Array>> {
+  const prefix = basename(appDir);
+  const entries: Record<string, Uint8Array> = {};
+
+  async function walk(dir: string, rel: string): Promise<void> {
+    const dirents = await readdir(dir, { withFileTypes: true });
+    await Promise.all(
+      dirents.map(async (dirent) => {
+        if (isMacCruft(dirent.name)) return;
+        // Archive entry names are always `/`-separated, whatever the host uses.
+        const relPath = rel ? `${rel}/${dirent.name}` : dirent.name;
+        const abs = join(dir, dirent.name);
+        if (dirent.isDirectory()) {
+          if (rel === '' && SKIPPED_DIRS.has(dirent.name)) return;
+          await walk(abs, relPath);
+        } else if (dirent.isFile()) {
+          entries[`${prefix}/${relPath}`] = await Bun.file(abs).bytes();
+        }
+      }),
+    );
+  }
+
+  await walk(appDir, '');
+  if (Object.keys(entries).length === 0) {
+    throw new Error(`"${prefix}" contains no files to publish`);
+  }
+  return entries;
+}
+
+/**
+ * tar.gz of the app directory, entries prefixed `{appId}/`.
  *
- * **Why this is still a spawn when the two extract paths are not.** `Bun.Archive`
- * replaced the `tar` spawns in `apps/archive.ts` and `update/installer.ts`; this one
- * stayed, deliberately. Measured on 1.4.0: `Bun.Archive` emits `ustar\0`00 with
- * *regular-file entries only* — no directory members — mode 0644, and an mtime from
- * the current clock (so no determinism is gained either, which was the gate for
- * touching creation at all). Every entry here crosses the wire to the marketplace's
- * own server-side extractor, which this repo cannot test; swapping a reader is
- * reversible in one process, swapping what a *published* artifact looks like is not.
- * Revisit when there is a way to verify the far end.
+ * Built by `Bun.Archive` from bytes we collected ourselves, which is why the excludes
+ * above are code rather than `tar --exclude` patterns: the last `tar` spawn in the repo
+ * is gone, and with it the shell-shaped failure modes (a `tar` that is missing, or is
+ * bsdtar rather than GNU, or synthesizes AppleDouble members for xattr-bearing files).
+ *
+ * Two shape differences from what `tar czf` used to emit, neither of which the far end
+ * cares about: the archive carries regular-file entries only (no directory members — a
+ * path-creating extractor makes the directories), and mode is a uniform 0644 (app source
+ * is text; nothing here is executable). The gzip stream is **not** byte-deterministic
+ * either way — an mtime from the current clock goes into it — so two archives of
+ * identical source still hash differently. That is fine for the freeze-and-ship model
+ * (`publish-staging.ts`): the artifact digest attests *these exact frozen bytes*, and
+ * source-drift detection uses `computeSourceHash` over `src/` content, never a re-tar
+ * comparison.
  */
 export async function packageAppTarball(appId: string, appDir: string): Promise<Buffer> {
-  const proc = spawn(
-    [
-      'tar',
-      'czf',
-      '-',
-      '--exclude',
-      `${basename(appDir)}/dist`,
-      // Unanchored so they catch macOS cruft at any depth: `.DS_Store` (Finder drops
-      // these into every browsed directory) and `._*` AppleDouble sidecars (macOS
-      // writes `._app.json` next to a file when it crosses a filesystem that can't
-      // hold xattrs — a zip extract, USB/network share). Neither belongs on the marketplace.
-      '--exclude',
-      '.DS_Store',
-      '--exclude',
-      '._*',
-      '-C',
-      dirname(appDir),
-      basename(appDir),
-    ],
-    {
-      stdout: 'pipe',
-      stderr: 'pipe',
-      // Belt-and-suspenders: on tar builds that *do* emit AppleDouble metadata for
-      // xattr-bearing files (older/Apple bsdtar), this suppresses the synthesized
-      // `._{name}` members. GNU tar and libarchive 3.5+ ignore it, so it's a no-op there.
-      env: { ...process.env, COPYFILE_DISABLE: '1' },
-    },
-  );
-
-  const [tarball, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).arrayBuffer(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (exitCode !== 0) {
-    throw new Error(stderr.trim() || `tar exited with code ${exitCode}`);
-  }
-  return Buffer.from(tarball);
+  const files = await collectAppFiles(appDir);
+  const bytes = await new Bun.Archive(files, { compress: 'gzip' }).bytes();
+  return Buffer.from(bytes);
 }
 
 /** Said in one voice by every path that needs a publisher and hasn't got one. */

@@ -7,6 +7,8 @@
  * `Bun.Archive` retired the spawn, and with it a whole class of shell-shaped bugs (GNU tar
  * reads the colon in `C:\…\app.tar.gz` as remote `host:path` syntax and tries to reach a
  * machine called C, which is why the old invocation had to keep every path relative to cwd).
+ * Both ends of the round trip are `Bun.Archive` now: `packageAppTarball` builds the archive
+ * this function takes apart.
  *
  * Two things the spawn used to handle that are this function's job now:
  *

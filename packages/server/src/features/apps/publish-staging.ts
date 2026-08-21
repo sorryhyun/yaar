@@ -21,9 +21,10 @@
  *    hashes, deterministic). `appDiff` supplies the *which files* detail for a
  *    human confirmation, best-effort, only once drift is already known.
  *
- * We hash source rather than re-tarring because the gzip stream is not
- * byte-deterministic (`tar czf` stamps an mtime), so a re-tar would always differ
- * even when nothing changed. Source content hashing is the correct drift signal.
+ * We hash source rather than re-packaging because the gzip stream is not
+ * byte-deterministic (an mtime from the current clock goes into it), so a rebuilt
+ * archive would always differ even when nothing changed. Source content hashing is
+ * the correct drift signal.
  */
 
 import { join } from 'path';

@@ -3,7 +3,10 @@
 **Status:** items 1–4 landed and have been cut from this file — their write-ups are in git
 history (and, where it matters at the call site, in code comments). Items 5–8 remain open and
 keep their original numbers so earlier references still resolve. The version bump itself is
-done (`.bun-version` → 1.4.0, `bun-types` catalog pin → `^1.4.0`, `engines.bun` → `>=1.4.0`).
+done (`.bun-version` → 1.4.0, `bun-types` catalog pin → `^1.4.0`, root `@types/bun` →
+`^1.4.0` so its nested `bun-types` stops pinning 1.3.14, `engines.bun` → `>=1.4.0`).
+`tar` is now entirely gone from the repo: item 2 finished by moving tarball *creation* onto
+`Bun.Archive` too.
 **Date:** 2026-08-21
 **Reference:** [Bun 1.4 release notes](https://bun.com/blog/bun-v1.4)
 
@@ -11,7 +14,7 @@ done (`.bun-version` → 1.4.0, `bun-types` catalog pin → `^1.4.0`, `engines.b
 
 Several YAAR subsystems existed to work around gaps in Bun ≤1.3, each carrying a documented
 apology for its own existence. Bun 1.4 shipped first-class answers, and items 1–4 spent them:
-the hand-partitioned mock test processes are gone (`--isolate`), two of three `tar` spawns are
+the hand-partitioned mock test processes are gone (`--isolate`), all three `tar` spawns are
 gone (`Bun.Archive`), the synthetic exe entry point is gone (`--compile --asset`), and the
 frontend is auto-memoized (`--react-compiler`).
 
@@ -38,11 +41,6 @@ HTTP-server memory, ~2× faster startup, and a smaller binary for the standalone
   cwd reasons.
 - **`trustedDependencies` narrowing (breaking in 1.4)** — only `canvas` is listed, from the
   npm registry; unaffected.
-- **`Bun.Archive` for *creating* the published app tarball** — the one part of item 2 left
-  undone, and deliberately. Measured on 1.4.0, its gzipped output is not byte-deterministic,
-  and it emits regular-file entries only (no directory members). Every byte crosses to the
-  marketplace's own server-side extractor, which this repo cannot exercise. `publish.ts` stays
-  a `tar czf` spawn until the far end can be verified.
 
 ## Items
 
@@ -106,3 +104,12 @@ no new mechanism. Needs a real design pass on *which* sweeps are safe to run mid
   one, two `set-state-in-effect` sites (`DesktopStatusBar`, `LoadingScreen`) did compile and
   behave, and the single purity site is in `RecentActionsPanel`, which is exported but never
   mounted.
+- 2026-08-21: item 2 finished — `packageAppTarball` builds the published app tarball with
+  `Bun.Archive` instead of spawning `tar czf`, so no `tar` process is left anywhere in the
+  repo. The earlier reservation (its gzip output is not byte-deterministic) was dropped as
+  overcautious: nothing in the publish flow ever compared two archives. Integrity is the
+  SHA-256 of the *frozen* bytes and drift detection is `computeSourceHash` over `src/`
+  content, both unaffected by how the archive is produced. Two shape changes go up with it —
+  regular-file entries only (no directory members) and a uniform 0644 mode — which a
+  path-creating extractor does not notice; the excludes (`dist/`, `.DS_Store`, `._*`) moved
+  from `tar --exclude` patterns into the directory walk.
