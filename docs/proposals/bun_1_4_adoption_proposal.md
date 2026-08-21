@@ -1,7 +1,7 @@
 # Proposal: Bun 1.4 adoption — retiring what the runtime now does for us
 
-**Status:** items 1–4 landed and have been cut from this file — their write-ups are in git
-history (and, where it matters at the call site, in code comments). Items 5–8 remain open and
+**Status:** items 1–5 landed and have been cut from this file — their write-ups are in git
+history (and, where it matters at the call site, in code comments). Items 6–8 remain open and
 keep their original numbers so earlier references still resolve. The version bump itself is
 done (`.bun-version` → 1.4.0, `bun-types` catalog pin → `^1.4.0`, root `@types/bun` →
 `^1.4.0` so its nested `bun-types` stops pinning 1.3.14, `engines.bun` → `>=1.4.0`).
@@ -16,11 +16,12 @@ Several YAAR subsystems existed to work around gaps in Bun ≤1.3, each carrying
 apology for its own existence. Bun 1.4 shipped first-class answers, and items 1–4 spent them:
 the hand-partitioned mock test processes are gone (`--isolate`), all three `tar` spawns are
 gone (`Bun.Archive`), the synthetic exe entry point is gone (`--compile --asset`), and the
-frontend is auto-memoized (`--react-compiler`).
+frontend is auto-memoized (`--react-compiler`). Item 5 is the one that went the other way: the
+Bun 1.4 feature it named turned out to be structurally wrong for this server, and the *behavior*
+it promised was worth having anyway, so `http/routes/static.ts` now answers conditional GETs
+itself.
 
-What is left is smaller and less load-bearing. `http/routes/static.ts` still serves the frontend
-with a manual MIME table and no ETag/304/Range handling at all (item 5); the remaining items are
-opportunistic adoptions with no current pain behind them.
+What is left is opportunistic adoption with no current pain behind it.
 
 The bump alone also bought runtime wins with no code change: ~5× lower idle CPU, 13–48% lower
 HTTP-server memory, ~2× faster startup, and a smaller binary for the standalone exe.
@@ -43,13 +44,6 @@ HTTP-server memory, ~2× faster startup, and a smaller binary for the standalone
   npm registry; unaffected.
 
 ## Items
-
-### 5. `Bun.serve` static `{ dir }` routes for the dev path (tryable)
-
-`http/routes/static.ts`'s filesystem branch gets Content-Type, ETag, Last-Modified, 304, and
-Range handling for free — none of which it does today. The bundled-exe branch reads from
-`Bun.embeddedFiles` and stays custom, as does the SPA `index.html` fallback. Worth doing when
-someone is next in that file; not urgent since the dev server is local.
 
 ### 6. `Bun.JSONL` streaming reads for session logs (tryable)
 
@@ -113,3 +107,29 @@ no new mechanism. Needs a real design pass on *which* sweeps are safe to run mid
   regular-file entries only (no directory members) and a uniform 0644 mode — which a
   path-creating extractor does not notice; the excludes (`dist/`, `.DS_Store`, `._*`) moved
   from `tar --exclude` patterns into the directory walk.
+- 2026-08-21: item 5 landed, but **not** as `{ dir }` routes — measured on 1.4.0, a directory
+  route cannot serve this frontend, and `static.ts`'s header records why at the call site. Four
+  reasons, any one of them disqualifying: the build is flat, so the only prefix available is
+  `/*` (the webfont URLs are baked into `features/fonts`' catalog and thus into app-facing CSS,
+  so the namespace cannot simply move); a route preempts `fetch` and a miss is a `404` rather
+  than a hand-off, which would take the SPA fallback *and* the `desktopRedirectTarget` check
+  that keeps the desktop document off the app origin away from `createFetchHandler`;
+  `DirectoryRouteOptions` has no header hook, so responses would lose the CORS headers
+  `withCors` attaches; and it pins the directory by fd at `serve()` time, which `dev-bundler.ts`
+  invalidates on its first hot rebuild by `rmSync`+`renameSync`-ing a new `dist/` into place —
+  every asset `404`s from then on, `statCache: false` no different, and a missing `dist/` throws
+  `ENOENT` at boot.
+  The premise was also partly wrong: Bun *already* infers `Content-Type` from a `BunFile` and
+  already answers `Range` with a `206` on the plain `fetch` path, so the real gap was conditional
+  GET alone. That is now implemented for both branches — the exe branch, which no directory route
+  could ever have helped, included. Filesystem assets get a weak `size`-`mtime` ETag plus
+  `Last-Modified`; embedded assets get a *strong* one from the content hash Bun mints into the
+  `/$bunfs/root/main-<hash>.js` path (confirmed content-derived by rebuilding a fixture with
+  different bytes at the same length) and no `Last-Modified`, since an embedded file reports the
+  sentinel 4503599627370495 — a date in the year 144680. Content-hashed build outputs are
+  `immutable`; everything else, the four webfonts above all, is `no-cache` and revalidates.
+  Measured end to end through the real fetch handler: a full desktop reload drops from 14.59 MB
+  of asset bodies to 0. 11 new tests in `static-conditional-get.test.ts`, one of which caught a
+  real defect in the `If-None-Match` list parse (the `W/` prefix was tested before the
+  separator's space was trimmed, so every entry after the first compared weak against strong).
+  Full suite green: 2576 pass / 0 fail / 1 skip across 241 files.
