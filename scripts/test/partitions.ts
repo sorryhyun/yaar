@@ -11,26 +11,32 @@
  *     assert anything if remote mode was pinned before the first import. In a
  *     local-mode process `checkHttpAuth` returns `null` on its first line and every
  *     assertion in that file passes vacuously — or, as it happens today, fails.
- *   - **`mock.module` is process-global and has no teardown.** `mock.restore()`
- *     cannot undo it once the real module has loaded, so a stub installed by one
- *     file is visible to every other file in the process, and which file wins is a
- *     race rather than an order. That race is not theoretical: `app-agent-model.test.ts`
- *     passed locally and failed in CI because four other files stub the
- *     `agents/profiles/index.js` barrel.
- *   - **Some suites own real resources and are sequential-only.** Running the 80
- *     non-remote server files in one `--parallel` process fails 45 of them; the same
- *     80 run sequentially pass. Two cannot overlap with anything: `src/tests/loopback/`
- *     (real stack, `FakeClient` + `ScriptedProvider`) binds real sockets, and
- *     `src/tests/realfs/` drives real `git` over one on-disk fixture directory that its
- *     cases reseed. Neither is the *integration* suite — that is `packages/tests/`,
- *     a separate package and therefore already a separate partition.
+ *   - **Some suites own real resources and cannot overlap with anything.**
+ *     `src/tests/loopback/` (real stack, `FakeClient` + `ScriptedProvider`) binds real
+ *     sockets, and `src/tests/realfs/` drives real `git` over one on-disk fixture
+ *     directory that its cases reseed — one shared path, so two of its files running
+ *     at once reseed under each other. Both are therefore `parallel: false` groups of
+ *     their own. Neither is the *integration* suite — that is `packages/tests/`, a
+ *     separate package and therefore already a separate partition.
+ *   - **The root preload sets up exactly one package per process.**
+ *     `scripts/test/preload-root.ts` dispatches on the anchored package because the
+ *     setups are mutually exclusive — the frontend installs happy-dom globals, and
+ *     `shims/yaar/define-app.ts` branches on `typeof window`, so a global DOM quietly
+ *     sends the compiler's tests down the browser path. Two packages in one process
+ *     therefore means one of them ran unconfigured.
  *
- * Plus one that is about the harness rather than the code under test: **the root
- * preload sets up exactly one package per process.** `scripts/test/preload-root.ts`
- * dispatches on the anchored package because the setups are mutually exclusive —
- * the frontend installs happy-dom globals, and `shims/yaar/define-app.ts` branches on
- * `typeof window`, so a global DOM quietly sends the compiler's tests down the browser
- * path. Two packages in one process therefore means one of them ran unconfigured.
+ * **One reason used to be here and no longer is.** `mock.module` is process-global and
+ * `mock.restore()` cannot undo it once the real module has loaded, so until Bun 1.4
+ * every file installing one needed a process to itself — 15 files, 15 processes — and
+ * a stub that escaped produced order-dependent failures rather than a red line
+ * (`app-agent-model.test.ts` passed locally and failed in CI because four other files
+ * stub the `agents/profiles/index.js` barrel). `bun test --isolate` runs each file in
+ * a fresh global with the module registry cleared, which is precisely the teardown
+ * that was missing. Measured on 1.4.0 before the rule was deleted: all 143 unit +
+ * mocking files pass in one `--parallel` process, and pass again in a single
+ * `--isolate` process in sorted *and* reversed order. The `units` partition therefore
+ * **depends on** `--isolate`, which is why `run-tests.ts` passes that flag explicitly
+ * instead of leaning on `--parallel` to imply it.
  *
  * Two consumers, so that the rule cannot drift from its enforcement:
  *
@@ -51,28 +57,17 @@ export interface Partition {
   reason: string;
   /** Environment the group's process needs on top of the pinned baseline. */
   env: Record<string, string>;
-  /** May the group's files run concurrently inside their one process (`bun test --parallel`)? */
+  /**
+   * May the group's files run concurrently inside their one process (`bun test --parallel`)?
+   *
+   * `false` means "sequential *and* not isolated": the runner passes neither flag, so such a
+   * group keeps one global and one module registry across its files. That is what a suite
+   * holding a real socket or a real fixture directory needs — and it is also why the
+   * partition guard still works there (see `partition-guard.ts`).
+   */
   parallel: boolean;
   /** Command that runs this group correctly, quoted in the guard's error. */
   howToRun: string;
-}
-
-/**
- * Does this file install a module mock?
- *
- * Comment lines are dropped first — several files *discuss* `mock.module` in prose (the
- * loopback harness explains at length why it does not use one), and counting those would
- * isolate files that never mock anything.
- */
-export function installsModuleMock(source: string): boolean {
-  const code = source
-    .split('\n')
-    .filter((line) => {
-      const t = line.trimStart();
-      return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
-    })
-    .join('\n');
-  return /\bmock\.module\s*\(/.test(code);
 }
 
 /** Absolute path → repo-relative posix path, or `null` if it is outside the repo. */
@@ -85,12 +80,13 @@ export function toRepoRelative(absPath: string, repoRoot: string): string | null
 /**
  * The partition of one test file.
  *
- * `repoRel` is repo-relative and posix-separated (`packages/server/src/tests/x.test.ts`);
- * `source` is the file's text, needed only for the `mock.module` scan. Returns `null` for a
- * path outside `packages/` — there are none today, and inventing a rule for a file we cannot
- * see is how a guard starts lying.
+ * `repoRel` is repo-relative and posix-separated (`packages/server/src/tests/x.test.ts`).
+ * Path alone decides it — the rule stopped needing the file's *text* when the `mock.module`
+ * scan went away, which is why `run-tests.ts` no longer reads all 143 files to schedule them.
+ * Returns `null` for a path outside `packages/` — there are none today, and inventing a rule
+ * for a file we cannot see is how a guard starts lying.
  */
-export function partitionOf(repoRel: string, source: string): Partition | null {
+export function partitionOf(repoRel: string): Partition | null {
   const pkg = /^packages\/([^/]+)\//.exec(repoRel)?.[1];
   if (!pkg) return null;
 
@@ -110,9 +106,10 @@ export function partitionOf(repoRel: string, source: string): Partition | null {
     };
   }
 
-  // Directory rules come first: a file under one of these is that suite's, whether or not it
-  // also mocks. `src/tests/loopback/` is additionally forbidden from mocking at all (see
-  // packages/server/CLAUDE.md), so the two rules do not actually compete there.
+  // Three directories, then everything else. `src/tests/loopback/` is additionally forbidden
+  // from calling `mock.module` at all (see packages/server/CLAUDE.md) — not because the stub
+  // would leak, which `--isolate` has settled, but because the harness's whole point is that
+  // it substitutes through real seams.
   if (inPackage.startsWith('src/tests/remote/')) {
     return {
       key: 'server:remote',
@@ -142,26 +139,16 @@ export function partitionOf(repoRel: string, source: string): Partition | null {
       key: 'server:realfs',
       label: 'realfs',
       reason:
-        'resolves real paths through PROJECT_ROOT, so it cannot share a process with the ' +
-        "units — several of them mock.module it to '/mock-root' and the stub has no teardown",
+        'drives real git over one on-disk fixture directory that its own cases reseed, so it ' +
+        'runs sequentially in a process of its own rather than alongside the parallel units',
       howToRun: 'cd packages/server && bun test src/tests/realfs',
-    };
-  }
-  if (installsModuleMock(source)) {
-    return {
-      ...base,
-      key: `server:mock:${repoRel}`,
-      label: `mock:${inPackage}`,
-      reason:
-        'installs mock.module, which is process-global with no teardown — its stub would be ' +
-        'visible to every other file in the process, so it gets a process to itself',
-      howToRun: `cd packages/server && bun test ${inPackage}`,
     };
   }
   return {
     key: 'server:units',
     label: 'units',
-    reason: 'is a plain unit test, which the suite runs concurrently in one shared process',
+    reason:
+      'is a plain unit test, which the suite runs concurrently in one shared --isolate process',
     env: {},
     parallel: true,
     howToRun: 'bun run --filter @yaar/server test',

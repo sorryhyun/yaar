@@ -45,7 +45,12 @@ interface Group {
 
 async function run(group: Group): Promise<{ ok: boolean; counts: TestCounts }> {
   const { partition, files } = group;
-  const args = [...files, ...(partition.parallel ? ['--parallel'] : [])];
+  // `--isolate` is the load-bearing half and is named explicitly, even though `--parallel`
+  // has implied it since Bun 1.4: the `units` group holds the files that install
+  // `mock.module`, and a fresh module registry per file is the only thing keeping their
+  // stubs from leaking into each other. `--parallel` is the speed half, and losing it
+  // should not silently cost correctness. See scripts/test/partitions.ts.
+  const args = [...files, ...(partition.parallel ? ['--parallel', '--isolate'] : [])];
   const proc = Bun.spawn(['bun', 'test', ...args], {
     cwd: PACKAGE_DIR,
     stdout: 'pipe',
@@ -87,8 +92,7 @@ files.sort();
 
 const groups = new Map<string, Group>();
 for (const file of files) {
-  const source = await Bun.file(`${PACKAGE_DIR}${file}`).text();
-  const partition = partitionOf(`${REPO_PREFIX}${file}`, source);
+  const partition = partitionOf(`${REPO_PREFIX}${file}`);
   if (!partition) throw new Error(`no partition for ${file} — see scripts/test/partitions.ts`);
   const group = groups.get(partition.key);
   if (group) group.files.push(file);
@@ -109,7 +113,7 @@ const outcomes = await pooled(
   MAX_CONCURRENT,
 );
 
-// The 19 partition processes each print their own block; this is the only line that adds
+// The partition processes each print their own block; this is the only line that adds
 // them up, so it is what `bun run --filter @yaar/server test | tail` has to land on.
 const total = outcomes.map((o) => o.counts).reduce(addCounts, ZERO_COUNTS);
 const failed = ordered.filter((_, i) => !outcomes[i].ok);

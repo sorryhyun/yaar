@@ -27,14 +27,22 @@ paths:
 Some test files cannot share a Bun process with others — not "should not," the run reports
 wrong results (confidently) if they do. Three reasons, all measured, not assumed:
 `REMOTE=1`/`IS_REMOTE` is a module-load constant so remote-mode assertions are only real if
-pinned for the whole process; `mock.module` is process-global with no teardown, so one file's
-stub leaks into every other file sharing its process; and some suites (`src/tests/loopback/`,
-`src/tests/realfs/`) own real sockets/git state and are sequential-only. The rule lives in
-`scripts/test/partitions.ts` (`partitionOf`); `scripts/test/partition-guard.ts` is a `Bun.plugin`
-preload that watches what a process actually loads and kills the run — with both offending files
-and the correct command for each — the moment a second partition appears in one process. It's
-wired via `bunfig.toml` (root) and `packages/server/bunfig.toml`. Full incident history and
-rationale: `scripts/test/partitions.ts` header.
+pinned for the whole process; some suites (`src/tests/loopback/`, `src/tests/realfs/`) own real
+sockets/git state and are sequential-only; and `scripts/test/preload-root.ts` configures exactly
+one package per process. The rule lives in `scripts/test/partitions.ts` (`partitionOf`), keyed on
+path alone; `scripts/test/partition-guard.ts` is a `Bun.plugin` preload that watches what a
+process actually loads and kills the run — with both offending files and the correct command for
+each — the moment a second partition appears in one process. It's wired via `bunfig.toml` (root)
+and `packages/server/bunfig.toml`. Full incident history and rationale:
+`scripts/test/partitions.ts` header.
+
+`mock.module` used to be a fourth reason — process-global, no teardown, so every file installing
+one got its own process. `bun test --isolate` (implied by `--parallel` since Bun 1.4) clears the
+module registry between files, which retired that rule and 15 processes with it. Two consequences
+worth knowing: the `units` partition now **depends on** `--isolate` (the runner passes it
+explicitly), and the guard cannot fire inside an isolated process at all — each file there gets a
+fresh global, a fresh `process.env`, and a `Bun.argv` naming only itself, so it can't tell a
+second file exists. The guard covers the plain `bun test <path>` form, which is what you type.
 
 If a run is refused, don't fight it — run the printed commands separately, or use
 `bun run test` / the package's own `test` script, which already partition correctly.
@@ -65,15 +73,15 @@ under `src/tests/remote/`.
 `src/` (colocated files included — which is why `tsconfig.build.json` excludes `**/*.test.ts`), groups them by
 `scripts/test/partitions.ts`, and spawns one process per group, concurrently. The partitions:
 
-1. `units` — one `--parallel` process for the plain unit/component tests.
+1. `units` — one `--parallel --isolate` process for everything not named below, including every
+   file that calls `mock.module`.
 2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process (`IS_REMOTE` is a
    module-load constant, so remote-gate assertions are vacuous in a local-mode process).
 3. `loopback` — `src/tests/loopback/`, the real stack end to end with exactly two fakes
    (`FakeClient` for the browser, `ScriptedProvider` for the model); sequential, binds real
    sockets. See `tests/loopback/harness/boot.ts`'s header for the deadlock it exists to catch.
-4. `realfs` — `src/tests/realfs/`, real `git` over a shared fixture dir. (The *integration* suite
-   is the separate `@yaar/tests` package.)
-5. one process per file that calls `mock.module` — the stub is process-global with no teardown.
+4. `realfs` — `src/tests/realfs/`, real `git` over one shared fixture dir its cases reseed;
+   sequential for that reason. (The *integration* suite is the separate `@yaar/tests` package.)
 
 Three rules follow:
 
@@ -81,10 +89,12 @@ Three rules follow:
   a `config/` file, or a path, pin it in the test (or add it to the scrub list in
   `scripts/test/env.ts`) rather than inheriting whatever the developer has. A suite that only
   passes on a clean checkout is a suite that will fail on someone's laptop and pass in review.
-- **Never add `mock.module` under `src/tests/loopback/`.** The harness substitutes through real
-  seams instead: the provider via `ContextPool`'s `acquireProvider`, the logger via the
-  `sessionLogger` option, the deadlines via `setDeadlinesForTest()` (`config.ts`), the config
-  dir via `YAAR_CONFIG`.
+- **Never add `mock.module` under `src/tests/loopback/`.** Not a leakage rule any more —
+  `--isolate` settled that — but the harness's whole claim is that it boots the real stack, and it
+  substitutes through real seams instead: the provider via `ContextPool`'s `acquireProvider`, the
+  logger via the `sessionLogger` option, the deadlines via `setDeadlinesForTest()` (`config.ts`),
+  the config dir via `YAAR_CONFIG`. (`loopback` is also a non-isolated process, so a stub there
+  really would still leak.)
 - **Assert against the narrowest module that holds the behavior.** A test that stubs the
   `profiles/index.js` barrel stubs everything the barrel re-exports; a test that asserts on real
   behavior should import the concrete module (`profiles/model-tiers.js`), not the barrel.

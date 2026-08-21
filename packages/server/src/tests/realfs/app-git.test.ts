@@ -2,11 +2,16 @@
  * Real-filesystem tests — these run real `git` against real app directories.
  *
  * That is what `src/tests/realfs/` is for, and the reason it gets a process of its own
- * (`scripts/test/partitions.ts`) is the mocks rather than the git: several unit tests in
- * `src/tests/` call `mock.module('../config.js', …)` with `PROJECT_ROOT: '/mock-root'`.
- * Bun hoists `mock.module` and applies it process-wide with no teardown, so any test
- * sharing that process which resolves a real path through `PROJECT_ROOT` dies with
- * `EACCES: mkdir '/mock-root'`, regardless of file order.
+ * (`scripts/test/partitions.ts`) is the git rather than the code: every case here reseeds
+ * the *same* on-disk fixture directory, so two of them running at once tear down each
+ * other's repository. The `units` partition runs `--parallel`, which is precisely what
+ * this suite must not do — hence a separate, sequential group.
+ *
+ * It used to be separated for a second reason as well: several unit tests in `src/tests/`
+ * call `mock.module('../config.js', …)` with `PROJECT_ROOT: '/mock-root'`, and before
+ * `--isolate` that stub had no teardown, so anything sharing the process which resolved a
+ * real path died with `EACCES: mkdir '/mock-root'`. A fresh module registry per file has
+ * settled that half.
  *
  * This is not the *integration* suite — that is `packages/tests/src/integration/`, which
  * boots the server and drives it over HTTP and WebSocket. Nothing here starts a server.

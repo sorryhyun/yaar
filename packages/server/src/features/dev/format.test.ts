@@ -7,8 +7,9 @@
  * that cannot tell "no formatter for .md" from "your code does not parse" reports the
  * second as the first.
  *
- * No `mock.module`: this reads the real `.prettierrc` and the real prettier, so it
- * stays in the shared `units` partition. See `scripts/test/partitions.ts`.
+ * It reads the real `.prettierrc` and the real prettier, and needs nothing pinned for a
+ * whole process, so it belongs to the shared `units` partition. See
+ * `scripts/test/partitions.ts`.
  */
 
 import { describe, expect, test } from 'bun:test';

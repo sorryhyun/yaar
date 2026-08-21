@@ -28,6 +28,22 @@
  * The consequence worth stating: the error arrives *after* the first partition's files have run,
  * because that is when the offending file loads. The run still fails, and it names the fix.
  *
+ * **What this cannot see: an isolated run.** Under `bun test --isolate` (which `--parallel`
+ * implies since Bun 1.4) every file gets a fresh global, a fresh module registry, and — measured,
+ * not assumed — a fresh `process.env` and a rewritten `Bun.argv` holding only that one file. So
+ * `held` below is `null` on every load, there is no in-process channel to park it in, and the
+ * flags that would reveal the mode are gone by the time a preload runs. An isolated process
+ * therefore cannot know a second file exists, and this guard never fires in one.
+ *
+ * That is a limit, not a hole, because isolation is what *removes* the two hazards a mixed
+ * process used to produce: the module registry is cleared between files, so a `mock.module` stub
+ * cannot leak, and `scripts/test/env.ts` re-runs per file, so its `tests/remote/` inference pins
+ * `REMOTE=1` for exactly the file that needs it. What is left — `loopback`'s real sockets,
+ * `realfs`'s one shared fixture directory — is a shared-*resource* problem that `--parallel`
+ * aggravates and that no per-process guard could observe anyway. Those groups are `parallel:
+ * false`, so the runner gives them plain non-isolated processes, which is exactly where this
+ * guard still works.
+ *
  * Wired from the root `bunfig.toml` (which is where the cross-package and whole-package mixes
  * come from) and from `packages/server/bunfig.toml` (where `bun test src/tests` mixes the
  * server's own suites). The other packages are each a single partition, so there is nothing
@@ -93,7 +109,7 @@ Bun.plugin({
       const loader = args.path.endsWith('x') ? 'tsx' : 'ts';
 
       const rel = toRepoRelative(args.path, REPO_ROOT);
-      const partition = rel ? partitionOf(rel, source) : null;
+      const partition = rel ? partitionOf(rel) : null;
       if (partition) {
         if (!held) held = { partition, file: rel! };
         else if (held.partition.key !== partition.key) refuse({ partition, file: rel! });

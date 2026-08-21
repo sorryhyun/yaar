@@ -1,9 +1,9 @@
 /**
  * Updater tests.
  *
- * No `mock.module` anywhere: every seam is an injected `fetch`, so these files stay
- * in the shared `units` partition instead of each earning its own process. See
- * `scripts/test/partitions.ts`.
+ * Every seam is an injected `fetch` rather than a `mock.module` — still the right shape
+ * now that `--isolate` has made a stub harmless to its neighbours, because an injected
+ * seam is what lets one *case* choose a different response from the next.
  *
  * The install path itself (download → verify → swap) is deliberately not exercised
  * here — it replaces `process.execPath`, which under `bun test` is the test runner's
