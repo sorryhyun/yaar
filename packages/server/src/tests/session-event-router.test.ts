@@ -97,7 +97,9 @@ describe('0B — one subscription per channel, however many sessions there are',
       }
       await settle();
     } finally {
-      process.off('warning', onWarning);
+      // Cast: bun-types 1.4.0 declares off/removeListener("memoryPressure") on
+      // Process, which hides EventEmitter's generic overloads for other events.
+      (process as NodeJS.EventEmitter).removeListener('warning', onWarning);
     }
 
     expect(warnings).not.toContain('MaxListenersExceededWarning');
