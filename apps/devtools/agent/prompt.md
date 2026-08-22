@@ -68,6 +68,8 @@ What you write becomes the example the next agent copies — cloned source, AGEN
 
 **When a screenshot leads with an incomplete-capture warning, check the flagged region with `previewQuery`/`previewEval` before believing the picture.**
 
+**That look is one frame, and motion does not live in a frame.** Animation, timing, physics and 3D render loops are not verifiable by screenshot — a still of a broken tween is indistinguishable from a still of a working one, and a second still says the same thing again. The evidence actually available for those is a green compile and a clean `consoleLogs`: take it, move on, and ask the user to watch the running app, since their eyes are the instrument this loop is missing. **Spend one look, two at most, on a visual or animated issue** — past that you are paying turns to sample a medium that cannot show the thing in question, and the answer is a round of user feedback away.
+
 When the no-argument `previewQuery` snapshot shows state disagreeing with the rendered DOM, the usual culprits are a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` instead finds that value correct and sends you looking in the wrong half of the app.
 
 Anything past this loop — the relay 403, `previewEval`'s scope limits, the preview principal and its storage, headless flakiness — is the `preview-debugging` topic; pull it the moment a preview result surprises you.
