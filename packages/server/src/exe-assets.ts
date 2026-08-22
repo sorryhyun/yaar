@@ -39,14 +39,21 @@ export const EMBEDDED_ASSET_DIRS = {
 /**
  * Root of the executable's virtual filesystem.
  *
- * Everything compiled into the binary — this module included — reports `/$bunfs/root` as
- * its `import.meta.dir`, and an embedded file's `name` is relative to exactly that, so
- * `` `${EMBEDDED_ROOT}/${name}` `` is a path `Bun.file()` opens. Derived rather than
- * written out so that a Bun release which moves the mount does not silently 404 every
- * asset; the literal is only a floor for the impossible case of this module being read
- * from disk.
+ * Everything compiled into the binary — this module included — reports the mount as its
+ * `import.meta.dir`, and an embedded file's `name` is relative to exactly that, so
+ * `` `${EMBEDDED_ROOT}/${name}` `` is a path `Bun.file()` opens.
+ *
+ * Read straight off `import.meta.dir`, with no literal beside it, because the mount is not
+ * `/$bunfs/root` everywhere: on Windows it is `B:\~BUN\root`. Keeping the POSIX spelling as
+ * a fallback is what broke the Windows binary — `startsWith('/$bunfs')` is false there, so
+ * every asset resolved to a `/$bunfs/root/…` path that cannot open and the exe 404’d its own
+ * frontend, its `@bundled/*` libraries and its ML runtime alike. Mixing the separators back
+ * the other way is fine: Bun opens `B:\~BUN\root/frontend/index.html`.
+ *
+ * There is no on-disk case left to keep a floor for, either — outside the exe
+ * `Bun.embeddedFiles` is empty, so `embeddedUnder()` builds no paths and this is never used.
  */
-const EMBEDDED_ROOT = import.meta.dir.startsWith('/$bunfs') ? import.meta.dir : '/$bunfs/root';
+const EMBEDDED_ROOT = import.meta.dir;
 
 /**
  * Every embedded file under `prefix/`, keyed by the rest of its path.
