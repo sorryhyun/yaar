@@ -459,8 +459,16 @@ export type DesktopStore = WindowsSlice &
   OutboxSlice & {
     appBadges: Record<string, number>;
     appsVersion: number;
+    /**
+     * Declared keybinding combos per installed app id, straight from each app's
+     * protocol manifest. The shell consults it before claiming a global combo —
+     * see `resolveCloseTopWindow` — so it needs the table synchronously, which
+     * rules out asking the iframe over postMessage.
+     */
+    appKeybindings: Record<string, string[]>;
     shortcuts: DesktopShortcut[];
     setShortcuts: (shortcuts: DesktopShortcut[]) => void;
+    setAppKeybindings: (keybindings: Record<string, string[]>) => void;
     bumpAppsVersion: () => void;
     applyAction: (action: OSAction) => void;
     applyActions: (actions: OSAction[]) => void;

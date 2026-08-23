@@ -31,6 +31,8 @@ interface AppInfo {
   windowStyle?: Record<string, string | number>;
   defaultWidth?: number;
   defaultHeight?: number;
+  /** From the app's protocol manifest — only `keybindings` is read here. */
+  protocol?: { keybindings?: Record<string, string> };
 }
 
 interface DesktopIconsProps {
@@ -84,7 +86,21 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
         if (!response.ok) throw new Error(`/api/apps responded ${response.status}`);
         {
           const data = await response.json();
-          setApps(data.apps || []);
+          const list: AppInfo[] = data.apps || [];
+          setApps(list);
+          // The shell needs each app's declared combos synchronously when a reserved
+          // shortcut fires (`resolveCloseTopWindow`), and this fetch is the one place
+          // that already reads them. Asking the app's iframe at keypress time would be
+          // a postMessage round-trip inside a handler that must decide now.
+          useDesktopStore
+            .getState()
+            .setAppKeybindings(
+              Object.fromEntries(
+                list
+                  .map((app) => [app.id, Object.keys(app.protocol?.keybindings ?? {})] as const)
+                  .filter(([, combos]) => combos.length > 0),
+              ),
+            );
           setOnboardingCompleted(!!data.onboardingCompleted);
           if (data.userName && data.userName !== useDesktopStore.getState().userName) {
             useDesktopStore.getState().setUserName(data.userName);

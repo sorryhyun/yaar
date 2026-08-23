@@ -45,6 +45,8 @@ const ASSISTANT_ERROR_TEXT: Record<SDKAssistantMessageError, string> = {
   authentication_failed:
     'Claude CLI authentication failed — run `claude login`, or set CLAUDE_CODE_OAUTH_TOKEN.',
   oauth_org_not_allowed: "This Claude account's organization is not allowed to use the API.",
+  account_on_hold:
+    'This Claude account is on hold and cannot make API calls until it is reinstated.',
   billing_error: 'Claude rejected the request for a billing reason — check the plan or credit.',
   rate_limit: 'Rate limited by the Claude API.',
   overloaded: 'The Claude API is overloaded.',

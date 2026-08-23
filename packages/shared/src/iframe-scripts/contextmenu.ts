@@ -111,7 +111,10 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     var dominated = false;
     if (e.key === 'Tab' && e.shiftKey) dominated = true;
     if (e.ctrlKey && e.key >= '1' && e.key <= '9') dominated = true;
-    if (e.ctrlKey && e.key === 'w') dominated = true;
+    // Plain Ctrl+W only. Ctrl+Shift+W and Ctrl+Alt+W are combos an app may legally
+    // bind (\`ctrl+w\` alone is reserved), and claiming them here ate the app's own
+    // shortcut on its way to closing the window.
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') dominated = true;
     if (!dominated) return;
     e.preventDefault();
     e.stopImmediatePropagation();

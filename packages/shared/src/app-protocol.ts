@@ -102,7 +102,8 @@ const RESERVED_KEYBINDINGS: ReadonlySet<string> = new Set([
  * Returns null for a combo that can never match: an unknown modifier token, a
  * missing key, or a modifier-only combo like `"Ctrl+Shift"`.
  *
- * Internal: reachable only through `listKeybindingIssues`, the one exported entry point.
+ * Shared by `listKeybindingIssues` (the build gate) and `keybindingsClaimKey` (the
+ * shell's runtime question), so both read a combo the same way.
  */
 function normalizeKeybinding(combo: string): string | null {
   const parts = combo.split('+').map((p) => p.trim().toLowerCase());
@@ -115,6 +116,31 @@ function normalizeKeybinding(combo: string): string | null {
     mods.add(part);
   }
   return [...KEYBINDING_MODIFIERS.filter((m) => mods.has(m)), key].join('+');
+}
+
+/**
+ * True when any of `combos` binds `key`, whatever modifiers it carries.
+ *
+ * The shell asks this before acting on a global combo it would otherwise own.
+ * Ctrl+W closes the topmost window, but an app that bound the `w` key at all —
+ * `w`, `Ctrl+Shift+W`, `Alt+W` — has a claim on it, and a window that vanishes
+ * mid-keystroke is a worse outcome than a shortcut that does nothing. Modifiers
+ * are ignored deliberately: the question is who owns the key, not whether this
+ * exact chord was declared (the build rejects `Ctrl+W` itself, so an app can
+ * never answer that one with a yes).
+ *
+ * Unparseable combos are skipped — they bind nothing, and the build already
+ * rejects them with a location.
+ */
+export function keybindingsClaimKey(combos: Iterable<string>, key: string): boolean {
+  const wanted = key.toLowerCase();
+  for (const combo of combos) {
+    const normalized = normalizeKeybinding(combo);
+    if (normalized !== null && normalized.slice(normalized.lastIndexOf('+') + 1) === wanted) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

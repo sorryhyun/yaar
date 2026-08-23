@@ -121,11 +121,18 @@ export const useDesktopStore = create<DesktopStore>()(
     // Desktop-level state
     appBadges: {} as Record<string, number>,
     appsVersion: 0,
+    appKeybindings: {} as Record<string, string[]>,
     shortcuts: [] as DesktopShortcut[],
     setShortcuts: (shortcuts: DesktopShortcut[]) => {
       const [set] = a;
       set((state) => {
         state.shortcuts = shortcuts;
+      });
+    },
+    setAppKeybindings: (keybindings: Record<string, string[]>) => {
+      const [set] = a;
+      set((state) => {
+        state.appKeybindings = keybindings;
       });
     },
     bumpAppsVersion: () => {

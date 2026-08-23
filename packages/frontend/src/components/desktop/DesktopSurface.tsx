@@ -17,6 +17,7 @@ import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import { runLocalToastAction } from '@/lib/localToastActions';
+import { isCloseWindowShortcut, resolveCloseTopWindow } from '@/lib/shellShortcuts';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../window/WindowFrame';
@@ -77,7 +78,8 @@ export function DesktopSurface() {
 
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
 
-  // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors, Ctrl+W to close focused window
+  // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors, Ctrl+W to
+  // close the topmost window.
   //
   // Capture phase, and each combo is claimed with stopImmediatePropagation(). These are
   // RESERVED_KEYBINDINGS (`@yaar/shared/app-protocol`), whose stated contract is that the
@@ -108,13 +110,14 @@ export function DesktopSurface() {
           switchMonitor(mons[idx].id);
         }
       }
-      // Ctrl+W: close the focused OS window (prevents browser tab close in --app mode)
-      if (e.ctrlKey && e.key === 'w') {
-        const { focusedWindowId: fwId, userCloseWindow } = useDesktopStore.getState();
-        if (fwId) {
-          claim();
-          userCloseWindow(fwId);
-        }
+      // Ctrl+W closes the topmost OS window. Claimed before we know whether there is one
+      // to close: unclaimed, Chrome takes it and closes the YAAR window itself, so an
+      // empty desktop is exactly when *not* claiming does the most damage.
+      if (isCloseWindowShortcut(e)) {
+        claim();
+        const state = useDesktopStore.getState();
+        const target = resolveCloseTopWindow(state);
+        if (target) state.userCloseWindow(target);
       }
     };
     document.addEventListener('keydown', handler, true);
@@ -124,7 +127,7 @@ export function DesktopSurface() {
   // Forward keyboard shortcuts from focused iframes (they can't bubble to document)
   useEffect(() => {
     return iframeMessages.on('yaar:keydown', (ctx) => {
-      const { key, shiftKey, ctrlKey } = ctx.data;
+      const { key, shiftKey, ctrlKey, altKey } = ctx.data;
       // F5 / Ctrl+R from iframes — nothing to do (iframe can't refresh parent)
       if (key === 'F5' || (ctrlKey && key === 'r')) return;
       if (key === 'Tab' && shiftKey) {
@@ -136,9 +139,12 @@ export function DesktopSurface() {
         const mons = useDesktopStore.getState().monitors;
         if (idx < mons.length) switchMonitor(mons[idx].id);
       }
-      if (ctrlKey && key === 'w') {
-        const { focusedWindowId: fwId, userCloseWindow } = useDesktopStore.getState();
-        if (fwId) userCloseWindow(fwId);
+      // The iframe script already called preventDefault() on its side, so the browser
+      // window is safe whatever we decide here.
+      if (isCloseWindowShortcut({ key, ctrlKey, shiftKey, altKey: !!altKey })) {
+        const state = useDesktopStore.getState();
+        const target = resolveCloseTopWindow(state);
+        if (target) state.userCloseWindow(target);
       }
     });
   }, [switchMonitor]);

@@ -685,7 +685,8 @@ export default defineApp({
   steals cursor movement from an input. The build rejects a binding to an undeclared command, an
   unparseable combo, two spellings of one chord, and the shell's reserved combos (`Shift+Tab`,
   `Ctrl+1-9`, `Ctrl+W`, `Ctrl+R`, `F5`). Bindings appear in the manifest, so agents can tell
-  users about them. For a shortcut that needs an argument, use the imperative
+  users about them — and the shell reads them back: an app that binds the `w` key at all keeps
+  its window when the user presses Ctrl+W, which otherwise closes the topmost one. For a shortcut that needs an argument, use the imperative
   `onShortcut(combo, handler)` from `@bundled/yaar`; for held-key movement, `createKeyState`.
 - **Splitting up.** `state`/`commands` maps may live in other modules and be spread in — see
   [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`
