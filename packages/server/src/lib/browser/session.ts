@@ -28,6 +28,7 @@ import {
   EXTRACT_IMAGES,
   FIND_MAIN_CONTENT,
   CARET_RECT,
+  SETTLE,
 } from './page-scripts.js';
 
 const DESKTOP_WIDTH = 1280;
@@ -43,6 +44,31 @@ const SCREENSHOT_QUALITY = 95;
  */
 const MODEL_SCREENSHOT_MAX_EDGE = 1568;
 const TEXT_SNIPPET_LENGTH = 500;
+
+/** How long the DOM must hold still before a settle wait returns early. */
+const SETTLE_QUIET_MS = 100;
+
+/**
+ * Ceilings for {@link BrowserSession.settle}, one per interaction. Each is the
+ * fixed sleep that interaction used to run unconditionally, kept as an upper
+ * bound so the worst case — a page whose DOM never goes quiet — is unchanged.
+ */
+const SETTLE_CAP = {
+  navigate: 500,
+  click: 500,
+  scroll: 300,
+  /** Letting an SPA's focus handlers run after the click that precedes typing. */
+  focus: 100,
+  /** Letting a controlled input re-render before the state/screenshot is read. */
+  type: 300,
+} as const;
+
+/**
+ * Slack over the cap for the settle round-trip itself. The page-side wait is
+ * bounded by `cap`, so anything past this means the context went away rather
+ * than the page being busy.
+ */
+const SETTLE_TIMEOUT_SLACK_MS = 1_000;
 
 /**
  * Cap a model-bound screenshot's long edge, re-encoding as WebP via `Bun.Image`
@@ -397,6 +423,33 @@ export class BrowserSession extends EventEmitter {
     return this.eval<T>(`(${fn})(${JSON.stringify(arg)})`);
   }
 
+  /**
+   * Wait for the page to stop changing, up to `capMs`.
+   *
+   * Replaces the flat sleeps these interactions used to run unconditionally. On
+   * example.com, HN, MDN and Wikipedia the text is already complete when `load`
+   * fires, so the old constant was pure latency; on a JS-heavy page it is the
+   * settling, not the constant, that decides when the content is actually there.
+   * Capping at the old constant keeps the worst case identical.
+   */
+  private async settle(capMs: number, quietMs = SETTLE_QUIET_MS): Promise<void> {
+    const startedAt = Date.now();
+    const opts = { quiet: Math.min(quietMs, capMs), cap: capMs };
+    try {
+      await this.cdp.send(
+        'Runtime.evaluate',
+        { expression: `(${SETTLE})(${JSON.stringify(opts)})`, awaitPromise: true },
+        capMs + SETTLE_TIMEOUT_SLACK_MS,
+      );
+    } catch {
+      // The execution context can vanish underneath us — a click that navigated
+      // away, a crashed tab. Sleep out whatever is left of the cap so the caller
+      // still gets the dwell it used to get.
+      const remaining = capMs - (Date.now() - startedAt);
+      if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
+    }
+  }
+
   private async getPageState(): Promise<PageState> {
     const { url, title, activeElement, scrollY, scrollHeight, viewportHeight } = (await this.eval<{
       url: string;
@@ -468,8 +521,7 @@ export class BrowserSession extends EventEmitter {
       await Promise.race([loadPromise.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))]);
     }
 
-    // Small delay for dynamic content
-    await new Promise((r) => setTimeout(r, 500));
+    await this.settle(SETTLE_CAP.navigate);
 
     if (!this.closed) {
       // Fire-and-forget: cache screenshot for browser app SSE, don't block navigation result
@@ -629,7 +681,7 @@ export class BrowserSession extends EventEmitter {
     });
 
     // Wait for potential navigation or re-render
-    await new Promise((r) => setTimeout(r, 500));
+    await this.settle(SETTLE_CAP.click);
 
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
@@ -660,7 +712,7 @@ export class BrowserSession extends EventEmitter {
         button: 'left',
         clickCount: 1,
       });
-      await new Promise((r) => setTimeout(r, 100));
+      await this.settle(SETTLE_CAP.focus);
     }
 
     // Focus and clear the input
@@ -672,6 +724,11 @@ export class BrowserSession extends EventEmitter {
     // Also set value via JS + native setter to ensure DOM is updated
     // (Input.insertText can silently fail to update .value on some pages)
     await this.evalFn(SET_VALUE, { sel: selector, text });
+
+    // Let a controlled input re-render before we read it. There was no wait here
+    // at all, so a React-style input's state/screenshot could be captured a frame
+    // before the value it was just given showed up.
+    await this.settle(SETTLE_CAP.type);
 
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
@@ -862,7 +919,7 @@ export class BrowserSession extends EventEmitter {
       expression: `window.scrollBy(0, ${delta})`,
     });
 
-    await new Promise((r) => setTimeout(r, 300));
+    await this.settle(SETTLE_CAP.scroll);
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
     this.notifyUpdate();

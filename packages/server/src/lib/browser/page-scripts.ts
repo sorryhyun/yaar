@@ -55,6 +55,52 @@ export const VIEWPORT_TEXT = `(function() {
 /** Expression returning {url, title}. */
 export const URL_AND_TITLE = '({url: location.href, title: document.title})';
 
+// ── settle ───────────────────────────────────────────────────────────
+
+/**
+ * Function that resolves once the page has stopped changing, or at `cap` —
+ * whichever comes first. Returns how many ms it waited.
+ *
+ * `quiet` is how long the DOM must hold still to count as settled. Both a DOM
+ * mutation and a completed resource load restart that clock, so a page that
+ * renders from a fetch keeps the wait alive until the render actually lands.
+ *
+ * This replaces the fixed sleeps `navigate`/`click`/`type`/`scroll` used to run
+ * unconditionally; `cap` is the old constant, so a page that never goes quiet —
+ * a spinner, a carousel, an animated ad — waits exactly as long as it did before.
+ */
+export const SETTLE = `function(opts) {
+  return new Promise(function(resolve) {
+    var quiet = opts.quiet, cap = opts.cap;
+    var startedAt = performance.now();
+    var last = startedAt;
+    var deadline = startedAt + cap;
+    var mutations = null, resources = null;
+    var bump = function() { last = performance.now(); };
+    try {
+      mutations = new MutationObserver(bump);
+      mutations.observe(document, {
+        subtree: true, childList: true, characterData: true, attributes: true
+      });
+    } catch (e) { /* no DOM to observe — fall through to the cap */ }
+    try {
+      resources = new PerformanceObserver(bump);
+      resources.observe({ type: 'resource', buffered: false });
+    } catch (e) { /* unsupported — DOM mutations alone still drive the wait */ }
+    var tick = function() {
+      var now = performance.now();
+      if (now - last >= quiet || now >= deadline) {
+        if (mutations) mutations.disconnect();
+        if (resources) resources.disconnect();
+        resolve(Math.round(now - startedAt));
+        return;
+      }
+      setTimeout(tick, 25);
+    };
+    setTimeout(tick, Math.min(quiet, cap));
+  });
+}`;
+
 // ── click: findBySelector ─────────────────────────────────────────────
 
 /**

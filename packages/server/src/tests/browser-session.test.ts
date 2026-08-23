@@ -10,6 +10,13 @@ import { mock, describe, it, expect, beforeEach } from 'bun:test';
 
 const FAKE_IMAGE_BASE64 = Buffer.from('fake-image').toString('base64');
 
+/**
+ * The settle wait is an implementation detail of navigate/click/type/scroll, not
+ * something these tests assert on — it just has to be told apart from the
+ * evaluates that carry meaning.
+ */
+const isSettle = (expression: string) => expression.includes('MutationObserver');
+
 const mockSend = mock((_method: string, _params?: Record<string, unknown>) =>
   Promise.resolve({} as Record<string, unknown>),
 );
@@ -114,14 +121,15 @@ describe('BrowserSession', () => {
     mockOn.mockClear();
     (CDPClient.connect as ReturnType<typeof mock>).mockClear();
 
-    // Track Runtime.evaluate call sequence to return appropriate values
-    let evalCallCount = 0;
-    mockSend.mockImplementation((method: string) => {
+    // Answer each Runtime.evaluate by what it asks for, not by call order — the
+    // settle wait adds one and would otherwise shift every later answer.
+    mockSend.mockImplementation((method: string, params?: { expression?: string }) => {
       if (method === 'Page.navigate') return Promise.resolve({});
       if (method === 'Page.captureScreenshot') return Promise.resolve({ data: FAKE_IMAGE_BASE64 });
       if (method === 'Runtime.evaluate') {
-        evalCallCount++;
-        if (evalCallCount === 1) {
+        const expression = params?.expression ?? '';
+        if (isSettle(expression)) return Promise.resolve({ result: { value: 0 } });
+        if (expression.includes('location.href')) {
           // getPageState: url + title
           return Promise.resolve({
             result: {
@@ -210,7 +218,9 @@ describe('BrowserSession', () => {
     const state = await session.click('#my-button');
 
     // Evaluated JS to find element coordinates using the provided selector
-    const evalCalls = mockSend.mock.calls.filter(([m]: any) => m === 'Runtime.evaluate');
+    const evalCalls = mockSend.mock.calls.filter(
+      ([m, p]: any) => m === 'Runtime.evaluate' && !isSettle(p?.expression ?? ''),
+    );
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
     expect((evalCalls[0] as any)[1].expression).toContain('#my-button');
 
@@ -240,8 +250,20 @@ describe('BrowserSession', () => {
     mockSend.mockClear();
 
     let evalCallCount = 0;
-    mockSend.mockImplementation((method: string) => {
+    mockSend.mockImplementation((method: string, params?: { expression?: string }) => {
       if (method === 'Runtime.evaluate') {
+        const expression = params?.expression ?? '';
+        // Answered by what each evaluate asks for rather than by call order, so
+        // the settle waits can't shift the later answers.
+        if (isSettle(expression)) return Promise.resolve({ result: { value: 0 } });
+        if (expression.includes('location.href')) {
+          // getPageState: url + title
+          return Promise.resolve({
+            result: {
+              value: { url: 'https://example.com', title: 'Typed' },
+            },
+          });
+        }
         evalCallCount++;
         if (evalCallCount === 1) {
           // FIND_BY_SELECTOR: returns coordinates for the click-before-focus
@@ -250,14 +272,6 @@ describe('BrowserSession', () => {
         if (evalCallCount <= 3) {
           // Second: FOCUS_AND_CLEAR; third: FIRE_CHANGE_EVENTS
           return Promise.resolve({ result: {} });
-        }
-        if (evalCallCount === 4) {
-          // getPageState: url + title
-          return Promise.resolve({
-            result: {
-              value: { url: 'https://example.com', title: 'Typed' },
-            },
-          });
         }
         // getPageState: text snippet
         return Promise.resolve({ result: { value: '' } });
@@ -270,7 +284,9 @@ describe('BrowserSession', () => {
 
     const state = await session.type('#search-input', 'hello world');
 
-    const evalCalls = mockSend.mock.calls.filter(([m]: any) => m === 'Runtime.evaluate');
+    const evalCalls = mockSend.mock.calls.filter(
+      ([m, p]: any) => m === 'Runtime.evaluate' && !isSettle(p?.expression ?? ''),
+    );
 
     // First evaluate: FIND_BY_SELECTOR to get coordinates for pre-click
     expect((evalCalls[0] as any)[1].expression).toContain('#search-input');
