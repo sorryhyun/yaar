@@ -116,7 +116,7 @@ import { join, basename } from 'path';
  * to edit, and the baked-in copy wins over the injected one. The bump also gets every
  * app the `window.__yaar_links__` block, which is what arms the guard.
  */
-export const COMPILER_VERSION = '26';
+export const COMPILER_VERSION = '27';
 
 export interface BuildManifest {
   sourceHash: string;

@@ -179,8 +179,16 @@ launch_chrome_when_ready() {
     echo "[chrome] Opening ${url} (port ${port}, profile ${profile})"
     # If a Chrome with this profile is already running, this just opens a tab in
     # it and exits; otherwise it starts a fresh instance with the debug port.
+    # --app: TEMPORARY. Chrome hands Ctrl+W to the page in a normal window (a probe
+    # confirmed preventDefault() cancels it), but fps-lite still loses its window to it
+    # while pointer-locked, so we are trying window types that hold the accelerator
+    # differently. App mode carries the URL itself — passing it positionally as well
+    # would open a second window. Being a plain default rather than an env gate is
+    # deliberate for now: we are measuring, not shipping. Remove once the pointer-lock
+    # path is understood.
     exec "$bin" --remote-debugging-port="${port}" --user-data-dir="${profile}" \
-      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${open_url}" >/dev/null 2>&1
+      --no-first-run --no-default-browser-check "${gpu_flags[@]}" \
+      --app="${open_url}" >/dev/null 2>&1
   ) &
   CHROME_PID=$!
   # exec (above) replaces the subshell in place, so CHROME_PID becomes the Chrome
