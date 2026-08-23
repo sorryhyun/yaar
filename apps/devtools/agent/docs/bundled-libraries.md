@@ -26,7 +26,8 @@ import { animate, createTimeline } from '@bundled/anime';
   `BufferGeometryUtils`, ...). Same shape of trap as solid-js, and the expensive one: two
   apps hand-rolled a glTF reader before anyone found it. `DRACOLoader`/`KTX2Loader` are
   absent on purpose — they fetch a decoder from a sibling path a single-file app cannot
-  serve.
+  serve. `PointerLockControls`, and any hand-rolled `requestPointerLock`, needs a
+  drag-to-look fallback: a click you dispatch never takes the lock (`preview-debugging`).
 - **`yaar`** — the Verb API (`read`, `list`, `invoke`, `describe`, `del`, `subscribe`,
   `stream`, `httpFetch`) plus helpers: `defineApp`, `defineAppCommand`,
   `createProtocolContext`, `appStorage`, `appDb`, `sanitizeHtml`, `escapeHtml`,

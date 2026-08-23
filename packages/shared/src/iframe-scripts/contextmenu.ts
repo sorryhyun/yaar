@@ -118,6 +118,15 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     if (!dominated) return;
     e.preventDefault();
     e.stopImmediatePropagation();
+    // A pointer-locked app owns the keyboard, so Ctrl+W there is a player walking
+    // forward with Ctrl held, not a request to destroy the window. The app cannot
+    // claim the key through \`keybindings\` either: held-key movement is sampled with
+    // \`createKeyState\`, never declared as a command, and \`ctrl+w\` itself is reserved.
+    // preventDefault() above still stands — that is what keeps Chrome from closing the
+    // browser window — so the chord simply does nothing until Esc releases the lock.
+    // Only the close is withheld: Shift+Tab and Ctrl+1-9 stay live, because a player
+    // locked into a game needs a way out that is not the mouse.
+    if (document.pointerLockElement && e.ctrlKey && e.key.toLowerCase() === 'w') return;
     // \`top\`, not \`parent\` — the only message here that skips the intermediate frames.
     // An app can embed another app (devtools' preview does), and \`parent\` is one hop:
     // the inner frame's shortcut landed in the outer app, which has no handler for it,

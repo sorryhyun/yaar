@@ -1,6 +1,6 @@
 ---
 name: preview-debugging
-description: Read when the preview disagrees with the state, a probe 403s, or a screenshot warns — the debugging long tail.
+description: Read when the preview disagrees with the state, a probe 403s, a screenshot warns, or mouselook will not engage — the debugging long tail.
 audience: agent
 ---
 
@@ -25,6 +25,17 @@ state is observable through exactly two projections: `previewQuery` for whatever
 `defineApp({ state })` declares, and the DOM for whatever gets rendered. If you need to
 watch a value that is neither, add it to `state:` — that is what it is for — rather than
 hunting for an eval expression that will never resolve it.
+
+**Pointer lock never engages under a click you synthesized.** The sandbox grants it
+(`allow-pointer-lock`, previews included), but `requestPointerLock()` needs transient user
+activation and a dispatched click is not one — the promise rejects and `pointerlockerror`
+fires. An app that mouselooks therefore needs a non-locked fallback (drag to look, and a fire
+button that is not the mouse, since the same button now steers), and a preview sitting in that
+fallback is the expected reading rather than a bug you introduced. Put which mode it is in
+`state:` — otherwise the only evidence is HUD text, and `previewQuery` cannot tell you how the
+app is being driven. In a deployed window, where a human's click *does* take the lock, the
+shell also stops delivering Ctrl+W for as long as it is held, so a player walking forward with
+Ctrl down cannot close the window out from under themselves.
 
 When a `previewEval` has to wait a long or open-ended time, don't raise the timeouts
 indefinitely — have the expression stash its result on `window` and return immediately, then
