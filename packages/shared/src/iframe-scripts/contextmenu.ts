@@ -122,10 +122,17 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     // forward with Ctrl held, not a request to destroy the window. The app cannot
     // claim the key through \`keybindings\` either: held-key movement is sampled with
     // \`createKeyState\`, never declared as a command, and \`ctrl+w\` itself is reserved.
-    // preventDefault() above still stands — that is what keeps Chrome from closing the
-    // browser window — so the chord simply does nothing until Esc releases the lock.
     // Only the close is withheld: Shift+Tab and Ctrl+1-9 stay live, because a player
     // locked into a game needs a way out that is not the mouse.
+    //
+    // Do not read this line as the thing holding the window, and do not drop the
+    // preventDefault() above on the theory that it is redundant. What we measured:
+    // a top-level page cancels Ctrl+W perfectly well (three presses, three keydowns,
+    // window intact), yet a pointer-locked app in a normal tabbed Chrome still lost
+    // its window with this guard in place. It survives once the browser is opened
+    // with --app, which is what scripts/dev/start.sh now does. Which of the two is
+    // load-bearing, and where a tabbed window takes the accelerator that a top-level
+    // document keeps, is not understood — so both stay until it is.
     if (document.pointerLockElement && e.ctrlKey && e.key.toLowerCase() === 'w') return;
     // \`top\`, not \`parent\` — the only message here that skips the intermediate frames.
     // An app can embed another app (devtools' preview does), and \`parent\` is one hop:

@@ -34,8 +34,9 @@ button that is not the mouse, since the same button now steers), and a preview s
 fallback is the expected reading rather than a bug you introduced. Put which mode it is in
 `state:` — otherwise the only evidence is HUD text, and `previewQuery` cannot tell you how the
 app is being driven. In a deployed window, where a human's click *does* take the lock, the
-shell also stops delivering Ctrl+W for as long as it is held, so a player walking forward with
-Ctrl down cannot close the window out from under themselves.
+shell withholds Ctrl+W for as long as it is held, so a player walking forward with Ctrl down
+does not close the window out from under themselves — though that only holds up in a Chrome
+opened with `--app`, and why a normal tabbed window still takes the key is an open question.
 
 When a `previewEval` has to wait a long or open-ended time, don't raise the timeouts
 indefinitely — have the expression stash its result on `window` and return immediately, then
