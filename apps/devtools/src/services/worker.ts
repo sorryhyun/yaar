@@ -3,7 +3,9 @@ import { createSignal, batch } from '@bundled/solid-js';
 import { app, invoke, read, del, stream, errMsg, type StreamFrame } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { activeProject } from '../core';
-import { PersonaHandleSchema, WorkerFrameDataSchema } from '../schema';
+import { applyEdits, type EditSpec } from '../lib/edits';
+import { PersonaHandleSchema, WorkerEditListSchema, WorkerFrameDataSchema } from '../schema';
+import { readFileText } from './files';
 
 // The worker sub-agent — a sonnet-tier explorer devtools spawns for itself via
 // `yaar://apps/self/agents` (requires the user-granted `subagents` capability in
@@ -13,11 +15,13 @@ import { PersonaHandleSchema, WorkerFrameDataSchema } from '../schema';
 // against devtools' own storage grants). Containment, not plumbing — the worker
 // can never see more of the machine than devtools itself shows it.
 //
-// Three of the four look outward (list_files, read_file, grep). The fourth,
-// `report`, looks back: it is how the worker says something before its turn ends.
-// It needed no new capability precisely because of the shape above — a tool is
-// already just a name over the bridge to this one iframe, so the only agent a
-// report can reach is devtools' own. See `addWorkerReport` for what it buys.
+// Three of the five look outward (list_files, read_file, grep). The other two
+// look back: `report`, how the worker says something before its turn ends, and
+// `edit_request`, how it proposes a change it cannot make. Neither needed a new
+// capability, precisely because of the shape above — a tool is already just a
+// name over the bridge to this one iframe, so the only agent either can reach is
+// devtools' own. See `addWorkerReport` and the Edit requests section for what
+// they buy.
 //
 // One worker, not a cast: the id below is fixed (the manifest's `subagents.max`
 // is a ceiling, not a target), and the provider session is persistent —
@@ -39,7 +43,7 @@ const TURN_IDLE_TIMEOUT_MS = 180_000;
 export type WorkerStatus = 'offline' | 'spawning' | 'idle' | 'running' | 'error';
 
 export interface WorkerEntry {
-  kind: 'task' | 'answer' | 'tool' | 'report' | 'error';
+  kind: 'task' | 'answer' | 'tool' | 'report' | 'edit-request' | 'error';
   text: string;
   timestamp: number;
 }
@@ -56,6 +60,8 @@ export interface TurnOutcome {
   error?: string;
   /** Interim findings the worker posted with its `report` tool during the turn. */
   reports?: string[];
+  /** Edits the worker proposed during the turn, as summaries. */
+  proposals?: EditProposalSummary[];
 }
 
 /**
@@ -84,6 +90,8 @@ export interface WorkerTaskRecord {
    * safe here in a way it would not be for a signal-backed value.
    */
   reports?: string[];
+  /** Edits proposed during the turn, filled in at settle from the proposal list. */
+  proposals?: EditProposalSummary[];
   /**
    * Whether the app agent started this one, and so should be woken when it
    * settles. False for a task the user ran from the Worker panel: nobody is
@@ -169,10 +177,15 @@ function settle(outcome: TurnOutcome): void {
   // came back empty); this is the backstop for the path that forgets to, and
   // for any added later.
   const error = outcome.error ?? (answer ? undefined : noAnswerError(reports));
+  // Proposals ride out with the result for the same reason reports do: a task
+  // whose whole product is a proposed edit has produced something even if its
+  // answer was lost, and the caller cannot act on what it is not told about.
+  const proposals = proposalsOfTask(record.id);
   const settled: TurnOutcome = {
     ...(answer ? { answer } : {}),
     ...(error ? { error } : {}),
     ...(reports.length ? { reports } : {}),
+    ...(proposals.length ? { proposals } : {}),
   };
   const finished: WorkerTaskRecord = { ...record, endedAt: Date.now(), ...settled };
   batch(() => {
@@ -196,6 +209,7 @@ function settle(outcome: TurnOutcome): void {
       ...(finished.answer ? { answer: finished.answer } : {}),
       ...(finished.error ? { error: finished.error } : {}),
       ...(reports.length ? { reports } : {}),
+      ...(proposals.length ? { proposals } : {}),
       elapsedMs: (finished.endedAt ?? Date.now()) - finished.startedAt,
     },
     { wakeAgent: !!finished.wakeAgent && !served },
@@ -284,6 +298,258 @@ export function addWorkerReport(finding: string, notify = false): string {
   return wakeAgent
     ? `Report #${reports.length} delivered — the caller has been interrupted to read it. Keep working unless it tells you otherwise.`
     : `Report #${reports.length} recorded. It reaches the caller with your final answer, or in place of it if this turn cannot finish.`;
+}
+
+// ── Edit requests ─────────────────────────────────────────────────────────────
+//
+// The worker reads the project but cannot write to it, and its prompt has always
+// asked it to describe the precise edit it would make so the caller could apply
+// it. That description arrived as prose, which meant the main agent re-typed the
+// whole thing as `editFile` params — so delegating a survey saved reading tokens
+// and spent them all again on output. `edit_request` is that same instruction
+// given a shape: the worker submits EditSpecs, the main agent accepts or rejects
+// an id.
+//
+// Two properties keep this from being a write door in disguise:
+//
+// 1. **Nothing is applied here.** A submission is dry-run against the file and
+//    then parked. `acceptEditRequest` (protocol/worker.ts) is the only writer.
+// 2. **The dry run is the worker's own feedback loop.** A `persona:*` handler's
+//    return value lands in the worker's turn as a tool result, so a mismatched
+//    search string or an ambiguous one comes back while the worker still has the
+//    file in context and can fix it. Only proposals that already apply cleanly
+//    ever reach the main agent.
+
+/** Every proposal a settled worker turn leaves behind, capped like the transcript. */
+const MAX_PROPOSALS = 40;
+
+/**
+ * Refused as a string the worker can act on, not thrown: a missing project is a
+ * normal state mid-conversation (the user closed it), and an error would read as
+ * the tool being broken rather than the project being gone.
+ */
+export const NO_ACTIVE_PROJECT = 'No project is active in Dev Tools right now. Say so and stop.';
+
+/** A change the worker proposes and cannot make. */
+export interface EditProposal {
+  id: number;
+  /** The task it came out of, or null for one submitted with no turn in flight. */
+  taskId: number | null;
+  path: string;
+  edits: EditSpec[];
+  rationale: string;
+  createdAt: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'failed';
+  /**
+   * The read gate. `readEditRequest` is the only command that serves this, and
+   * `acceptEditRequest` refuses without it — so an accept is proof the payload
+   * passed through the main agent's context, which is the property that keeps
+   * "the agent that verifies is the agent that applies" true once the main agent
+   * stopped having to retype the edits.
+   *
+   * A discipline gate, not a security boundary: the worker is subordinate and
+   * already inside this iframe. It exists to make rubber-stamping take more
+   * effort than reading, not to withstand an adversary.
+   */
+  token: string;
+  /** Why it was rejected, or how applying it went. */
+  resolution?: string;
+}
+
+/** What a list of proposals says without quoting their bodies. */
+export interface EditProposalSummary {
+  id: number;
+  path: string;
+  edits: number;
+  rationale: string;
+  status: EditProposal['status'];
+}
+
+export const [workerProposals, setWorkerProposals] = createSignal<EditProposal[]>([]);
+let proposalSeq = 0;
+
+/**
+ * Feedback owed to the worker, delivered at the head of its next task.
+ *
+ * A rejection lands after the turn that proposed it has ended, and the server
+ * takes no message while a turn is not running — so the alternative to a queue
+ * is a worker that proposes the same rejected edit again next task. Drained by
+ * `startWorkerTask`.
+ */
+let pendingFeedback: string[] = [];
+
+/** FNV-1a over the proposal body. Short, stable, and not derivable from a summary. */
+function proposalToken(path: string, rationale: string, edits: EditSpec[]): string {
+  const source = `${path} ${rationale} ${JSON.stringify(edits)}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < source.length; i++) {
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36).padStart(7, '0');
+}
+
+/**
+ * A summary carries the rationale and never the edit bodies: `readEditRequest` is
+ * where those live, and an accept is supposed to cost a deliberate read. The cap is
+ * therefore sized to fit a whole rationale rather than to save room — one cut
+ * mid-sentence is worse than useless, since it reads as a complete thought.
+ */
+export function summarizeProposal(p: EditProposal): EditProposalSummary {
+  const rationale = p.rationale.length > 500 ? `${p.rationale.slice(0, 500)}…` : p.rationale;
+  return { id: p.id, path: p.path, edits: p.edits.length, rationale, status: p.status };
+}
+
+export function findProposal(id: number): EditProposal | undefined {
+  return workerProposals().find((p) => p.id === id);
+}
+
+/** Move a proposal out of `pending`, keeping the record for the transcript. */
+export function resolveProposal(
+  id: number,
+  status: EditProposal['status'],
+  resolution: string,
+): void {
+  setWorkerProposals(
+    workerProposals().map((p) => (p.id === id ? { ...p, status, resolution } : p)),
+  );
+}
+
+/** Tell the worker how one of its proposals ended, at the start of its next task. */
+export function queueWorkerFeedback(line: string): void {
+  pendingFeedback.push(line);
+}
+
+/** What a dry run concluded: the edits apply, or the reason they do not. */
+export interface ProposalCheck {
+  ok: boolean;
+  error?: string;
+  lines?: number;
+}
+
+/**
+ * Apply the edits in memory and throw nothing away — the check both `edit_request`
+ * and `acceptEditRequest` run, for different reasons. At submission it is the
+ * worker's correction loop; at accept it is the staleness check, because the file
+ * may have moved under the proposal in between.
+ *
+ * `requireUnique` is on: a search string that matches twice would splice into
+ * whichever came first, and the worker is not there to notice.
+ */
+export async function validateProposedEdits(
+  path: string,
+  edits: EditSpec[],
+): Promise<ProposalCheck> {
+  if (!activeProject()) return { ok: false, error: NO_ACTIVE_PROJECT };
+  const content = await readFileText(path);
+  if (content === null) {
+    return { ok: false, error: `No such file in the active project: ${path}` };
+  }
+  try {
+    const { content: updated } = applyEdits(content, edits, { requireUnique: true });
+    if (updated === content) {
+      return { ok: false, error: 'These edits leave the file byte-identical — nothing to apply.' };
+    }
+    return { ok: true, lines: updated.split('\n').length };
+  } catch (err) {
+    return { ok: false, error: errMsg(err) };
+  }
+}
+
+/**
+ * Take one proposed edit from the worker, dry-run it, and park it for the caller.
+ *
+ * Returns the string the worker reads as its tool result — which is the whole
+ * point of validating here rather than at accept: a rejection it can act on
+ * arrives inside the turn that can still fix it.
+ */
+export async function addWorkerEditRequest(input: {
+  path: string;
+  editsJson: string;
+  rationale: string;
+  notify?: boolean;
+}): Promise<string> {
+  const path = input.path.trim();
+  const rationale = input.rationale.trim();
+  if (!path) return 'No path given — say which file this edit is for.';
+  if (!rationale) {
+    return 'No rationale given. Say why this edit is right; the caller decides from it.';
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(input.editsJson);
+  } catch (err) {
+    return `edits is not valid JSON (${errMsg(err)}). Send an array of edit objects, e.g. [{"search":"old text","replace":"new text"}].`;
+  }
+  const parsed = z.safeParse(WorkerEditListSchema, raw);
+  if (!parsed.success) {
+    return 'edits must be an array of objects, each with search+replace or startLine+endLine+anchor.';
+  }
+  if (parsed.data.length === 0) return 'edits is empty — nothing to propose.';
+
+  // Normalize the aliases once, so everything downstream (the dry run, the stored
+  // record, the accept) sees one spelling.
+  const edits: EditSpec[] = parsed.data.map((e) => ({
+    ...(e.search !== undefined || e.oldString !== undefined
+      ? { search: e.search ?? e.oldString }
+      : {}),
+    ...(e.replace !== undefined || e.newString !== undefined
+      ? { replace: e.replace ?? e.newString }
+      : {}),
+    ...(e.startLine !== undefined ? { startLine: e.startLine } : {}),
+    ...(e.endLine !== undefined ? { endLine: e.endLine } : {}),
+    ...(e.anchor !== undefined ? { anchor: e.anchor } : {}),
+  }));
+
+  const check = await validateProposedEdits(path, edits);
+  if (!check.ok) {
+    // Not recorded: a proposal that does not apply is not a proposal, and parking
+    // it would spend the caller's attention on the worker's typo.
+    return `Not submitted — ${check.error} Re-read the file and try again; nothing was changed.`;
+  }
+
+  const proposal: EditProposal = {
+    id: ++proposalSeq,
+    taskId: inflight?.record.id ?? null,
+    path,
+    edits,
+    rationale,
+    createdAt: Date.now(),
+    status: 'pending',
+    token: proposalToken(path, rationale, edits),
+  };
+  setWorkerProposals([...workerProposals(), proposal].slice(-MAX_PROPOSALS));
+  appendEntry(
+    'edit-request',
+    `#${proposal.id} ${path} · ${edits.length} edit${edits.length === 1 ? '' : 's'}\n${rationale}`,
+  );
+  keepAlive();
+
+  const wakeAgent = !!inflight?.record.wakeAgent && input.notify === true;
+  app?.emit(
+    'worker',
+    {
+      kind: 'edit-request',
+      taskId: proposal.taskId,
+      proposal: summarizeProposal(proposal),
+      elapsedMs: inflight ? Date.now() - inflight.record.startedAt : 0,
+    },
+    { wakeAgent },
+  );
+
+  return (
+    `Edit request #${proposal.id} submitted and verified against ${path} — it applies cleanly ` +
+    `(${check.lines} lines after). The caller decides whether to apply it; you cannot. ` +
+    'Keep working, and still describe this change in your final answer.'
+  );
+}
+
+/** The proposals one task produced, for the result it settles with. */
+function proposalsOfTask(taskId: number): EditProposalSummary[] {
+  return workerProposals()
+    .filter((p) => p.taskId === taskId)
+    .map(summarizeProposal);
 }
 
 /** Fold one stream frame into the panel state; settle the turn on a terminal. */
@@ -419,9 +685,13 @@ layout, grep to locate, read_file to confirm. The active project can be switched
 your tools always answer for the project as it is now, so when results look inconsistent with
 what you remember, re-list rather than arguing with the tools.
 
-Your tools are read-only. You cannot edit files, compile, or run anything — for a task that
-needs a change, describe exactly what you found and the precise edit you would make (file, line,
-before/after), so the caller can apply it.
+You cannot edit files, compile, or run anything. When a task needs a change, submit it with the
+edit_request tool rather than describing it in prose: the caller applies your exact search and
+replace instead of retyping it, which is the whole reason the tool exists. Read the file first and
+copy the search string out of what read_file showed you, with enough surrounding lines that it
+occurs exactly once — a string matching twice is refused, because replacing the first match would
+be a guess. The tool answers you either way, so a refusal is yours to fix and resubmit in this same
+turn. Still describe the change in your final answer: the caller decides from that.
 
 Report as you go with the report tool — after each batch of files, not saved up for the end. Two
 reasons, both real: your final answer can be lost whole to a size cap, while a report already
@@ -467,6 +737,46 @@ const WORKER_TOOLS = [
     input: {
       pattern: { type: 'string', description: 'Regex pattern to search for.' },
       glob: { type: 'string', description: 'File glob filter, e.g. src/**/*.ts.', optional: true },
+    },
+  },
+  {
+    name: 'edit_request',
+    description:
+      'Propose one edit to one file of the active project. You cannot apply it — the caller ' +
+      'accepts or rejects it — but sending one saves the caller retyping a change you have ' +
+      'already worked out, which is why you should prefer it to describing an edit in prose. ' +
+      'Every request is applied to the file in memory before it is accepted for submission and ' +
+      'the outcome is returned to you, so a search string that does not match, or that matches ' +
+      'more than once, comes back while you can still fix it. Nothing is written to the file ' +
+      'either way. One request per coherent change; batch several steps in the same file into ' +
+      'one request rather than sending several.',
+    input: {
+      path: { type: 'string', description: 'Project-relative path, e.g. src/main.ts.' },
+      edits: {
+        type: 'string',
+        description:
+          'A JSON array of edit steps, as a string. Each step is either ' +
+          '{"search":"exact current text","replace":"new text"} — the search text copied ' +
+          'verbatim from read_file and long enough to occur exactly once — or ' +
+          '{"startLine":N,"endLine":M,"anchor":"current text of line N","replace":"new text"}. ' +
+          'Omit replace in a line-range step to delete the lines. Steps apply in order, each ' +
+          'to the text the one before it left.',
+      },
+      rationale: {
+        type: 'string',
+        description:
+          'Why this edit is right, in a sentence or two. The caller decides from this, so ' +
+          'say what is wrong now rather than restating the diff. Plain prose, not JSON: ' +
+          'this field is read as text, so write quotes and backslashes as themselves. An ' +
+          'escaped quote arrives as a literal \\" and reads as noise.',
+      },
+      notify: {
+        type: 'boolean',
+        description:
+          'True to interrupt the caller to look at this now. Default false, which is right ' +
+          'for anything that can wait for your final answer.',
+        optional: true,
+      },
     },
   },
   {
@@ -594,6 +904,15 @@ export async function startWorkerTask(
     return { error: `Could not spawn the worker: ${errMsg(err)}` };
   }
 
+  // Feedback on earlier proposals is delivered here rather than pushed when it
+  // was decided: the server takes a message only while a turn is running, and
+  // an accept or a reject lands after the proposing turn has ended.
+  const owed = pendingFeedback;
+  pendingFeedback = [];
+  const message = owed.length
+    ? `Since your last turn:\n${owed.map((line) => `- ${line}`).join('\n')}\n\nNow: ${content}`
+    : content;
+
   const record: WorkerTaskRecord = {
     id: ++taskSeq,
     task: content,
@@ -611,7 +930,7 @@ export async function startWorkerTask(
   keepAlive();
 
   try {
-    await invoke(`yaar://apps/self/agents/${WORKER_ID}`, { action: 'message', content });
+    await invoke(`yaar://apps/self/agents/${WORKER_ID}`, { action: 'message', content: message });
   } catch (err) {
     // A turn that already settled is not this call's to fail: a fast worker can
     // finish before `message` resolves, and reporting the queue error then would
@@ -646,6 +965,8 @@ export interface WaitResult {
   error?: string;
   /** Interim findings the worker posted while it worked, oldest first. */
   reports?: string[];
+  /** Edits the worker proposed, as summaries — read one whole with readEditRequest. */
+  proposals?: EditProposalSummary[];
 }
 
 /** Project a settled record into the wait result shape. */
@@ -663,6 +984,7 @@ function resultOf(record: WorkerTaskRecord): WaitResult {
     ...(record.error || record.answer ? {} : { error: noAnswerError(record.reports ?? []) }),
     ...(record.error ? { error: record.error } : {}),
     ...(record.reports?.length ? { reports: record.reports } : {}),
+    ...(record.proposals?.length ? { proposals: record.proposals } : {}),
   };
 }
 
@@ -727,6 +1049,7 @@ export function waitForWorker(
         // to now instead of only "still running", and can decide from it
         // whether to keep waiting or interrupt.
         ...(record.reports?.length ? { reports: [...record.reports] } : {}),
+        ...(proposalsOfTask(record.id).length ? { proposals: proposalsOfTask(record.id) } : {}),
       });
     }, waitMs);
     waiters.push((outcome) => {
@@ -743,6 +1066,7 @@ export function waitForWorker(
         ...(outcome.answer ? { answer: outcome.answer } : {}),
         ...(outcome.error ? { error: outcome.error } : {}),
         ...(outcome.reports?.length ? { reports: outcome.reports } : {}),
+        ...(outcome.proposals?.length ? { proposals: outcome.proposals } : {}),
       });
       return true;
     });
@@ -803,6 +1127,11 @@ export async function resetWorker(): Promise<void> {
     setWorkerDraft('');
     setWorkerThinking('');
     setWorkerStatus('offline');
+    // Proposals go with the transcript too: their rationale is a turn of a
+    // conversation that no longer exists, and accepting one on the strength of a
+    // summary alone is the reading this feature exists to prevent.
+    setWorkerProposals([]);
+    pendingFeedback = [];
     // The last result goes with the transcript it belonged to. Keeping it would
     // hand the next `workerWait` an answer from a conversation that no longer
     // exists — the one reading a reset worker is least equipped to catch.

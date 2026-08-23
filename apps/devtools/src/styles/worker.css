@@ -70,6 +70,15 @@
   margin-bottom: 2px;
 }
 
+/* A proposed edit: an answer's face in the accent wash, because unlike a report
+   it is waiting on someone rather than merely informing them. */
+.worker-entry-edit-request {
+  background: var(--yaar-wash-accent);
+  border-left: 2px solid var(--yaar-accent-emphasis);
+  font-family: var(--yaar-font-mono, monospace);
+  font-size: 11px;
+}
+
 .worker-entry-tool {
   padding: 0 var(--yaar-sp-2);
   color: var(--yaar-text-muted);

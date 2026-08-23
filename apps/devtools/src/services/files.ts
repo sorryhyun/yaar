@@ -178,6 +178,17 @@ async function currentText(projectId: string, path: string): Promise<string | nu
   }
 }
 
+/**
+ * The same read against the active project, for callers that hold a path and
+ * nothing else — the worker's edit-request dry run, which must see exactly the
+ * bytes an accepted edit would be applied to.
+ */
+export async function readFileText(path: string): Promise<string | null> {
+  const proj = activeProject();
+  if (!proj) return null;
+  return currentText(proj.id, path);
+}
+
 export interface WriteReceipt {
   path: string;
   lines: number;

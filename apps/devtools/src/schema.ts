@@ -140,5 +140,28 @@ export const WorkerFrameDataSchema = z.looseObject({
   status: z.optional(z.string()),
 });
 
+/**
+ * One step of an edit the worker proposes through its `edit_request` tool.
+ *
+ * Mirrors `EditSpec` in lib/edits.ts, and is declared again rather than derived
+ * from it because this is a boundary in a way the interface is not: the value
+ * arrives as JSON a model typed into a string argument, so nothing has checked
+ * it before this point. `oldString`/`newString` are accepted for the same reason
+ * `editFile` accepts them — a worker that reaches for the alias should be
+ * corrected by the dry run's real errors, not rejected at the parse.
+ */
+const WorkerEditSpecSchema = z.looseObject({
+  search: z.optional(z.string()),
+  replace: z.optional(z.string()),
+  oldString: z.optional(z.string()),
+  newString: z.optional(z.string()),
+  startLine: z.optional(z.number()),
+  endLine: z.optional(z.number()),
+  anchor: z.optional(z.string()),
+});
+
+/** The whole `edits` payload of one edit request: a non-empty list of steps. */
+export const WorkerEditListSchema = z.array(WorkerEditSpecSchema);
+
 export type PersonaHandle = z.infer<typeof PersonaHandleSchema>;
 export type WorkerFrameData = z.infer<typeof WorkerFrameDataSchema>;

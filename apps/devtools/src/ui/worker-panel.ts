@@ -89,7 +89,9 @@ export function WorkerPanel() {
         <${Show} when=${() => workerEntries().length === 0 && !busy()}>
           <div class="worker-empty y-text-xs y-text-muted">
             A sonnet sub-agent that explores the active project with read-only tools (list, read,
-            grep) and reports back. Give it a task below — follow-ups share its memory.
+            grep) and reports back. It can propose edits but never apply them — the agent you are
+            talking to accepts or rejects those. Give it a task below — follow-ups share its
+            memory.
           </div>
         <//>
         <${For} each=${workerEntries}>
@@ -97,6 +99,9 @@ export function WorkerPanel() {
             <div class=${entryClass(entry)}>
               <${Show} when=${() => entry.kind === 'report'}>
                 <div class="worker-report-tag">interim report</div>
+              <//>
+              <${Show} when=${() => entry.kind === 'edit-request'}>
+                <div class="worker-report-tag">proposed edit · awaiting the agent</div>
               <//>
               <${Show} when=${() => entry.kind === 'tool'} fallback=${() => entry.text}>
                 <span class="worker-tool-line">⚙ ${entry.text}</span>

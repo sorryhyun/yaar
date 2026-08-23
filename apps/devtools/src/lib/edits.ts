@@ -39,7 +39,28 @@ export function truncateRemoved(text: string, max = 500): string {
   return `${text.slice(0, head)}\n… [${elided} chars elided] …\n${text.slice(-tail)}`;
 }
 
-function applyEdit(content: string, edit: EditSpec, label: string): EditResult {
+/**
+ * How many times `search` occurs in `content`. Plain scan rather than a regex —
+ * the search string is arbitrary file text and would need escaping first.
+ */
+export function countOccurrences(content: string, search: string): number {
+  if (!search) return 0;
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const at = content.indexOf(search, from);
+    if (at === -1) return count;
+    count++;
+    from = at + search.length;
+  }
+}
+
+function applyEdit(
+  content: string,
+  edit: EditSpec,
+  label: string,
+  requireUnique: boolean,
+): EditResult {
   const hasSearch = edit.search !== undefined;
   const hasRange = edit.startLine !== undefined || edit.endLine !== undefined;
   if (hasSearch && hasRange) {
@@ -53,6 +74,22 @@ function applyEdit(content: string, edit: EditSpec, label: string): EditResult {
     }
     if (!content.includes(edit.search!)) {
       throw new Error(`${label}: search string not found in file`);
+    }
+    // Search mode replaces the FIRST match only, so a non-unique search string
+    // splices somewhere the author did not look. That is tolerable for an edit
+    // written and applied in the same breath — the author has the file in front
+    // of them — and not tolerable for one proposed at time T and applied at T+n
+    // by someone else, which is what a worker edit request is. Hence the opt-in
+    // rather than a change of default: see validateProposedEdits in services/worker.ts.
+    if (requireUnique) {
+      const seen = countOccurrences(content, edit.search!);
+      if (seen > 1) {
+        throw new Error(
+          `${label}: search string appears ${seen} times in the file, so replacing the ` +
+            'first match would be a guess. Extend it with surrounding lines until it is ' +
+            'unique, or use a line range with an anchor.',
+        );
+      }
     }
     // A function replacer inserts the replacement literally. Passing it as a string
     // would expand $&, $1, $` and $' — so a replacement containing `$` would
@@ -111,12 +148,16 @@ function applyEdit(content: string, edit: EditSpec, label: string): EditResult {
 export function applyEdits(
   content: string,
   edits: EditSpec[],
+  opts: { requireUnique?: boolean } = {},
 ): { content: string; removals: string[] } {
   let current = content;
   const removals: string[] = [];
   edits.forEach((edit, i) => {
     const label = edits.length > 1 ? `edit ${i + 1} of ${edits.length}` : 'edit';
-    const result = applyEdit(current, edit, label);
+    // Uniqueness is checked against `current`, not the original: a later edit in a
+    // batch sees the text earlier ones left behind, and that is the text it will
+    // actually match against.
+    const result = applyEdit(current, edit, label, opts.requireUnique === true);
     current = result.content;
     removals.push(result.removed);
   });

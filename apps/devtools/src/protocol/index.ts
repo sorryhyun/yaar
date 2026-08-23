@@ -21,6 +21,8 @@ import {
   workerEntries,
   workerActiveTask,
   workerLastResult,
+  workerProposals,
+  summarizeProposal,
 } from '../services/worker';
 import { previewWindowIsOpen } from '../services';
 
@@ -212,7 +214,10 @@ export const devtoolsState = {
       'it ends; `lastResult` is the last one to finish ({ taskId, answer, error, reports, ' +
       'elapsedMs }), always carrying an answer or an error. This is the poll-shaped read: ' +
       'it never blocks, so use it to check on a task while you work. To *wait* for one, ' +
-      'call workerWait instead of polling this in a loop.',
+      'call workerWait instead of polling this in a loop. `proposals` are edits the worker ' +
+      'submitted with its edit_request tool and cannot apply, newest last, as summaries — ' +
+      'each already verified to apply cleanly, each waiting on you: readEditRequest for the ' +
+      'body, then acceptEditRequest or rejectEditRequest.',
     get: () => {
       const entries = workerEntries();
       // Tool lines are one-liners; tasks and answers can be long. Cap per entry so a
@@ -240,6 +245,7 @@ export const devtoolsState = {
               elapsedMs: (last.endedAt ?? Date.now()) - last.startedAt,
             }
           : null,
+        proposals: workerProposals().map(summarizeProposal),
         transcript: entries.slice(-30).map((e) => ({ kind: e.kind, text: clip(e.text) })),
       };
     },

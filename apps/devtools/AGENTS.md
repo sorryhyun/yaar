@@ -131,6 +131,32 @@ skips the raise while the editor textarea has focus — autosave records a chang
 pauses, and the sidebar is now the same column as the file tree, so raising it mid-edit would pull
 the tree out from under someone reading their own code.
 
+## The worker proposes; only one command applies
+
+The worker sub-agent reads the project and cannot write to it. `edit_request` does not change
+that: a submission is dry-run against the file and parked, and **`acceptEditRequest` in
+`protocol/worker.ts` is the only thing in this app that turns a proposal into a write.** Anything
+added to the worker's tool list that writes directly re-opens the hole this shape closes.
+
+Three properties hold it together, and each exists because the obvious version fails:
+
+- **The dry run runs at submit *and* at accept.** At submit it is the worker's correction loop —
+  a `persona:*` handler's return value lands in the worker's turn as a tool result, so a bad
+  search string comes back while the worker still has the file in context. At accept it is the
+  staleness check, because the file may have moved in between.
+- **Proposed edits require a unique search string** (`requireUnique` in `lib/edits.ts`). Search
+  mode replaces the *first* match, which is fine for an edit written and applied in one breath
+  and not fine for one written at T and applied at T+n by someone else. The flag is opt-in
+  rather than the default for exactly that reason — do not turn it on for `editFile`.
+- **Accept needs the `token` from `readEditRequest` and an `intent` the caller wrote.** Without
+  them, delegation degrades into a forward: the point of a slower agent in the loop is that it
+  read the diff. A token is a discipline gate, not a security boundary — the worker is already
+  inside this iframe.
+
+A rejection is delivered to the worker at the head of its *next* task (`pendingFeedback` in
+`services/worker.ts`), because the server takes no message while no turn is running. Drop that
+queue and a rejected proposal comes back unchanged.
+
 ## Where the panes live
 
 The workspace is three regions, and which component owns which is not obvious from the file names:
