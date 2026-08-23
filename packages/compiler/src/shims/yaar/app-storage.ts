@@ -79,7 +79,13 @@ export const appStorage = {
     }
   },
   async read(path: string): Promise<string> {
-    return asText(await y.read(appStorageUri(path)));
+    // Through the raw storage door (an HTTP GET of the file), not the verb layer. A verb
+    // read of a text file whose content happens to parse as JSON hands back the parsed
+    // value, and re-serializing that flattens the file to one minified line — so every
+    // read of a valid .json file lied about its formatting, and an app that wrote the
+    // result back (an edit round trip) flattened the file on disk for real. `as: 'text'`
+    // keeps this door from doing its own content-type parse.
+    return String(await y.storage.read(appStorageUri(path), { as: 'text' }));
   },
   async readJson<T = unknown>(path: string): Promise<T> {
     return y.read(appStorageUri(path));

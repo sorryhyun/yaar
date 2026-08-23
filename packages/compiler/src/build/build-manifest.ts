@@ -115,8 +115,14 @@ import { join, basename } from 'path';
  * Same reasoning as '25': the apps this fixes are precisely the ones nobody is about
  * to edit, and the baked-in copy wins over the injected one. The bump also gets every
  * app the `window.__yaar_links__` block, which is what arms the guard.
+ *
+ * '28': `appStorage.read` reads through the raw storage door instead of the verb layer,
+ * whose envelope JSON-parses any text that will parse — so a valid .json file read back
+ * as one minified line, and any app that wrote a read back (an edit round trip)
+ * flattened the file on disk. The SDK is compiled into `dist/`, so only a bump carries
+ * the fix to apps nobody is about to edit.
  */
-export const COMPILER_VERSION = '27';
+export const COMPILER_VERSION = '28';
 
 export interface BuildManifest {
   sourceHash: string;

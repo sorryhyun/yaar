@@ -8,6 +8,7 @@ import {
   previewStaleNote,
   queryPreviewState,
   readPreview,
+  runPreviewScript,
 } from '../services';
 
 export const previewCommands = {
@@ -191,6 +192,45 @@ export const previewCommands = {
         throw new AppCommandError(`Preview command failed: ${errMsg(err)}`);
       }
     },
+  }),
+  previewScript: defineAppCommand({
+    description:
+      'Run a scripted regression: execute the steps in a JSON script file from the project ' +
+      'against the open preview, record each result (projected through the step\'s `pick` ' +
+      'paths), and diff against the script\'s baseline file — failures come back as ' +
+      '{ step, expected, actual } rows. With no baseline yet, the run writes one: capture on ' +
+      'a build you trust, refactor, re-run to compare. Requires an open, non-stale preview ' +
+      'on the current compile. A many-step script needs this command\'s own timeoutMs raised ' +
+      'well past the sum of its steps. Script format and workflow: the regression-testing ' +
+      'doc topic.',
+    params: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Script file in the project. Default test/regression.json.',
+        },
+        update: {
+          type: 'boolean',
+          description:
+            'Rewrite the baseline from this run, reporting which rows moved. Only after ' +
+            'verifying the new behavior is intended — an updated baseline is the new truth.',
+        },
+        groups: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Run only steps in these groups (ungrouped steps still run). The comparison ' +
+            'then covers only what ran. Incompatible with update.',
+        },
+      },
+    },
+    run: async (p) =>
+      await runPreviewScript({
+        ...(typeof p.path === 'string' ? { path: p.path } : {}),
+        ...(p.update === true ? { update: true } : {}),
+        ...(Array.isArray(p.groups) ? { groups: p.groups.map((g) => String(g)) } : {}),
+      }),
   }),
   resizePreview: defineAppCommand({
     description:

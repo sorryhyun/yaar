@@ -24,7 +24,7 @@ Without a raised `timeoutMs`, a slow build surfaces as "App did not respond" ins
 
 `skipTypecheck: true` exists for emergencies only. If you use it, say so out loud; you are shipping unchecked code.
 
-**Testing after fixes:** for a complex or uncertain change, `relay` the monitor to open and exercise the real app.
+**Testing after fixes:** for a complex or uncertain change, `relay` the monitor to open and exercise the real app. For a refactor that must preserve behavior, capture a `previewScript` baseline on the pre-change build and re-run it after — the `regression-testing` topic — rather than driving commands by hand and judging the numbers yourself.
 
 ## Projects and Clones
 
