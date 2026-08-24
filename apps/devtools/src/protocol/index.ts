@@ -25,6 +25,7 @@ import {
   summarizeProposal,
 } from '../services/worker';
 import { previewWindowIsOpen } from '../services';
+import { resolveCompileStatus } from '../lib';
 
 export { projectCommands } from './projects';
 export { fileCommands } from './files';
@@ -34,6 +35,7 @@ export { previewCommands } from './preview';
 export { introspectCommands } from './introspect';
 export { httpCommands } from './http';
 export { workerCommands } from './worker';
+export { testCommands } from './test';
 
 /**
  * The `defineApp({ state })` map. Split from `main.ts` for the same reason the
@@ -116,18 +118,10 @@ export const devtoolsState = {
       '(after a `skipTypecheck` compile, or after any write since the last one) — that is ' +
       'not a pass. "error" means one half failed: read `compileErrors` for the bundler and ' +
       '`diagnostics` for typecheck. Values: idle | compiling | success | unchecked | error.',
-    get: () => {
-      const bundle = bundleStatus();
-      // A bundle that never succeeded decides it on its own: there is nothing to be
-      // clean about. Only "it built" leaves the question open for typecheck to answer.
-      if (bundle !== 'success') return bundle;
-      const checked = typecheckState();
-      // Reported as its own value, not folded into either verdict. "It built and nobody
-      // type checked it" was the state this key used to call `success`, which is how a
-      // project with six live type errors got waved through as clean.
-      if (checked === 'unknown') return 'unchecked';
-      return checked === 'errors' ? 'error' : 'success';
-    },
+    // The reducer is pure and lives in lib/compile-status.ts, shared with the `compile`
+    // command so the two cannot drift apart. Its unit checks are the `compile-status`
+    // suite in selfTest.
+    get: () => resolveCompileStatus(bundleStatus(), typecheckState()),
   },
   compileErrors: {
     description:

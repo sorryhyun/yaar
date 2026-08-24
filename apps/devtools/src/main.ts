@@ -12,6 +12,7 @@ import {
   introspectCommands,
   httpCommands,
   workerCommands,
+  testCommands,
 } from './protocol/index';
 
 // Registers the protocol and mounts `AppShell` into the compiler's `#app`.
@@ -44,6 +45,7 @@ export default defineApp({
     ...introspectCommands,
     ...httpCommands,
     ...workerCommands,
+    ...testCommands,
   },
   view: AppShell,
 });

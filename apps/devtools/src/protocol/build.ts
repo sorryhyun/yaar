@@ -7,6 +7,7 @@ import {
   previewWindowId,
   staticProtocol,
 } from '../core';
+import { resolveCompileStatus } from '../lib';
 import {
   compile,
   typecheck,
@@ -71,7 +72,10 @@ export const buildCommands = {
       // `skipTypecheck` gets its own word rather than borrowing `success`: nothing here
       // checked the code, and the `compileStatus` state key says the same thing so a
       // caller polling it cannot land on a cleaner answer than the command gave.
-      const status = !built ? 'error' : skip ? 'unchecked' : typeErrors === 0 ? 'success' : 'error';
+      const status = resolveCompileStatus(
+        built ? 'success' : 'error',
+        skip ? 'unknown' : typeErrors === 0 ? 'clean' : 'errors',
+      );
 
       // Refresh an open preview onto the build we just made. Left alone, it went on
       // showing the previous one — so a screenshot taken to confirm a fix showed the

@@ -8,3 +8,4 @@ export * from './scaffold';
 export * from './edits';
 export * from './parse-diagnostics';
 export * from './diff';
+export * from './compile-status';
