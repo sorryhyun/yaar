@@ -16,8 +16,13 @@ src/
 ├── store.ts       # Signals and shared state
 ├── types.ts       # Type definitions
 ├── helpers.ts     # Pure utility functions
+├── test/          # previewScript regression suite — the regression-testing topic
 └── sprite.png     # Static assets — imported, not fetched
 ```
+
+Deploy ships `src/`, `agent/` and the root files and nothing else, which is why the test
+suite sits under `src/`: a directory at any other top level is silently absent from the
+deployed app.
 
 **Mounting and design tokens are specified in the App Authoring Contract appended to your
 prompt** — generated from the compiler itself and authoritative. Read it rather than guessing

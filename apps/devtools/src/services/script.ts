@@ -17,7 +17,9 @@ function defaultBaselinePath(scriptPath: string): string {
   return dir ? `${dir}/baseline.json` : 'baseline.json';
 }
 
-const DEFAULT_SCRIPT_PATH = 'test/regression.json';
+// Under src/, because deploy ships only src/, agent/ and the root files — a suite at a
+// top-level test/ is dropped from the deployed app silently.
+const DEFAULT_SCRIPT_PATH = 'src/test/regression.json';
 /** Serialized chars kept per recorded row. Truncation is deterministic, so a capped
  * row still compares stably — it just compares on its prefix. */
 const ROW_CHARS = 4000;
@@ -35,10 +37,11 @@ type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
 interface ParsedStep {
   index: number;
-  kind: 'command' | 'eval' | 'resize';
+  kind: 'command' | 'eval' | 'resize' | 'state';
   command?: string;
   params?: Record<string, unknown>;
   expression?: string;
+  stateKey?: string;
   width?: number;
   height?: number;
   timeoutMs?: number;
@@ -111,8 +114,49 @@ function reportValue(value: Json): string {
   return text.length > REPORT_CHARS ? `${text.slice(0, REPORT_CHARS)}…` : text;
 }
 
-function fail(index: number, message: string): never {
-  throw new AppCommandError(`Script step ${index}: ${message}`);
+function fail(index: number, message: string, label?: string): never {
+  throw new AppCommandError(`Script step ${index}${label ? ` (${label})` : ''}: ${message}`);
+}
+
+/** Key a row by label, numbering repeats, so duplicate labels still pair up 1:1. */
+function rowKeys(rows: BaselineRow[]): string[] {
+  const seen = new Map<string, number>();
+  return rows.map((r) => {
+    const n = seen.get(r.label) ?? 0;
+    seen.set(r.label, n + 1);
+    return n === 0 ? r.label : `${r.label} (${n + 1})`;
+  });
+}
+
+interface RowDelta {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+/**
+ * Compare two row lists by label rather than by position, so a step inserted in the
+ * middle reports as one addition instead of shifting every row after it into
+ * `changed`. This is what makes an `update: true` over a restructured script
+ * readable: the caller needs to see what arrived and what left, not a wall of
+ * off-by-one diffs.
+ */
+function diffRows(before: BaselineRow[], after: BaselineRow[]): RowDelta {
+  const beforeKeys = rowKeys(before);
+  const afterKeys = rowKeys(after);
+  const beforeBy = new Map(beforeKeys.map((k, i) => [k, before[i]!]));
+  const afterBy = new Map(afterKeys.map((k, i) => [k, after[i]!]));
+  return {
+    added: afterKeys.filter((k) => !beforeBy.has(k)),
+    removed: beforeKeys.filter((k) => !afterBy.has(k)),
+    changed: afterKeys.filter((k) => {
+      const b = beforeBy.get(k);
+      return (
+        b !== undefined &&
+        JSON.stringify(normalize(b.value)) !== JSON.stringify(afterBy.get(k)!.value)
+      );
+    }),
+  };
 }
 
 /**
@@ -141,9 +185,22 @@ function parseScript(scriptPath: string, text: string): ParsedScript {
       fail(index, 'each step must be an object.');
     }
     const s = entry as Record<string, unknown>;
-    const kinds = ['command', 'eval', 'resize'].filter((k) => s[k] !== undefined);
+    const label = typeof s.label === 'string' ? s.label : undefined;
+    // `{ type: "state", key }` is an accepted spelling of `{ state: key }`; the rest
+    // of the format discriminates by which key is present, so it normalizes to that.
+    if (s.type === 'state' && s.state === undefined) {
+      if (typeof s.key !== 'string' || !s.key.trim()) {
+        fail(index, '"type": "state" needs "key" naming a declared state key.', label);
+      }
+      s.state = s.key;
+    }
+    const kinds = ['command', 'eval', 'resize', 'state'].filter((k) => s[k] !== undefined);
     if (kinds.length !== 1) {
-      fail(index, `a step carries exactly one of "command", "eval", "resize" — found ${kinds.length}.`);
+      fail(
+        index,
+        `a step carries exactly one of "command", "eval", "resize", "state" — found ${kinds.length}.`,
+        label,
+      );
     }
     const group = typeof s.group === 'string' ? s.group : undefined;
     if (group && !groups.includes(group)) groups.push(group);
@@ -159,12 +216,12 @@ function parseScript(scriptPath: string, text: string): ParsedScript {
     if (s.resize !== undefined) {
       const size = s.resize;
       if (!Array.isArray(size) || size.length !== 2) {
-        fail(index, '"resize" must be [width, height].');
+        fail(index, '"resize" must be [width, height].', label);
       }
       const width = Number(size[0]);
       const height = Number(size[1]);
       if (!(width > 0) || !(height > 0)) {
-        fail(index, '"resize" must be [width, height] with positive numbers.');
+        fail(index, '"resize" must be [width, height] with positive numbers.', label);
       }
       // A resize is harness setup, never a measurement — recording the window
       // acknowledgment would make every baseline row after it shift on a rename.
@@ -173,38 +230,51 @@ function parseScript(scriptPath: string, text: string): ParsedScript {
         kind: 'resize',
         width,
         height,
-        label: typeof s.label === 'string' ? s.label : `#${index} resize`,
+        label: label ?? `#${index} resize`,
         record: false,
       };
     }
+    if (s.state !== undefined) {
+      if (typeof s.state !== 'string' || !s.state.trim()) {
+        fail(index, '"state" must name a key declared in defineApp({ state }).', label);
+      }
+      return {
+        ...base,
+        kind: 'state',
+        stateKey: s.state,
+        label: label ?? `#${index} state ${s.state}`,
+        record: s.record !== false,
+      };
+    }
     if (s.eval !== undefined) {
-      if (typeof s.eval !== 'string' || !s.eval.trim()) fail(index, '"eval" must be an expression string.');
+      if (typeof s.eval !== 'string' || !s.eval.trim()) {
+        fail(index, '"eval" must be an expression string.', label);
+      }
       return {
         ...base,
         kind: 'eval',
         expression: s.eval,
-        label: typeof s.label === 'string' ? s.label : `#${index} eval`,
+        label: label ?? `#${index} eval`,
         record: s.record !== false,
       };
     }
     if (typeof s.command !== 'string' || !s.command.trim()) {
-      fail(index, '"command" must be a command name string.');
+      fail(index, '"command" must be a command name string.', label);
     }
     if (s.params !== undefined && (s.params === null || typeof s.params !== 'object')) {
-      fail(index, '"params" must be an object.');
+      fail(index, '"params" must be an object.', label);
     }
     return {
       ...base,
       kind: 'command',
       command: s.command,
       params: (s.params as Record<string, unknown>) ?? {},
-      label: typeof s.label === 'string' ? s.label : `#${index} ${s.command}`,
+      label: label ?? `#${index} ${s.command}`,
       record: s.record !== false,
     };
   });
   return {
-    baselinePath:
-      typeof doc.baseline === 'string' ? doc.baseline : defaultBaselinePath(scriptPath),
+    baselinePath: typeof doc.baseline === 'string' ? doc.baseline : defaultBaselinePath(scriptPath),
     ...(scriptRound !== undefined ? { round: scriptRound } : {}),
     steps,
     groups,
@@ -217,6 +287,12 @@ async function executeStep(wid: string, step: ParsedStep): Promise<unknown> {
       action: 'resize',
       width: step.width,
       height: step.height,
+    });
+  }
+  if (step.kind === 'state') {
+    return await invoke<unknown>(`yaar://windows/${wid}`, {
+      action: 'app_query',
+      stateKey: step.stateKey,
     });
   }
   if (step.kind === 'eval') {
@@ -268,6 +344,10 @@ export interface ScriptRunResult {
   failuresOmitted?: number;
   /** Compared/updated only: rows whose value moved since the stored baseline. */
   changed?: string[];
+  /** Rows this run recorded that the baseline did not hold, by label. */
+  added?: string[];
+  /** Rows the baseline held that this run did not record, by label. */
+  removed?: string[];
   /** The script and the baseline no longer line up row-for-row — nothing was value-compared. */
   structureMismatch?: string;
   note?: string;
@@ -307,7 +387,9 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
   // passing rows is exactly the kind that gets read as noise.
   const stale = previewStaleNote();
   if (stale) {
-    throw new AppCommandError(`${stale}\nA regression run against a stale preview measures the wrong build.`);
+    throw new AppCommandError(
+      `${stale}\nA regression run against a stale preview measures the wrong build.`,
+    );
   }
 
   const scriptPath = opts.path ?? DEFAULT_SCRIPT_PATH;
@@ -340,16 +422,37 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
   const rows: BaselineRow[] = [];
   for (const step of toRun) {
     let value: unknown;
+    let stepError: string | undefined;
     try {
       value = await executeStep(wid, step);
     } catch (err) {
       // Recorded, not thrown: "this step now errors" is a comparable finding, and
       // later groups are self-contained enough to still be worth measuring.
-      value = { error: errMsg(err) };
+      stepError = errMsg(err);
+      value = { error: stepError };
     }
-    if (!step.record) continue;
+    if (!step.record) {
+      // A setup step's failure is invisible in the baseline by construction, so it
+      // stops the run instead of being swallowed: every later row would measure
+      // state the fixture never built, and rows that agree with the baseline
+      // anyway are worse than no rows at all.
+      if (stepError !== undefined) {
+        throw new AppCommandError(
+          `Script step ${step.index} (${step.label}) has "record": false and failed: ${stepError}\n` +
+            'A setup step must succeed — fix it, or drop "record": false so the failure is ' +
+            'recorded as a comparable row and the run continues.',
+        );
+      }
+      continue;
+    }
+    // A step that threw while naming `pick` paths would otherwise record a row of
+    // "<missing>" that says nothing about why. The error rides along so the diff's
+    // `actual` names the cause.
     const projected = step.pick
-      ? Object.fromEntries(step.pick.map((p) => [p, pickPath(value, p)]))
+      ? {
+          ...Object.fromEntries(step.pick.map((p) => [p, pickPath(value, p)])),
+          ...(stepError !== undefined ? { error: stepError } : {}),
+        }
       : value;
     rows.push({
       label: step.label,
@@ -394,6 +497,30 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
   const baseline = parseBaseline(script.baselinePath, baselineText);
   const expectedRows = baseline.results.filter((r) => inGroups(r?.group, groups));
 
+  // Updating comes before the alignment check on purpose. Re-capture is precisely
+  // what a caller does after editing the script, so refusing it on the grounds that
+  // the script was edited leaves no way forward at all. The delta is reported by
+  // label instead, which is the part that carries the review: `added` and `removed`
+  // are the script edit, `changed` is the behavior that moved under it.
+  if (opts.update) {
+    const delta = diffRows(expectedRows, rows);
+    await writeBaseline();
+    const restructured = delta.added.length > 0 || delta.removed.length > 0;
+    return {
+      mode: 'updated',
+      ...summary,
+      ...(delta.changed.length > 0 ? { changed: delta.changed } : {}),
+      ...(delta.added.length > 0 ? { added: delta.added } : {}),
+      ...(delta.removed.length > 0 ? { removed: delta.removed } : {}),
+      note:
+        delta.changed.length === 0 && !restructured
+          ? 'Baseline rewritten; no row differed from the previous baseline.'
+          : 'Baseline rewritten — these rows now define expected behavior. "changed" is a row ' +
+            'whose value moved and should be a change you meant; "added" and "removed" are the ' +
+            "script's own steps arriving and leaving, and are not evidence about behavior.",
+    };
+  }
+
   // Rows pair up positionally, verified by label. A script edited since capture is
   // reported as drift and not value-compared: pairing rows by guesswork would report
   // real regressions against the wrong expectations.
@@ -408,25 +535,27 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
           )
           .find((m) => m !== null);
   if (misaligned) {
+    const delta = diffRows(expectedRows, rows);
     return {
       mode: 'compared',
       ...summary,
       pass: false,
+      ...(delta.added.length > 0 ? { added: delta.added } : {}),
+      ...(delta.removed.length > 0 ? { removed: delta.removed } : {}),
       structureMismatch:
-        `${misaligned}. The script changed since the baseline was captured — verify current ` +
-        'behavior on a known-good build and re-capture with update: true.',
+        `${misaligned}. The script changed since the baseline was captured — "added" and ` +
+        '"removed" name which rows. Verify current behavior on a build you trust, then re-run ' +
+        `this same call with update: true to rewrite ${script.baselinePath}.`,
     };
   }
 
   const failures: ScriptFailure[] = [];
-  const changed: string[] = [];
   rows.forEach((row, i) => {
     const expected = expectedRows[i];
     if (!expected) return;
     const want = JSON.stringify(normalize(expected.value));
     const got = JSON.stringify(row.value);
     if (want === got) return;
-    changed.push(row.label);
     failures.push({
       step: row.label,
       ...(row.group ? { group: row.group } : {}),
@@ -434,19 +563,6 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
       actual: reportValue(row.value),
     });
   });
-
-  if (opts.update) {
-    await writeBaseline();
-    return {
-      mode: 'updated',
-      ...summary,
-      ...(changed.length > 0 ? { changed } : {}),
-      note:
-        changed.length > 0
-          ? 'Baseline rewritten. "changed" lists the rows whose expected value moved — each should be an intended behavior change.'
-          : 'Baseline rewritten; no row differed from the previous baseline.',
-    };
-  }
 
   const shown = failures.slice(0, MAX_REPORTED_FAILURES);
   return {

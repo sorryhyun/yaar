@@ -196,11 +196,14 @@ export const previewCommands = {
   previewScript: defineAppCommand({
     description:
       'Run a scripted regression: execute the steps in a JSON script file from the project ' +
-      'against the open preview, record each result (projected through the step\'s `pick` ' +
-      'paths), and diff against the script\'s baseline file — failures come back as ' +
+      'against the open preview — protocol commands, state-key reads, JS evals and window ' +
+      "resizes — record each result (projected through the step's `pick` " +
+      "paths), and diff against the script's baseline file — failures come back as " +
       '{ step, expected, actual } rows. With no baseline yet, the run writes one: capture on ' +
-      'a build you trust, refactor, re-run to compare. Requires an open, non-stale preview ' +
-      'on the current compile. A many-step script needs this command\'s own timeoutMs raised ' +
+      'a build you trust, refactor, re-run to compare. A step with `record: false` is setup ' +
+      'and must succeed: its failure aborts the run rather than passing silently. ' +
+      'Requires an open, non-stale preview ' +
+      "on the current compile. A many-step script needs this command's own timeoutMs raised " +
       'well past the sum of its steps. Script format and workflow: the regression-testing ' +
       'doc topic.',
     params: {
@@ -208,13 +211,17 @@ export const previewCommands = {
       properties: {
         path: {
           type: 'string',
-          description: 'Script file in the project. Default test/regression.json.',
+          description:
+            'Script file in the project. Default src/test/regression.json — keep it under ' +
+            'src/, since deploy ships only src/, agent/ and the root files.',
         },
         update: {
           type: 'boolean',
           description:
-            'Rewrite the baseline from this run, reporting which rows moved. Only after ' +
-            'verifying the new behavior is intended — an updated baseline is the new truth.',
+            'Rewrite the baseline from this run and report the delta by label: `changed` for ' +
+            'a value that moved, `added`/`removed` for steps the script gained or lost. ' +
+            'Works after a script edit too — it is how a structureMismatch is resolved. Only ' +
+            'after verifying the new behavior is intended: an updated baseline is the new truth.',
         },
         groups: {
           type: 'array',
