@@ -47,6 +47,7 @@ Read a file by URI.
 | `context` | `number` | no | Context lines around pattern matches (default: `0`) |
 | `pdfText` | `boolean \| string` | no | PDF only: extract the text layer. `true` (or `"all"`) reads the whole document; a range like `"1-3"` scopes it. |
 | `pdfPages` | `string` | no | PDF only: page range to rasterize to images, e.g. `"1-3"`, `"5"`, `"2-"` — for scanned/visual PDFs. |
+| `missingOk` | `boolean` | no | Answer an absent file with `null` instead of an error. For when "it isn't there yet" is an expected state — an optional config file on a first run. A file holding a literal `null` is indistinguishable from an absent one; `list` the parent if you must tell them apart. |
 
 **Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
 
@@ -57,6 +58,8 @@ Read a file by URI.
 **Returns (binary files):** A message explaining the file can't be read as text, with a pointer to the REST API.
 
 **Errors:** Path traversal detected, file not found. Reading a directory falls back to `list` with a note.
+
+A `file not found` is tagged `notFound` on the result and logged with `errorCategory: "not_found"`, which keeps it out of the session's `failureCount`. Absence is a routine answer — before the tag, a first launch reported one session error per optional config file per mount, and that was the bulk of every error the log held. It is still an error and still logged; only the tally skips it. `missingOk` is the way to not produce one at all.
 
 ### `list`
 
@@ -459,7 +462,7 @@ Reach for `storage` when you hold a path *someone else* produced (an image under
 | `trySave` | `(path, content, options?) → Promise<boolean>` | `save()` that reports failure instead of throwing — resolves whether the write landed. Toasts the failure (throttled to once per 5s per path) unless `options.onError` is given. |
 | `read` | `(path) → Promise<string>` | Read file as text. |
 | `readJson` | `(path) → Promise<T>` | Read and parse JSON; throws if the file is missing or unparseable. |
-| `readJsonOr` | `(path, fallback) → Promise<T>` | `readJson`, but returns `fallback` instead of throwing. |
+| `readJsonOr` | `(path, fallback) → Promise<T>` | `readJson`, but returns `fallback` instead of throwing. Sends `missingOk`, so an absent file costs nothing — reach for this on any optional file rather than wrapping `readJson` in a `try/catch`, which handles absence for your app and still records it against the session. |
 | `readBinary` | `(path) → Promise<{data, mimeType, encoding}>` | Read raw bytes; `encoding` is `'base64'` for image reads, `'text'` otherwise. |
 | `readBlob` | `(path) → Promise<Blob>` | `readBinary`, decoded into a `Blob`. |
 | `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }`. `path` is relative to the app's own storage root, so it can be handed straight back to `read`/`save`. `size`/`modifiedAt` carry the same values as `StorageEntry` above but are optional here — a directory has no size. |

@@ -924,6 +924,8 @@ const prefs = safeParseOr(PrefsSchema, raw, DEFAULTS, { label: 'prefs.json' });
 
 The rule is one line: **degraded-by-design must be distinguishable from broken.** A missing file is normal and stays silent; a malformed one is logged with `parsed.error.issues`, and toasted if the user would otherwise be misled about what they are looking at. Never toast from a poll or a subscription callback — log every failure, but surface only the *transition* into failure.
 
+**Use `readJsonOr`, not `readJson` in a `try/catch`.** They look equivalent from inside the app — both end with the fallback — but only `readJsonOr` tells the *server* that absence was expected, by sending `missingOk` on the read. A caught failure is still a failure the session recorded: before that option existed, an app whose console stayed perfectly clean added one session error per optional config file per mount, and on a first run that was the great majority of every error the log held. The same applies to a bare `read()` you were going to wrap — pass `{ missingOk: true }` and check for `null` instead.
+
 Two more edges:
 
 - Write the `z.safeParse` by hand when the failure branch needs something one fallback can't express — per-field recovery, or validating an array element-wise so one bad row doesn't reject the rest. Prefer per-field recovery when the fields are independent: a drifted `playbackRate` should not cost the user their `lastStoragePath`.

@@ -74,6 +74,17 @@ export interface ParsedMessage {
   // Written on result entries by `logToolResult` / `logVerbResult`. Declared here
   // because they were already being logged and read back untyped.
   isError?: boolean;
+  /** See {@link NOT_FOUND_CATEGORY} for the one value the failure tally treats specially. */
   errorCategory?: string;
   durationMs?: number;
 }
+
+/**
+ * The `errorCategory` for "there was nothing there".
+ *
+ * The one error the session's `failureCount` does not count. An app reading an optional
+ * config file it has not written yet fails by design, and tallying that made a first
+ * launch — where every persisted preference is still absent — look like a session full
+ * of errors. The entry stays in the log; only the count skips it.
+ */
+export const NOT_FOUND_CATEGORY = 'not_found';

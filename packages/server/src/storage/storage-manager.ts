@@ -211,7 +211,7 @@ export async function storageRead(
     try {
       fileStat = await stat(validatedPath);
     } catch {
-      return { success: false, error: `File not found: ${filePath}` };
+      return { success: false, notFound: true, error: `File not found: ${filePath}` };
     }
     if (fileStat.isDirectory()) {
       return {

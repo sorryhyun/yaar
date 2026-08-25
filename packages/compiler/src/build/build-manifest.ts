@@ -121,8 +121,14 @@ import { join, basename } from 'path';
  * as one minified line, and any app that wrote a read back (an edit round trip)
  * flattened the file on disk. The SDK is compiled into `dist/`, so only a bump carries
  * the fix to apps nobody is about to edit.
+ *
+ * '29': `appStorage.readJsonOr` sends `missingOk`, so an optional config file that isn't
+ * there yet is answered with `null` instead of a failure the session counts. Same reason
+ * as the two above — the declaration lives in the compiled-in SDK, so an app keeps
+ * manufacturing one `File not found` per optional file per mount until it is rebuilt,
+ * and the apps that read the most preferences are the ones nobody is about to edit.
  */
-export const COMPILER_VERSION = '28';
+export const COMPILER_VERSION = '29';
 
 export interface BuildManifest {
   sourceHash: string;

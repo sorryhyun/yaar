@@ -90,10 +90,25 @@ export const appStorage = {
   async readJson<T = unknown>(path: string): Promise<T> {
     return y.read(appStorageUri(path));
   },
-  /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
+  /**
+   * Read JSON with a fallback value returned when the file doesn't exist or is unparseable.
+   *
+   * `missingOk` is what makes the fallback free. Without it this was a plain read plus a
+   * `catch`, so every optional config file an app doesn't have yet manufactured one
+   * `File not found` in the session log — invisible to the app, which had already handled
+   * it, and counted against the session all the same. The option says up front that
+   * absence is the expected answer, and the server hands back `null` instead of failing.
+   *
+   * The `catch` stays: it still covers a corrupt file, and it is what makes an app
+   * compiled against this SDK work against a server too old to know the option (the read
+   * fails as before, and the fallback lands as before).
+   */
   async readJsonOr<T>(path: string, fallback: T): Promise<T> {
     try {
-      return (await y.read(appStorageUri(path))) as T;
+      const value = await y.read(appStorageUri(path), { missingOk: true });
+      // A stored `null` and an absent file are the same answer here by design — both are
+      // "nothing useful is persisted", which is exactly what the fallback is for.
+      return value === null || value === undefined ? fallback : (value as T);
     } catch {
       return fallback;
     }

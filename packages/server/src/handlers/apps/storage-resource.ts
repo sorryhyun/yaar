@@ -8,9 +8,19 @@
  * On disk: storage/apps/{appId}/{path}
  */
 
-import type { VerbResult } from '../uri-registry.js';
+import type { ReadOptions, VerbResult } from '../uri-registry.js';
 import type { ResolvedUri } from '../uri-resolve.js';
-import { ok, okJson, okResource, okLinks, okWithImages, error, mimeFromPath } from '../utils.js';
+import {
+  ok,
+  okJson,
+  okMissing,
+  okResource,
+  okLinks,
+  okWithImages,
+  error,
+  notFoundError,
+  mimeFromPath,
+} from '../utils.js';
 import {
   storageRead,
   storageWrite,
@@ -90,7 +100,10 @@ export async function describeStorage(uri: string): Promise<VerbResult | null> {
 }
 
 /** Read a storage file (or list the bare `/storage` root). Null when not a storage URI. */
-export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | null> {
+export async function readStorage(
+  resolved: ResolvedUri,
+  options?: ReadOptions,
+): Promise<VerbResult | null> {
   const storagePath = parseAppStoragePath(resolved.sourceUri);
   if (!storagePath) return null;
 
@@ -99,7 +112,12 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
     return storageListLinks(storagePath.appId, prefixedPath, { missingIsEmpty: true });
   }
   const result = await storageRead(prefixedPath);
-  if (!result.success) return error(result.error!);
+  if (!result.success) {
+    // An app reading its own optional config declares that absence is fine by passing
+    // `missingOk`; answer it with `null` rather than a failure it would only catch.
+    if (result.notFound && options?.missingOk) return okMissing();
+    return result.notFound ? notFoundError(result.error!) : error(result.error!);
+  }
   // PDF metadata (view-first default): no pages ingested — return the summary as text.
   if (result.pdfMeta) {
     return ok(

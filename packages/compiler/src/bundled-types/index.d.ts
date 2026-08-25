@@ -851,7 +851,14 @@ interface YaarAppStorage {
   trySave(path: string, content: string, options?: YaarAppStorageTrySaveOptions): Promise<boolean>;
   read(path: string): Promise<string>;
   readJson<T = unknown>(path: string): Promise<T>;
-  /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
+  /**
+   * Read JSON with a fallback value returned when the file doesn't exist or is unparseable.
+   *
+   * Sends `missingOk`, so an absent file is answered with `null` rather than a failure
+   * the session counts. This is the method to reach for on any optional config file —
+   * a bare `readJson` in a `try/catch` handles absence for your app and records it
+   * against the session anyway.
+   */
   readJsonOr<T>(path: string, fallback: T): Promise<T>;
   readBinary(
     path: string,
@@ -1252,6 +1259,32 @@ interface YaarDev {
 
 // -- Global --
 
+/** Options for a `read` — the verb layer's read options, as an app sees them. */
+interface YaarReadOptions {
+  /** Line range to read, e.g. "10-20", "50", "100-" (1-based, inclusive). */
+  lines?: string;
+  /** Regex — return only matching lines, with line numbers. */
+  pattern?: string;
+  /** Context lines around each `pattern` match (default 0). */
+  context?: number;
+  /** PDF only: extract the text layer. `true` (or "all") for the whole document, or a range. */
+  pdfText?: boolean | string;
+  /** PDF only: page range to rasterize to images, e.g. "1-3". */
+  pdfPages?: string;
+  /** Images only: the stored bytes instead of the WebP re-encode a read normally applies. */
+  rawImage?: boolean;
+  /**
+   * Answer an absent resource with `null` instead of throwing.
+   *
+   * For the case where "it isn't there yet" is a normal answer — an optional config
+   * file on a first run. Without it, a caller that handles absence perfectly still
+   * leaves one recorded failure per read behind it. A resource holding a literal
+   * `null` is indistinguishable from an absent one; `list` the parent if you must
+   * tell them apart.
+   */
+  missingOk?: boolean;
+}
+
 interface YaarGlobal {
   app: YaarApp;
   storage: YaarStorage;
@@ -1261,8 +1294,13 @@ interface YaarGlobal {
 
   /** Execute an action on a yaar:// resource. Returns parsed data from the JSON envelope. */
   invoke<T = unknown>(uri: string, payload?: Record<string, unknown>): Promise<T>;
-  /** Read the current value/state of a yaar:// resource. Returns parsed data. */
-  read<T = unknown>(uri: string): Promise<T>;
+  /**
+   * Read the current value/state of a yaar:// resource. Returns parsed data.
+   *
+   * Pass `{ missingOk: true }` when absence is an expected answer — you get `null`
+   * instead of a rejection the session records as a failure.
+   */
+  read<T = unknown>(uri: string, options?: YaarReadOptions): Promise<T>;
   /** List child resources under a yaar:// URI. Returns parsed data. */
   list<T = unknown>(uri: string): Promise<T>;
   /** Describe a yaar:// resource (supported verbs, schema). Returns parsed data. */
@@ -1278,8 +1316,16 @@ interface Window {
 // -- @bundled/yaar module --
 
 declare module '@bundled/yaar' {
-  /** Read the current value/state of a yaar:// resource. */
-  export function read<T = unknown>(uri: string): Promise<T>;
+  /**
+   * Read the current value/state of a yaar:// resource.
+   *
+   * `options` are the same read options an agent has: `lines` / `pattern` / `context`
+   * to filter a text file, `pdfText` / `pdfPages` for PDFs, and `missingOk` to get
+   * `null` for an absent resource instead of a thrown error. Prefer `missingOk` over a
+   * bare `catch` whenever absence is a state you expect — a caught failure is still a
+   * failure the session recorded.
+   */
+  export function read<T = unknown>(uri: string, options?: YaarReadOptions): Promise<T>;
   /** Execute an action on a yaar:// resource. */
   export function invoke<T = unknown>(uri: string, payload?: Record<string, unknown>): Promise<T>;
   /** List child resources under a yaar:// URI. */

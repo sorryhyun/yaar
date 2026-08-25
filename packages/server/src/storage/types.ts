@@ -32,6 +32,14 @@ export interface StorageReadResult {
    * alongside `success: false`.
    */
   isDirectory?: boolean;
+  /**
+   * The file does not exist — as distinct from existing and being unreadable. The
+   * read-side twin of `StorageListResult.notFound`: absence is the one failure a
+   * caller routinely *expects* (an optional config file on a first run), and telling
+   * it apart from a real read error should not mean matching on the error prose.
+   * Set only alongside `success: false`.
+   */
+  notFound?: boolean;
   error?: string;
 }
 

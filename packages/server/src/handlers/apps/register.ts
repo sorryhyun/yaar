@@ -13,7 +13,7 @@
  * the resource modules are already shaped as independent handlers.
  */
 
-import type { ResourceRegistry, VerbResult } from '../uri-registry.js';
+import type { ReadOptions, ResourceRegistry, VerbResult } from '../uri-registry.js';
 import type { ResolvedUri } from '../uri-resolve.js';
 import { okJson, error } from '../utils.js';
 import { parseAppDbPath } from './paths.js';
@@ -187,14 +187,14 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       return rejectUnhandledSubPath(resolved.sourceUri) ?? describeApplication(resolved);
     },
 
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
       const rejected = rejectInstanceSubPath(resolved.sourceUri);
       if (rejected) return rejected;
 
       const dbResult = await handleDbVerb('read', resolved);
       if (dbResult) return dbResult;
 
-      const storageResult = await readStorage(resolved);
+      const storageResult = await readStorage(resolved, options);
       if (storageResult) return storageResult;
 
       const personaResult = await readPersonas(resolved);

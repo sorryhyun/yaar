@@ -72,6 +72,14 @@ export interface VerbResult {
   content: ContentBlock[];
   isError?: boolean;
   /**
+   * This failure is "the resource is not there", not "the call went wrong". Absence is
+   * a routine answer — an app reading an optional config file on a first run — so the
+   * doors that count failures can leave it out of the tally instead of reporting a
+   * clean first launch as dozens of errors. Set only alongside `isError: true`; see
+   * `notFoundError` in handlers/utils.ts.
+   */
+  notFound?: boolean;
+  /**
    * Optional lossless, typed copy of the result for programmatic consumers
    * (app→app SDK calls via `POST /api/verb`, non-model MCP clients). `content`
    * remains the model-facing channel — a JSON *string* the LLM reads — while
@@ -120,6 +128,18 @@ export interface ReadOptions {
    * subject rather than the content.
    */
   rawImage?: boolean;
+  /**
+   * Answer an absent resource with `null` instead of an error.
+   *
+   * The caller is declaring that absence is an expected state — `appStorage.readJsonOr`
+   * is exactly this declaration, and without a way to send it every optional config file
+   * an app reads manufactured a failure underneath the fallback that handled it.
+   *
+   * A resource whose stored content is literally `null` is indistinguishable from an
+   * absent one through this option. Callers that must tell them apart should `list` the
+   * parent instead.
+   */
+  missingOk?: boolean;
 }
 
 /**

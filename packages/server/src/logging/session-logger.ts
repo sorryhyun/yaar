@@ -4,6 +4,7 @@ import type { OSAction, UserInteraction } from '@yaar/shared';
 import { formatCompactInteraction } from '../lib/format-interaction.js';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
+import { NOT_FOUND_CATEGORY } from './types.js';
 import type { ContextSource } from '../agents/context.js';
 import type { EscapeGuardRecord } from '../providers/types.js';
 import { createLogger } from '../observability/log.js';
@@ -421,9 +422,15 @@ export class SessionLogger {
   logVerbResult(
     toolName: string,
     result: unknown,
-    meta?: { isError?: boolean; durationMs?: number },
+    meta?: { isError?: boolean; errorCategory?: string; durationMs?: number },
   ): void {
-    if (meta?.isError) {
+    // `not_found` is an error the log keeps and the tally skips. An app reading an
+    // optional config file it has not written yet is the single most common failure a
+    // session records — on a first run it was the overwhelming majority of them — and
+    // counting absence made `failureCount` a measure of how new the install was rather
+    // than of anything going wrong. The entry still says what happened; see
+    // `VerbResult.notFound`.
+    if (meta?.isError && meta.errorCategory !== NOT_FOUND_CATEGORY) {
       this.sessionInfo.metadata.failureCount = (this.sessionInfo.metadata.failureCount ?? 0) + 1;
       this.scheduleMetadataSave();
     }

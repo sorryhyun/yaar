@@ -15,10 +15,45 @@ export function asText(data: any): string {
   return typeof data === 'string' ? data : data != null ? JSON.stringify(data) : '';
 }
 
+/** Options for {@link read} — the verb layer's `ReadOptions`, as an app sees them. */
+export interface YaarReadOptions {
+  /** Line range to read, e.g. "10-20", "50", "100-" (1-based, inclusive). */
+  lines?: string;
+  /** Regex — return only matching lines, with line numbers. */
+  pattern?: string;
+  /** Context lines around each `pattern` match (default 0). */
+  context?: number;
+  /** PDF only: extract the text layer. `true` (or "all") for the whole document, or a range. */
+  pdfText?: boolean | string;
+  /** PDF only: page range to rasterize to images, e.g. "1-3". */
+  pdfPages?: string;
+  /** Images only: the stored bytes instead of the WebP re-encode a read normally applies. */
+  rawImage?: boolean;
+  /**
+   * Answer an absent resource with `null` instead of throwing.
+   *
+   * For the case where "it isn't there yet" is a normal answer — an optional config
+   * file on a first run. Without it, a caller that handles absence perfectly still
+   * leaves one recorded failure per read behind it. A resource holding a literal
+   * `null` is indistinguishable from an absent one; `list` the parent if you must
+   * tell them apart.
+   */
+  missingOk?: boolean;
+}
+
 // ── Verb functions ───────────────────────────────────────────────
 
-export async function read<T = unknown>(uri: string): Promise<T> {
-  return y.read(uri);
+/**
+ * Read a yaar:// resource.
+ *
+ * `options` are the same read options an agent has: `lines` / `pattern` / `context` to
+ * filter a text file, `pdfText` / `pdfPages` for PDFs, and `missingOk` to get `null`
+ * for an absent resource instead of a thrown error. Prefer `missingOk` over a bare
+ * `catch` whenever absence is a state you expect — a caught failure is still a failure
+ * the session recorded.
+ */
+export async function read<T = unknown>(uri: string, options?: YaarReadOptions): Promise<T> {
+  return y.read(uri, options);
 }
 
 /**

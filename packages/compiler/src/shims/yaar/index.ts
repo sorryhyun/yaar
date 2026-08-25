@@ -35,7 +35,7 @@ export {
   windows,
   links,
 } from './verbs.js';
-export type { StreamFrame } from './verbs.js';
+export type { StreamFrame, YaarReadOptions } from './verbs.js';
 
 // ── App-scoped storage ──────────────────────────────────────────
 export { appStorage } from './app-storage.js';

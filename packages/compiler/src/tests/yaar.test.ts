@@ -39,9 +39,11 @@ const docListeners: Record<string, ((e: unknown) => void)[]> = {};
 
 let invokeImpl: (uri: string, payload: unknown) => Promise<unknown> = async () => ({});
 /** Default: nothing stored, so `readJsonOr` swallows the rejection and yields its fallback. */
-let readImpl: (uri: string) => Promise<unknown> = async () => {
+let readImpl: (uri: string, options?: unknown) => Promise<unknown> = async () => {
   throw new Error('no such file');
 };
+/** Every verb read the shim made, with the options it sent. Cleared per test that cares. */
+const readCalls: { uri: string; options?: unknown }[] = [];
 
 function makeEl(tag: string): FakeEl {
   const el: FakeEl = {
@@ -128,7 +130,10 @@ const expandSelf = (p: string) =>
 (globalThis as any).window = {
   yaar: {
     invoke: (uri: string, payload: unknown) => invokeImpl(uri, payload),
-    read: (uri: string) => readImpl(uri),
+    read: (uri: string, options?: unknown) => {
+      readCalls.push({ uri, options });
+      return readImpl(uri, options);
+    },
     delete: async () => {},
     list: async () => [],
     storage: {
@@ -276,6 +281,55 @@ describe('appStorage.trySave', () => {
     expect(seen).toEqual(['disk full']);
     expect(toasts).toBeEmpty();
     expect(errors).toHaveLength(1);
+  });
+});
+
+/**
+ * `readJsonOr` declares that an absent file is an expected answer. Before it could send
+ * that declaration to the server it was a plain read wrapped in a `catch`, so every
+ * optional config file an app had not written yet produced one `File not found` in the
+ * session log — invisible to the app, which had already handled it, and counted against
+ * the session all the same. What matters here is that the declaration is actually sent,
+ * and that the `catch` still covers the servers and files it always did.
+ */
+describe('appStorage.readJsonOr', () => {
+  beforeEach(() => {
+    readCalls.length = 0;
+    nothingStored();
+  });
+
+  test('tells the server absence is expected', async () => {
+    await appStorage.readJsonOr('settings.json', { theme: 'dark' });
+    expect(readCalls).toEqual([
+      { uri: 'yaar://apps/self/storage/settings.json', options: { missingOk: true } },
+    ]);
+  });
+
+  test('takes the fallback when the server answers null', async () => {
+    readImpl = async () => null;
+    expect(await appStorage.readJsonOr('settings.json', { theme: 'dark' })).toEqual({
+      theme: 'dark',
+    });
+  });
+
+  test('returns the stored value when there is one', async () => {
+    readImpl = async () => ({ theme: 'light' });
+    expect(await appStorage.readJsonOr('settings.json', { theme: 'dark' })).toEqual({
+      theme: 'light',
+    });
+  });
+
+  test('keeps a falsy stored value rather than mistaking it for absence', async () => {
+    readImpl = async () => false;
+    expect(await appStorage.readJsonOr('flag.json', true)).toBe(false);
+  });
+
+  // A server that predates `missingOk` ignores the option and fails the read as before.
+  // An app compiled against this SDK has to keep working against one.
+  test('still falls back when the read rejects', async () => {
+    expect(await appStorage.readJsonOr('settings.json', { theme: 'dark' })).toEqual({
+      theme: 'dark',
+    });
   });
 });
 

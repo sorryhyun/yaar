@@ -66,7 +66,12 @@ export const IFRAME_VERB_SDK_SCRIPT = `
   }
 
   window.yaar.invoke = function(uri, payload) { return callVerb('invoke', uri, payload); };
-  window.yaar.read = function(uri) { return callVerb('read', uri); };
+  // \`read\` takes options — the same 4th argument an MCP caller has always had
+  // (\`lines\`, \`pattern\`, \`pdfText\`, …) plus \`missingOk\`, which answers an absent
+  // file with null instead of an error. Dropping the argument here is what forced
+  // \`appStorage.readJsonOr\` to declare "absence is fine" only to itself, above a
+  // failure the session had already recorded.
+  window.yaar.read = function(uri, options) { return callVerb('read', uri, options); };
   window.yaar.list = function(uri) { return callVerb('list', uri); };
   window.yaar.describe = function(uri) { return callVerb('describe', uri); };
   window.yaar.delete = function(uri) { return callVerb('delete', uri); };

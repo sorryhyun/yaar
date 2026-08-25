@@ -120,6 +120,32 @@ export const error = (text: string) => ({
   isError: true,
 });
 
+/**
+ * An error that says "there is nothing at this URI", tagged as such.
+ *
+ * Still an error — the caller asked for something and did not get it — but flagged so
+ * the doors that count failures can tell a missing optional file apart from a call that
+ * went wrong. Every `File not found` an app produced by reading a config file it does
+ * not have yet used to land in the session's failure tally; on a first run that was the
+ * overwhelming majority of it. See `VerbResult.notFound`.
+ */
+export const notFoundError = (text: string): VerbResult => ({
+  content: [{ type: 'text' as const, text }],
+  isError: true,
+  notFound: true,
+});
+
+/**
+ * The answer to a `read` whose caller passed `missingOk` and whose resource is absent.
+ *
+ * Deliberately the same shape as reading a file that holds `null`: the option exists so
+ * a caller with a fallback stops manufacturing failures, not so it can audit presence.
+ * See `ReadOptions.missingOk`.
+ */
+export const okMissing = (): VerbResult => ({
+  content: [{ type: 'text' as const, text: 'null' }],
+});
+
 /** Create a result with text and images */
 export const okWithImages = (text: string, images: Array<{ data: string; mimeType: string }>) => ({
   content: [

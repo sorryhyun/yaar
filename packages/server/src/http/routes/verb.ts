@@ -15,7 +15,7 @@ import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '.
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
 import { copySources, resolveCopySources } from '../../handlers/storage-copy.js';
-import type { InvokePayload, Verb, VerbResult } from '../../handlers/uri-registry.js';
+import type { InvokePayload, ReadOptions, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   namesSelf,
   requireApp,
@@ -34,6 +34,7 @@ import { runWithAgentContext } from '../../agents/agent-context.js';
 import { compactVerbPayload, shouldLogVerb } from '../../lib/format-verb-log.js';
 import type { SessionId } from '../../session/types.js';
 import { createLogger } from '../../observability/log.js';
+import { NOT_FOUND_CATEGORY } from '../../logging/types.js';
 
 const log = createLogger('verb');
 
@@ -415,8 +416,15 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     (sessionId && callerWindowId
       ? getSessionHub().get(sessionId)?.windowState.getMonitorForWindow(callerWindowId)
       : undefined);
+  // For `read`, the payload IS the read options — `window.yaar.read(uri, { missingOk: true })`
+  // and the `lines` / `pattern` filters an MCP caller has always had. This door dropped the
+  // 4th argument entirely before, so an app could name a read option but never send one, and
+  // `appStorage.readJsonOr` had no way to say that an absent file was the expected answer.
+  // The array form is already refused for a non-invoke verb inside `execute`.
+  const readOptions =
+    verb === 'read' && payload && !Array.isArray(payload) ? (payload as ReadOptions) : undefined;
   const dispatch = () => {
-    const execute = () => registry.execute(verb, resolvedUri, payload);
+    const execute = () => registry.execute(verb, resolvedUri, payload, readOptions);
     return sessionId
       ? runWithAgentContext(
           {
@@ -446,7 +454,14 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     const envelope = toEnvelope(result);
     verbLog()?.logVerbResult(verbLabel, envelope, {
       durationMs: Date.now() - startedAt,
-      ...(result.isError ? { isError: true } : {}),
+      // `notFound` still logs as an error — the app asked for something and did not get it —
+      // but carries the category that keeps it out of the session's failure tally. Absence is
+      // a routine answer, and counting it made a clean first launch read as dozens of errors.
+      // Apps compiled before `missingOk` existed still send a plain read, so this half of the
+      // fix is what makes their logs honest without a recompile.
+      ...(result.isError
+        ? { isError: true, ...(result.notFound ? { errorCategory: NOT_FOUND_CATEGORY } : {}) }
+        : {}),
     });
     return envelope;
   };

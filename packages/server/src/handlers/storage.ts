@@ -18,7 +18,16 @@ import {
   storageDelete,
   storageGrep,
 } from '../storage/index.js';
-import { ok, okJson, okWithImages, okResource, okLinks, error } from './utils.js';
+import {
+  ok,
+  okJson,
+  okMissing,
+  okWithImages,
+  okResource,
+  okLinks,
+  error,
+  notFoundError,
+} from './utils.js';
 import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
 import { copyStorageBytes, decodeWriteContent } from './storage-bytes.js';
 import {
@@ -124,7 +133,9 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
           return this.list!(resolved).then((r) =>
             prependNote(r, 'This is a folder — used list instead.'),
           );
-        return error(result.error!);
+        // A caller with a fallback said so by passing `missingOk` — see ReadOptions.
+        if (result.notFound && options?.missingOk) return okMissing();
+        return result.notFound ? notFoundError(result.error!) : error(result.error!);
       }
 
       // PDF, metadata only (view-first default): steer to a viewer window instead of ingesting.
