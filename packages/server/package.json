@@ -16,7 +16,7 @@
     "test": "bun run scripts/run-tests.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.243",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.245",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@yaar/compiler": "workspace:*",
@@ -50,6 +50,6 @@
     }
   },
   "engines": {
-    "bun": ">=1.1.22"
+    "bun": ">=1.4.0"
   }
 }
