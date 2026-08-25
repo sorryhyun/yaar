@@ -14,8 +14,45 @@ import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/doma
 import { isYaarOriginUrl, enforceBrowserGuards, isMutatingAction } from './guards.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
+import { handleCreate as handleWindowCreate } from '../window/create.js';
 
 type Payload = Record<string, unknown>;
+
+/**
+ * Show a headless tab as a Browser-app window.
+ *
+ * Goes through the window verb (`features/window/create.ts`) rather than emitting a
+ * raw `window.create`, because that verb is the ONE place an iframe token is minted.
+ * A raw emit produced a window whose Browser app had no token: every `/api/browser`
+ * call from inside it (SSE, screencast, navigation) was refused, and the user saw a
+ * tab that had loaded fine sit on "Reconnecting…" — first hit by an app opening a
+ * `visible: true` tab for a human login. The verb also derives the app origin and
+ * broadcasts correctly whether or not an agent is on the stack.
+ *
+ * The content is the `yaar://apps/browser` URI, not the `/api/apps/browser/…` path it
+ * resolves to. The verb learns which app a window *is* from that URI (`extractAppId`),
+ * and the token it mints carries that app's declared bundles. Handed the resolved
+ * path, it minted a token for no app at all — no `yaar-web` — so the Browser app's
+ * very first `/api/browser/{id}/events` was 403'd and the window stayed blank; the
+ * same window came back working after a close/reopen only because window-restore
+ * also recognises the `/api/apps/{id}/` path shape.
+ *
+ * `bid` is caller-chosen and need not be numeric (`'login'`), so the cascade offset
+ * falls back to 0 instead of `NaN`.
+ */
+async function openBrowserWindow(bid: string, isMobile: boolean, title: string): Promise<void> {
+  const n = Number(bid);
+  const step = Number.isFinite(n) ? n : 0;
+  await handleWindowCreate(`browser-${bid}`, {
+    title,
+    renderer: 'iframe',
+    content: `yaar://apps/browser?browserId=${encodeURIComponent(bid)}`,
+    x: 80 + step * 30,
+    y: 60 + step * 30,
+    width: isMobile ? 430 : 900,
+    height: isMobile ? 750 : 650,
+  });
+}
 
 /**
  * Emit a window action via the session-scoped 'browser-action' channel.
@@ -60,25 +97,7 @@ export async function handleCreate(
   session.windowId = windowId;
 
   if (p.visible !== false) {
-    const isMobile = session.mobile;
-    const sessionId = getActiveSessionId();
-    const windowAction = {
-      type: 'window.create' as const,
-      windowId,
-      title: 'Browser — (new tab)',
-      bounds: {
-        x: 80 + Number(bid) * 30,
-        y: 60 + Number(bid) * 30,
-        w: isMobile ? 430 : 900,
-        h: isMobile ? 750 : 650,
-      },
-      content: {
-        renderer: 'iframe' as const,
-        data: `/api/apps/browser/dist/index.html?browserId=${bid}`,
-      },
-    };
-    await actionEmitter.emitActionWithFeedback(windowAction, 3000, sessionId);
-    emitBrowserWindowAction(windowAction, sessionId);
+    await openBrowserWindow(bid, session.mobile, 'Browser — (new tab)');
   }
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}] Created (about:blank)`);
 }
@@ -165,25 +184,7 @@ export async function handleOpen(
     p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
   );
   if (p.visible !== false && !existing) {
-    const isMobile = session.mobile;
-    const sessionId = getActiveSessionId();
-    const windowAction = {
-      type: 'window.create' as const,
-      windowId,
-      title: `Browser — ${state.title || domain}`,
-      bounds: {
-        x: 80 + Number(bid) * 30,
-        y: 60 + Number(bid) * 30,
-        w: isMobile ? 430 : 900,
-        h: isMobile ? 750 : 650,
-      },
-      content: {
-        renderer: 'iframe' as const,
-        data: `/api/apps/browser/dist/index.html?browserId=${bid}`,
-      },
-    };
-    await actionEmitter.emitActionWithFeedback(windowAction, 3000, sessionId);
-    emitBrowserWindowAction(windowAction, sessionId);
+    await openBrowserWindow(bid, session.mobile, `Browser — ${state.title || domain}`);
   }
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}]\n${formatPageState(state)}`);
 }
