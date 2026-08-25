@@ -4,7 +4,8 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, unlink, rm, stat, realpath } from 'fs/promises';
+import { mkdir, readdir, unlink, rename, rm, stat, realpath } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { join, normalize, relative, dirname, extname } from 'path';
 import { pdfToImages, pdfToText, getPdfPageCount } from '../lib/pdf/index.js';
 import { toWebPForModel } from '../lib/image.js';
@@ -349,6 +350,100 @@ export async function storageWrite(
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath) };
   }
+}
+
+/**
+ * A `storageWrite` whose bytes arrive over time instead of all at once.
+ *
+ * The reason this exists is `yaar://http`'s `saveTo`: a download's whole point is that the
+ * body never has to fit in memory, and `storageWrite(path, Buffer.concat(everything))`
+ * defeats that before the first byte reaches disk.
+ *
+ * Bytes land in a sibling `.part-*` file and are renamed into place by {@link
+ * StorageWriteStream.commit}. So a transfer that dies halfway leaves nothing at the
+ * destination — no half a PDF that `read` will happily hand to a model — which is the
+ * all-or-nothing outcome the buffered write gave for free and a naive stream would lose.
+ */
+export interface StorageWriteStream {
+  /** Append a chunk, flushing it through to the partial file. */
+  write(chunk: Uint8Array): Promise<void>;
+  /** Close the partial file and move it to the destination. */
+  commit(): Promise<StorageWriteResult & { bytes: number }>;
+  /** Close and discard the partial file, leaving the destination untouched. */
+  abort(): Promise<void>;
+}
+
+export type StorageWriteStreamResult =
+  | { success: true; stream: StorageWriteStream }
+  | { success: false; error: string };
+
+/**
+ * Open a streaming write to a storage path.
+ *
+ * Validates the destination exactly as {@link storageWrite} does — traversal, read-only
+ * mounts — and creates the parent directories, so calling this is already a commitment to
+ * writing there. Callers that must not leave a directory behind on a request that never
+ * produces bytes (a denied domain, a 404) should open the stream on the first chunk rather
+ * than up front.
+ */
+export async function storageWriteStream(filePath: string): Promise<StorageWriteStreamResult> {
+  const resolved = resolvePath(filePath);
+  if (!resolved) {
+    return { success: false, error: 'Invalid path: path traversal detected' };
+  }
+  if (resolved.readOnly) {
+    return { success: false, error: 'Mount is read-only' };
+  }
+  const validatedPath = resolved.absolutePath;
+  const partialPath = `${validatedPath}.part-${randomUUID().slice(0, 8)}`;
+
+  let writer: ReturnType<ReturnType<typeof Bun.file>['writer']>;
+  try {
+    await ensureStorageDir();
+    await mkdir(dirname(validatedPath), { recursive: true });
+    writer = Bun.file(partialPath).writer();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, error: sanitizeStorageError(msg, filePath) };
+  }
+
+  let bytes = 0;
+  let closed = false;
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    await writer.end();
+  };
+
+  return {
+    success: true,
+    stream: {
+      async write(chunk: Uint8Array): Promise<void> {
+        writer.write(chunk);
+        bytes += chunk.length;
+        await writer.flush();
+      },
+      async commit(): Promise<StorageWriteResult & { bytes: number }> {
+        try {
+          await close();
+          await rename(partialPath, validatedPath);
+          return { success: true, path: filePath, bytes };
+        } catch (err) {
+          await unlink(partialPath).catch(() => {});
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath), bytes };
+        }
+      },
+      async abort(): Promise<void> {
+        try {
+          await close();
+        } catch {
+          // Closing a sink we are about to delete cannot fail in a way that matters.
+        }
+        await unlink(partialPath).catch(() => {});
+      },
+    },
+  };
 }
 
 /**

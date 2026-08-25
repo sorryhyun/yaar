@@ -41,6 +41,7 @@ before changing a default or adding a knob.
 | `YAAR_APP_ORIGIN_ISOLATION` | **on** | App iframes on a distinct browser origin (`=0` disables) |
 | `YAAR_CLIPBOARD_SECRETS` | **on** | Redact credentials out of clipboard text (`=0` disables) |
 | `YAAR_CLIPBOARD_GRANT` | **on** | Pre-grant clipboard to the desktop origin over CDP (`=0` disables) |
+| `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` (the inline cap stays 10MB) |
 | `MONITOR_MAX_CONCURRENT` / `_ACTIONS_PER_MIN` / `_OUTPUT_PER_MIN` | `2` / `30` / `50000` | Background monitor budget |
 | `APP_AGENT_IDLE_MINUTES` | `15` | Idle minutes before an app agent is reclaimed (`0` disables) |
 | `CODEX_WS_PORT` / `CODEX_HOME` | `4510` / codex's | App-server port; codex config dir, **read by YAAR before the spawn** |

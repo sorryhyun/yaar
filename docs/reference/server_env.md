@@ -189,6 +189,31 @@ code, tunnel). See [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
 
 ---
 
+## Network
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` |
+
+### Why the download ceiling is separate from the inline one
+
+`yaar://http` has two ceilings because it answers two different questions. The inline cap
+(`MAX_RESPONSE_SIZE`, a fixed 10MB) is not about the network at all — it bounds what ends up
+*in a context*: base64 an app has to decode, or bytes a model would have to read. `saveTo`
+puts the body on disk and hands back a path, so none of that applies and the only thing left
+to bound is the disk. Sharing one number meant the parameter that exists to fetch something
+large was refused for being large (issue #90).
+
+Bytes under `saveTo` are piped to a `.part-*` file as they arrive and renamed into place at
+the end, so nothing the size of the download is ever held in memory and a transfer that dies
+halfway leaves nothing at the destination. The 30-second request budget also becomes a
+*stall* timeout there — restarted on each chunk — since a legitimate 500MB transfer outlives
+any fixed one while a dead connection still has to be noticed.
+
+**Source:** `packages/server/src/features/http/fetch.ts`, `packages/server/src/handlers/http.ts`
+
+---
+
 ## Agent budgets
 
 | Variable | Default | Meaning |

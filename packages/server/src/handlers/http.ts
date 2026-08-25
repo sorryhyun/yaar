@@ -9,10 +9,14 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { okJson, okWithImages, error } from './utils.js';
-import { performFetch } from '../features/http/fetch.js';
+import { performFetch, MAX_DOWNLOAD_SIZE } from '../features/http/fetch.js';
 import { planResponseBody } from '../features/http/binary-body.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
-import { storageWrite } from '../storage/storage-manager.js';
+import {
+  storageWrite,
+  storageWriteStream,
+  type StorageWriteStream,
+} from '../storage/storage-manager.js';
 import { getSessionId, getAppId, getAgentRole } from '../agents/agent-context.js';
 import { resolveShorthandUri } from '../http/uri-match.js';
 
@@ -96,10 +100,11 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
         saveTo: {
           type: 'string',
           description:
-            'Write the response body to this path under yaar://storage/ instead of returning ' +
+            'Stream the response body to this path under yaar://storage/ instead of returning ' +
             'it inline, and return the stored URI. Relative path, e.g. "downloads/photo.jpg". ' +
             'The way to actually retrieve a binary resource: save it, then read or open that ' +
-            'path. Session and monitor agents only.',
+            'path. Bytes go straight to disk, so this is not bound by the inline response cap ' +
+            'and is how to fetch something large. Session and monitor agents only.',
         },
       },
       required: ['url'],
@@ -140,6 +145,24 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
       const forModel = getAgentRole() !== undefined;
       const raw = forModel || saveTo !== undefined;
 
+      // A `saveTo` body is piped to disk as it arrives, never assembled in memory — which
+      // is the whole reason the parameter exists, and why it gets the download ceiling
+      // instead of the inline one. The stream opens on the *first chunk* rather than here,
+      // so a request that dies before producing bytes (denied domain, refused connection)
+      // leaves no directory behind, exactly as the buffered version did.
+      const download: { stream: StorageWriteStream | null } = { stream: null };
+      const sink =
+        saveTo === undefined
+          ? undefined
+          : async (chunk: Uint8Array): Promise<void> => {
+              if (!download.stream) {
+                const opened = await storageWriteStream(saveTo);
+                if (!opened.success) throw new Error(`Cannot save to "${saveTo}": ${opened.error}`);
+                download.stream = opened.stream;
+              }
+              await download.stream.write(chunk);
+            };
+
       try {
         const result = await performFetch(url, {
           method,
@@ -148,19 +171,26 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
           sessionId,
           redirect,
           raw,
+          sink,
+          maxResponseSize: saveTo !== undefined ? MAX_DOWNLOAD_SIZE : undefined,
         });
         if (!raw) return okJson(result);
 
-        const { bytes = Buffer.alloc(0), ...meta } = result;
+        const { bytes = Buffer.alloc(0), bytesStreamed, ...meta } = result;
         const { body: _unusedBody, ...envelope } = meta;
 
         if (saveTo !== undefined) {
-          const written = await storageWrite(saveTo, bytes);
+          // No sink means no bytes ever arrived (HEAD, 204, an empty body) — still land the
+          // empty file, so `saveTo` either produces the path it promised or reports why not.
+          const written: { success: boolean; error?: string } = download.stream
+            ? await download.stream.commit()
+            : await storageWrite(saveTo, Buffer.alloc(0));
+          const saved = bytesStreamed ?? 0;
           if (!written.success)
-            return error(`Fetched ${bytes.length} bytes but could not save them: ${written.error}`);
+            return error(`Fetched ${saved} bytes but could not save them: ${written.error}`);
           return okJson({
             ...envelope,
-            saved: { uri: `yaar://storage/${saveTo}`, bytes: bytes.length },
+            saved: { uri: `yaar://storage/${saveTo}`, bytes: saved },
           });
         }
 
@@ -182,6 +212,9 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
           hint: plan.hint,
         });
       } catch (err) {
+        // Drop the partial download rather than leaving half a file where a whole one was
+        // asked for — `read` cannot tell the difference, and a model reading it would not either.
+        await download.stream?.abort();
         const message = err instanceof Error ? err.message : 'Fetch failed';
         return error(message);
       }

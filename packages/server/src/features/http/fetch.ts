@@ -6,11 +6,38 @@
  */
 
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
+import { getEnvInt } from '../../config.js';
 import { ensureDomainAllowed } from './domain-gate.js';
 import { getCookieHeader, captureResponseCookies } from './cookie-jar.js';
 
 export const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
+
+const DEFAULT_DOWNLOAD_MB = 512;
+const configuredDownloadMb = getEnvInt('YAAR_MAX_DOWNLOAD_MB', DEFAULT_DOWNLOAD_MB);
+
+/**
+ * The ceiling for a body going straight to disk, rather than through a caller's memory.
+ *
+ * {@link MAX_RESPONSE_SIZE} is a *context* limit dressed as a network one: 10MB of base64
+ * is already more than an iframe wants to decode and far more than a transcript can hold.
+ * A body handed to {@link FetchOptions.sink} never becomes either, so the only thing left
+ * to bound is the disk it lands on — hence a much larger number, and an env var for the
+ * user who wants a different one.
+ *
+ * A junk `YAAR_MAX_DOWNLOAD_MB` falls back to the default rather than becoming `NaN`, which
+ * every `>` below would answer `false` — a typo in the env would otherwise remove the
+ * ceiling silently instead of raising it.
+ */
+export const MAX_DOWNLOAD_SIZE =
+  (configuredDownloadMb > 0 ? configuredDownloadMb : DEFAULT_DOWNLOAD_MB) * 1024 * 1024;
+
 export const TIMEOUT_MS = 30_000;
+
+/** Phrase the cap the way the caller set it — the default still reads "max 10MB". */
+function tooLargeMessage(limit: number): string {
+  const mb = limit / (1024 * 1024);
+  return `Response too large (max ${Number.isInteger(mb) ? mb : mb.toFixed(1)}MB)`;
+}
 
 export interface FetchOptions {
   method?: string;
@@ -30,6 +57,24 @@ export interface FetchOptions {
    * hand them to a model as an image, only pays for the base64 round trip. This skips it.
    */
   raw?: boolean;
+  /**
+   * Hand each chunk over as it arrives instead of accumulating the body.
+   *
+   * This is what makes a download a download: nothing is buffered, `bytes` and `body` come
+   * back empty, and the byte count lands on {@link FetchResult.bytesStreamed}. A throw from
+   * the sink aborts the read and propagates, so a caller writing to disk fails the whole
+   * request on a failed write rather than reporting a truncated success.
+   *
+   * The request timeout becomes a *stall* timeout under a sink — {@link TIMEOUT_MS} between
+   * chunks rather than for the whole transfer, since a 500MB body legitimately outlives any
+   * fixed budget while a dead connection still has to be noticed.
+   */
+  sink?: (chunk: Uint8Array) => void | Promise<void>;
+  /**
+   * Raise (or lower) the body-size ceiling for this one request. Defaults to
+   * {@link MAX_RESPONSE_SIZE}; a caller streaming to disk wants {@link MAX_DOWNLOAD_SIZE}.
+   */
+  maxResponseSize?: number;
 }
 
 export interface FetchResult {
@@ -46,6 +91,11 @@ export interface FetchResult {
    * response shape you actually want.
    */
   bytes?: Buffer;
+  /**
+   * How many body bytes went through {@link FetchOptions.sink}. Set only under a sink,
+   * where neither `body` nor `bytes` carries them.
+   */
+  bytesStreamed?: number;
 }
 
 /**
@@ -134,10 +184,17 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
       redirect: options?.redirect === 'manual' ? 'manual' : 'follow',
     });
 
-    // Check Content-Length before reading body (fast reject)
+    const sink = options?.sink;
+    const maxSize = options?.maxResponseSize ?? MAX_RESPONSE_SIZE;
+
+    // Check Content-Length before reading body (fast reject).
+    //
+    // Skipped for HEAD, where content-length advertises the body a *GET* would have
+    // returned and this response carries none of it — judging a bodyless response by a
+    // number describing a different one rejects the cheapest way to ask how big a file is.
     const contentLength = response.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
-      throw new FetchResponseError('Response too large (max 10MB)');
+    if (method !== 'HEAD' && contentLength && parseInt(contentLength, 10) > maxSize) {
+      throw new FetchResponseError(tooLargeMessage(maxSize));
     }
 
     // Read response body with streaming size limit
@@ -149,15 +206,23 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
         const { done, value } = await reader.read();
         if (done) break;
         totalSize += value.length;
-        if (totalSize > MAX_RESPONSE_SIZE) {
+        if (totalSize > maxSize) {
           reader.cancel();
-          throw new FetchResponseError('Response too large (max 10MB)');
+          throw new FetchResponseError(tooLargeMessage(maxSize));
         }
-        chunks.push(value);
+        if (sink) {
+          // Progress is proof of life: restart the budget so it bounds a stall, not the
+          // transfer. Without this a download is capped at whatever fits in TIMEOUT_MS.
+          clearTimeout(timeoutHandle);
+          timeoutHandle = setTimeout(() => controller.abort(), TIMEOUT_MS);
+          await sink(value);
+        } else {
+          chunks.push(value);
+        }
       }
     }
 
-    const responseBuffer = Buffer.concat(chunks);
+    const responseBuffer = sink ? Buffer.alloc(0) : Buffer.concat(chunks);
 
     // Collect response headers
     const responseHeaders: Record<string, string> = {};
@@ -185,6 +250,17 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
     // Determine if response is text or binary
     const responseContentType = response.headers.get('content-type') || '';
     const isText = isTextContentType(responseContentType);
+
+    if (sink) {
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+        body: '',
+        bytesStreamed: totalSize,
+      };
+    }
 
     if (options?.raw) {
       return {
