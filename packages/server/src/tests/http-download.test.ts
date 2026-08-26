@@ -26,21 +26,11 @@ import type { SessionId } from '../session/types.js';
 const BIG_BYTES = MAX_RESPONSE_SIZE + 1024 * 1024;
 const CHUNK = Buffer.alloc(1024 * 1024, 0x41);
 
-/**
- * A body delivered in 1MB pieces, optionally dying partway through.
- *
- * `failAfter` errors the stream rather than closing it short: Bun's server rewrites the
- * content-length of a body that simply ends early, so a clean close is indistinguishable
- * from a complete response and does not reproduce a dropped transfer.
- */
-function bigStream(failAfter?: number): ReadableStream<Uint8Array> {
+/** A body delivered in 1MB pieces, cheap to produce. */
+function bigStream(): ReadableStream<Uint8Array> {
   let sent = 0;
   return new ReadableStream({
     pull(controller) {
-      if (failAfter !== undefined && sent >= failAfter) {
-        controller.error(new Error('upstream went away'));
-        return;
-      }
       if (sent >= BIG_BYTES) {
         controller.close();
         return;
@@ -50,6 +40,37 @@ function bigStream(failAfter?: number): ReadableStream<Uint8Array> {
     },
   });
 }
+
+/**
+ * A transfer that dies halfway: a raw socket that promises `BIG_BYTES`, sends two chunks,
+ * and hangs up.
+ *
+ * Not a `Bun.serve` stream that errors — `controller.error()` on a response body usually
+ * leaves the client socket open, so the reader on the other end sees neither an error nor
+ * an end and waits out `performFetch`'s 30s stall timeout, which is also this test's budget.
+ * (Closing the stream short is no better: Bun rewrites the content-length of a body that
+ * ends early, and a clean close is indistinguishable from a complete response.) Only a
+ * dropped connection reproduces a dropped connection.
+ */
+const truncating = Bun.listen({
+  hostname: '127.0.0.1',
+  port: 0,
+  socket: {
+    data(socket) {
+      socket.write(
+        'HTTP/1.1 200 OK\r\n' +
+          'content-type: application/pdf\r\n' +
+          `content-length: ${BIG_BYTES}\r\n` +
+          'connection: close\r\n\r\n',
+      );
+      socket.write(CHUNK);
+      socket.write(CHUNK);
+      socket.flush();
+      socket.end();
+    },
+  },
+});
+const truncatedUrl = `http://localhost:${truncating.port}/truncated`;
 
 const server = Bun.serve({
   port: 0,
@@ -62,17 +83,16 @@ const server = Bun.serve({
     // HEAD is answered by the same handler: the point of the test is that it advertises a
     // content-length it does not deliver, which is exactly what a real server does.
     if (req.method === 'HEAD') return new Response(null, { headers });
-    if (path === '/truncated')
-      return new Response(bigStream(2 * CHUNK.length), {
-        headers: { 'content-type': headers['content-type'] },
-      });
     if (path === '/big') return new Response(bigStream(), { headers });
     return new Response('ok', { headers: { 'content-type': 'text/plain' } });
   },
 });
 const url = (path: string) => `http://localhost:${server.port}${path}`;
 
-afterAll(() => server.stop(true));
+afterAll(() => {
+  server.stop(true);
+  truncating.stop(true);
+});
 
 const asMonitor = (payload: Record<string, unknown>) =>
   runWithAgentContext(
@@ -138,7 +158,7 @@ describe('a download that dies halfway leaves nothing behind', () => {
     await storageDelete('downloads/truncated.pdf');
 
     const result = await asMonitor({
-      url: url('/truncated'),
+      url: truncatedUrl,
       saveTo: 'downloads/truncated.pdf',
     });
     expect(result.isError).toBe(true);

@@ -74,28 +74,25 @@ describe('app agent base prompt', () => {
 });
 
 /**
- * Layer A of the storage exposure gate: an app agent is told about the storage door iff
- * its app.json declares an entry under `yaar://storage/`.
+ * The prompt half of the storage door: every app agent is told about both trees, and the
+ * shared section is told in that app's own terms.
  *
- * Two failure modes are pinned here, and they pull in opposite directions:
+ * The failure mode this pins is one section reaching a prompt branch the other does not.
+ * The shared tree was moved out of the generic branch once and the app-scoped one was
+ * left behind, so every `prompt.md` app — devtools among them — was never told that
+ * `storage/{path}` names its own tree, and the shared section's opening contrast with
+ * "the app-scoped one above" pointed at nothing. Both are appended at one site above the
+ * branch, so the two cannot drift apart again.
  *
- *  - For a **declaring** app, both doors must reach *either* prompt branch. The shared
- *    tree was already moved out of the generic branch once and the app-scoped one was
- *    left behind, so every `prompt.md` app — devtools among them — was never told that
- *    `storage/{path}` names its own tree, and the shared section's opening contrast with
- *    "the app-scoped one above" pointed at nothing.
- *  - For an **undeclared** app, neither may appear. `mcp/app-agent` refuses these calls
- *    at execution, so a section describing them is a prompt that lies — the one defect
- *    the gate itself could introduce.
- *
- * devtools declares `yaar://storage/`; memo declares nothing. Both ends of the rule are
- * therefore covered by bundled fixtures, without a synthetic manifest.
+ * devtools declares `yaar://storage/` and memo declares nothing: both hold the door, and
+ * only what the shared section *says* differs. The handler side — that everything past
+ * the commons is still `permissionsAllow` — is `app-agent-storage-door.test.ts`.
  */
 describe('app agent storage doors', () => {
   const APP_SCOPED = '## App Storage';
   const SHARED = '## Shared Storage (`yaar://storage/`)';
 
-  it('documents both doors for a declaring app that replaces the base prompt', async () => {
+  it('documents both doors for an app that replaces the base prompt', async () => {
     const { systemPrompt } = await buildAppAgentProfile('devtools');
 
     expect(systemPrompt).toContain(APP_SCOPED);
@@ -117,17 +114,16 @@ describe('app agent storage doors', () => {
     expect(systemPrompt.split(SHARED).length - 1).toBe(1);
   });
 
-  it('names no storage door at all for an app that declares none', async () => {
-    // memo ships no storage permission, so it holds neither tree from its agent — not
-    // even its own, which is the aggressive half of the rule.
+  it('names both doors for an app that declares no storage permission', async () => {
+    // memo ships no storage entry and still holds its own tree and the commons, so the
+    // spellings have to be there — the whole door, not just the headings.
     const { systemPrompt } = await buildAppAgentProfile('memo');
 
-    expect(systemPrompt).not.toContain(APP_SCOPED);
-    expect(systemPrompt).not.toContain(SHARED);
-    // And no stray call spelling survives outside the headings.
-    expect(systemPrompt).not.toContain('storage:write');
-    expect(systemPrompt).not.toContain('storage:list');
-    expect(systemPrompt).not.toContain('storage:delete');
+    expect(systemPrompt).toContain(APP_SCOPED);
+    expect(systemPrompt).toContain(SHARED);
+    expect(systemPrompt).toContain('storage:write');
+    expect(systemPrompt).toContain('storage:list');
+    expect(systemPrompt).toContain('storage:delete');
   });
 
   it('replaces the unevaluable conditional with the app’s own declaration', async () => {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
-import { isCloseWindowShortcut, resolveCloseTopWindow } from '@/lib/shellShortcuts';
+import {
+  isCloseWindowShortcut,
+  resolveCloseTopWindow,
+  shouldConfirmUnload,
+} from '@/lib/shellShortcuts';
 import type { WindowModel } from '@/types/state';
 
 function win(id: string, extra: Partial<WindowModel> = {}): WindowModel {
@@ -77,5 +81,19 @@ describe('isCloseWindowShortcut', () => {
 
   it('ignores an unmodified w', () => {
     expect(isCloseWindowShortcut(ev({ ctrlKey: false }))).toBe(false);
+  });
+});
+
+describe('shouldConfirmUnload', () => {
+  it('prompts while a window is open', () => {
+    expect(shouldConfirmUnload(state([win('a')]))).toBe(true);
+  });
+
+  it('prompts for a minimized window too — it is still the user’s work', () => {
+    expect(shouldConfirmUnload(state([win('a', { minimized: true })]))).toBe(true);
+  });
+
+  it('stays quiet on a bare desktop, where the dock is the only thing on screen', () => {
+    expect(shouldConfirmUnload(state([]))).toBe(false);
   });
 });

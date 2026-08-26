@@ -385,13 +385,11 @@ export default defineApp({
         };
       },
     },
-    // The agent's only route to storage. It used to write audits with the built-in
-    // `command('storage:write', …)`, which is no longer offered to an app whose app.json
-    // declares no storage permission — this app's does not, and the built-in reaching its
-    // own tree regardless was the capability that gate closed. A declared command is the
-    // intended shape: the iframe holds the SDK (`yaar://apps/self/storage/` is granted for
-    // being an app), the agent asks for the write by name, and the app decides where
-    // reports may land.
+    // The agent's intended route to storage. `command('storage:write', …)` would reach the
+    // same tree — the built-ins are held by every app agent, and `yaar://apps/self/storage/`
+    // needs no permission — which is exactly why a named command earns its place instead:
+    // the iframe holds the SDK, the agent asks for the write by name, and the app decides
+    // where a report may land and under what name. The prompt says to prefer it.
     saveReport: {
       description:
         'Save an analysis report into this app\'s own storage under "reports/". ' +

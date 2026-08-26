@@ -17,7 +17,11 @@ import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import { runLocalToastAction } from '@/lib/localToastActions';
-import { isCloseWindowShortcut, resolveCloseTopWindow } from '@/lib/shellShortcuts';
+import {
+  isCloseWindowShortcut,
+  resolveCloseTopWindow,
+  shouldConfirmUnload,
+} from '@/lib/shellShortcuts';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../window/WindowFrame';
@@ -123,6 +127,24 @@ export function DesktopSurface() {
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
   }, [switchMonitor]);
+
+  // ⌘W (and Ctrl+W on a browser build that keeps the accelerator) can't be cancelled
+  // from the page — see shouldConfirmUnload. A beforeunload handler is the one thing
+  // browsers still honour: it can't stop the close, only make Chrome ask first, and
+  // only after the user has interacted with the page (sticky activation). The dialog
+  // text is Chrome's own; `returnValue` is set for the browsers that still require it.
+  //
+  // Registered unconditionally and gated inside the handler, so it reads live store
+  // state rather than re-subscribing on every window open and close.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!shouldConfirmUnload(useDesktopStore.getState())) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   // Forward keyboard shortcuts from focused iframes (they can't bubble to document)
   useEffect(() => {

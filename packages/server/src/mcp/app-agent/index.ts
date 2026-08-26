@@ -7,14 +7,15 @@
  * - command: send commands to the app via app protocol (also handles storage write/delete/list)
  * - relay: hand off a message to the monitor agent
  *
- * Storage access is *declared*, not built in. `query`/`command` intercept storage paths
+ * Storage access is built in, for every app. `query`/`command` intercept storage paths
  * server-side and resolve a relative one against the app's scoped storage
- * (storage/apps/{appId}/...), but only for an app whose app.json declares an entry under
- * `yaar://storage/`; every other app is refused at the door and reaches storage through a
- * command its own `protocol.json` declares. A path spelled as a `yaar://storage/...` URI
- * names the *shared* tree instead, and is additionally permission-checked per verb — see
- * ./shared-storage.ts for the exposure/authorization split, why the shared door exists,
- * and why it is a URI rather than a second relative spelling.
+ * (storage/apps/{appId}/...), which needs no permission — it is the app's own tree, the
+ * same one its iframe writes through `@bundled/yaar`. A path spelled as a
+ * `yaar://storage/...` URI names the *shared* tree instead, and is permission-checked per
+ * verb: the commons (`yaar://storage/shared/`) is granted for being an app, and anything
+ * past it costs an entry in app.json. See ./shared-storage.ts for why the shared door
+ * exists, why the built-ins are no longer declaration-gated, and why the shared tree is a
+ * URI rather than a second relative spelling.
  *
  * A third spelling is accepted rather than merely printed: `yaar://apps/{id}/storage/...`,
  * the dialect this door emits on every app-scoped result. `appNamespaceStorage` normalizes
@@ -51,6 +52,12 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
+import {
+  findStorageOverride,
+  overrideNote,
+  STORAGE_VERBS,
+  type StorageVerb,
+} from './storage-override.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
 import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
@@ -124,8 +131,6 @@ import {
   sharedStorageUri,
   authorizeSharedStorage,
   sharedStorageHint,
-  declaresSharedStorage,
-  storageNotDeclared,
 } from './shared-storage.js';
 import { createLogger } from '../../observability/log.js';
 import { LARGE_RESULT_META } from '../result-size.js';
@@ -163,16 +168,14 @@ function getAppId(windowState: WindowStateRegistry, windowId: string): string | 
  * The four descriptions the storage door used to appear in — and no longer does.
  *
  * `query` and `command` are the app *protocol* tools; storage is a door they happen to
- * intercept. Documenting it here meant documenting it for every app, including the ones
- * refused at execution, and the only fix from inside a description would have been to
- * build all four per app: an appId resolution and an uncached `getAppMeta` read on every
- * `app`-namespace MCP request, since the modern era builds a server per request.
+ * intercept, and the spellings are long enough (three trees, four verbs, one permission
+ * rule) that a description carrying them would be mostly storage.
  *
- * The conditional lives in the **system prompt** instead (`agents/profiles/app-agent.ts`),
- * where it is computed once per agent, from the same predicate, and where the door is
- * already described in full. So there is exactly one place that decides whether an agent
- * is told about storage, and these descriptions say nothing about it at all — for a
- * declaring app either, which is the point: two sources would be two things to keep true.
+ * The **system prompt** documents it instead (`agents/profiles/app-agent/index.ts`),
+ * where it is assembled once per agent and rendered with that app's own declared reach —
+ * which a description, written once for every caller, could never show. So there is
+ * exactly one place an agent is told about storage, and these descriptions say nothing
+ * about it: two sources would be two things to keep true.
  */
 export const APP_TOOL_DESCRIPTIONS = {
   command: 'Send a command to the app. Specify the command name and optional parameters.',
@@ -204,6 +207,40 @@ function withLaunchNote(result: VerbResult, appId: string, windowId: string): Ve
 }
 
 /**
+ * Hand a relative-path storage call to the app's own override, when it declares one.
+ *
+ * Asked by both `query` (`storage/{path}` is `storage:read` by another spelling) and
+ * `command`, after the path has been normalized to the app's own tree and *only* for
+ * that tree — the shared tree never overrides (see `storage-override.ts`). Null means
+ * "no override; run the built-in". The app's answer is opened with a note naming the
+ * door it went through, since it will not read like the built-in's.
+ */
+function isStorageVerb(name: string): name is StorageVerb {
+  return (STORAGE_VERBS as readonly string[]).includes(name);
+}
+
+async function routeStorageOverride(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  appId: string,
+  verb: StorageVerb,
+  params: Record<string, unknown>,
+  timeoutMs?: number,
+): Promise<VerbResult | null> {
+  const canonical = await findStorageOverride(appId, verb);
+  if (!canonical) return null;
+  const result = await handleAppCommand(windowState, windowId, {
+    command: canonical,
+    params,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  });
+  return {
+    ...result,
+    content: [{ type: 'text' as const, text: overrideNote(verb, canonical) }, ...result.content],
+  };
+}
+
+/**
  * One command of an installed app, documented in full — the app agent's spelling of
  * `read('yaar://apps/{id}/protocol/commands/{name}')`.
  *
@@ -226,6 +263,23 @@ async function describeOneCommand(appId: string, name: string) {
 }
 
 /**
+ * The built-in `storage:write` / `storage:delete` answers, one shape for both trees.
+ *
+ * An app that overrides these answers with its own JSON (`{ path, tree, bytes }` in
+ * word-excel's case); the built-in used to answer `"Written to yaar://..."`, so an agent
+ * had to know which door it went through before it could read the reply. Now the
+ * built-in answers in kind: the `path` the caller spelled, the `uri` it resolved to, and
+ * what happened — a caller branches on neither path spelling nor override to parse it.
+ */
+export function storageWriteAnswer(uri: string, path: string, content: string) {
+  return { uri, path, written: true, bytes: Buffer.byteLength(content, 'utf8') };
+}
+
+export function storageDeleteAnswer(uri: string, path: string) {
+  return { uri, path, deleted: true };
+}
+
+/**
  * `storage:write` / `storage:delete` / `storage:list` against the shared tree.
  *
  * A sibling of the app-scoped switch in `command` rather than a shared implementation:
@@ -243,11 +297,16 @@ async function sharedStorageCommand(
   arg: string,
   content: unknown,
 ) {
-  const verbs: Record<string, Verb> = { write: 'invoke', delete: 'delete', list: 'list' };
+  const verbs: Record<string, Verb> = {
+    read: 'read',
+    write: 'invoke',
+    delete: 'delete',
+    list: 'list',
+  };
   const verb = verbs[subCommand];
   if (!verb) {
     return error(
-      `Unknown storage command: ${subCommand}. Use storage:write, storage:delete, or storage:list.`,
+      `Unknown storage command: ${subCommand}. Use storage:read, storage:write, storage:delete, or storage:list.`,
     );
   }
 
@@ -258,19 +317,32 @@ async function sharedStorageCommand(
   const uri = sharedStorageUri(path);
 
   switch (subCommand) {
+    case 'read': {
+      if (!path) return error('"path" is required for storage:read.');
+      const result = await storageRead(path);
+      if (!result.success) {
+        if (result.isDirectory) {
+          const listDenied = await authorizeSharedStorage(appId, path, 'list');
+          if (listDenied) return error(listDenied);
+          return okJson({ uri, ...(await storageList(path)) });
+        }
+        return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
+      }
+      return ok(result.content ?? '');
+    }
     case 'write': {
       if (typeof content !== 'string') {
         return error('"content" (string) is required for storage:write.');
       }
       const result = await storageWrite(path, content);
       if (!result.success) return error(`${result.error ?? 'write failed.'} (resolved to ${uri})`);
-      return ok(`Written to ${uri}`);
+      return okJson(storageWriteAnswer(uri, arg, content));
     }
     case 'delete': {
       if (!path) return error('"path" is required for storage:delete.');
       const result = await storageDelete(path);
       if (!result.success) return error(`${result.error ?? 'delete failed.'} (resolved to ${uri})`);
-      return ok(`Deleted ${uri}`);
+      return okJson(storageDeleteAnswer(uri, arg));
     }
     default: {
       // Root-relative entries, the coordinate system this spelling is already in: each
@@ -438,20 +510,22 @@ export function registerAppAgentTools(server: McpServer): void {
           return error("storage is app-scoped; you cannot read another app's storage.");
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
-        // The exposure gate. The relative spelling is gated as well as the `storage:*`
-        // commands, or `query("storage")` — which falls through to a listing below —
-        // would leave the door open for reads and make the gate cosmetic. The *shared*
-        // branch above is deliberately not gated: the commons is granted for being an
-        // app, and `authorizeSharedStorage` already refuses the rest of that tree by name.
-        if (!(await declaresSharedStorage(appId))) {
-          // Quotes what the caller *sent*, not the rewritten form: a refusal that echoes a
-          // spelling the model never typed reads as the door having misunderstood it.
-          return error(storageNotDeclared(appId, `query("${args.stateKey}")`));
-        }
+        // No permission check on this branch, and none to add: a relative path is confined
+        // to `storage/apps/{appId}/` by `scopedAppStoragePath` below, which is the app's
+        // own tree — granted for being an app, exactly as it is for the app's iframe. The
+        // *shared* branch above is where a permission is owed, and it asks for one.
         const relativePath = stateKey === 'storage' ? '' : stateKey.slice('storage/'.length);
         const scoped = scopedAppStoragePath(appId, relativePath);
         if (!scoped) return error(STORAGE_PATH_ERROR);
         const uri = resolvedStorageUri(appId, relativePath);
+        const overridden = await routeStorageOverride(
+          windowState,
+          windowId,
+          appId,
+          relativePath ? 'read' : 'list',
+          { path: relativePath },
+        );
+        if (overridden) return { ...overridden };
         if (!relativePath) {
           // List root storage
           const result = emptyIfRootMissing(await storageList(scoped), true);
@@ -514,20 +588,14 @@ export function registerAppAgentTools(server: McpServer): void {
 
       const windowState = getWindowState();
 
-      // Intercept storage commands — a relative path is app-scoped, so only your own app;
-      // a `yaar://storage/...` one names the shared tree and is gated on app.json.
-      //
-      // appId → exposure → spelling, in that order. The split on `namesSharedStorage`
-      // used to come first, which put the app-scoped branch beyond any check at all; the
-      // exposure gate governs both branches, so it has to be asked before the split.
+      // Intercept storage commands — a relative path is app-scoped, so only your own app
+      // and no permission owed; a `yaar://storage/...` one names the shared tree, where
+      // everything past the commons is gated on app.json by `sharedStorageCommand`.
       if (args.command.startsWith('storage:')) {
         if (args.appId)
           return error("storage is app-scoped; you cannot modify another app's storage.");
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
-        if (!(await declaresSharedStorage(appId))) {
-          return error(storageNotDeclared(appId, `command("${args.command}")`));
-        }
         const subCommand = args.command.slice('storage:'.length);
         let path = (args.params?.path as string) ?? '';
 
@@ -550,7 +618,34 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!scoped) return error(STORAGE_PATH_ERROR);
         const uri = resolvedStorageUri(appId, path);
 
+        if (isStorageVerb(subCommand)) {
+          const overridden = await routeStorageOverride(
+            windowState,
+            windowId,
+            appId,
+            subCommand,
+            { ...(args.params ?? {}), path },
+            args.timeoutMs,
+          );
+          if (overridden) return { ...overridden };
+        }
+
         switch (subCommand) {
+          case 'read': {
+            // `query(stateKey: "storage/{path}")` by its command name, so that the four
+            // verbs are one vocabulary an app can override uniformly (see storage-override.ts).
+            if (!path) return error('"path" is required for storage:read.');
+            const result = await storageRead(scoped);
+            if (!result.success) {
+              if (result.isDirectory) {
+                const listed = await storageList(scoped);
+                return okJson({ uri, ...appRelativeEntries(appId, listed) });
+              }
+              const hint = await sharedStorageHint(appId, path, 'read');
+              return error(`${result.error ?? 'read failed.'} (resolved to ${uri})${hint}`);
+            }
+            return ok(result.content ?? '');
+          }
           case 'write': {
             const content = args.params?.content;
             if (typeof content !== 'string') {
@@ -560,7 +655,7 @@ export function registerAppAgentTools(server: McpServer): void {
             if (!result.success) {
               return error(`${result.error ?? 'write failed.'} (resolved to ${uri})`);
             }
-            return ok(`Written to ${uri}`);
+            return okJson(storageWriteAnswer(uri, path, content));
           }
           case 'delete': {
             if (!path) return error('"path" is required for storage:delete.');
@@ -568,7 +663,7 @@ export function registerAppAgentTools(server: McpServer): void {
             if (!result.success) {
               return error(`${result.error ?? 'delete failed.'} (resolved to ${uri})`);
             }
-            return ok(`Deleted ${uri}`);
+            return okJson(storageDeleteAnswer(uri, path));
           }
           case 'list': {
             const result = emptyIfRootMissing(await storageList(scoped), !path);
@@ -576,7 +671,7 @@ export function registerAppAgentTools(server: McpServer): void {
           }
           default:
             return error(
-              `Unknown storage command: ${subCommand}. Use storage:write, storage:delete, or storage:list.`,
+              `Unknown storage command: ${subCommand}. Use storage:read, storage:write, storage:delete, or storage:list.`,
             );
         }
       }

@@ -18,10 +18,16 @@ iframe action), `relay` (hand off to monitor agent) — plus `direct_message` wh
 declares `"messaging": "all"`. `describe`/`query`/`command` take an optional `appId` for
 cross-app control, gated by the caller's `app.json` `controls` list (**bundled apps only**).
 
-`storage:*` built-ins are **declared, not automatic**: an agent holds them only if its `app.json`
-names an entry under `yaar://storage/`, its own tree included. Every other app persists through a
-command its `protocol.json` declares — the iframe holds the SDK, the agent calls the command by
-name.
+`storage:*` built-ins are held by **every** app agent, no declaration needed: they reach the app's
+own tree (`storage/{path}`, which needs no permission) and the commons
+(`yaar://storage/shared/`, granted for being an app). Anything further under `yaar://storage/`
+still costs an entry in `app.json`. A `protocol.json` command that persists on the agent's behalf
+is still the better door when the app has one — it keeps the app's own invariants, and the UI reads
+the state it writes. An app can make that door *the* door: a command named `storage:read` /
+`storage:write` / `storage:delete` / `storage:list`, or one aliased to that name, **overrides**
+the built-in for relative paths — the agent keeps the spelling it was taught and the app's handler
+answers (`mcp/app-agent/storage-override.ts`). The shared tree (`yaar://storage/…`) never
+overrides; its permission gate stays between the agent and the bytes.
 
 Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 (`.claude/skills/server-verbs/SKILL.md`); [`packages/server/CLAUDE.md`](../packages/server/CLAUDE.md) for the map.

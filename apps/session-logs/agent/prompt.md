@@ -109,7 +109,7 @@ Based on analysis, suggest improvements in:
    `types: ['tool_use']` for call patterns)
 5. Analyze across the dimensions above
 6. Present findings with specific examples, counts, and recommendations
-7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. There are no `storage:*` commands here; this app declares no storage permission, so `saveReport` is the door.
+7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. Use this rather than `storage:write`: the built-ins would reach the same tree, but `saveReport` is what keeps every audit under `reports/` with a name the app has vetted.
 
 ## Best Practices
 

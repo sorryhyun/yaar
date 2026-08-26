@@ -54,3 +54,23 @@ export function isCloseWindowShortcut(e: {
 }): boolean {
   return e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w';
 }
+
+/**
+ * Whether closing the tab right now should cost the user a confirmation dialog.
+ *
+ * This is the only lever we have against ⌘W on macOS. `isCloseWindowShortcut` is
+ * Ctrl-only on purpose: the Mac close key is ⌘W, and that one is a Chrome *menu*
+ * key equivalent, dispatched from the browser's pre-renderer shortcut table — the
+ * page never gets the chance to cancel it, so widening the predicate to `metaKey`
+ * would close the top YAAR window *and* lose the browser window with it. What a
+ * page is still allowed to do is ask `beforeunload` for a "Leave site?" prompt,
+ * which is what this gates.
+ *
+ * `zOrder` rather than `windows`: panels aren't in it at all, so the dock — which
+ * is always present — doesn't make a bare desktop look occupied. On a desktop with
+ * nothing open there is nothing to lose (the session itself survives on the server
+ * and reconnects), and prompting there would be friction for no gain.
+ */
+export function shouldConfirmUnload(state: Pick<DesktopStore, 'zOrder'>): boolean {
+  return state.zOrder.length > 0;
+}

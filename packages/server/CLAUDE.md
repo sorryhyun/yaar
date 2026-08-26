@@ -291,7 +291,8 @@ Everything below this surface lives in the `server-verbs` skill, which loads whe
 `handlers/`, `mcp/`, or `features/`: the **stateless-only protocol era** (`getModernHandler` in
 `mcp/server.ts` — read its two documented traps first), verb semantics and the
 six false-success rules, the two batching axes, **access tiers** (`access: 'session-principal'`),
-the app protocol and its `$defs` resolution, declared-not-automatic app-agent storage,
+the app protocol and its `$defs` resolution, the app-agent storage door (built in for every
+app, up to the commons),
 monitor ↔ app messaging, sub-agent containment, and self-update (`features/update/`).
 
 ## REST API

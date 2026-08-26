@@ -44,13 +44,13 @@ tool payloads as a generic one, so replacing the base must not drop the mechanic
    `features/apps/discovery.ts`.
 2. **Payload-literals rule** (`profiles/prompts/payload-literals.md`) — always appended.
    The write-literal-characters / never-hand-escape contract for tool arguments.
-3. **Storage sections — both or neither.** Gated on the same predicate the tools refuse on
-   (`declaresSharedStorage`: the app.json declares at least one entry under
-   `yaar://storage/`). When held: the static app-scoped section
+3. **Storage sections — both, for every app.** The static app-scoped section
    (`prompts/app-storage.md`) plus a **generated** shared-storage section rendered from the
-   app's own declared grants, so the verbs the prompt promises are the verbs the door admits.
-   An app declaring no storage is told nothing about the door at all — the prompt and the
-   execution gate agree by construction.
+   app's own declared grants, so the verbs the prompt promises are the verbs the door
+   admits. Every app agent holds its own tree and the commons, so both sections are
+   unconditional; what varies is the generated half, which either lists what the app.json
+   reaches beyond the commons or says plainly that it reaches nothing further. Appended at
+   one site above the branch — they drifted apart once when only one was.
 4. **Protocol manifest** — generated from the app's `protocol.json`: state keys (read with
    `query`), then command signatures rendered by `renderSignature` with the compiler-hoisted
    `$defs`, the same renderer `describe` answers with. The two headings name the verb for
@@ -121,9 +121,11 @@ contrasting itself with "the app-scoped one above", so app storage must precede 
 ## Tool Payloads: write literal text, never escape sequences
 …                                         ⟵ profiles/prompts/payload-literals.md, always
 
-⟨if app.json declares an entry under yaar://storage/⟩
-## App Storage
+## App Storage                            ⟨always⟩
 …                                         ⟵ app-agent/prompts/app-storage.md, static
+                                            (names the storage:* override rule; the
+                                            overriding commands themselves show up
+                                            under Available Commands like any other)
 
 ## Shared Storage (`yaar://storage/`)
 …
