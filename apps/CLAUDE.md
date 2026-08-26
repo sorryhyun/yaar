@@ -25,9 +25,10 @@ still costs an entry in `app.json`. A `protocol.json` command that persists on t
 is still the better door when the app has one — it keeps the app's own invariants, and the UI reads
 the state it writes. An app can make that door *the* door: a command named `storage:read` /
 `storage:write` / `storage:delete` / `storage:list`, or one aliased to that name, **overrides**
-the built-in for relative paths — the agent keeps the spelling it was taught and the app's handler
-answers (`mcp/app-agent/storage-override.ts`). The shared tree (`yaar://storage/…`) never
-overrides; its permission gate stays between the agent and the bytes.
+the built-in for every ungated path — relative, and the commons (`shared/{path}` /
+`yaar://storage/shared/…`) — so the agent keeps the spelling it was taught and the app's handler
+answers (`mcp/app-agent/storage-override.ts`). The rest of the shared tree never overrides; its
+permission gate stays between the agent and the bytes.
 
 Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 (`.claude/skills/server-verbs/SKILL.md`); [`packages/server/CLAUDE.md`](../packages/server/CLAUDE.md) for the map.

@@ -16,7 +16,9 @@ appended to your prompt; read it there. On top of it: **prefer a Zod schema for 
 with one exception below** — a JSON Schema literal is checked for required and unknown keys
 only, so a `type: "string"` param accepts the number `12345` and hands it to `run`, while a
 Zod schema validates the type and `run` receives the parsed value. Declare `replay: 'never'`
-on any command whose effect must not be re-applied when the iframe remounts.
+on any command whose effect must not be re-applied when the iframe remounts. A command
+named `storage:write` / `storage:read` / `storage:delete` **overrides** the agent's built-in of that
+name — the `storage-overrides` topic says when that is the right shape.
 
 **The exception is an app that evaluates an `` html`` `` template at module scope** — the
 common shape here, since most apps build their view with `@bundled/solid-js/html`. A Zod

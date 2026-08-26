@@ -26,6 +26,8 @@ import {
   sharedStorageUri,
   authorizeSharedStorage,
   appNamespaceStorage,
+  expandStorageShortcut,
+  namesCommons,
 } from '../mcp/app-agent/shared-storage.js';
 import {
   capForeignAppStorage,
@@ -65,6 +67,52 @@ describe('naming the shared tree', () => {
   it('refuses a traversing path — it would be checked as one URI and read as another', () => {
     expect(sharedStoragePath('yaar://storage/../config/credentials.json')).toBeNull();
     expect(sharedStoragePath('yaar://storage/reports/../../x')).toBeNull();
+  });
+});
+
+describe('the relative shortcuts', () => {
+  it('sends shared/… to the commons — the tree every prompt calls "shared/"', () => {
+    // Before: a silent shadow folder at storage/apps/{id}/shared/. Now: the commons URI,
+    // which the shared branch handles and permissionsAllow grants to every app.
+    expect(expandStorageShortcut('shared/anima/dragon.png')).toBe(
+      'yaar://storage/shared/anima/dragon.png',
+    );
+    expect(expandStorageShortcut('shared')).toBe('yaar://storage/shared');
+    expect(expandStorageShortcut('/shared/x')).toBe('yaar://storage/shared/x');
+    expect(namesSharedStorage(expandStorageShortcut('shared/x'))).toBe(true);
+  });
+
+  it('never reaches past the commons — the gated tree is still URI-only', () => {
+    // A relative spelling must not become a way to name yaar://storage/reports/.
+    expect(expandStorageShortcut('reports/x.md')).toBe('reports/x.md');
+    expect(expandStorageShortcut('sharedx/y')).toBe('sharedx/y');
+    expect(expandStorageShortcut('a/shared/x')).toBe('a/shared/x');
+  });
+
+  it('strips app/… to the own tree', () => {
+    expect(expandStorageShortcut('app/notes.json')).toBe('notes.json');
+    expect(expandStorageShortcut('app')).toBe('');
+    expect(expandStorageShortcut('apps/x')).toBe('apps/x');
+  });
+
+  it('leaves a traversal for the path guard to refuse, not for the shortcut to hide', () => {
+    expect(sharedStoragePath(expandStorageShortcut('shared/../config'))).toBeNull();
+    expect(expandStorageShortcut('app/../x')).toBe('../x');
+  });
+});
+
+describe('the commons — the only shared path an override may take', () => {
+  it('is the shared/ subtree, either spelling once expanded', () => {
+    expect(namesCommons('yaar://storage/shared')).toBe(true);
+    expect(namesCommons('yaar://storage/shared/word-excel/report.docx')).toBe(true);
+    expect(namesCommons(expandStorageShortcut('shared/x.md'))).toBe(true);
+  });
+
+  it('excludes everything the app.json gate guards', () => {
+    expect(namesCommons('yaar://storage')).toBe(false);
+    expect(namesCommons('yaar://storage/reports/x.md')).toBe(false);
+    expect(namesCommons('yaar://storage/sharedx/y')).toBe(false);
+    expect(namesCommons('yaar://storage/apps/notes/x')).toBe(false);
   });
 });
 

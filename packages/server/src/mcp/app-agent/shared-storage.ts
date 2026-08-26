@@ -110,6 +110,44 @@ export function sharedStoragePath(arg: string): string | null {
   return raw;
 }
 
+/**
+ * Expand the two relative shortcuts an agent types before it knows the URI form exists.
+ *
+ * `shared/{path}` names the **commons** (`yaar://storage/shared/{path}`), and `app/{path}`
+ * names the app's own tree (`{path}`); anything else is the app's own tree unchanged.
+ *
+ * Before this, `shared/x` was a plain relative path, so it landed at
+ * `storage/apps/{id}/shared/x` — a shadow folder inside the app's private tree, created
+ * silently, that no other app could see. Every prompt the agent reads calls the commons
+ * "shared/", so this was the spelling it reached for first, and the miss was a "file not
+ * found" against a tree that did have the file. The redirect is gate-safe by
+ * construction: it only ever produces a URI under the commons, which `permissionsAllow`
+ * grants to every app for being an app — the wider `yaar://storage/…` tree still costs
+ * an app.json line and still has to be spelled by URI.
+ *
+ * Applied to the **typed** relative spelling only. `yaar://apps/self/storage/shared/x` is
+ * normalized to relative *after* this is asked, so a file already sitting in the shadow
+ * folder stays reachable by the URI a listing reported for it.
+ */
+export function expandStorageShortcut(path: string): string {
+  const cleaned = path.replace(/^\/+/, '');
+  if (cleaned === 'shared' || cleaned.startsWith('shared/')) return `${SHARED_ROOT}/${cleaned}`;
+  if (cleaned === 'app') return '';
+  if (cleaned.startsWith('app/')) return cleaned.slice('app/'.length);
+  return path;
+}
+
+/** The commons — the one part of the shared tree every app holds without declaring it. */
+const COMMONS = `${SHARED_ROOT}/shared`;
+
+/**
+ * Is this URI inside the commons? The part of the shared tree that costs nothing is also
+ * the part an app's storage override may take (see `storage-override.ts`).
+ */
+export function namesCommons(arg: string): boolean {
+  return arg === COMMONS || arg.startsWith(`${COMMONS}/`);
+}
+
 /** The canonical URI for a root-relative path, as the caller should spell it back. */
 export function sharedStorageUri(path: string): string {
   return path ? `${SHARED_ROOT}/${path}` : SHARED_ROOT;

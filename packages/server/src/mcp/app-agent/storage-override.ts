@@ -17,12 +17,20 @@
  *
  * ── What is overridable ──
  *
- * The **relative** spelling only — the app's own tree. A `yaar://storage/...` path names
- * the shared tree, whose every call past the commons is gated on `app.json`; letting an
- * app intercept it would put the app's code between the agent and that gate, and the
- * gate is the point. So a shared-tree call always reaches the built-in, override or not.
- * `yaar://apps/self/storage/...` is normalized to relative before this is asked, so it
- * overrides like the relative form it is.
+ * Every path that costs no permission: the app's own tree (the relative spelling, and
+ * `yaar://apps/self/storage/...`, which is normalized to relative before this is asked)
+ * and the **commons** (`yaar://storage/shared/...`, or its shortcut `shared/...`), which
+ * every app holds for being an app. The rest of the shared tree never overrides: past
+ * the commons every call is gated on `app.json`, and letting the app intercept it would
+ * put the app's code between the agent and that gate, and the gate is the point.
+ *
+ * The commons was excluded at first, as part of "the shared tree". That left an app
+ * whose files are renderings with no way to publish one: `storage:write` to
+ * `shared/...` reached the raw writer, which demanded `content` and wrote it verbatim
+ * under a `.docx` name, so the app grew a second name (`saveToStorage`) that nothing
+ * intercepted — app code in front of the agent's storage call under an alias, which is
+ * the very thing the exclusion was meant to prevent. Admitting the commons costs no
+ * gate, because the commons has none, and closes that door.
  *
  * ── Why the declaration is the protocol, not app.json ──
  *

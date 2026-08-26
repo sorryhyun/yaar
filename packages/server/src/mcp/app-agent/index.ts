@@ -129,6 +129,8 @@ import {
   namesSharedStorage,
   sharedStoragePath,
   sharedStorageUri,
+  expandStorageShortcut,
+  namesCommons,
   authorizeSharedStorage,
   sharedStorageHint,
 } from './shared-storage.js';
@@ -152,8 +154,10 @@ export const APP_TOOL_NAMES = [
  */
 const STORAGE_PATH_ERROR =
   'invalid storage path. A relative path is scoped to this app — it is resolved under your ' +
-  'own storage root and may not contain "..". To reach the shared storage tree, name it by ' +
-  'URI ("yaar://storage/{path}"), which requires a covering permission in your app.json.';
+  'own storage root and may not contain "..". The commons is "shared/{path}" (the same as ' +
+  '"yaar://storage/shared/{path}") and needs no permission; any other part of the shared ' +
+  'tree is named by URI ("yaar://storage/{path}") and requires a covering permission in ' +
+  'your app.json.';
 
 /** Rejection for a `yaar://storage/...` argument that names no resource. */
 const SHARED_PATH_ERROR =
@@ -211,7 +215,8 @@ function withLaunchNote(result: VerbResult, appId: string, windowId: string): Ve
  *
  * Asked by both `query` (`storage/{path}` is `storage:read` by another spelling) and
  * `command`, after the path has been normalized to the app's own tree and *only* for
- * that tree — the shared tree never overrides (see `storage-override.ts`). Null means
+ * that tree or the commons — the gated shared tree never overrides (see
+ * `storage-override.ts`). Null means
  * "no override; run the built-in". The app's answer is opened with a note naming the
  * door it went through, since it will not read like the built-in's.
  */
@@ -456,6 +461,17 @@ export function registerAppAgentTools(server: McpServer): void {
       // permission, exposure-gated), another app's becomes the flat form its grant is
       // written in, and both are then handled by the code that already decides those cases.
       let stateKey = args.stateKey;
+      // The two relative shortcuts, expanded before the URI dialect below so that only
+      // the *typed* spelling is redirected: `storage/shared/x` is the commons, and
+      // `storage/app/x` is the own tree (see `expandStorageShortcut`).
+      if (stateKey?.startsWith('storage/')) {
+        const expanded = expandStorageShortcut(stateKey.slice('storage/'.length));
+        stateKey = namesSharedStorage(expanded)
+          ? expanded
+          : expanded
+            ? `storage/${expanded}`
+            : 'storage';
+      }
       if (stateKey?.startsWith('yaar://apps/')) {
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
@@ -466,7 +482,7 @@ export function registerAppAgentTools(server: McpServer): void {
       }
 
       // Intercept shared-tree reads — a `yaar://storage/...` URI names the storage root,
-      // and is admitted only by what app.json declares. Checked before the relative
+      // and past the commons is admitted only by what app.json declares. Checked before the relative
       // branch, which would otherwise never see it (a URI is not a `storage/` path).
       if (stateKey && namesSharedStorage(stateKey)) {
         if (args.appId)
@@ -475,6 +491,17 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!appId) return error('could not resolve appId for this window.');
         const path = sharedStoragePath(stateKey);
         if (path === null) return error(SHARED_PATH_ERROR);
+        // The commons is ungated, so it is the app's to override like its own tree.
+        if (namesCommons(sharedStorageUri(path))) {
+          const overridden = await routeStorageOverride(
+            windowState,
+            windowId,
+            appId,
+            path === 'shared' ? 'list' : 'read',
+            { path: sharedStorageUri(path) },
+          );
+          if (overridden) return { ...overridden };
+        }
         // The root is a listing and a file is a read, so they are different verbs and an
         // app.json may well grant one without the other.
         const denied = await authorizeSharedStorage(appId, path, path ? 'read' : 'list');
@@ -599,6 +626,9 @@ export function registerAppAgentTools(server: McpServer): void {
         const subCommand = args.command.slice('storage:'.length);
         let path = (args.params?.path as string) ?? '';
 
+        // `shared/x` is the commons and `app/x` the own tree, exactly as in `query`.
+        if (!path.startsWith('yaar://')) path = expandStorageShortcut(path);
+
         // The same normalization `query` applies, for the same reason: `storage:list`
         // reports `yaar://apps/{id}/storage/{path}` as the `uri` of what it listed, and a
         // caller that writes back to a path it was shown must reach the tree it was shown.
@@ -612,6 +642,18 @@ export function registerAppAgentTools(server: McpServer): void {
         }
 
         if (namesSharedStorage(path)) {
+          // Same door as the relative form for the commons — no gate there to guard.
+          if (isStorageVerb(subCommand) && namesCommons(path)) {
+            const overridden = await routeStorageOverride(
+              windowState,
+              windowId,
+              appId,
+              subCommand,
+              { ...(args.params ?? {}), path },
+              args.timeoutMs,
+            );
+            if (overridden) return { ...overridden };
+          }
           return sharedStorageCommand(appId, subCommand, path, args.params?.content);
         }
         const scoped = scopedAppStoragePath(appId, path);

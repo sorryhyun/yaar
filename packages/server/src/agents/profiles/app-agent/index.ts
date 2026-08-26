@@ -178,7 +178,7 @@ for each other, one directory per producer (\`shared/anima/\`, \`shared/lab/\`).
 has to be declared to read or write it; publish your own output under
 \`yaar://storage/shared/{yourAppId}/\`.${extra}
 
-- **Read:** \`query(stateKey: "yaar://storage/shared/anima/dragon.png")\`
+- **Read:** \`query(stateKey: "yaar://storage/shared/anima/dragon.png")\` — or, for the commons only, the shortcut \`query(stateKey: "storage/shared/anima/dragon.png")\` / \`params: { path: "shared/anima/dragon.png" }\`
 - **List:** \`command(command: "storage:list", params: { path: "yaar://storage/shared" })\`
 - **Write:** \`command(command: "storage:write", params: { path: "yaar://storage/shared/{yourAppId}/out.md", content: "..." })\`
 - **Delete:** \`command(command: "storage:delete", params: { path: "yaar://storage/shared/{yourAppId}/out.md" })\`

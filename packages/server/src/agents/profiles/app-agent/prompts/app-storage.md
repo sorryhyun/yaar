@@ -11,6 +11,11 @@ A relative path is scoped to this app — you cannot reach another app's storage
 Every relative path is resolved under your own storage root, listed results included, so a path
 from `storage:list` reads back directly as `query(stateKey: "storage/{that path}")`.
 
+Two leading segments are shortcuts, not folders of yours: `shared/{path}` is the **commons**
+(`yaar://storage/shared/{path}` — see the next section; no permission needed), and `app/{path}`
+is this tree explicitly (`app/notes.json` is `notes.json`). You cannot create a private folder
+named `shared` or `app` here; a path starting with either is redirected.
+
 Results report what a relative path resolved to, as `yaar://apps/{yourAppId}/storage/{path}`.
 That URI reads back too — pass it anywhere a relative path goes and it names the same file, so
 you can copy one out of a result rather than converting it. `yaar://apps/self/storage/{path}`
@@ -27,7 +32,8 @@ then that spelling runs the app's own command instead of the raw file operation,
 params you passed, and the answer is the app's (it opens with a note saying so). Read the
 command's description before calling: an override can take different params and mean something
 richer than bytes-in, bytes-out (a document editor's `storage:write` saves the *document* to
-the path, in the format its extension names). Only a relative path is overridable — a
+the path, in the format its extension names). An override takes every path that costs no
+permission — a relative one and the commons (`shared/…` / `yaar://storage/shared/…`); any other
 `yaar://storage/…` path always runs the built-in below.
 
 The shared `yaar://storage/` root is a **different tree**, named by URI rather than by relative

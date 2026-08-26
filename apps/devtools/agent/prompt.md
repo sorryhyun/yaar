@@ -113,7 +113,7 @@ Any HTML the app did not author — Markdown from storage, a scraped page, a fee
 Apps run in a **browser iframe sandbox**:
 - No OAuth flows (needs a server-side client_secret)
 - Bare `fetch()` is CORS-bound — use `httpFetch` and declare `yaar://http`
-- No localStorage/IndexedDB — use `appStorage` (key/value) or `appDb` (SQLite); both are app-scoped and need no permission
+- No localStorage/IndexedDB — use `appStorage` (key/value) or `appDb` (SQLite); both are app-scoped and need no permission. An app whose files are *renderings* of its state (a `.docx` of a document) overrides the agent's `storage:write` rather than adding a second save command — the `storage-overrides` topic
 
 For an external API, describe it in the app's `agent/prompt.md` and keep the user's token at `yaar://config/app/{appId}`. Two things follow from that URI being a normal permission with no implicit self-grant: the app you are building must declare `yaar://config/app/{appId}` in its own `app.json` to read the token back, and *you* cannot write it — devtools holds no `yaar://config/` permission, so `relay` that to the monitor agent. The alternative is a UI-only app with the agent mediating API calls across the App Protocol.
 
