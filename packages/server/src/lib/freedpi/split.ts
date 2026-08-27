@@ -72,6 +72,40 @@ export function planSplit(payload: Uint8Array, host: string): SplitPlan {
   return fallback > 0 ? { cuts: [fallback], strategy: 'fallback' } : { cuts: [], strategy: 'none' };
 }
 
+/**
+ * Rewrite a ClientHello as two TLS records, cut inside the hostname.
+ *
+ * This is the no-stall rung. A middlebox that reassembles TCP defeats segment
+ * fragmentation, but many then hand the stream to a parser that reads the SNI out of
+ * the first *record* and stops. Give it two records — each with its own 5-byte header,
+ * the name straddling the boundary — and that parser sees a truncated hello with no
+ * matchable name, while the server, for which a handshake message spanning records is
+ * ordinary TLS, sees the same bytes it always did.
+ *
+ * Only a payload that is exactly one whole record is rewritten. Anything else — a
+ * partial record, several, not a hello — is returned untouched as one segment, which
+ * is the same as not being on this rung at all.
+ */
+export function recordsFor(payload: Uint8Array, host: string): Uint8Array[] {
+  if (!isClientHello(payload)) return [payload];
+  const declared = (payload[3]! << 8) | payload[4]!;
+  if (declared !== payload.length - 5) return [payload];
+
+  const at = findHostname(payload, host);
+  const cut = at > 5 && host.length >= 2 ? at + Math.floor(host.length / 2) : 5 + FALLBACK_CUT;
+  if (cut <= 5 || cut >= payload.length) return [payload];
+
+  const record = (body: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(5 + body.length);
+    out.set(payload.subarray(0, 3));
+    out[3] = body.length >> 8;
+    out[4] = body.length & 0xff;
+    out.set(body, 5);
+    return out;
+  };
+  return [record(payload.subarray(5, cut)), record(payload.subarray(cut))];
+}
+
 /** Apply a plan, yielding the segments to write in order. */
 export function segmentsFor(payload: Uint8Array, plan: SplitPlan): Uint8Array[] {
   if (plan.cuts.length === 0) return [payload];

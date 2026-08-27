@@ -4,8 +4,10 @@
  * The bypass is not free: fragmenting with a stall costs `stallMs` on the handshake,
  * and applying that to every connection would make ordinary browsing feel broken. So
  * the proxy learns instead of assuming — every host starts `direct`, and only a reset
- * that looks injected promotes it to `bypass`. Normal traffic keeps its latency and a
- * censored host pays the stall once, then goes straight down the working path.
+ * that looks injected promotes it one rung up the `Route` ladder: first to `tlsrec`,
+ * which costs nothing, and only if that is reset too to the stalled `bypass`. Normal
+ * traffic keeps its latency and a censored host climbs once, then goes straight down
+ * the cheapest rung that worked.
  *
  * Both halves are pure so the interesting decisions are testable without a socket.
  */
@@ -20,6 +22,14 @@ const DEFAULT_MAX_HOSTS = 512;
 interface Verdict {
   route: Route;
   at: number;
+}
+
+/** Cheapest first. `bypass` is the top: a reset there is not evidence for anything. */
+const LADDER: readonly Route[] = ['direct', 'tlsrec', 'bypass'];
+
+/** The next rung to try after `route` was reset, or `null` at the top. */
+export function escalate(route: Route): Route | null {
+  return LADDER[LADDER.indexOf(route) + 1] ?? null;
 }
 
 export interface HostPolicyOptions {
@@ -63,19 +73,20 @@ export class HostPolicy {
   /**
    * Fold one finished attempt into the table.
    *
-   * Only two outcomes teach anything. `served` over `direct` clears the host; a `reset`
-   * marks it blocked. `served` over `bypass` deliberately does *not* clear it — that is
-   * the bypass working, which is evidence the host still needs it. `inconclusive` is
-   * dropped rather than guessed at, so a refused connection or a DNS failure cannot
-   * strand a host on the slow path.
+   * Only two outcomes teach anything. `served` keeps the host on the rung that served
+   * it — over `direct` that clears it, over `tlsrec` or `bypass` it deliberately does
+   * *not*, because that is the bypass working, which is evidence the host still needs
+   * it. A `reset` moves the host one rung up. `inconclusive` is dropped rather than
+   * guessed at, so a refused connection or a DNS failure cannot strand a host on the
+   * slow path.
    */
   record(host: string, route: Route, outcome: Outcome): void {
     if (outcome === 'inconclusive') return;
-    if (outcome === 'served' && route === 'bypass') {
-      this.touch(host, 'bypass');
+    if (outcome === 'served') {
+      this.touch(host, route);
       return;
     }
-    this.touch(host, outcome === 'reset' ? 'bypass' : 'direct');
+    this.touch(host, escalate(route) ?? route);
   }
 
   /** Current verdict without the read refreshing anything. For logs and tests. */
@@ -129,16 +140,17 @@ export interface ReplayState {
  * true: the TLS state machine has advanced, and a second ServerHello on a new socket
  * would be protocol garbage.
  *
- * Restricted to a `reset` after a `direct` attempt. A bypass that resets is not
- * evidence a second bypass would fare better, and replaying it would just double the
- * stall the user waits through.
+ * Restricted to a `reset` on a rung that has one above it. A `bypass` that resets is
+ * not evidence a second bypass would fare better, and replaying it would just double
+ * the stall the user waits through. The attempt bound is the ladder's height: a tunnel
+ * that started on `direct` may climb twice, one that started higher climbs less.
  */
 export function canReplay(state: ReplayState): boolean {
   return (
-    state.route === 'direct' &&
+    escalate(state.route) !== null &&
     state.outcome === 'reset' &&
     state.serverBytesDelivered === 0 &&
-    state.attempts === 1 &&
+    state.attempts < LADDER.length &&
     state.hasFirstFlight
   );
 }

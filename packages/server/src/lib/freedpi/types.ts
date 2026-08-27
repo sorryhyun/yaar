@@ -2,10 +2,11 @@
  * A local HTTP CONNECT proxy that gets TLS past SNI-matching DPI.
  *
  * The censorship this defeats is a middlebox that reads the `server_name` out of a
- * plaintext ClientHello and injects a TCP reset. The countermeasure is to make sure
- * no single TCP segment ever carries the whole hostname — see `split.ts` — and, where
- * the middlebox reassembles the stream first, to outlast the buffer it reassembles
- * into (`FreeDpiConfig.stallMs`).
+ * plaintext ClientHello and injects a TCP reset. The countermeasures, tried cheapest
+ * first (`Route`), are all in `split.ts`: cut the hello into two TLS records so a
+ * parser that reads the first one finds no name; failing that, make sure no single TCP
+ * segment carries the whole hostname and, where the middlebox reassembles the stream,
+ * outlast the buffer it reassembles into (`FreeDpiConfig.stallMs`).
  *
  * Everything here is *stream* fragmentation, which is the ceiling a kernel TCP socket
  * imposes. Out-of-order segments and low-TTL decoy packets — what SpoofDPI's
@@ -13,8 +14,19 @@
  * so they need raw packet injection and are deliberately out of scope.
  */
 
-/** Which way one upstream connection is dialed. */
-export type Route = 'direct' | 'bypass';
+/**
+ * Which way one upstream connection is dialed. A ladder, cheapest first:
+ *
+ *   - `direct`  — plain, what every host starts on.
+ *   - `tlsrec`  — the ClientHello rewritten as two TLS *records* cut inside the
+ *                 hostname, each in its own segment, no stall. Beats a middlebox that
+ *                 reassembles TCP but parses the SNI out of the first record only.
+ *   - `bypass`  — two TCP segments with `stallMs` between them. Beats a middlebox
+ *                 that reassembles everything, by outliving its buffer. Slow.
+ *
+ * A reset on one rung escalates to the next (`policy.escalate`).
+ */
+export type Route = 'direct' | 'tlsrec' | 'bypass';
 
 /** What a finished attempt tells the policy about the host. */
 export type Outcome =

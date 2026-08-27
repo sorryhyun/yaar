@@ -204,21 +204,31 @@ the route; the handshake is simply shot in the head every time. With `YAAR_FREED
 server starts a loopback `CONNECT` proxy and points its two outbound paths at it: Chrome
 gets `--proxy-server`, and `safeFetch` gets `fetch`'s `proxy` option.
 
-The countermeasure is to cut the ClientHello *inside* the hostname so no single TCP segment
-carries a matchable name. Against a middlebox that reassembles the stream first, that alone
-does nothing — so the second fragment is also held back until the reassembly buffer has
-expired.
+The countermeasures are a ladder, tried cheapest first, and every host climbs only as far
+as it has to (`Route` in `lib/freedpi/types.ts`):
+
+1. **`tlsrec`** — rewrite the ClientHello as two TLS *records*, cut inside the hostname.
+   A middlebox that reassembles TCP still gets the whole stream, but a parser that reads
+   the SNI out of the first record finds a truncated name. Costs nothing — measured on
+   SK Broadband (AS9318), 2026-08, a blocked host went from a 40ms reset to a ~120ms
+   handshake, indistinguishable from an unblocked one.
+2. **`bypass`** — cut the hello into two TCP *segments* inside the hostname, and hold the
+   second one back until the middlebox's reassembly buffer has expired. This is the rung
+   for a box that both reassembles and parses across records; it is the one that costs
+   `stallMs`.
 
 **Off by default, and not a candidate to become default-on.** It changes how every outbound
-handshake is written, resolves names over DoH instead of the system resolver, and adds
-seconds of latency to the hosts it decides are blocked. It is also, plainly, a
+handshake is written, resolves names over DoH instead of the system resolver, and can add
+seconds of latency to a host that needs the stalled rung. It is also, plainly, a
 censorship-circumvention tool. None of that should arrive unrequested.
 
 ### The stall is a measurement, not a constant
 
-`stallMs` defaults to 3000. That number came from measuring one network — SK Broadband
-(AS9318), 2026-08 — where fragmentation with no delay, and with delays up to 1000ms, was
-reset every time; 2500ms succeeded intermittently; 3000ms succeeded six times out of six.
+`stallMs` only applies on the `bypass` rung, and defaults to 3000. That number came from
+measuring one network — SK Broadband (AS9318), 2026-08 — where TCP fragmentation with no
+delay, and with delays up to 1000ms, was reset every time; 2500ms succeeded intermittently;
+3000ms succeeded six times out of six. (The same network is defeated by the record split,
+which is why `tlsrec` is tried first; the stall is there for a box that is not.)
 It describes that middlebox's buffer lifetime and nothing more. Another ISP will have a
 different one, and the same ISP can change it. Treat a bypass that stops working as a
 number to re-measure rather than a bug.
@@ -229,12 +239,13 @@ Three seconds on every handshake would make the browser feel broken, and a hand-
 domain list goes stale the moment a censor's list does. So every host starts on the direct
 path, and only a reset that *looks injected* — the connection opened, carried our first
 flight, and died without one byte coming back — moves it to the bypass. Ordinary traffic
-keeps its latency; a blocked host pays the stall once and is remembered.
+keeps its latency; a blocked host climbs the ladder once and the rung that served it is
+remembered — a further reset on that rung climbs again.
 
 That is affordable only because the retry is invisible. A client whose TLS handshake was
 reset is still waiting for a ServerHello and has seen nothing, so the proxy opens a fresh
-connection and replays the identical ClientHello, fragmented this time. One byte delivered
-and that stops being safe, which is why `canReplay` refuses after any server bytes.
+connection and replays the identical ClientHello on the next rung. One byte delivered and
+that stops being safe, which is why `canReplay` refuses after any server bytes.
 
 Verdicts expire (30 minutes) so an ISP that changes its policy is noticed, and the table is
 bounded and never written to disk — a stale verdict read at boot would apply the stall to a

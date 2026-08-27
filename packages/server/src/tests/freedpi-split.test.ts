@@ -13,7 +13,13 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { isClientHello, findHostname, planSplit, segmentsFor } from '../lib/freedpi/split.js';
+import {
+  isClientHello,
+  findHostname,
+  planSplit,
+  recordsFor,
+  segmentsFor,
+} from '../lib/freedpi/split.js';
 
 /** A synthetic ClientHello: real framing, the hostname where SNI would put it. */
 function clientHello(host: string): Uint8Array {
@@ -32,7 +38,9 @@ function clientHello(host: string): Uint8Array {
     name,
     Buffer.alloc(64, 0x07), // trailing extensions
   ]);
-  return new Uint8Array(Buffer.concat([Buffer.from([0x16, 0x03, 0x01, 0x00, 0x00]), body]));
+  // A real record length: `recordsFor` refuses anything that is not exactly one record.
+  const header = Buffer.from([0x16, 0x03, 0x01, body.length >> 8, body.length & 0xff]);
+  return new Uint8Array(Buffer.concat([header, body]));
 }
 
 describe('isClientHello', () => {
@@ -122,5 +130,35 @@ describe('segmentsFor', () => {
   it('drops empty segments a degenerate cut would produce', () => {
     const payload = new Uint8Array([1, 2, 3]);
     expect(segmentsFor(payload, { cuts: [0], strategy: 'fallback' })).toHaveLength(1);
+  });
+});
+
+describe('recordsFor', () => {
+  const host = 'pornhub.com';
+
+  it('yields two well-framed records whose bodies rejoin to the original body', () => {
+    const hello = clientHello(host);
+    const records = recordsFor(hello, host);
+    expect(records).toHaveLength(2);
+    for (const r of records) {
+      expect(Array.from(r.subarray(0, 3))).toEqual(Array.from(hello.subarray(0, 3)));
+      expect((r[3]! << 8) | r[4]!).toBe(r.length - 5);
+    }
+    const bodies = Buffer.concat(records.map((r) => r.subarray(5)));
+    expect(Buffer.compare(bodies, Buffer.from(hello.subarray(5)))).toBe(0);
+  });
+
+  it('leaves no record containing the hostname', () => {
+    for (const r of recordsFor(clientHello(host), host)) {
+      expect(findHostname(r, host)).toBe(-1);
+    }
+  });
+
+  it('returns the payload whole when it is not exactly one client_hello record', () => {
+    const appData = new Uint8Array([0x17, 0x03, 0x03, 0x00, 0x01, 0x00]);
+    expect(recordsFor(appData, host)).toEqual([appData]);
+    const hello = clientHello(host);
+    const partial = hello.subarray(0, hello.length - 1);
+    expect(recordsFor(partial, host)).toEqual([partial]);
   });
 });

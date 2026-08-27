@@ -16,9 +16,9 @@
  */
 
 import { connect, listen, type Socket, type TCPSocketListener } from 'bun';
-import { canReplay, HostPolicy } from './policy.js';
+import { canReplay, escalate, HostPolicy } from './policy.js';
 import { DohResolver, refusalForAddress, type Resolver } from './resolve.js';
-import { planSplit, segmentsFor } from './split.js';
+import { planSplit, recordsFor, segmentsFor } from './split.js';
 import type { FreeDpiConfig, FreeDpiProxy, Outcome, Route } from './types.js';
 
 const TAG = '[FreeDPI]';
@@ -107,7 +107,7 @@ export function createFreeDpiProxy(config: FreeDpiConfig = {}): FreeDpiProxy {
     else client.end();
   };
 
-  /** Write the first flight, fragmenting it when this attempt is the bypass. */
+  /** Write the first flight, fragmented however this attempt's rung says. */
   const writeFirstFlight = (client: Socket<ClientState>, chunk: Uint8Array): void => {
     const st = client.data;
     const up = st.up;
@@ -117,11 +117,18 @@ export function createFreeDpiProxy(config: FreeDpiConfig = {}): FreeDpiProxy {
     st.sentFirstFlight = true;
 
     const segments =
-      st.route === 'bypass' ? segmentsFor(chunk, planSplit(chunk, st.host)) : [chunk];
+      st.route === 'bypass'
+        ? segmentsFor(chunk, planSplit(chunk, st.host))
+        : st.route === 'tlsrec'
+          ? recordsFor(chunk, st.host)
+          : [chunk];
 
-    if (segments.length <= 1) {
-      push(up, segments[0] ?? chunk);
-      up.flush();
+    // Only the top rung stalls; the record split relies on framing, not timing.
+    if (segments.length <= 1 || st.route !== 'bypass') {
+      for (const segment of segments) {
+        push(up, segment);
+        up.flush();
+      }
       return;
     }
 
@@ -172,11 +179,14 @@ export function createFreeDpiProxy(config: FreeDpiConfig = {}): FreeDpiProxy {
       return;
     }
 
+    const next = escalate(st.route)!;
     policy.record(st.host, st.route, 'reset');
-    console.log(`${TAG} ${st.host} reset before any server byte — retrying fragmented`);
+    console.log(
+      `${TAG} ${st.host} reset before any server byte on ${st.route} — retrying as ${next}`,
+    );
 
     st.up = null;
-    st.route = 'bypass';
+    st.route = next;
     st.attempts += 1;
     st.sentFirstFlight = false;
     st.pending.unshift(st.firstFlight!);
