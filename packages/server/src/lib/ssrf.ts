@@ -2,6 +2,8 @@
  * SSRF protection utilities — URL validation and safe fetch with redirect following.
  */
 
+import { getFreeDpiProxyUrl } from './freedpi/active.js';
+
 /** Loopback addresses — allowed through SSRF protection. */
 const LOOPBACK_PATTERNS = [/^127\./, /^localhost$/i, /^\[?::1\]?$/];
 
@@ -48,6 +50,31 @@ const MAX_REDIRECTS = 10;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
+ * The bypass proxy option for one URL, or nothing.
+ *
+ * Empty unless `YAAR_FREEDPI=1` brought a proxy up, so the default build issues exactly
+ * the `fetch` it always did. Private and loopback targets are deliberately excluded:
+ * the proxy refuses them anyway (`lib/freedpi/resolve.ts`), and routing them at it would
+ * turn a working local call into a 403 for no gain — the bypass exists for censored
+ * *public* hosts.
+ *
+ * Note the split of responsibility. `validateUrl` governs the hostname a caller asked
+ * for; the address actually dialed once traffic is tunnelled is the one the proxy
+ * resolves over DoH, which is why the proxy re-applies these same rules on its side.
+ */
+function bypassFor(url: string): { proxy: string } | undefined {
+  const proxyUrl = getFreeDpiProxyUrl();
+  if (!proxyUrl) return undefined;
+  try {
+    const { hostname } = new URL(url);
+    if (isLoopback(hostname) || isPrivateHostname(hostname)) return undefined;
+    return { proxy: proxyUrl };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Fetch with SSRF-safe redirect following.
  * Validates each redirect target before following it.
  */
@@ -56,7 +83,7 @@ export async function safeFetch(url: string, init?: RequestInit): Promise<Respon
 
   // If caller explicitly wants manual redirect handling, do a single request
   if (init?.redirect === 'manual') {
-    return fetch(url, { ...init, redirect: 'manual' });
+    return fetch(url, { ...init, ...bypassFor(url), redirect: 'manual' });
   }
 
   let currentUrl = url;
@@ -90,8 +117,11 @@ export async function safeFetch(url: string, init?: RequestInit): Promise<Respon
       );
     }
 
+    // Recomputed per hop: a redirect can cross from a censored host to a clean one,
+    // or into private space, and the routing decision belongs to the URL being fetched.
     const response = await fetch(currentUrl, {
       ...init,
+      ...bypassFor(currentUrl),
       headers,
       redirect: 'manual',
     });

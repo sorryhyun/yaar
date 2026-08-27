@@ -23,6 +23,7 @@ import {
   PROJECT_ROOT,
   IS_BUNDLED_EXE,
   IS_REMOTE,
+  IS_FREEDPI,
   IS_DEV,
   getPort,
   getConfigDir,
@@ -47,12 +48,23 @@ import {
   type TunnelConfig,
   type TunnelProvider,
 } from './lib/tunnel/index.js';
+import { createFreeDpiProxy, setActiveFreeDpi, type FreeDpiProxy } from './lib/freedpi/index.js';
 
 const log = createLogger('lifecycle');
 /** The banner points at "[Tunnel] warnings above", so the tunnel keeps its own name. */
 const tunnelLog = createLogger('Tunnel');
 
 let activeTunnel: TunnelProvider | null = null;
+
+/**
+ * The DPI bypass proxy, when `YAAR_FREEDPI=1` and it managed to bind.
+ *
+ * Started here rather than alongside the tunnel, because both of its consumers can be
+ * reached before the HTTP sockets exist — `LAUNCH_CHROME=1` may spawn a browser, and any
+ * startup path may `safeFetch`. Publishing the URL late would leave those on the direct
+ * route while the flag claimed otherwise.
+ */
+let activeFreeDpi: FreeDpiProxy | null = null;
 
 /**
  * The tunnel we intend to bring up, resolved in `initializeSubsystems` and connected
@@ -132,6 +144,17 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   if (IS_REMOTE) {
     generateRemoteToken();
     plannedTunnel = loadTunnelConfig() ?? DEFAULT_TUNNEL;
+  }
+
+  // Never fatal. A bypass that will not bind leaves every consumer on the direct path,
+  // which is the same code path the flag being unset takes — degraded, not broken.
+  if (IS_FREEDPI) {
+    try {
+      activeFreeDpi = createFreeDpiProxy();
+      setActiveFreeDpi(activeFreeDpi);
+    } catch (err) {
+      log.warn('DPI bypass could not start — continuing without it', { err });
+    }
   }
 
   if (IS_DEV) {
@@ -449,6 +472,13 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
     if (activeTunnel) {
       await activeTunnel.shutdown();
       activeTunnel = null;
+    }
+
+    // Retract the URL before stopping, so nothing routes at a listener that is going away.
+    if (activeFreeDpi) {
+      setActiveFreeDpi(null);
+      activeFreeDpi.stop();
+      activeFreeDpi = null;
     }
 
     // Release the clipboard grant's CDP connection. Independent of the two browser

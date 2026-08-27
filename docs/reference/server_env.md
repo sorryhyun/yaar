@@ -194,6 +194,69 @@ code, tunnel). See [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
 | Variable | Default | Meaning |
 |---|---|---|
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` |
+| `YAAR_FREEDPI` | off | Route outbound TLS through a local fragmenting proxy to get past SNI-matching DPI |
+
+### `YAAR_FREEDPI` — off by default (`=1` enables)
+
+Some networks block HTTPS by reading the hostname out of the ClientHello — which is
+plaintext — and injecting a TCP reset. Nothing is wrong with DNS and nothing is wrong with
+the route; the handshake is simply shot in the head every time. With `YAAR_FREEDPI=1` the
+server starts a loopback `CONNECT` proxy and points its two outbound paths at it: Chrome
+gets `--proxy-server`, and `safeFetch` gets `fetch`'s `proxy` option.
+
+The countermeasure is to cut the ClientHello *inside* the hostname so no single TCP segment
+carries a matchable name. Against a middlebox that reassembles the stream first, that alone
+does nothing — so the second fragment is also held back until the reassembly buffer has
+expired.
+
+**Off by default, and not a candidate to become default-on.** It changes how every outbound
+handshake is written, resolves names over DoH instead of the system resolver, and adds
+seconds of latency to the hosts it decides are blocked. It is also, plainly, a
+censorship-circumvention tool. None of that should arrive unrequested.
+
+### The stall is a measurement, not a constant
+
+`stallMs` defaults to 3000. That number came from measuring one network — SK Broadband
+(AS9318), 2026-08 — where fragmentation with no delay, and with delays up to 1000ms, was
+reset every time; 2500ms succeeded intermittently; 3000ms succeeded six times out of six.
+It describes that middlebox's buffer lifetime and nothing more. Another ISP will have a
+different one, and the same ISP can change it. Treat a bypass that stops working as a
+number to re-measure rather than a bug.
+
+### Why hosts are learned instead of configured
+
+Three seconds on every handshake would make the browser feel broken, and a hand-maintained
+domain list goes stale the moment a censor's list does. So every host starts on the direct
+path, and only a reset that *looks injected* — the connection opened, carried our first
+flight, and died without one byte coming back — moves it to the bypass. Ordinary traffic
+keeps its latency; a blocked host pays the stall once and is remembered.
+
+That is affordable only because the retry is invisible. A client whose TLS handshake was
+reset is still waiting for a ServerHello and has seen nothing, so the proxy opens a fresh
+connection and replays the identical ClientHello, fragmented this time. One byte delivered
+and that stops being safe, which is why `canReplay` refuses after any server bytes.
+
+Verdicts expire (30 minutes) so an ISP that changes its policy is noticed, and the table is
+bounded and never written to disk — a stale verdict read at boot would apply the stall to a
+host that may no longer need it, with nothing prompting a re-test.
+
+### Chrome must also be told to stop using QUIC
+
+`--disable-quic` is passed alongside `--proxy-server`. HTTP/3 is UDP/443 and never enters an
+HTTP proxy, so without it Chrome negotiates QUIC and goes around the bypass entirely — which
+presents as the bypass mysteriously not working.
+
+### It re-checks SSRF, because `validateUrl` can no longer see the target
+
+`validateUrl` inspects the hostname a caller passed. Once traffic is tunnelled, the address
+actually dialed is the one the proxy resolved over DoH, which no earlier check has seen — so
+a public hostname whose A record points into private space would sail through. The proxy
+therefore re-applies the same rules to the resolved address, and refuses loopback as well,
+which `safeFetch` deliberately allows: an open `CONNECT` listener lives for the whole server
+run, and anything local that finds the port inherits its reach.
+
+**Source:** `packages/server/src/lib/freedpi/`, `packages/server/src/lib/ssrf.ts`,
+`packages/server/src/lib/browser/chrome.ts`, `packages/server/src/lifecycle.ts`
 
 ### Why the download ceiling is separate from the inline one
 

@@ -226,6 +226,20 @@ export function setPort(p: number): void {
 export const IS_REMOTE = process.env.REMOTE === '1';
 
 /**
+ * DPI bypass — route TLS through a local fragmenting CONNECT proxy (`lib/freedpi/`).
+ *
+ * Off unless `YAAR_FREEDPI=1`. This is a censorship-circumvention path, not a default
+ * network route: it changes how every outbound TLS handshake is written, resolves names
+ * over DoH rather than the system resolver, and adds a stall to the hosts it decides are
+ * blocked. None of that should happen to someone who did not ask for it.
+ *
+ * The flag only *enables* the proxy. Which hosts actually pay for it is learned at
+ * runtime — see `lib/freedpi/policy.ts`, where every host starts on the direct path and
+ * only an injected-looking reset moves it off.
+ */
+export const IS_FREEDPI = process.env.YAAR_FREEDPI === '1';
+
+/**
  * App-origin isolation — the origin boundary that makes an app's principal
  * unforgeable (Stages 1 + 2).
  *

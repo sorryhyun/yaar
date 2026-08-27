@@ -32,6 +32,7 @@ export {
   getPort,
   setPort,
   IS_REMOTE,
+  IS_FREEDPI,
   IS_DEV,
   APP_ORIGIN_ISOLATION,
   isAppOriginIsolationEnabled,

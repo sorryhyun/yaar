@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
+import { getFreeDpiProxyUrl } from '../freedpi/active.js';
 import type { Subprocess } from 'bun';
 
 import { createServer } from 'net';
@@ -160,6 +161,9 @@ export async function launchChrome(
   // known port we can poll for the endpoint instead of relying solely on stderr parsing.
   const debugPort = process.platform === 'win32' ? await findFreePort() : 0;
 
+  // Null unless the bypass is live, in which case this is the loopback CONNECT proxy.
+  const freeDpiProxyUrl = getFreeDpiProxyUrl();
+
   const args = [
     '--headless=new',
     `--remote-debugging-port=${debugPort}`,
@@ -174,6 +178,10 @@ export async function launchChrome(
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
+    // `YAAR_FREEDPI=1` only. `--disable-quic` is not optional alongside it: HTTP/3 is
+    // UDP/443 and never enters an HTTP proxy, so without it Chrome negotiates QUIC and
+    // walks straight around the bypass — which looks like the bypass silently failing.
+    ...(freeDpiProxyUrl ? [`--proxy-server=${freeDpiProxyUrl}`, '--disable-quic'] : []),
     // A forwarded ⌘P/Ctrl+P (live mode) would otherwise open print preview over
     // the tab in the hidden window and freeze the screencast. Belt-and-braces to
     // the accelerator filter in websocket/screencast-handlers.ts.
