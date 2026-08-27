@@ -1,6 +1,6 @@
 ---
 name: storage-overrides
-description: Read before giving an app a save/load/export command, or when its files are renderings (.docx, .xlsx, .md) of some in-memory state — how to override the built-in storage:* verbs instead of shipping a second write command.
+description: Read before a save, load, or export command, or when an app's files are renderings of in-memory state — override storage:*, do not add a verb.
 audience: agent
 ---
 
