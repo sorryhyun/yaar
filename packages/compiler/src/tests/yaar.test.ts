@@ -114,6 +114,9 @@ function storageRefPath(ref: unknown): string | null {
 /** Every `window.yaar.storage` call, in order — what `sharedStorage` scoped and passed on. */
 const storageCalls: { method: string; path: string; extra?: unknown }[] = [];
 
+/** A binary file's first four bytes, as the fake server would serve them: `glTF`. */
+const GLB_BYTES = new Uint8Array([0x67, 0x6c, 0x54, 0x46]);
+
 /**
  * The principal the fake server resolves `shared/self/` against, or null to leave the
  * pronoun standing.
@@ -145,6 +148,11 @@ const expandSelf = (p: string) =>
       },
       read: async (path: string, options?: unknown) => {
         storageCalls.push({ method: 'read', path, extra: options });
+        // The real door answers in the shape `as` asked for. `blob` is the case that
+        // matters here: it is the only way an app gets a binary file's actual bytes.
+        if ((options as { as?: string } | undefined)?.as === 'blob') {
+          return new Blob([GLB_BYTES], { type: 'model/gltf-binary' });
+        }
         return 'contents';
       },
       list: async (path: string) => {
@@ -330,6 +338,45 @@ describe('appStorage.readJsonOr', () => {
     expect(await appStorage.readJsonOr('settings.json', { theme: 'dark' })).toEqual({
       theme: 'dark',
     });
+  });
+});
+
+/**
+ * `readBinary` and `readBlob` read *bytes*, and there is only one door that serves them.
+ *
+ * Through the verb layer — where both used to go — a non-image binary came back as a
+ * success-shaped sentence ("Binary file (.glb) — cannot be read as text"), which
+ * `readBlob` then wrapped in a valid little Blob; an image came back re-encoded to WebP
+ * for a model's eyes. Nothing threw either way, so the corruption surfaced far from here,
+ * as a parser failing on a model an app had "read" successfully. These tests pin the
+ * door, not just the answer: a verb read reappearing is the whole bug returning.
+ */
+describe('appStorage binary reads', () => {
+  beforeEach(() => {
+    storageCalls.length = 0;
+    readCalls.length = 0;
+  });
+
+  test('readBlob asks the storage door for the stored bytes', async () => {
+    const blob = await appStorage.readBlob('models/t6.glb');
+
+    // The app URI goes over verbatim — the storage door folds `yaar://apps/{id}/storage/`
+    // to a root-relative path itself, the same way `appStorage.read` relies on.
+    expect(storageCalls).toEqual([
+      { method: 'read', path: 'yaar://apps/self/storage/models/t6.glb', extra: { as: 'blob' } },
+    ]);
+    expect(readCalls).toEqual([]);
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(GLB_BYTES);
+    expect(blob.type).toBe('model/gltf-binary');
+  });
+
+  test('readBinary hands those same bytes back as base64, typed', async () => {
+    expect(await appStorage.readBinary('models/t6.glb')).toEqual({
+      data: 'Z2xURg==',
+      mimeType: 'model/gltf-binary',
+      encoding: 'base64',
+    });
+    expect(readCalls).toEqual([]);
   });
 });
 

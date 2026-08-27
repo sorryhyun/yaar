@@ -53,8 +53,15 @@ export interface EncodedImage {
   mimeType: string;
 }
 
-/** Chunked so a multi-megabyte image does not blow the argument limit on `apply`. */
-function base64FromBuffer(buffer: ArrayBuffer): string {
+/**
+ * Raw bytes as base64, chunked so a multi-megabyte file does not blow the argument
+ * limit on `apply`.
+ *
+ * Exported for `appStorage.readBinary`, which needs the same conversion on bytes it did
+ * not encode. Deliberately not in the barrel — an app that wants base64 out of a blob it
+ * holds is describing `toWebP`, or a `blobToDataUrl` it can slice.
+ */
+export function base64FromBuffer(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.length; i += 0x8000) {

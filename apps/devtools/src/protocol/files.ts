@@ -291,11 +291,7 @@ export const fileCommands = {
       'its buffers are embedded — one that names a sidecar .bin or texture files cannot ' +
       'resolve those relative URLs against a data: URI, so import the .glb form instead. ' +
       'Destination directories are created ' +
-      'automatically. One caveat for copies WITHIN the project: storage serves images ' +
-      're-encoded to WebP, so copying a .png already in the project yields WebP and the ' +
-      'destination is renamed accordingly — to preserve an original encoding, copy from ' +
-      'its yaar://storage/... source, which is server-side and byte-exact. Does NOT delete ' +
-      'the original — pair with deleteFile to move.',
+      'automatically. Does NOT delete the original — pair with deleteFile to move.',
     params: {
       type: 'object',
       properties: {
@@ -370,17 +366,8 @@ export const fileCommands = {
         const to = projectDestination(toRef);
         if (from === to) throw new AppCommandError('Source and destination are the same path');
         try {
-          const landed = await copyFile(from, to);
-          if (landed === to) return { from, to };
-          return {
-            from,
-            to: landed,
-            note:
-              `Storage serves images re-encoded to WebP, so "${to}" would have held WebP ` +
-              'bytes under its original extension. The copy was renamed to match what it ' +
-              'actually contains. To keep an original encoding, copy it from its ' +
-              'yaar://storage/... source instead — that path is server-side and exact.',
-          };
+          await copyFile(from, to);
+          return { from, to };
         } catch (err) {
           throw new AppCommandError(errMsg(err));
         }

@@ -294,12 +294,13 @@ async function readCopyText(projectId: string, path: string): Promise<string> {
  *
  * Reading one as text and writing the string back corrupted every image it touched, so
  * the bytes travel as bytes: `readBlob`, then `blobToDataUrl` for the base64 `save`
- * wants. Non-image binaries round-trip exactly this way.
+ * wants. Every binary round-trips exactly this way, images included.
  *
- * Images cannot, and no client-side read can fix it: **storage serves images re-encoded
- * to WebP**. A 408,746-byte PNG reads back as a 40,472-byte `image/webp` blob through
- * `readBinary` and `readBlob` alike. So an image copy yields WebP, and the destination
- * is renamed to match rather than left claiming to be a PNG.
+ * Images used not to: `appStorage.readBlob` read through the verb layer, which hands an
+ * image back re-encoded to WebP for a model's eyes — a 408,746-byte PNG arrived as a
+ * 40,472-byte `image/webp` blob — so a copy landed as WebP and the destination had to be
+ * renamed to match what it actually held. The SDK reads the served file now, and both
+ * the re-encode and the rename are gone.
  *
  * A server-side `action: 'copy'` would avoid the read entirely — it is how a storage
  * *import* stays byte-exact — but it cannot express this case. `from` does not expand
@@ -307,22 +308,13 @@ async function readCopyText(projectId: string, path: string): Promise<string> {
  * `yaar://apps/{id}/storage/` and `yaar://storage/apps/{id}/` are refused, the flat-root
  * grant deliberately excluding `apps/`.
  */
-async function copyBytes(projectId: string, from: string, to: string): Promise<string> {
+async function copyBytes(projectId: string, from: string, to: string): Promise<void> {
   try {
     const blob = await appStorage.readBlob(projectPath(projectId, from));
-    // Storage serves images re-encoded to WebP, so a .png read back is WebP bytes and
-    // writing them under the original name would produce a file whose contents and
-    // extension disagree — the corruption this function exists to end, one layer up.
-    // The destination follows the bytes instead, and the caller is told where it landed.
-    const dest =
-      isImagePath(from) && blob.type === 'image/webp' && !/\.webp$/i.test(to)
-        ? to.replace(/\.[^.]+$/, '.webp')
-        : to;
     const dataUrl = await blobToDataUrl(blob);
-    await appStorage.save(projectPath(projectId, dest), dataUrl.slice(dataUrl.indexOf(',') + 1), {
+    await appStorage.save(projectPath(projectId, to), dataUrl.slice(dataUrl.indexOf(',') + 1), {
       encoding: 'base64',
     });
-    return dest;
   } catch (err) {
     // Keeps the server's reason, drops the host path it names it with.
     throw new Error(
@@ -331,8 +323,8 @@ async function copyBytes(projectId: string, from: string, to: string): Promise<s
   }
 }
 
-/** Copies `from` to `to`, returning where it actually landed — see `copyBytes`. */
-export async function copyFile(from: string, to: string): Promise<string> {
+/** Copies `from` to `to` — text through `writeFile`, bytes through `copyBytes`. */
+export async function copyFile(from: string, to: string): Promise<void> {
   const proj = activeProject();
   if (!proj) throw new Error('No active project');
 
@@ -342,15 +334,15 @@ export async function copyFile(from: string, to: string): Promise<string> {
   if (!isBinaryPath(from)) {
     await writeFile(to, await readCopyText(proj.id, from), { label: `copy from ${from}` });
     setStatusText(`Copied ${from} → ${to}`);
-    return to;
+    return;
   }
 
   // Binary cannot go through writeFile at all: it takes a string, and would record
   // mojibake as the diff. Recorded as the fact instead — the shape deleteFile already
   // uses to report removing one.
-  const landed = await copyBytes(proj.id, from, to);
+  await copyBytes(proj.id, from, to);
   recordChange({
-    path: landed,
+    path: to,
     kind: 'create',
     before: '',
     after: `(binary file copied from ${from})`,
@@ -358,8 +350,7 @@ export async function copyFile(from: string, to: string): Promise<string> {
   });
   setTypecheckState('unknown');
   await refreshFiles();
-  setStatusText(`Copied ${from} → ${landed}`);
-  return landed;
+  setStatusText(`Copied ${from} → ${to}`);
 }
 
 export async function deleteFile(path: string): Promise<void> {

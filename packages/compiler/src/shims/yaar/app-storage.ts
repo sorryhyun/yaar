@@ -4,8 +4,9 @@
  * App-scoped storage — wraps the `yaar://apps/self/storage/` verbs.
  */
 
-import { y, asText } from './verbs.js';
+import { y } from './verbs.js';
 import { errMsg, showToast } from './ui.js';
+import { base64FromBuffer } from './image.js';
 
 function appStorageUri(path: string): string {
   const clean = path.replace(/^\//, '');
@@ -113,30 +114,33 @@ export const appStorage = {
       return fallback;
     }
   },
+  /**
+   * A file's bytes as base64, with the MIME type the server served them under.
+   *
+   * Through the raw storage door for a sharper version of the reason `read()` above
+   * uses it. The verb layer answers a non-image binary with a *success-shaped* notice —
+   * `Binary file (.glb) — cannot be read as text` — and an image with the WebP re-encode
+   * it applies on the way into a model's context. Neither throws, so a `.glb` read that
+   * way came back as a perfectly valid 127-byte Blob holding an apology, and a `.png` as
+   * bytes whose type no longer matched its name. The HTTP route serves the file as
+   * stored, which is what a caller asking for bytes meant.
+   *
+   * `encoding` is always `'base64'` now — the union stays only so callers that narrow
+   * on it keep compiling.
+   */
   async readBinary(
     path: string,
   ): Promise<{ data: string; mimeType: string; encoding: 'base64' | 'text' }> {
-    const result = await y.read(appStorageUri(path));
-    // When images are present, callVerb returns { data, images } with base64 data
-    if (result && typeof result === 'object' && result.images?.length) {
-      const img = result.images[0];
-      return {
-        data: img.data,
-        mimeType: img.mimeType ?? 'application/octet-stream',
-        encoding: 'base64',
-      };
-    }
-    // Non-image reads come back as text — flag it so callers don't atob() plain text
-    return { data: asText(result), mimeType: 'application/octet-stream', encoding: 'text' };
+    const blob = await appStorage.readBlob(path);
+    return {
+      data: base64FromBuffer(await blob.arrayBuffer()),
+      mimeType: blob.type || 'application/octet-stream',
+      encoding: 'base64',
+    };
   },
-  /** Read file contents as a Blob. Decodes base64 for binary (image) reads; wraps text as-is. */
+  /** A file's bytes as a Blob — the form an `<img>`, a canvas or a parser wants. */
   async readBlob(path: string): Promise<Blob> {
-    const { data, mimeType, encoding } = await appStorage.readBinary(path);
-    if (encoding === 'base64') {
-      const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-      return new Blob([bytes], { type: mimeType });
-    }
-    return new Blob([data], { type: mimeType });
+    return y.storage.read(appStorageUri(path), { as: 'blob' });
   },
   async list(dirPath?: string): Promise<YaarAppStorageEntry[]> {
     const result = await y.list(appStorageUri(dirPath ?? ''));

@@ -860,10 +860,21 @@ interface YaarAppStorage {
    * against the session anyway.
    */
   readJsonOr<T>(path: string, fallback: T): Promise<T>;
+  /**
+   * A file's bytes as base64, with the MIME type the server served them under.
+   *
+   * The stored bytes, whatever the type: not the "Binary file (…) — cannot be read as
+   * text" notice the verb layer answers a `.glb` with, and not the WebP re-encode it
+   * applies to an image on the way into a model's context.
+   *
+   * `encoding` is always `'base64'`; the union is kept so existing callers that narrow
+   * on it still compile. Prefer `readBlob` unless you need base64 (a data URL, or a
+   * `save(..., { encoding: 'base64' })` round trip).
+   */
   readBinary(
     path: string,
   ): Promise<{ data: string; mimeType: string; encoding: 'base64' | 'text' }>;
-  /** Read binary data and return as a Blob. Handles the base64 → binary conversion. */
+  /** A file's bytes as a Blob — the form an `<img>`, a canvas or a parser wants. */
   readBlob(path: string): Promise<Blob>;
   list(dirPath?: string): Promise<YaarAppStorageEntry[]>;
   remove(path: string): Promise<void>;
