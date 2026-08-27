@@ -47,7 +47,7 @@ function publishButton(app: DisplayApp) {
   const blocked = () => owns() && (order() === 'older' || order() === 'same');
   return html`
     <button
-      class="y-btn y-btn-sm publish-btn"
+      class=${() => `y-btn y-btn-sm publish-btn${owns() && !blocked() ? ' publish-btn-update' : ''}`}
       disabled=${() => loading() || blocked()}
       title=${() => {
         if (blocked()) {

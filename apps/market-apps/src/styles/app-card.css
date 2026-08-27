@@ -79,6 +79,14 @@
   font-size: 13px;
 }
 
+/* "Publish update" — the one state of this button that is a pending action rather
+   than a status, so it must not share the colour of the disabled "vX published"
+   text that renders in the same slot. */
+.publish-btn.publish-btn-update {
+  color: var(--yaar-warning);
+  font-weight: 600;
+}
+
 /* Pull-from-marketplace button ("Install update") — warning outline (y-btn-warning).
    It shares a column with Publish / Publish update but moves bytes in the opposite
    direction, so it must not read as another shade of the same action. Yellow is the
