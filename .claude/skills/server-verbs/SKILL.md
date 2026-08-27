@@ -144,6 +144,12 @@ app agent holds them, with no declaration required, because both trees behind th
 app's: its own (`yaar://apps/{id}/storage/`, no permission at all) and the commons
 (`yaar://storage/shared/`, granted to every app for being an app).
 
+Two relative prefixes name those trees and nothing else can be confused for them: `app/{path}` is
+the app's own, `shared/{path}` is the commons (`expandStorageShortcut`). A bare relative path is
+still the own tree — the prefixes changed what the door *prints*, not what it accepts — and every
+app-scoped listing entry, write receipt and delete receipt carries `app/` (`appScopedRef`), so two
+relative paths sitting in one agent context can be told apart by reading them.
+
 They were declaration-gated for one release — `declaresSharedStorage`, now deleted. The rule read
 well (a capability the author never declared is not one the agent should hold) and cost more than
 it bought: no manifest declares the app's *own* tree, since there is nothing to declare, so the

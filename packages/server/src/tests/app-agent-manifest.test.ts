@@ -98,8 +98,10 @@ describe('app agent storage doors', () => {
     expect(systemPrompt).toContain(APP_SCOPED);
     expect(systemPrompt).toContain(SHARED);
     // The spellings, not just the heading — a section naming no tool call is not a door.
-    expect(systemPrompt).toContain('query(stateKey: "storage/path/to/file.json")');
-    expect(systemPrompt).toContain('command(command: "storage:list", params: { path: "subdir" })');
+    expect(systemPrompt).toContain('query(stateKey: "storage/app/path/to/file.json")');
+    expect(systemPrompt).toContain(
+      'command(command: "storage:list", params: { path: "app/subdir" })',
+    );
   });
 
   it('states the app-scoped door before the shared one refers back to it', async () => {

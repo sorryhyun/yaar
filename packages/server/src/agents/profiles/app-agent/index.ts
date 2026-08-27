@@ -188,7 +188,7 @@ ${verbCharges}
 Paths a shared listing returns are already in these coordinates: prefix \`yaar://storage/\` and
 read one back directly. Files the user or the monitor put
 at the shared root live here, not in your app storage — so when a file you were told about is
-"not found" under \`storage/{path}\`, look for it at \`yaar://storage/{path}\` before reporting it
+"not found" under \`app/{path}\`, look for it at \`yaar://storage/{path}\` before reporting it
 missing.`;
 }
 

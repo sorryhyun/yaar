@@ -27,11 +27,17 @@
  * for every caller and could never render one app's declared reach.
  */
 import { describe, expect, it } from 'bun:test';
-import { sharedStorageGrants, authorizeSharedStorage } from '../mcp/app-agent/shared-storage.js';
+import {
+  sharedStorageGrants,
+  authorizeSharedStorage,
+  expandStorageShortcut,
+} from '../mcp/app-agent/shared-storage.js';
 import {
   APP_TOOL_DESCRIPTIONS,
   storageWriteAnswer,
   storageDeleteAnswer,
+  appScopedRef,
+  appRelativeEntries,
 } from '../mcp/app-agent/index.js';
 import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
 import { permissionsAllow, type PermissionEntry } from '../http/access.js';
@@ -53,7 +59,7 @@ describe('the door every app holds', () => {
     expect(systemPrompt).toContain(APP_SCOPED);
     expect(systemPrompt).toContain(SHARED);
     // The spellings, not just the heading — a section naming no tool call is not a door.
-    expect(systemPrompt).toContain('query(stateKey: "storage/path/to/file.json")');
+    expect(systemPrompt).toContain('query(stateKey: "storage/app/path/to/file.json")');
     expect(systemPrompt).toContain('storage:write');
     expect(systemPrompt).toContain('storage:delete');
     expect(systemPrompt).toContain('storage:list');
@@ -183,10 +189,44 @@ describe('the built-in answer', () => {
       written: true,
       bytes: 6,
     });
-    expect(storageDeleteAnswer('yaar://apps/memo/storage/a.md', 'a.md')).toEqual({
+    // The app-scoped door spells its own tree `app/…` on the way out, so a receipt and a
+    // listing entry name the tree they are in rather than reading as a bare root path.
+    expect(storageDeleteAnswer('yaar://apps/memo/storage/a.md', 'app/a.md')).toEqual({
       uri: 'yaar://apps/memo/storage/a.md',
-      path: 'a.md',
+      path: 'app/a.md',
       deleted: true,
     });
+  });
+});
+
+describe('which tree a relative path is in', () => {
+  // Both trees take a relative path and only one of them said so: the commons answered
+  // `shared/…` and the app's own answered a bare `reports/x.md`, so two paths in one
+  // context had nothing in the strings to tell them apart — and a bare one reads like a
+  // storage-root path, which is what the shared door's paths actually are.
+  it('is printed on every app-scoped path the door emits', () => {
+    expect(appScopedRef('reports/x.md')).toBe('app/reports/x.md');
+    expect(appScopedRef('')).toBe('app');
+    expect(
+      appRelativeEntries('memo', {
+        success: true,
+        entries: [
+          { path: 'apps/memo/reports/x.md', isDirectory: false, size: 3, modifiedAt: '' },
+          { path: 'apps/memo/reports', isDirectory: true, size: 0, modifiedAt: '' },
+        ],
+      }).entries?.map((e) => e.path),
+    ).toEqual(['app/reports/x.md', 'app/reports']);
+    expect(
+      storageWriteAnswer('yaar://apps/memo/storage/a.md', appScopedRef('a.md'), 'hi'),
+    ).toMatchObject({ path: 'app/a.md' });
+  });
+
+  it('reads back as the same file it named — a spelling, not a folder', () => {
+    // The round trip is the whole point: a listed path has to be usable verbatim as the
+    // next call's argument, on either tool.
+    expect(expandStorageShortcut(appScopedRef('reports/x.md'))).toBe('reports/x.md');
+    expect(expandStorageShortcut(appScopedRef(''))).toBe('');
+    // And the bare form an older prompt (or an app's own code) still spells is untouched.
+    expect(expandStorageShortcut('reports/x.md')).toBe('reports/x.md');
   });
 });

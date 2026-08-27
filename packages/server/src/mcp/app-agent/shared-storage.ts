@@ -111,10 +111,16 @@ export function sharedStoragePath(arg: string): string | null {
 }
 
 /**
- * Expand the two relative shortcuts an agent types before it knows the URI form exists.
+ * Expand the two relative shortcuts that say which tree a path is in.
  *
  * `shared/{path}` names the **commons** (`yaar://storage/shared/{path}`), and `app/{path}`
  * names the app's own tree (`{path}`); anything else is the app's own tree unchanged.
+ *
+ * `app/` is the spelling this door now *emits* for its own tree — every listing entry and
+ * every write/delete receipt carries it (`appScopedRef` in `mcp/app-agent/index.ts`) — so
+ * that two relative paths in one context can be told apart by reading them. Accepting a
+ * bare relative path is what keeps that free: it is the same file either way, so nothing an
+ * app or an earlier prompt already spells stops resolving.
  *
  * Before this, `shared/x` was a plain relative path, so it landed at
  * `storage/apps/{id}/shared/x` — a shadow folder inside the app's private tree, created
@@ -227,7 +233,7 @@ export async function authorizeSharedStorage(
     `not permitted: ${verb} ${uri} — "${appId}" declares no permission covering it. ` +
     `Add "${SHARED_ROOT}/" (or a narrower prefix under it) to "permissions" in app.json. ` +
     `Your own app's storage is a separate tree and needs no permission: ` +
-    `"storage/${path}" reads it.`
+    `"app/${path}" names it there.`
   );
 }
 

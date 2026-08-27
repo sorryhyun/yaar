@@ -19,14 +19,16 @@ declares `"messaging": "all"`. `describe`/`query`/`command` take an optional `ap
 cross-app control, gated by the caller's `app.json` `controls` list (**bundled apps only**).
 
 `storage:*` built-ins are held by **every** app agent, no declaration needed: they reach the app's
-own tree (`storage/{path}`, which needs no permission) and the commons
-(`yaar://storage/shared/`, granted for being an app). Anything further under `yaar://storage/`
+own tree (`app/{path}`, which needs no permission) and the commons
+(`shared/{path}` = `yaar://storage/shared/`, granted for being an app). The two relative prefixes
+are how a path says which tree it is in — a bare relative path still means the own tree, and the
+door prints the `app/` form on every listing entry and receipt. Anything further under `yaar://storage/`
 still costs an entry in `app.json`. A `protocol.json` command that persists on the agent's behalf
 is still the better door when the app has one — it keeps the app's own invariants, and the UI reads
 the state it writes. An app can make that door *the* door: a command named `storage:read` /
 `storage:write` / `storage:delete` / `storage:list`, or one aliased to that name, **overrides**
-the built-in for every ungated path — relative, and the commons (`shared/{path}` /
-`yaar://storage/shared/…`) — so the agent keeps the spelling it was taught and the app's handler
+the built-in for every ungated path — the own tree (`app/{path}`, or bare) and the commons
+(`shared/{path}` / `yaar://storage/shared/…`) — so the agent keeps the spelling it was taught and the app's handler
 answers (`mcp/app-agent/storage-override.ts`). The rest of the shared tree never overrides; its
 permission gate stays between the agent and the bytes.
 

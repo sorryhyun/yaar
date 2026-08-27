@@ -77,6 +77,27 @@ function resolvedStorageUri(appId: string, relativePath: string): string {
 }
 
 /**
+ * The app's own tree, spelled so it cannot be read as the commons.
+ *
+ * Both trees take a relative path, and only one of them announced which it was: the
+ * commons answered `shared/...` and the app's own answered a bare `reports/x.md`, so a
+ * listing, a write receipt and a delete receipt all named a file without naming the tree
+ * it is in. An agent holding two such paths has nothing in the strings to tell them
+ * apart, and a bare path *looks* like a root-relative one — which is what the shared
+ * door's paths actually are.
+ *
+ * So every app-scoped path this door **emits** carries the `app/` prefix that
+ * {@link expandStorageShortcut} already accepts on the way back in. It is a spelling of
+ * the same relative path, not a folder: `app/reports/x.md` resolves to `reports/x.md`
+ * under this app's root, and reads back through either tool unchanged. A bare relative
+ * argument still means the same thing it always did — this changes what is printed, not
+ * what is accepted.
+ */
+export function appScopedRef(relativePath: string): string {
+  return relativePath ? `app/${relativePath}` : 'app';
+}
+
+/**
  * A listing whose paths can be handed straight back to `storage/{path}`.
  *
  * `storageList` answers in storage-root coordinates (`apps/notes/reports/x.md`)
@@ -87,6 +108,12 @@ function resolvedStorageUri(appId: string, relativePath: string): string {
  * per *spelling*: a relative argument is answered app-relative, and the shared
  * `yaar://storage/...` one is answered in root coordinates, which is what it is already
  * written in. Either way, a listed path reads back exactly as it was printed.
+ *
+ * The app-relative half is printed as `app/{path}` ({@link appScopedRef}) so that the
+ * two coordinate systems are told apart by the path itself: `app/reports/x.md` is this
+ * app's, `shared/notes.md` is the commons, and neither can be mistaken for the other or
+ * for a root-relative path. `expandStorageShortcut` strips the prefix on the way back
+ * in, so the round trip is unchanged.
  */
 /**
  * An app's storage namespace exists from the moment the app does; the directory on
@@ -99,13 +126,13 @@ function emptyIfRootMissing(result: StorageListResult, isRoot: boolean): Storage
   return !result.success && result.notFound && isRoot ? { success: true, entries: [] } : result;
 }
 
-function appRelativeEntries(appId: string, result: StorageListResult): StorageListResult {
+export function appRelativeEntries(appId: string, result: StorageListResult): StorageListResult {
   if (!result.entries) return result;
   const prefix = `apps/${appId}/`;
   return {
     ...result,
     entries: result.entries.map((e) =>
-      e.path.startsWith(prefix) ? { ...e, path: e.path.slice(prefix.length) } : e,
+      e.path.startsWith(prefix) ? { ...e, path: appScopedRef(e.path.slice(prefix.length)) } : e,
     ),
   };
 }
@@ -153,9 +180,9 @@ export const APP_TOOL_NAMES = [
  * what an agent looking for the shared tree types before it knows the URI form exists.
  */
 const STORAGE_PATH_ERROR =
-  'invalid storage path. A relative path is scoped to this app — it is resolved under your ' +
-  'own storage root and may not contain "..". The commons is "shared/{path}" (the same as ' +
-  '"yaar://storage/shared/{path}") and needs no permission; any other part of the shared ' +
+  'invalid storage path. Your own tree is "app/{path}" — a relative path is resolved under ' +
+  'your own storage root and may not contain "..". The commons is "shared/{path}" (the same ' +
+  'as "yaar://storage/shared/{path}") and needs no permission; any other part of the shared ' +
   'tree is named by URI ("yaar://storage/{path}") and requires a covering permission in ' +
   'your app.json.';
 
@@ -697,7 +724,7 @@ export function registerAppAgentTools(server: McpServer): void {
             if (!result.success) {
               return error(`${result.error ?? 'write failed.'} (resolved to ${uri})`);
             }
-            return okJson(storageWriteAnswer(uri, path, content));
+            return okJson(storageWriteAnswer(uri, appScopedRef(path), content));
           }
           case 'delete': {
             if (!path) return error('"path" is required for storage:delete.');
@@ -705,7 +732,7 @@ export function registerAppAgentTools(server: McpServer): void {
             if (!result.success) {
               return error(`${result.error ?? 'delete failed.'} (resolved to ${uri})`);
             }
-            return okJson(storageDeleteAnswer(uri, path));
+            return okJson(storageDeleteAnswer(uri, appScopedRef(path)));
           }
           case 'list': {
             const result = emptyIfRootMissing(await storageList(scoped), !path);
