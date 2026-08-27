@@ -18,7 +18,7 @@
  * generated against and `codex-version.test.ts` refuses to let it ship.
  *
  * So the floor moves only when a release actually breaks something we send or read — not
- * on every codex version. It currently sits at 0.145.0 with bindings from 0.147.0.
+ * on every codex version. It currently sits at 0.145.0 with bindings from 0.150.1.
  *
  * 0.147.0 is the first regeneration whose diff is *not* purely additive, so the "only adds
  * fields" reasoning above does not cover it on its own and the floor was re-derived by hand.
@@ -31,6 +31,17 @@
  * `turn/*` and `initialize`, none of which changed — so a 0.145/0.146 CLI still speaks
  * every shape we actually send, and its extra `isPinned` on a response is a field we never
  * read. Grep before trusting that: the argument is "unused", not "compatible".
+ *
+ * 0.150.1 is the second such regeneration, and the same grep settles it. Two shapes changed
+ * non-additively: `HookMetadata` split its flat `handlerType`/`command` pair into a
+ * discriminated union, and `ResponseItem`'s `function_call_output` made `call_id` optional
+ * beside new `name`/`namespace` fields. Neither type is referenced outside `generated/`.
+ * Everything else is new variants on existing unions (`AuthMode.bedrockAccessKeys`,
+ * `HookEventName.interrupt`, four more `CollabAgentTool` members,
+ * `SubAgentActivityKind.completed`) plus whole new `project/*`, `thread/queue/*`,
+ * `thread/revert` and `server/diagnostics` request families we never call. The one addition
+ * that reached non-generated code is `CodexErrorInfo.misalignmentPolicyViolation`, for which
+ * the total `Record` in `errors.ts` forced a sentence — the guard working as designed.
  *
  * The additive half worth knowing about: `InitializeCapabilities.extensions`, the successor
  * to the `mcpServerOpenaiFormElicitation` flag and the seam a client declares MCP extensions

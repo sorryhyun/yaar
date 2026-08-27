@@ -8,6 +8,7 @@ import type { ReasoningEffort } from "../ReasoningEffort.js";
 import type { SleepItem } from "../SleepItem.js";
 import type { WebSearchItem } from "../WebSearchItem.js";
 import type { JsonValue } from "../serde_json/JsonValue.js";
+import type { AgentMessageDelivery } from "./AgentMessageDelivery.js";
 import type { CollabAgentState } from "./CollabAgentState.js";
 import type { CollabAgentTool } from "./CollabAgentTool.js";
 import type { CollabAgentToolCallStatus } from "./CollabAgentToolCallStatus.js";
@@ -27,7 +28,7 @@ import type { PatchApplyStatus } from "./PatchApplyStatus.js";
 import type { SubAgentActivityKind } from "./SubAgentActivityKind.js";
 import type { UserInput } from "./UserInput.js";
 
-export type ThreadItem = { "type": "userMessage", id: string, clientId: string | null, content: Array<UserInput>, } | { "type": "hookPrompt", id: string, fragments: Array<HookPromptFragment>, } | { "type": "agentMessage", id: string, text: string, phase: MessagePhase | null, memoryCitation: MemoryCitation | null, } | { "type": "plan", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string,
+export type ThreadItem = { "type": "userMessage", id: string, clientId: string | null, content: Array<UserInput>, } | { "type": "hookPrompt", id: string, fragments: Array<HookPromptFragment>, } | { "type": "agentMessage", id: string, text: string, phase: MessagePhase | null, memoryCitation: MemoryCitation | null, delivery: AgentMessageDelivery | null, } | { "type": "plan", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string,
 /**
  * Trusted first-party plugin id when this command resolves to one plugin script.
  */

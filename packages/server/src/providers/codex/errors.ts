@@ -37,6 +37,7 @@ const CODEX_ERROR_TEXT: Record<CodexErrorCode, string> = {
   usageLimitExceeded: 'Your Codex usage limit is exhausted.',
   serverOverloaded: 'The Codex API is overloaded.',
   cyberPolicy: 'The request was declined by the cyber-activity policy.',
+  misalignmentPolicyViolation: 'The request was declined by the misalignment policy.',
   internalServerError: 'The Codex API returned an internal server error.',
   unauthorized: 'Codex is not authenticated — run `codex login`.',
   badRequest: 'The Codex API rejected the request as malformed.',
