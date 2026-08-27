@@ -332,7 +332,7 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
     }
     case 'key': {
       const e = readKey(msg);
-      if (e) state.session.dispatchKey(e).catch(() => {});
+      if (e && !isChromeAccelerator(e)) state.session.dispatchKey(e).catch(() => {});
       return;
     }
     case 'text': {
@@ -417,6 +417,54 @@ function num(v: unknown): number | undefined {
 const MOUSE_TYPES = new Set(['mousePressed', 'mouseReleased', 'mouseMoved', 'mouseWheel']);
 const MOUSE_BUTTONS = new Set(['none', 'left', 'middle', 'right', 'back', 'forward']);
 const KEY_TYPES = new Set(['keyDown', 'keyUp', 'rawKeyDown', 'char']);
+
+/** CDP modifier bits, as `Input.dispatchKeyEvent` reads them. */
+const MOD_CTRL = 2;
+const MOD_META = 4;
+
+/**
+ * Letters that are Chrome's own accelerators under ⌘ (macOS) / Ctrl (elsewhere).
+ *
+ * The screencast Chrome is `--headless=new`, which still runs a real, hidden
+ * browser window with the full shortcut table. A forwarded ⌘P opens print preview
+ * over the tab, ⌘O a native file panel that blocks the browser UI thread, ⌘L
+ * focuses an omnibox nobody can see — and since the window is hidden, nobody can
+ * press Escape in it, so the screencast stays stalled. None of these was ever
+ * meant for the page, so they are dropped here rather than dispatched.
+ */
+const CHROME_ACCELERATOR_KEYS = new Set([
+  'l', // omnibox
+  'o', // open file
+  'p', // print
+  'n', // new window
+  't', // new tab
+  'w', // close tab
+  'q', // quit
+  's', // save page
+  'd', // bookmark
+  'h', // history / hide app
+  'j', // downloads
+  'u', // view source
+  'y', // history (mac)
+  ',', // settings (mac)
+  '0', // zoom reset
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9', // tab N
+]);
+
+/** True when this key event would be eaten by the browser chrome, not the page. */
+export function isChromeAccelerator(e: Pick<RawKeyEvent, 'key' | 'modifiers'>): boolean {
+  const mod = process.platform === 'darwin' ? MOD_META : MOD_CTRL;
+  if (!((e.modifiers ?? 0) & mod)) return false;
+  return e.key !== undefined && CHROME_ACCELERATOR_KEYS.has(e.key.toLowerCase());
+}
 
 /** Field-by-field, because the sender is an iframe and CDP `Input` is not a passthrough. */
 function readMouse(msg: Record<string, unknown>): RawMouseEvent | null {

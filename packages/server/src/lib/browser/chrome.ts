@@ -174,6 +174,10 @@ export async function launchChrome(
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
+    // A forwarded ⌘P/Ctrl+P (live mode) would otherwise open print preview over
+    // the tab in the hidden window and freeze the screencast. Belt-and-braces to
+    // the accelerator filter in websocket/screencast-handlers.ts.
+    '--disable-print-preview',
     // WebGPU is off by default in Linux Chrome (it needs the Vulkan backend,
     // which is soft-blocklisted there), so yaar-ml inference in the sandbox
     // fails with "Failed to get GPU adapter". Opt in explicitly — the headless

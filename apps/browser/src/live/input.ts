@@ -153,8 +153,29 @@ function claimKey(e: KeyboardEvent): boolean {
   return true;
 }
 
+/**
+ * Chrome accelerators are never the page's: forwarding ⌘P/⌘O into the hidden
+ * screencast Chrome opens a dialog nobody can dismiss and the stream freezes (the
+ * server drops them too, `screencast-handlers.ts`). ⌘L is the one with a local
+ * meaning worth keeping — it goes to this app's own URL bar instead.
+ */
+const ACCELERATOR_KEYS = new Set(['l', 'o', 'p', 'n', 't', 'w', 'q', 's', 'd', 'h', 'j', 'u', 'y']);
+
+function isChromeAccelerator(e: KeyboardEvent): boolean {
+  const mod = navigator.platform.startsWith('Mac') ? e.metaKey : e.ctrlKey;
+  return mod && ACCELERATOR_KEYS.has(e.key.toLowerCase());
+}
+
 export function onCanvasKeyDown(e: KeyboardEvent): void {
   if (!claimKey(e)) return;
+  if (isChromeAccelerator(e)) {
+    if (e.key.toLowerCase() === 'l') {
+      const bar = document.querySelector<HTMLInputElement>('.url-text');
+      bar?.focus();
+      bar?.select();
+    }
+    return;
+  }
   markInput();
   const printable = e.key.length === 1 && !e.ctrlKey && !e.metaKey;
   send({
@@ -166,6 +187,7 @@ export function onCanvasKeyDown(e: KeyboardEvent): void {
 
 export function onCanvasKeyUp(e: KeyboardEvent): void {
   if (!claimKey(e)) return;
+  if (isChromeAccelerator(e)) return;
   send({ ...keyPayload(e), type: 'keyUp' });
 }
 

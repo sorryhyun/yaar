@@ -220,6 +220,12 @@ export class BrowserSession extends EventEmitter {
       cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
     });
 
+    // A native file-open panel (a page's <input type=file> click, or a forwarded
+    // ⌘O in live mode) runs a nested run loop on the browser UI thread and stalls
+    // every CDP reply and screencast frame with it. Intercepted, the panel never
+    // opens; nothing consumes the event yet, which is the right default.
+    await cdp.send('Page.setInterceptFileChooserDialog', { enabled: true }).catch(() => {});
+
     cdp.on('Inspector.targetCrashed', () => this.noteCrash(cdp, 'renderer crashed'));
     cdp.onClose((expected) => {
       if (!expected) this.noteCrash(cdp, 'devtools socket closed');
@@ -813,7 +819,6 @@ export class BrowserSession extends EventEmitter {
       key: desc.key,
       code: desc.code,
       windowsVirtualKeyCode: desc.keyCode,
-      nativeVirtualKeyCode: desc.keyCode,
       ...keyDownExtra,
     });
     await this.cdp.send('Input.dispatchKeyEvent', {
@@ -822,7 +827,6 @@ export class BrowserSession extends EventEmitter {
       key: desc.key,
       code: desc.code,
       windowsVirtualKeyCode: desc.keyCode,
-      nativeVirtualKeyCode: desc.keyCode,
     });
 
     await new Promise((r) => setTimeout(r, 300));
@@ -1350,11 +1354,10 @@ export class BrowserSession extends EventEmitter {
       ...(e.unmodifiedText !== undefined ? { unmodifiedText: e.unmodifiedText } : {}),
       ...(e.key !== undefined ? { key: e.key } : {}),
       ...(e.code !== undefined ? { code: e.code } : {}),
+      // No `nativeVirtualKeyCode`: it is the platform key code, and on macOS the
+      // Windows VK for Shift (16) is the `Y` key — sending it froze the screencast.
       ...(e.windowsVirtualKeyCode !== undefined
-        ? {
-            windowsVirtualKeyCode: e.windowsVirtualKeyCode,
-            nativeVirtualKeyCode: e.windowsVirtualKeyCode,
-          }
+        ? { windowsVirtualKeyCode: e.windowsVirtualKeyCode }
         : {}),
     });
   }
