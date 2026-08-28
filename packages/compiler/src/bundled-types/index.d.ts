@@ -2554,6 +2554,40 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
   }): Promise<WebResult>;
 
+  // ── Shield ─────────────────────────────────────────────────────
+  //
+  // The server half of ad/popup blocking. Both settings are PROVIDER-WIDE: they
+  // apply to every tab now open and to every tab Chrome opens later (a popup is
+  // adopted into the same profile), which is what makes them useful against a
+  // popunder — the tab the ad opened is shielded before its first script runs.
+  // `browserId` is accepted for uniformity and ignored.
+
+  /**
+   * Refuse matching requests at the network layer (`Network.setBlockedURLs`), so
+   * the bytes never arrive and the tracker is never pinged. `hosts` are suffix
+   * rules (`doubleclick.net` also blocks `ad.doubleclick.net`), `urlPatterns` are
+   * substrings of the full URL, `patterns` are raw Chrome wildcard patterns.
+   * `enabled: false` clears everything.
+   */
+  export function setRequestBlocking(opts: {
+    enabled: boolean;
+    rules?: { hosts?: string[]; urlPatterns?: string[]; patterns?: string[] };
+    browserId?: string;
+  }): Promise<WebResult<{ enabled: boolean; ruleCount: number }>>;
+  /** Per-tab counters since the tab's socket came up. */
+  export function getRequestBlockStats(opts?: {
+    browserId?: string;
+  }): Promise<WebResult<{ blocked: number; requests: number; enabled: boolean }>>;
+  /**
+   * Source evaluated BEFORE any page script, on every navigation, in every tab
+   * (`Page.addScriptToEvaluateOnNewDocument`). The only way to override
+   * `window.open` ahead of a page that binds it on load. Empty string clears.
+   */
+  export function setInitScript(opts: {
+    script: string;
+    browserId?: string;
+  }): Promise<WebResult<{ installed: boolean }>>;
+
   // ── Observation ────────────────────────────────────────────────
   export function waitFor(opts: {
     selector: string;

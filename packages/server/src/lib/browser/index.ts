@@ -14,7 +14,7 @@ export { CdpBrowserProvider } from './cdp-provider.js';
 // Back-compat aliases (deprecated — prefer getHeadlessBrowser / getLocalBrowser).
 export { BrowserPool, getBrowserPool } from './pool.js';
 export { BrowserSession } from './session.js';
-export type { BrowserSessionUpdate } from './session.js';
+export type { BrowserSessionUpdate, ShieldProfile, RequestBlockStats } from './session.js';
 export type {
   PageState,
   PageContent,

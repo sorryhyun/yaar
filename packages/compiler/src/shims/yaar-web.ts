@@ -204,6 +204,27 @@ export async function evaluate(opts: {
   return browserPost({ action: 'evaluate', browserId, ...params }, params.timeoutMs);
 }
 
+// ── Shield (request blocking, init script) ──────────────────────
+// Provider-wide: every tab, including popups Chrome opens later. See issue #94.
+
+export async function setRequestBlocking(opts: {
+  enabled: boolean;
+  rules?: { hosts?: string[]; urlPatterns?: string[]; patterns?: string[] };
+  browserId?: string;
+}) {
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'set_request_blocking', browserId, ...params });
+}
+
+export async function getRequestBlockStats(opts?: { browserId?: string }) {
+  return browserPost({ action: 'get_request_block_stats', browserId: opts?.browserId });
+}
+
+export async function setInitScript(opts: { script: string; browserId?: string }) {
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'set_init_script', browserId, ...params });
+}
+
 // ── Visual ──────────────────────────────────────────────────────
 
 export async function annotate(browserId?: string) {

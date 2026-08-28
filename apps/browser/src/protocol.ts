@@ -13,6 +13,17 @@ import { currentUrl, pageTitle, activeBrowserId, updateUrlBar, clearDisplay } fr
 import { refreshScreenshot } from './actions';
 import { liveMode } from './live';
 import {
+  adBlockEnabled,
+  blockedCount,
+  rules,
+  setAdBlock,
+  addBlockRule,
+  refreshStats,
+  currentSiteExempt,
+  networkBlocked,
+  popupTabs,
+} from './adblock';
+import {
   attach,
   browserOpts,
   ensureBrowserId,
@@ -62,6 +73,38 @@ export const browserState = {
       },
     },
     get: () => listTabs(),
+  },
+  adBlockEnabled: {
+    description:
+      'Whether ad/popup/overlay suppression is on. Default true. This is DOM-level ' +
+      'only — it hides ad elements, neutralizes window.open and strips full-screen ' +
+      'interstitials after they load; it cannot stop the requests themselves. False ' +
+      'here means off globally; a site on the exception list reads true but is not ' +
+      'blocked (see get_block_stats.siteExempt). Set with set_ad_block.',
+    schema: { type: 'boolean' },
+    get: () => adBlockEnabled(),
+  },
+  blockedCount: {
+    description:
+      'Elements hidden + popups swallowed + requests Chrome refused, on the page ' +
+      'currently on screen. Resets to 0 on every navigation. Polled every 5s, so it ' +
+      'lags a burst of late-inserted ads by up to that.',
+    schema: { type: 'number' },
+    get: () => blockedCount(),
+  },
+  popupTabs: {
+    description:
+      'Tabs the server saw this page open (popups/popunders), with their browserIds, ' +
+      'since the last navigation. Recorded, never auto-closed: the new tab is often ' +
+      'the page the user actually wanted, or a login in progress. Close with close_tab.',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { browserId: { type: 'string' }, url: { type: 'string' } },
+      },
+    },
+    get: () => popupTabs(),
   },
 };
 
@@ -257,6 +300,81 @@ export const inspectionCommands = {
     description: 'Remove annotation badges',
     params: { type: 'object', properties: {} },
     run: async () => web.removeAnnotations(await ensureBrowserId()),
+  }),
+};
+
+// ── Ad, popup and overlay blocking ───────────────────────────────────
+
+export const adBlockCommands = {
+  set_ad_block: defineAppCommand({
+    description:
+      'Turn ad/popup/overlay blocking on or off — the toolbar shield. Three layers: ' +
+      'network (Chrome refuses requests to blocklisted hosts), an init script that ' +
+      'claims window.open before page scripts run, and DOM cleanup. Applies to the ' +
+      'page already on screen: turning it off restores every element the blocker hid, ' +
+      'without a reload. Use scope "site" to make an exception for the current host ' +
+      'instead of flipping the global switch; exceptions persist. The network and ' +
+      'init-script layers are shared by every tab, so a site exception switches them ' +
+      'off for all tabs while that site is on screen.',
+    params: {
+      type: 'object',
+      properties: {
+        enabled: {
+          type: 'boolean',
+          description: 'true to block. With scope "site", false adds the exception.',
+        },
+        scope: {
+          type: 'string',
+          enum: ['global', 'site'],
+          description: 'Default "global". "site" edits the exception list for the current host.',
+        },
+      },
+      required: ['enabled'],
+    },
+    run: async (p) => setAdBlock(p.enabled, p.scope ?? 'global', await ensureBrowserId()),
+  }),
+  get_block_stats: defineAppCommand({
+    description:
+      'What the blocker has done to the page on screen, read live from it: elements ' +
+      'hidden, popups swallowed in-page, requests Chrome refused (`networkBlocked`), ' +
+      'popup tabs the server saw open (`popupTabs`), and whether the DOM payload is ' +
+      'still installed. `active: false` with blocking enabled means the page navigated ' +
+      'and has not been swept yet.',
+    params: { type: 'object', properties: {} },
+    run: async () => {
+      const stats = await refreshStats(await ensureBrowserId());
+      return {
+        ...(stats ?? { blocked: 0, popups: 0, hidden: 0, active: false, url: currentUrl() }),
+        networkBlocked: networkBlocked(),
+        popupTabs: popupTabs(),
+        adBlockEnabled: adBlockEnabled(),
+        siteExempt: currentSiteExempt(),
+        allowDomains: rules().allowDomains,
+      };
+    },
+  }),
+  add_block_rule: defineAppCommand({
+    description:
+      'Add a rule to blocklist.json in app storage, which the user can also edit by ' +
+      'hand. The kind is inferred from the pattern — CSS punctuation means a selector, ' +
+      'a slash means a URL fragment, anything else is a host — so pass `kind` when that ' +
+      'guess would be wrong. Takes effect on the next sweep, not retroactively.',
+    params: {
+      type: 'object',
+      properties: {
+        pattern: {
+          type: 'string',
+          description: 'e.g. "adsterra.com", "/adframe", or "ins.adsbygoogle"',
+        },
+        kind: {
+          type: 'string',
+          enum: ['host', 'urlPattern', 'selector'],
+          description: 'Override the inferred list.',
+        },
+      },
+      required: ['pattern'],
+    },
+    run: async (p) => addBlockRule(p.pattern, p.kind),
   }),
 };
 

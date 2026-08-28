@@ -128,6 +128,40 @@
   color: var(--yaar-accent);
 }
 
+/*
+ * The shield. Sized like the other toolbar buttons so the row does not reflow
+ * when the badge appears and disappears — the badge is inline and empty when the
+ * count is zero, rather than a positioned bubble that would need a hole reserved
+ * for it.
+ */
+.url-bar .shield {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+}
+
+/* Off and exempt both read as "not protecting you"; exempt keeps a little colour
+   so it is distinguishable from the global switch being off. */
+.url-bar .shield.off {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+.url-bar .shield.exempt {
+  opacity: 0.7;
+}
+
+.url-bar .shield-badge:not(:empty) {
+  padding-inline: var(--yaar-sp-1);
+  border-radius: var(--yaar-radius-full);
+  background: var(--yaar-wash-accent-strong);
+  color: var(--yaar-text);
+  font-size: var(--yaar-text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
 .url-bar .quality-select {
   flex-shrink: 0;
   width: auto;

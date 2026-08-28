@@ -17,7 +17,7 @@
  * to the user's already-running one.
  */
 
-import { BrowserSession, type BrowserSessionOptions } from './session.js';
+import { BrowserSession, type BrowserSessionOptions, type ShieldProfile } from './session.js';
 import type {
   BrowserProvider,
   BrowserProviderStats,
@@ -69,6 +69,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    * the *opener target*, not a browserId.
    */
   protected targetOwners = new Map<string, string>();
+  /** The shield every tracked session carries; see {@link setShield}. */
+  protected shield: ShieldProfile = { initScript: '', blockedUrls: [] };
   /**
    * Sessions that exist only because a target does: adopted popups and the user's
    * own tabs. Nothing on disk remembers them, so when their target dies there is
@@ -165,6 +167,11 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     { persist }: { persist: boolean },
   ): void {
     this.sessions.set(browserId, session);
+    if (this.shield.initScript || this.shield.blockedUrls.length > 0) {
+      session.applyShield(this.shield).catch((err) => {
+        console.error(`[browser] Failed to apply shield to session ${browserId}:`, err);
+      });
+    }
     if (!persist || !this.ownsChrome) return;
 
     void this.store.load().then(() => {
@@ -494,6 +501,25 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   }
 
   /** Check and consume any pending auto-adopted tabs. */
+  async setShield(patch: Partial<ShieldProfile>): Promise<ShieldProfile> {
+    this.shield = {
+      initScript: patch.initScript ?? this.shield.initScript,
+      blockedUrls: [...(patch.blockedUrls ?? this.shield.blockedUrls)],
+    };
+    await Promise.all(
+      [...this.sessions.values()].map((s) =>
+        s.applyShield(this.shield).catch((err) => {
+          console.error(`[browser] Failed to apply shield to session ${s.id}:`, err);
+        }),
+      ),
+    );
+    return this.getShield();
+  }
+
+  getShield(): ShieldProfile {
+    return { initScript: this.shield.initScript, blockedUrls: [...this.shield.blockedUrls] };
+  }
+
   consumeAdoptedTabs(): AdoptedTab[] {
     const result: AdoptedTab[] = [];
     for (const [browserId, info] of this.pendingAdoptions) {

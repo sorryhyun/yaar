@@ -21,4 +21,14 @@ export const BrowserEventSchema = z.looseObject({
   url: z.string(),
   title: z.string(),
   version: z.number(),
+  // Present on the frame that announces a popup this tab opened. Such a frame
+  // repeats the tab's own state and does NOT advance `version`, so it has to be
+  // read before the version gate (sse.ts).
+  popup: z.optional(
+    z.looseObject({
+      browserId: z.string(),
+      url: z.string(),
+      openerBrowserId: z.optional(z.string()),
+    }),
+  ),
 });

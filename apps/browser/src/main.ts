@@ -17,15 +17,19 @@ import {
   navigationCommands,
   interactionCommands,
   inspectionCommands,
+  adBlockCommands,
   uiCommands,
 } from './protocol';
+import { initAdBlock, stopStatsPolling } from './adblock';
 import { App } from './view';
 import './styles.css';
 
 connectSSE(initialBrowserId);
+void initAdBlock();
 onCleanup(() => {
   disconnectSSE();
   disconnectLive();
+  stopStatsPolling();
 });
 
 export default defineApp({
@@ -36,6 +40,7 @@ export default defineApp({
     ...navigationCommands,
     ...interactionCommands,
     ...inspectionCommands,
+    ...adBlockCommands,
     ...uiCommands,
   },
   view: App,

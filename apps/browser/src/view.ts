@@ -45,6 +45,13 @@ import {
 import { setScreenshotEl } from './dom';
 import { handleNav, handleReload, handleUrlFocus, handleUrlKeydown } from './actions';
 import { toggleLive, changeQuality } from './session';
+import {
+  adBlockEnabled,
+  blockedCount,
+  currentSiteExempt,
+  toggleAdBlock,
+  toggleSiteException,
+} from './adblock';
 
 /** What a tab calls itself in the strip: its title, else its host, else its id. */
 function tabLabel(tab: LiveTab): string {
@@ -59,34 +66,90 @@ function tabLabel(tab: LiveTab): string {
 function UrlBar() {
   return html`
     <div class="url-bar y-flex y-gap-2 y-px-2 y-surface y-border-b">
-      <button class="y-btn y-btn-sm y-btn-ghost" title="Back" aria-label="Back"
-        onClick=${() => handleNav('navigate_back')}>←</button>
-      <button class="y-btn y-btn-sm y-btn-ghost" title="Forward" aria-label="Forward"
-        onClick=${() => handleNav('navigate_forward')}>→</button>
+      <button
+        class="y-btn y-btn-sm y-btn-ghost"
+        title="Back"
+        aria-label="Back"
+        onClick=${() => handleNav('navigate_back')}
+      >
+        ←
+      </button>
+      <button
+        class="y-btn y-btn-sm y-btn-ghost"
+        title="Forward"
+        aria-label="Forward"
+        onClick=${() => handleNav('navigate_forward')}
+      >
+        →
+      </button>
       <span class=${() => lock().cls}>${() => lock().icon}</span>
-      <input class="url-text y-input"
+      <input
+        class="url-text y-input"
         value=${() => currentUrl()}
         onFocus=${handleUrlFocus}
-        onKeydown=${handleUrlKeydown} />
-      <button class="y-btn y-btn-sm y-btn-ghost" title="Reload" aria-label="Reload"
-        onClick=${handleReload}>↻</button>
+        onKeydown=${handleUrlKeydown}
+      />
+      <button
+        class="y-btn y-btn-sm y-btn-ghost"
+        title="Reload"
+        aria-label="Reload"
+        onClick=${handleReload}
+      >
+        ↻
+      </button>
       <button
         class=${() => `y-btn y-btn-sm ${liveMode() ? 'y-btn-primary' : 'y-btn-ghost'}`}
         title="Live mode — stream the page and drive it yourself"
         aria-pressed=${() => String(liveMode())}
-        onClick=${() => void toggleLive()}>◉ Live</button>
-      ${() => (liveMode() ? QualitySelect() : null)}
+        onClick=${() => void toggleLive()}
+      >
+        ◉ Live
+      </button>
+      ${ShieldToggle()} ${() => (liveMode() ? QualitySelect() : null)}
       <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
     </div>
   `;
 }
 
+/**
+ * The shield: click flips the global switch, alt-click exempts this site.
+ *
+ * Two switches on one control because the toolbar is already seven items wide and
+ * a second button would be there for a case that is rare — most sites are never
+ * excepted. The tooltip carries the alt-click, and the exempt state is visible
+ * (a dimmed shield) rather than something to go looking for.
+ */
+function shieldState(): { cls: string; label: string } {
+  if (!adBlockEnabled()) return { cls: 'y-btn-ghost off', label: 'off' };
+  if (currentSiteExempt()) return { cls: 'y-btn-ghost exempt', label: 'off for this site' };
+  return { cls: 'y-btn-primary', label: 'on' };
+}
+
+function ShieldToggle() {
+  return html`
+    <button
+      class=${() => `y-btn y-btn-sm shield ${shieldState().cls}`}
+      title=${() =>
+        `Ad & popup blocking: ${shieldState().label}. Click to toggle, Alt+click for this site only.`}
+      aria-pressed=${() => String(adBlockEnabled() && !currentSiteExempt())}
+      onClick=${(e: MouseEvent) => void (e.altKey ? toggleSiteException() : toggleAdBlock())}
+    >
+      🛡<span class="shield-badge"
+        >${() => (blockedCount() > 0 ? String(blockedCount()) : '')}</span
+      >
+    </button>
+  `;
+}
+
 function QualitySelect() {
   return html`
-    <select class="y-select quality-select" title="Stream quality"
+    <select
+      class="y-select quality-select"
+      title="Stream quality"
       value=${() => quality()}
       onChange=${(e: Event) =>
-        changeQuality((e.target as HTMLSelectElement).value as QualityPreset)}>
+        changeQuality((e.target as HTMLSelectElement).value as QualityPreset)}
+    >
       <option value="high">High</option>
       <option value="medium">Medium</option>
       <option value="low">Low</option>
@@ -105,15 +168,24 @@ function TabStrip() {
       ${() =>
         liveTabs().map(
           (tab: LiveTab) => html`
-        <div class=${() => `live-tab ${activeBrowserId() === tab.browserId ? 'active' : ''}`}>
-          <button class="y-btn y-btn-sm y-btn-ghost tab-label y-truncate"
-            title=${() => tab.url || `browser:${tab.browserId}`}
-            onClick=${() => switchLiveTab(tab.browserId)}>${() => tabLabel(tab)}</button>
-          <button class="y-btn y-btn-sm y-btn-ghost tab-close"
-            title="Close tab" aria-label="Close tab"
-            onClick=${() => void closeLiveTab(tab.browserId)}>×</button>
-        </div>
-      `,
+            <div class=${() => `live-tab ${activeBrowserId() === tab.browserId ? 'active' : ''}`}>
+              <button
+                class="y-btn y-btn-sm y-btn-ghost tab-label y-truncate"
+                title=${() => tab.url || `browser:${tab.browserId}`}
+                onClick=${() => switchLiveTab(tab.browserId)}
+              >
+                ${() => tabLabel(tab)}
+              </button>
+              <button
+                class="y-btn y-btn-sm y-btn-ghost tab-close"
+                title="Close tab"
+                aria-label="Close tab"
+                onClick=${() => void closeLiveTab(tab.browserId)}
+              >
+                ×
+              </button>
+            </div>
+          `,
         )}
     </div>
   `;
@@ -140,16 +212,15 @@ function Stage() {
       <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
       ${() =>
         !liveMode() && !showScreenshot()
-          ? html`
-        <div class="placeholder y-text-muted y-text-sm">${() => placeholderText()}</div>
-      `
+          ? html` <div class="placeholder y-text-muted y-text-sm">${() => placeholderText()}</div> `
           : null}
       <img
         ref=${(el: HTMLImageElement) => {
           setScreenshotEl(el);
         }}
         style=${() => (!liveMode() && showScreenshot() ? '' : 'display:none')}
-        alt="Browser screenshot" />
+        alt="Browser screenshot"
+      />
       <canvas
         class="live-canvas"
         tabindex="0"
@@ -167,7 +238,8 @@ function Stage() {
         onMouseUp=${onCanvasMouseUp}
         onMouseMove=${onCanvasMouseMove}
         onWheel=${onCanvasWheel}
-        onContextMenu=${onCanvasContextMenu}></canvas>
+        onContextMenu=${onCanvasContextMenu}
+      ></canvas>
       <!--
         The IME anchor: hidden, unclickable, and the thing that actually owns the
         keyboard while live. It exists because an IME cannot compose into a canvas
@@ -191,7 +263,8 @@ function Stage() {
         onCompositionStart=${onImeStart}
         onCompositionUpdate=${onImeUpdate}
         onCompositionEnd=${onImeEnd}
-        onInput=${onImeInput}></textarea>
+        onInput=${onImeInput}
+      ></textarea>
       ${() => (liveMode() ? LiveStatsBar() : null)}
     </div>
   `;
@@ -200,9 +273,7 @@ function Stage() {
 export function App() {
   return html`
     <div class="browser-chrome y-app">
-      ${UrlBar()}
-      ${() => (liveMode() && liveTabs().length > 1 ? TabStrip() : null)}
-      ${Stage()}
+      ${UrlBar()} ${() => (liveMode() && liveTabs().length > 1 ? TabStrip() : null)} ${Stage()}
     </div>
   `;
 }

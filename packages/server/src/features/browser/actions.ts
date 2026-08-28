@@ -561,6 +561,79 @@ export async function handleRemoveAnnotations(
 }
 
 /**
+ * Turn the app-facing block rules into `Network.setBlockedURLs` wildcard
+ * patterns. A host rule is a suffix rule: `doubleclick.net` must catch
+ * `ad.doubleclick.net` but not `notdoubleclick.net`, hence two patterns rather
+ * than `*doubleclick.net*`. A URL-pattern rule is a plain substring.
+ */
+export function compileBlockPatterns(rules: {
+  hosts?: string[];
+  urlPatterns?: string[];
+  patterns?: string[];
+}): string[] {
+  const out = new Set<string>();
+  for (const raw of rules.hosts ?? []) {
+    const host = String(raw)
+      .trim()
+      .replace(/^\*?\.?/, '')
+      .toLowerCase();
+    if (!host) continue;
+    out.add(`*://${host}/*`);
+    out.add(`*://*.${host}/*`);
+  }
+  for (const raw of rules.urlPatterns ?? []) {
+    const sub = String(raw).trim();
+    if (sub) out.add(`*${sub}*`);
+  }
+  for (const raw of rules.patterns ?? []) {
+    const pat = String(raw).trim();
+    if (pat) out.add(pat);
+  }
+  return [...out];
+}
+
+/**
+ * Request blocking — the server half of the Browser app's shield (issue #94).
+ * Provider-wide on purpose: an ad's popup is a new tab, and a per-tab rule set
+ * would leave that tab open with nothing blocked until someone noticed it.
+ * `browserId` is accepted and ignored so the verb reads like its siblings.
+ */
+export async function handleSetRequestBlocking(
+  pool: BrowserProvider,
+  p: Payload,
+): Promise<VerbResult> {
+  const enabled = p.enabled !== false;
+  const rules = (p.rules ?? {}) as {
+    hosts?: string[];
+    urlPatterns?: string[];
+    patterns?: string[];
+  };
+  const blockedUrls = enabled ? compileBlockPatterns(rules) : [];
+  const shield = await pool.setShield({ blockedUrls });
+  return okJson({ enabled: shield.blockedUrls.length > 0, ruleCount: shield.blockedUrls.length });
+}
+
+export async function handleGetRequestBlockStats(
+  pool: BrowserProvider,
+  browserId: string,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  const stats = session.getRequestBlockStats();
+  return okJson({ ...stats, enabled: pool.getShield().blockedUrls.length > 0 });
+}
+
+/**
+ * Init script — runs before any page script, on every navigation, in every tab
+ * (provider-wide, like the blocklist). The only place a `window.open` override
+ * wins the race against a popunder that binds on load. Empty string clears.
+ */
+export async function handleSetInitScript(pool: BrowserProvider, p: Payload): Promise<VerbResult> {
+  if (typeof p.script !== 'string') return error('"script" is required for set_init_script.');
+  const shield = await pool.setShield({ initScript: p.script });
+  return okJson({ installed: shield.initScript.length > 0 });
+}
+
+/**
  * Shared action dispatcher — the single switch table that both browser doors
  * use. The caller passes the provider instance (headless for `/api/browser`,
  * the user's real Chrome for `yaar://session/browser`) plus the parsed action
@@ -618,6 +691,12 @@ export async function runBrowserAction(
       return handleListTabs(pool);
     case 'close_tab':
       return handleCloseTab(pool, browserId);
+    case 'set_request_blocking':
+      return handleSetRequestBlocking(pool, body);
+    case 'get_request_block_stats':
+      return handleGetRequestBlockStats(pool, browserId);
+    case 'set_init_script':
+      return handleSetInitScript(pool, body);
     default:
       return error(`Unknown action "${action}".`);
   }

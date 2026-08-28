@@ -27,6 +27,8 @@ actions.ts       toolbar handlers + the still-screenshot refresh
 url.ts           address-vs-phrase parsing (imports nothing)
 sse.ts           the event stream and the 200 ms still-screenshot poll
 schema.ts        zod boundary schema for SSE frames
+adblock.ts       ad/popup/overlay suppression: rules, storage, the switches
+adblock-script.ts  the ES5 payloads injected into the remote page (imports nothing)
 live/index.ts    barrel + the live-mode design notes; implementation beside it
   live/state.ts    signals and types
   live/context.ts  socket / canvas / IME anchor / remote viewport (imports nothing)
@@ -135,6 +137,70 @@ slow; the three numbers were the same artifact seen three ways.
 Two rules keep it honest, and both matter: an input mark expires (`LAG_EXPIRY_MS`), so one
 unanswered input cannot poison every later reading; and `switchLiveTab` resets the
 counters, because they are per-tab, not per-connection.
+
+## Ad blocking is three layers, and the top two live on the server
+
+`adblock.ts` blocks in three places, in the order they get a say:
+
+1. **Network** — `web.setRequestBlocking` hands the `hosts`/`urlPatterns` rules to Chrome's
+   own blocklist (`Network.setBlockedURLs`). A matching request is refused before it
+   leaves the tab, which is the only layer that saves bandwidth or stops a tracker
+   beacon. `web.getRequestBlockStats` counts what was refused; the counter resets on every
+   top-level navigation, like the badge.
+2. **Init script** — `web.setInitScript` installs `initScript` (`adblock-script.ts`) to run
+   before any page script, in every frame (`Page.addScriptToEvaluateOnNewDocument`). It
+   is deliberately tiny — `window.open` and `onbeforeunload` — because those are the two
+   hooks that lose a race if installed late: a popunder binds `window.open` during load,
+   which is why the post-load override alone measured `popups: 0` on a popunder site
+   (issue #94).
+3. **DOM** — `applyScript`, injected *after* load on every navigation via the SSE url frame
+   (`sse.ts` -> `onNavigated`) plus a second pass at `SETTLE_MS`, because the frame arrives
+   at navigation commit, before the ads exist. Hides ad elements, strips interstitials,
+   unlocks scroll, rewrites `target=_blank`. `initAdBlock` sweeps separately, for a window
+   that opens onto an already-loaded page.
+
+**Layers 1 and 2 are provider-wide.** The server applies them to every tab it owns and to
+every tab Chrome opens later — the popup an ad spawns is adopted into the same profile
+and is shielded before its first script runs. That is the point; a per-tab rule set would
+leave exactly the tab that matters unprotected. The consequence: they are set from the
+*active* tab's point of view (`syncServerShield`), on when blocking is on and the page on
+screen is not exempt, off otherwise. A site exception therefore switches the network and
+init-script layers off for all tabs while that site is on screen; the DOM layer stays
+per-tab. `syncServerShield` is keyed on the last profile sent, so the per-navigation calls
+are free while nothing changed.
+
+Three rules that hold across all layers:
+
+- **Everything must be reversible.** A heuristic that hides real content is worse than
+  the ads it removed, so `APPLY` records each element's previous inline style on a
+  `window.__yaarAdBlock` ledger and `DISABLE` walks it back. `INIT` shares that ledger:
+  it stores the real `window.open` in `st.openOrig`, and `DISABLE` restores it from
+  there. Turning the shield off restores the page in place; "reload to undo" is not an
+  undo. Anything added to a payload has to join the ledger.
+- **The overlay heuristic is deliberately conservative.** Fixed/sticky, z-index over
+  `minZIndex`, covering over `minCoverage` of the viewport, *and* not holding the page's
+  own landmarks or a paragraph of text. Selectors are anchored for the same reason:
+  `[id*=ad]` also matches "header", "download", "gradient" and "loading".
+- **Popups are recorded, never auto-closed.** The server announces a popup on its
+  *opener's* SSE stream (`popup` field, consumed in `sse.ts` ahead of the version gate
+  because it does not advance `version`), with the opener Chrome named — authoritative in
+  a way the in-page counter is not. It lands in `popupTabs` state and the badge. It is
+  not closed: a popunder's new tab is the page the user meant to open, and an OAuth popup
+  is a login in progress. Closing an innocent tab is worse than the popup.
+
+Rules live in `blocklist.json` in app storage and are meant to be hand-edited, which is
+why the schema is loose and every field falls back to its default rather than failing
+validation. A rule *kind* is singular (`host`) and its *field* is plural (`hosts`);
+`RULE_FIELD` maps between them, because indexing the rules by kind reads `undefined` and
+this project's TypeScript settings do not catch it.
+
+## This project compiles without strict null checks
+
+Discriminated unions therefore do **not** narrow: `if (res.ok)` leaves `res.error` an
+error on every branch, for the SDK's `WebResult` and for any union you declare yourself.
+Flatten the envelope to one optional-field shape instead — `protocol.ts` does it for
+`web.screenshot`, `adblock.ts` for `web.evaluate`. `noImplicitAny` is off too, so a bad
+index is a silent `any` rather than a build failure.
 
 ## Protocol
 

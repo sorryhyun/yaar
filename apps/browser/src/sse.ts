@@ -4,6 +4,7 @@ import { liveMode } from './live/state';
 import { eventsUrl, screenshotUrl } from './endpoints';
 import { getScreenshotEl } from './dom';
 import { refreshScreenshot } from './actions';
+import { onNavigated, onPopup } from './adblock';
 import { BrowserEventSchema } from './schema';
 
 type BrowserEvent = z.infer<typeof BrowserEventSchema>;
@@ -126,10 +127,22 @@ export function connectSSE(browserId: string): void {
     const data = parseFrame(e.data, warnOnce);
     if (!data) return;
 
+    // A popup announcement carries the opener's unchanged version on purpose (it is
+    // not a navigation), so it is consumed here, ahead of the gate, and only here.
+    if (data.popup) {
+      onPopup({ browserId: data.popup.browserId, url: data.popup.url });
+      return;
+    }
+
     if (data.version <= lastVersion) return;
     lastVersion = data.version;
 
-    if (data.url) updateUrlBar(data.url, data.title);
+    if (data.url) {
+      updateUrlBar(data.url, data.title);
+      // The only navigation signal this app gets. `onNavigated` de-duplicates,
+      // so the repeated frames of one page load cost one injection.
+      onNavigated(data.url);
+    }
     refreshScreenshot();
   };
 

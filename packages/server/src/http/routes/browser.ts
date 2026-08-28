@@ -206,6 +206,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             if (closed) return;
             closed = true;
             clearInterval(heartbeat);
+            unsubscribeTabs();
             session.off('updated', onUpdate);
             session.off('closed', onClosed);
             // Emit the terminal zero-length chunk on every teardown path — abort,
@@ -229,6 +230,23 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             );
           };
           const onClosed = () => cleanup();
+          // A popup is announced on its OPENER's stream, because that is the window
+          // a user is looking at when it happens. The frame repeats the opener's own
+          // state (the client keys on `version`, which does not move for this) with
+          // the popup attached; the client must read `popup` before its version gate.
+          const unsubscribeTabs = pool.onTabEvent((event) => {
+            if (event.type !== 'opened' || event.openerBrowserId !== browserId) return;
+            write(
+              `data: ${JSON.stringify({
+                url: session.currentUrl,
+                title: session.currentTitle,
+                version: session.version,
+                driving: session.driving,
+                isSelf: isYaarOriginUrl(session.currentUrl),
+                popup: { browserId: event.browserId, url: event.url, openerBrowserId: browserId },
+              })}\n\n`,
+            );
+          });
 
           const heartbeat = setInterval(() => {
             write(': heartbeat\n\n');

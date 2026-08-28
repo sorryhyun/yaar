@@ -343,3 +343,82 @@ describe('BrowserSession', () => {
     expect(session.lastScreenshot).toBe(buffer);
   });
 });
+
+// ── Shield (issue #94) ──────────────────────────────────────────────────────
+
+describe('BrowserSession shield', () => {
+  beforeEach(() => {
+    mockSend.mockClear();
+    mockOn.mockClear();
+    (CDPClient.connect as ReturnType<typeof mock>).mockClear();
+    mockSend.mockImplementation((method: string) => {
+      if (method === 'Page.addScriptToEvaluateOnNewDocument') {
+        return Promise.resolve({ identifier: 'script-1' });
+      }
+      return defaultSendHandler(method);
+    });
+  });
+
+  it('create enables Network and starts with an empty blocklist', async () => {
+    await BrowserSession.create('sh-1', 'ws://127.0.0.1:9222/devtools/page/a');
+    expect(mockSend).toHaveBeenCalledWith('Network.enable');
+    expect(mockSend).toHaveBeenCalledWith('Network.setBlockedURLs', { urls: [] });
+    expect(mockSend).not.toHaveBeenCalledWith(
+      'Page.addScriptToEvaluateOnNewDocument',
+      expect.anything(),
+    );
+  });
+
+  it('applyShield installs the blocklist and init script; clearing removes the script', async () => {
+    const session = await BrowserSession.create('sh-2', 'ws://127.0.0.1:9222/devtools/page/a');
+    await session.applyShield({ initScript: 'window.open = null', blockedUrls: ['*://ads/*'] });
+    expect(mockSend).toHaveBeenCalledWith('Network.setBlockedURLs', { urls: ['*://ads/*'] });
+    expect(mockSend).toHaveBeenCalledWith('Page.addScriptToEvaluateOnNewDocument', {
+      source: 'window.open = null',
+    });
+
+    await session.applyShield({ initScript: '', blockedUrls: [] });
+    expect(mockSend).toHaveBeenCalledWith('Page.removeScriptToEvaluateOnNewDocument', {
+      identifier: 'script-1',
+    });
+    expect(mockSend).toHaveBeenCalledWith('Network.setBlockedURLs', { urls: [] });
+    expect(session.getShield()).toEqual({ initScript: '', blockedUrls: [] });
+  });
+
+  it('reattach replays the shield onto the new socket', async () => {
+    const session = await BrowserSession.create('sh-3', 'ws://127.0.0.1:9222/devtools/page/a');
+    await session.applyShield({ initScript: 'x', blockedUrls: ['*://*.ads.test/*'] });
+    mockSend.mockClear();
+
+    await session.reattach('ws://127.0.0.1:9222/devtools/page/b');
+    expect(mockSend).toHaveBeenCalledWith('Network.setBlockedURLs', {
+      urls: ['*://*.ads.test/*'],
+    });
+    expect(mockSend).toHaveBeenCalledWith('Page.addScriptToEvaluateOnNewDocument', {
+      source: 'x',
+    });
+    // A new target never had the old script, so nothing is removed from it.
+    expect(mockSend).not.toHaveBeenCalledWith(
+      'Page.removeScriptToEvaluateOnNewDocument',
+      expect.anything(),
+    );
+  });
+
+  it('counts blocked requests from Network.loadingFailed and resets per top-level navigation', async () => {
+    const session = await BrowserSession.create('sh-4', 'ws://127.0.0.1:9222/devtools/page/a');
+    const handlers = new Map<string, (p: unknown) => void>();
+    for (const call of mockOn.mock.calls as unknown as Array<[string, (p: unknown) => void]>) {
+      handlers.set(call[0], call[1]);
+    }
+    handlers.get('Network.requestWillBeSent')!({});
+    handlers.get('Network.requestWillBeSent')!({});
+    handlers.get('Network.loadingFailed')!({ blockedReason: 'inspector' });
+    handlers.get('Network.loadingFailed')!({ errorText: 'net::ERR_FAILED' });
+    expect(session.getRequestBlockStats()).toEqual({ blocked: 1, requests: 2 });
+
+    handlers.get('Page.frameNavigated')!({ frame: { id: 'child', parentId: 'top' } });
+    expect(session.getRequestBlockStats()).toEqual({ blocked: 1, requests: 2 });
+    handlers.get('Page.frameNavigated')!({ frame: { id: 'top' } });
+    expect(session.getRequestBlockStats()).toEqual({ blocked: 0, requests: 0 });
+  });
+});

@@ -41,6 +41,9 @@ import { actionEmitter } from '../../session/action-emitter.js';
  * `evaluate` is mutating: arbitrary JS can change the DOM, storage, or navigate.
  */
 const MUTATING_ACTIONS = new Set([
+  // Provider-wide: an init script and a URL blocklist change what every tab sees.
+  'set_request_blocking',
+  'set_init_script',
   'open',
   'navigate',
   'click',

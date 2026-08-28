@@ -2,7 +2,7 @@
  * Browser automation types.
  */
 
-import type { BrowserSession, BrowserSessionOptions } from './session.js';
+import type { ShieldProfile, BrowserSession, BrowserSessionOptions } from './session.js';
 
 /**
  * Stats reported by a browser provider for `yaar://` system introspection.
@@ -116,6 +116,14 @@ export interface BrowserProvider {
   findByWindowId(windowId: string): BrowserSession | undefined;
   /** Drain tabs auto-adopted since the last call (e.g. popups). */
   consumeAdoptedTabs(): AdoptedTab[];
+  /**
+   * Set the ad/popup shield for every tab this provider owns, now and later —
+   * a popup Chrome opens is adopted into the same profile, which is the point:
+   * a shield that only covered the tab that asked for it would leave the tab
+   * the ad opened unprotected. Partial: an omitted field keeps its value.
+   */
+  setShield(patch: Partial<ShieldProfile>): Promise<ShieldProfile>;
+  getShield(): ShieldProfile;
   /**
    * Subscribe to tabs opening and closing. Returns the unsubscribe.
    *

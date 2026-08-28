@@ -161,6 +161,29 @@ export interface BrowserSessionOptions {
   adopt?: boolean;
 }
 
+/**
+ * The ad/popup shield, as the CDP layer sees it: a script that runs before every
+ * page's own scripts, and a list of URL patterns Chrome refuses to fetch. Set
+ * provider-wide (`CdpBrowserProvider.setShield`) and re-applied per target here,
+ * because both are per-target CDP state that a popup or a crash-restart would
+ * otherwise start without. Semantics: the `Ad blocking` section of
+ * `apps/browser/AGENTS.md` and issue #94.
+ */
+export interface ShieldProfile {
+  /** Source evaluated before any page script on every navigation. Empty = none. */
+  initScript: string;
+  /** `Network.setBlockedURLs` wildcard patterns (`*://*.doubleclick.net/*`). */
+  blockedUrls: string[];
+}
+
+/** Request counters a shield exposes, per tab, since the socket came up. */
+export interface RequestBlockStats {
+  /** Requests Chrome refused because a `blockedUrls` pattern matched. */
+  blocked: number;
+  /** Every request the tab started, blocked ones included. */
+  requests: number;
+}
+
 export class BrowserSession extends EventEmitter {
   readonly id: string;
   readonly mobile: boolean;
@@ -181,6 +204,10 @@ export class BrowserSession extends EventEmitter {
   /** The viewport this session was last told to emulate, so a reattach restores it. */
   private viewport: { width: number; height: number; deviceScaleFactor: number } | null = null;
   private crashed = false;
+  private shield: ShieldProfile = { initScript: '', blockedUrls: [] };
+  /** Chrome's handle for the installed init script on the *current* target. */
+  private initScriptId: string | null = null;
+  private blockStats: RequestBlockStats = { blocked: 0, requests: 0 };
 
   private constructor(id: string, cdp: CDPClient, mobile: boolean, adopted: boolean) {
     super();
@@ -214,6 +241,30 @@ export class BrowserSession extends EventEmitter {
   private async initTarget(cdp: CDPClient): Promise<void> {
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
+    // Network stays enabled for the life of the socket: `Network.setBlockedURLs`
+    // only holds while it is, and the blocked-request counter needs the events.
+    // Nothing may `Network.disable` on this socket later.
+    await cdp.send('Network.enable');
+    this.blockStats = { blocked: 0, requests: 0 };
+    // Counters are per page, not per socket: the badge that shows them resets on
+    // navigation, and "blocked since some earlier tab" is not a number anyone wants.
+    cdp.on('Page.frameNavigated', (params: unknown) => {
+      const frame = (params as { frame?: { parentId?: string } }).frame;
+      if (frame && !frame.parentId) this.blockStats = { blocked: 0, requests: 0 };
+    });
+    cdp.on('Network.requestWillBeSent', () => {
+      this.blockStats.requests++;
+    });
+    cdp.on('Network.loadingFailed', (params: unknown) => {
+      // 'inspector' is the reason Chrome gives for a request a DevTools blocklist
+      // refused — i.e. ours. Other reasons are the page's own failures.
+      if ((params as { blockedReason?: string }).blockedReason === 'inspector') {
+        this.blockStats.blocked++;
+      }
+    });
+    // A fresh target has none of the previous one's shield state.
+    this.initScriptId = null;
+    await this.pushShield(cdp);
     // Renderer death has its own CDP event; the socket dropping is the coarser
     // signal that also covers Chrome exiting. Both land on the same handler.
     await cdp.send('Inspector.enable').catch(() => {});
@@ -552,7 +603,8 @@ export class BrowserSession extends EventEmitter {
 
   /** Wait until no network requests for `quietMs`, up to `timeoutMs`. */
   private async waitForNetworkIdle(quietMs: number, timeoutMs: number): Promise<void> {
-    await this.cdp.send('Network.enable');
+    // Network is enabled for the whole socket by initTarget(); disabling it here,
+    // as this used to, would also silently drop the shield's URL blocklist.
     let inflight = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -591,7 +643,6 @@ export class BrowserSession extends EventEmitter {
         this.cdp.off('Network.requestWillBeSent', onRequest);
         this.cdp.off('Network.loadingFinished', onFinish);
         this.cdp.off('Network.loadingFailed', onFinish);
-        this.cdp.send('Network.disable').catch(() => {});
       };
 
       // Start checking immediately in case no requests are pending
@@ -1105,7 +1156,6 @@ export class BrowserSession extends EventEmitter {
   /** Get cookies from the browser for the current page (or a specific URL). */
   async getCookies(urls?: string[]): Promise<BrowserCookie[]> {
     this.touch();
-    await this.cdp.send('Network.enable');
     const params: Record<string, unknown> = {};
     if (urls && urls.length > 0) {
       params.urls = urls;
@@ -1247,6 +1297,43 @@ export class BrowserSession extends EventEmitter {
    * backpressure would stall the stream rather than degrade it. Dropping frames
    * is the transport's job (see `screencast-handlers.ts`).
    */
+  /**
+   * Install (or clear) the shield on this tab. Idempotent; the provider calls it
+   * for every tracked session when the profile changes, and `initTarget` replays
+   * the stored profile onto a new socket.
+   */
+  async applyShield(profile: ShieldProfile): Promise<void> {
+    this.shield = { initScript: profile.initScript, blockedUrls: [...profile.blockedUrls] };
+    await this.pushShield(this.cdp);
+  }
+
+  getShield(): ShieldProfile {
+    return { initScript: this.shield.initScript, blockedUrls: [...this.shield.blockedUrls] };
+  }
+
+  getRequestBlockStats(): RequestBlockStats {
+    return { ...this.blockStats };
+  }
+
+  private async pushShield(cdp: CDPClient): Promise<void> {
+    if (this.closed) return;
+    // Blocklist first: it is the half that has no race to lose.
+    await cdp.send('Network.setBlockedURLs', { urls: this.shield.blockedUrls });
+
+    if (this.initScriptId) {
+      await cdp
+        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: this.initScriptId })
+        .catch(() => {});
+      this.initScriptId = null;
+    }
+    if (this.shield.initScript) {
+      const r = (await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: this.shield.initScript,
+      })) as { identifier: string };
+      this.initScriptId = r.identifier;
+    }
+  }
+
   /**
    * Make this tab the frontmost of its window.
    *
