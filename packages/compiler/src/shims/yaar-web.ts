@@ -41,7 +41,12 @@ async function browserPost<T>(body: Record<string, unknown>, budgetMs?: number):
 // ── Tab lifecycle ───────────────────────────────────────────────
 
 /** Create a new browser tab without navigating. Returns browserId info. */
-export async function create(opts?: { browserId?: string; mobile?: boolean; visible?: boolean }) {
+export async function create(opts?: {
+  browserId?: string;
+  mobile?: boolean;
+  visible?: boolean;
+  live?: boolean;
+}) {
   const { browserId, ...params } = opts ?? {};
   return browserPost({ action: 'create', browserId, ...params });
 }
@@ -60,7 +65,13 @@ export async function closeTab(browserId?: string) {
 
 export async function open(
   url: string,
-  opts?: { browserId?: string; mobile?: boolean; visible?: boolean; waitUntil?: string },
+  opts?: {
+    browserId?: string;
+    mobile?: boolean;
+    visible?: boolean;
+    live?: boolean;
+    waitUntil?: string;
+  },
 ) {
   const { browserId, ...params } = opts ?? {};
   return browserPost({ action: 'open', browserId, url, ...params });

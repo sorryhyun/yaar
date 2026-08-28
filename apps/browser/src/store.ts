@@ -8,6 +8,16 @@ export const initialBrowserId = params.get('browserId') || '0';
 /** The `?url=` launch parameter, or `about:blank` when it is absent or not http(s). */
 export const parsedInitialUrl = parseHttpUrl(params.get('url') ?? '') ?? 'about:blank';
 
+/**
+ * The `?live=1` launch parameter — `web.open(url, { visible: true, live: true })`.
+ *
+ * Read here but *not* used to seed the `liveMode` signal: `setLive()` returns early
+ * when the signal already holds the state it was asked for, so a pre-seeded signal
+ * would light the toolbar up and never open the screencast. main.ts calls `setLive(true)`
+ * after mount instead, which is the call that actually connects.
+ */
+export const initialLive = params.get('live') === '1';
+
 export const [activeBrowserId, setActiveBrowserId] = createSignal(initialBrowserId);
 export const [currentUrl, setCurrentUrl] = createSignal(parsedInitialUrl);
 export const [pageTitle, setPageTitle] = createSignal('');

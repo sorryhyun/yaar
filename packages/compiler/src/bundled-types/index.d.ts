@@ -2484,6 +2484,14 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
     mobile?: boolean;
     visible?: boolean;
+    /**
+     * Open the window already in live mode — the screencast the toolbar's ◉ Live
+     * button turns on, which the user can drive with mouse and keyboard. Only
+     * meaningful alongside `visible`; ignored when no window is opened. Use it for
+     * flows a human has to finish by hand (login, OTP, captcha) so they are not
+     * left to find the toggle themselves.
+     */
+    live?: boolean;
   }): Promise<WebResult>;
   /** List all open browser tabs. */
   export function listTabs(): Promise<WebResult<WebTab[]>>;
@@ -2498,6 +2506,14 @@ declare module '@bundled/yaar-web' {
       browserId?: string;
       mobile?: boolean;
       visible?: boolean;
+      /**
+       * Open the window already in live mode — the screencast the toolbar's ◉ Live
+       * button turns on, which the user can drive with mouse and keyboard. Only
+       * meaningful alongside `visible`; ignored when no window is opened. Use it for
+       * flows a human has to finish by hand (login, OTP, captcha) so they are not
+       * left to find the toggle themselves.
+       */
+      live?: boolean;
       waitUntil?: 'load' | 'domcontentloaded' | 'networkidle';
     },
   ): Promise<WebResult>;

@@ -8,10 +8,10 @@
 import { onCleanup } from '@bundled/solid-js';
 import { defineApp } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-import { initialBrowserId, parsedInitialUrl } from './store';
+import { initialBrowserId, parsedInitialUrl, initialLive } from './store';
 import { connectSSE, disconnectSSE } from './sse';
 import { disconnectLive } from './live';
-import { browserOpts } from './session';
+import { browserOpts, setLive } from './session';
 import {
   browserState,
   navigationCommands,
@@ -45,6 +45,20 @@ export default defineApp({
   },
   view: App,
 });
+
+/**
+ * `?live=1` is a launch parameter too: the window opens already streaming, instead of
+ * the user having to find the ◉ Live toggle. Set by `web.open({ visible: true, live: true })`
+ * for the flows only a human can finish — a login form, an OTP, a captcha.
+ *
+ * After `defineApp`, because `setLive` needs the view mounted: it focuses the IME anchor,
+ * which the toolbar only renders once `liveMode()` is true.
+ */
+if (initialLive) {
+  void setLive(true).catch((err: unknown) => {
+    console.error('[browser] initial live mode failed:', err);
+  });
+}
 
 /**
  * `?url=` is a launch parameter, and it used to fill the URL bar and stop there — the

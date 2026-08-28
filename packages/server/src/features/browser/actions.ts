@@ -39,14 +39,25 @@ type Payload = Record<string, unknown>;
  *
  * `bid` is caller-chosen and need not be numeric (`'login'`), so the cascade offset
  * falls back to 0 instead of `NaN`.
+ *
+ * `live` rides on the content URI because that is the only channel a freshly created
+ * app window has: the app is mounted by the frontend, and nothing here can talk to it
+ * until it has registered its protocol. Without it, an app wanting a live window had
+ * to poll `listTabs`, then retry `set_live_mode` against the window until the iframe
+ * came up — declaring `yaar://windows/` permission it otherwise had no use for.
  */
-async function openBrowserWindow(bid: string, isMobile: boolean, title: string): Promise<void> {
+async function openBrowserWindow(
+  bid: string,
+  isMobile: boolean,
+  title: string,
+  live = false,
+): Promise<void> {
   const n = Number(bid);
   const step = Number.isFinite(n) ? n : 0;
   await handleWindowCreate(`browser-${bid}`, {
     title,
     renderer: 'iframe',
-    content: `yaar://apps/browser?browserId=${encodeURIComponent(bid)}`,
+    content: `yaar://apps/browser?browserId=${encodeURIComponent(bid)}${live ? '&live=1' : ''}`,
     x: 80 + step * 30,
     y: 60 + step * 30,
     width: isMobile ? 430 : 900,
@@ -97,7 +108,7 @@ export async function handleCreate(
   session.windowId = windowId;
 
   if (p.visible !== false) {
-    await openBrowserWindow(bid, session.mobile, 'Browser — (new tab)');
+    await openBrowserWindow(bid, session.mobile, 'Browser — (new tab)', p.live === true);
   }
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}] Created (about:blank)`);
 }
@@ -184,7 +195,12 @@ export async function handleOpen(
     p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
   );
   if (p.visible !== false && !existing) {
-    await openBrowserWindow(bid, session.mobile, `Browser — ${state.title || domain}`);
+    await openBrowserWindow(
+      bid,
+      session.mobile,
+      `Browser — ${state.title || domain}`,
+      p.live === true,
+    );
   }
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}]\n${formatPageState(state)}`);
 }
