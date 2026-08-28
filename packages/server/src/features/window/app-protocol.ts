@@ -6,6 +6,7 @@ import type { AppManifest, AppProtocolRequest, AppProtocolResponse } from '@yaar
 import { isPreviewAppId } from '@yaar/shared';
 import type { ContentBlock, VerbResult } from '../../handlers/uri-registry.js';
 import { isContentBlocks } from '../../handlers/uri-registry.js';
+import { getAgentId } from '../../agents/agent-context.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, okJson, error, getActiveSessionId } from '../../handlers/utils.js';
 import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
@@ -496,19 +497,26 @@ export async function handleAppCommand(
 
   const timeoutMs = resolveTimeout(payload, deadlines.appCommandMs);
 
+  const agentId = getAgentId();
   const outcome = await request(key, req, timeoutMs);
   if (!outcome.ok) {
     if (outcome.reason === 'cancelled')
       return error('The session ended before the app answered the command.');
     if (outcome.reason === 'closed') return error(windowClosedMessage(`\`${req.command}\``));
-    return error(
+    const message =
       `App did not respond within ${(timeoutMs / 1000).toFixed(0)}s. If this command is ` +
-        `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`,
-    );
+      `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`;
+    // A timeout is history too: the app may well have applied the command before the
+    // deadline passed, and a reader of the log should see that it was sent.
+    windowState.recordAppCommand(key, req, { ok: false, error: 'timeout' }, agentId);
+    return error(message);
   }
   const response = outcome.value;
   if (response.kind !== 'command') return error('Unexpected response kind.');
-  if (response.error) return error(response.error);
-  windowState.recordAppCommand(key, req);
+  if (response.error) {
+    windowState.recordAppCommand(key, req, { ok: false, error: response.error }, agentId);
+    return error(response.error);
+  }
+  windowState.recordAppCommand(key, req, { ok: true }, agentId);
   return wrapAppValue(response.result);
 }

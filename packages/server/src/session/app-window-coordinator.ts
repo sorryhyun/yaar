@@ -177,6 +177,12 @@ export class AppWindowCoordinator {
       replayed: replayable.length,
       skippedByNeverReplay: skipped,
     });
+    this.deps.windowState.recordWindowEvent(
+      windowId,
+      'replayed',
+      `${replayable.length} command(s) re-sent after remount` +
+        (skipped ? `, ${skipped} skipped by replay: 'never'` : ''),
+    );
     for (let i = 0; i < replayable.length; i++) {
       const request = replayable[i]!;
       this.deps.broadcast({

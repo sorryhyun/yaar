@@ -43,6 +43,13 @@ import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage, handleGeometry } from '../features/window/manage.js';
 import {
+  historyUri,
+  parseHistorySubPath,
+  listHistory,
+  readHistory,
+  restoreHistory,
+} from '../features/window/history.js';
+import {
   handleAppQuery,
   handleAppCommand,
   handleAppEval,
@@ -84,10 +91,15 @@ function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow &
 type WindowTarget =
   | { kind: 'window' }
   | { kind: 'resource'; resourceType: 'state' | 'commands'; key: string }
+  | { kind: 'history'; seq?: number }
   | { kind: 'invalid'; subPath: string };
 
 function windowTarget(resolved: ResolvedWindow): WindowTarget {
   if (!resolved.subPath) return { kind: 'window' };
+  // `history` is the window's own log, not a key of the app's manifest — see
+  // features/window/history.ts.
+  const history = parseHistorySubPath(resolved.subPath);
+  if (history) return { kind: 'history', ...history };
   const parsed = parseWindowResourceUri(resolved.sourceUri);
   if (!parsed || !parsed.key) return { kind: 'invalid', subPath: resolved.subPath };
   return { kind: 'resource', resourceType: parsed.resourceType, key: parsed.key };
@@ -188,8 +200,9 @@ function builtinManual(windowId: string, win: WindowState): Record<string, unkno
 
 function badSubPath(resolved: ResolvedWindow, subPath: string): VerbResult {
   return error(
-    `"${subPath}" is not a window sub-resource. Use yaar://windows/${resolved.windowId}/state/{key} ` +
-      `or yaar://windows/${resolved.windowId}/commands/{key}; list("yaar://windows/${resolved.windowId}") ` +
+    `"${subPath}" is not a window sub-resource. Use yaar://windows/${resolved.windowId}/state/{key}, ` +
+      `yaar://windows/${resolved.windowId}/commands/{key} or yaar://windows/${resolved.windowId}/history; ` +
+      `list("yaar://windows/${resolved.windowId}") ` +
       'shows both.',
   );
 }
@@ -525,7 +538,10 @@ export function registerWindowHandlers(
       'manage; delete to close. ' +
       'Sub-paths: read yaar://windows/{windowId}/state/{key} for one state value, invoke ' +
       'yaar://windows/{windowId}/commands/{key} to run one command (payload = its params; ' +
-      'pass an ARRAY of params to run it once per element, in order, as one call). ' +
+      'pass an ARRAY of params to run it once per element, in order, as one call); ' +
+      'list/read yaar://windows/{windowId}/history for every app_command sent to the window ' +
+      'so far, and invoke it with { action: "restore", upTo: <seq> } to put the window back ' +
+      'to that point. ' +
       'Every window also answers three state keys of its own, whatever it renders: ' +
       '__content (its content, no capture), __screenshot and __console (iframe windows). ' +
       'A bare read of an iframe window is __content + __screenshot, the screenshot winning. ' +
@@ -694,6 +710,33 @@ export function registerWindowHandlers(
         return error(`No resource at ${resolved.sourceUri}. Use list to see available windows.`);
       }
 
+      if (target.kind === 'history') {
+        return okJson({
+          uri: historyUri(resolved.windowId),
+          description:
+            "This window's history: every app_command sent to it (successful or failed, with " +
+            'who sent it), plus the moments the server replayed or restored it. list for one ' +
+            'link per entry, read for the entries as JSON (or read history/{seq} for one with ' +
+            'its full params), invoke { action: "restore", upTo: <seq> } to forget everything ' +
+            'after that entry and remount — the kept commands are replayed, so the window ' +
+            'comes back as it stood then. Holds what agents did; state the user produced ' +
+            'inside the window is not in it.',
+          verbs: ['describe', 'list', 'read', 'invoke'],
+          invokeSchema: {
+            type: 'object',
+            required: ['action', 'upTo'],
+            properties: {
+              action: { type: 'string', enum: ['restore'] },
+              upTo: {
+                type: 'integer',
+                minimum: 0,
+                description: 'Keep entries up to and including this seq; 0 forgets everything.',
+              },
+            },
+          },
+        });
+      }
+
       if (target.kind === 'resource') {
         // A built-in is documented here, not asked of the app: the app has never heard of
         // these keys and would answer "unknown state key" for one it does not own.
@@ -789,6 +832,15 @@ export function registerWindowHandlers(
 
       const target = windowTarget(resolved);
       if (target.kind === 'invalid') return badSubPath(resolved, target.subPath);
+      if (target.kind === 'history') {
+        if (target.seq !== undefined) {
+          return error(
+            `"${resolved.sourceUri}" is a single history entry, not a collection. Use read on it, ` +
+              `or list("${historyUri(resolved.windowId)}") for all of them.`,
+          );
+        }
+        return listHistory(getWindowState(), resolved.windowId);
+      }
       if (target.kind === 'resource') {
         return error(
           `"${resolved.sourceUri}" is a single ${target.resourceType === 'state' ? 'state key' : 'command'}, not a collection. ` +
@@ -804,6 +856,17 @@ export function registerWindowHandlers(
       // `list` the one verb that answered a question about the app when it was asked a
       // question about the window.
       const builtins = builtinLinks(resolved.windowId, win);
+      if (win.content.renderer === 'iframe') {
+        // The window's own log sits beside the app's keys, so an agent that lists the
+        // window finds the door to what was already done to it.
+        builtins.push({
+          uri: historyUri(resolved.windowId),
+          name: 'history',
+          description:
+            'Every app_command sent to this window so far, in order; invoke with ' +
+            '{ action: "restore", upTo: <seq> } to put the window back to that point.',
+        });
+      }
       if (win.content.renderer !== 'iframe') {
         return prependNote(
           okLinks(builtins),
@@ -896,6 +959,8 @@ export function registerWindowHandlers(
 
       const target = windowTarget(resolved);
       if (target.kind === 'invalid') return badSubPath(resolved, target.subPath);
+      if (target.kind === 'history')
+        return readHistory(getWindowState(), resolved.windowId, target.seq);
       if (target.kind === 'resource' && target.resourceType === 'commands') {
         return error(
           `Commands are invoked, not read. Use invoke("${resolved.sourceUri}", { …params }), ` +
@@ -987,6 +1052,21 @@ export function registerWindowHandlers(
         if (target.kind === 'invalid') return badSubPath(resolved, target.subPath);
         if (target.kind === 'resource') {
           return invokeSubResource(resolved, target, payload);
+        }
+        if (target.kind === 'history') {
+          if (target.seq !== undefined) {
+            return error(
+              `A history entry is read, not invoked. To go back to it: ` +
+                `invoke("${historyUri(resolved.windowId)}", { action: "restore", upTo: ${target.seq} }).`,
+            );
+          }
+          const p = payload ?? {};
+          if (p.action !== 'restore') {
+            return error(
+              `invoke("${resolved.sourceUri}") takes { action: "restore", upTo: <seq> } and nothing else.`,
+            );
+          }
+          return restoreHistory(getWindowState(), resolved.windowId, p);
         }
       }
 

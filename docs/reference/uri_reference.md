@@ -154,6 +154,8 @@ The canonical way agents address windows. The monitor is injected automatically 
 | `yaar://windows/{windowId}/state/{key}` | One state key of an app window (describe, read) |
 | `yaar://windows/{windowId}/state/__{content,screenshot,console}` | The **window's own** state keys — see below (describe, read) |
 | `yaar://windows/{windowId}/commands/{key}` | One command of an app window (describe, invoke) |
+| `yaar://windows/{windowId}/history` | The window's own log — every `app_command` sent to it, and the replays/restores the server did (describe, list, read, invoke `restore`) |
+| `yaar://windows/{windowId}/history/{seq}` | One history entry with its full params (read) |
 
 | Verb | URI | Effect |
 |------|-----|--------|
@@ -162,6 +164,8 @@ The canonical way agents address windows. The monitor is injected automatically 
 | `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links. **The index**: a command's `description` is its rendered signature plus the *first sentence* of its documentation, so the list is enough to call from without being the whole manual — for a 52-command app it is ~10 KB rather than 80. `describe` on the row's own URI has the full text |
 | `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
 | `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params. An **array** payload runs it once per element, in order (see [Batching](#batching)) |
+| `list` / `read` | `yaar://windows/{windowId}/history` | What has been done to the window, oldest first: each `app_command` (command, params preview, sender, `ok`/`error`) and each `replayed` / `restored` event. `list` gives one link per entry; `read` the entries as JSON; `read …/history/{seq}` one entry with full params. Holds what *agents* sent — state the user produced inside the window was never a command and is not here |
+| `invoke` | `yaar://windows/{windowId}/history` | `{ action: 'restore', upTo: <seq> }` — forget every entry after `upTo` (0 = all) and remount; the kept commands are replayed on re-registration, so the window comes back as it stood at that seq. Commands the app declares `replay: 'never'` stay in the log but are not re-sent, and the response says how many. Refused on a window locked by another agent, like `reload` |
 | `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description`. A command also carries `signature`, a rendered `invoke` example, and its `schema` |
 
 > **Two protocol sources exist**, and `describe` says which it read. `protocol.json` on disk and the

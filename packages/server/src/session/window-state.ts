@@ -20,6 +20,34 @@ const log = createLogger('WindowStateRegistry');
 export type { WindowState } from '@yaar/shared';
 
 /**
+ * One line of a window's history — what an agent did to the app inside it, in order.
+ *
+ * `command` entries are the `app_command`s sent through `yaar://windows/{id}`, successful
+ * or not; `event` entries are the moments the server itself changed what the document
+ * holds (a replay after remount, a restore to an earlier point). Together they are what
+ * `list('yaar://windows/{id}/history')` shows and what `restore` truncates to.
+ */
+export type WindowHistoryEntry =
+  | {
+      kind: 'command';
+      seq: number;
+      at: number;
+      agentId?: string;
+      command: string;
+      params?: unknown;
+      ok: boolean;
+      error?: string;
+    }
+  | { kind: 'event'; seq: number; at: number; agentId?: string; event: string; detail?: string };
+
+/**
+ * Per-window history cap. Oldest entries fall off first, so a window past the cap
+ * replays (and restores) from a truncated log — named in `getWindowHistory` via
+ * `dropped` so the reader knows the beginning is missing rather than empty.
+ */
+export const WINDOW_HISTORY_CAP = 1000;
+
+/**
  * The window-shaping half of an app's manifest — the fields a `window.create` for that
  * app inherits. Narrower than what app discovery returns on purpose: this module has no
  * business knowing about permissions or bundles.
@@ -79,7 +107,16 @@ export function windowCreateAction(win: WindowState): OSAction {
 
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
-  private appCommands: Map<string, AppProtocolRequest[]> = new Map();
+  /**
+   * Per window: the ordered history the app has been driven through (see
+   * `WindowHistoryEntry`). The replayable command log is a *view* of this
+   * (`getAppCommands`), not a second list — replay and history must never disagree
+   * about what was sent.
+   */
+  private appCommands: Map<
+    string,
+    { entries: WindowHistoryEntry[]; nextSeq: number; dropped: number }
+  > = new Map();
   /**
    * Per window: the command names the *currently registered* app declared
    * `replay: 'never'` for. Keyed exactly like `appCommands` (resolved key, raw id as
@@ -608,18 +645,96 @@ export class WindowStateRegistry {
     return this.resolve(windowId)?.[0] ?? windowId;
   }
 
-  recordAppCommand(windowId: string, request: AppProtocolRequest): void {
+  private historyOf(windowId: string) {
     const key = this.appKey(windowId);
-    let commands = this.appCommands.get(key);
-    if (!commands) {
-      commands = [];
-      this.appCommands.set(key, commands);
+    let history = this.appCommands.get(key);
+    if (!history) {
+      history = { entries: [], nextSeq: 1, dropped: 0 };
+      this.appCommands.set(key, history);
     }
-    commands.push(request);
+    return history;
   }
 
+  private pushHistory(
+    windowId: string,
+    entry: WindowHistoryEntry extends infer E
+      ? E extends unknown
+        ? Omit<E, 'seq' | 'at'>
+        : never
+      : never,
+  ): number {
+    const history = this.historyOf(windowId);
+    const seq = history.nextSeq++;
+    history.entries.push({ ...entry, seq, at: Date.now() } as WindowHistoryEntry);
+    if (history.entries.length > WINDOW_HISTORY_CAP) {
+      history.dropped += history.entries.length - WINDOW_HISTORY_CAP;
+      history.entries.splice(0, history.entries.length - WINDOW_HISTORY_CAP);
+    }
+    return seq;
+  }
+
+  /**
+   * File an `app_command` in the window's history. A failed command is recorded too —
+   * it is part of what happened to the window, and an agent reading the history should
+   * see the refusal — but only a successful one is replayed (`getAppCommands`).
+   */
+  recordAppCommand(
+    windowId: string,
+    request: Extract<AppProtocolRequest, { kind: 'command' }>,
+    outcome: { ok: true } | { ok: false; error: string } = { ok: true },
+    agentId?: string,
+  ): number {
+    return this.pushHistory(windowId, {
+      kind: 'command',
+      command: request.command,
+      ...(request.params !== undefined ? { params: request.params } : {}),
+      ...(agentId ? { agentId } : {}),
+      ...outcome,
+    });
+  }
+
+  /** File a server-side moment (replay, restore) in the window's history. */
+  recordWindowEvent(windowId: string, event: string, detail?: string, agentId?: string): number {
+    return this.pushHistory(windowId, {
+      kind: 'event',
+      event,
+      ...(detail ? { detail } : {}),
+      ...(agentId ? { agentId } : {}),
+    });
+  }
+
+  /** The window's history, oldest first, and how many leading entries the cap dropped. */
+  getWindowHistory(windowId: string): { entries: readonly WindowHistoryEntry[]; dropped: number } {
+    const history = this.appCommands.get(this.appKey(windowId));
+    return history
+      ? { entries: history.entries, dropped: history.dropped }
+      : { entries: [], dropped: 0 };
+  }
+
+  /**
+   * Forget every entry after `seq`, so the next replay rebuilds the window as it stood
+   * then. Returns the entries removed, so the caller can name them; `seq: 0` clears
+   * the whole log.
+   */
+  truncateWindowHistory(windowId: string, seq: number): WindowHistoryEntry[] {
+    const history = this.appCommands.get(this.appKey(windowId));
+    if (!history) return [];
+    const idx = history.entries.findIndex((e) => e.seq > seq);
+    if (idx === -1) return [];
+    return history.entries.splice(idx);
+  }
+
+  /** The successful commands, in order — what a remount replays. */
   getAppCommands(windowId: string): AppProtocolRequest[] {
-    return this.appCommands.get(this.appKey(windowId)) ?? [];
+    return this.getWindowHistory(windowId)
+      .entries.filter(
+        (e): e is Extract<WindowHistoryEntry, { kind: 'command' }> => e.kind === 'command' && e.ok,
+      )
+      .map((e) => ({
+        kind: 'command' as const,
+        command: e.command,
+        ...(e.params !== undefined ? { params: e.params } : {}),
+      }));
   }
 
   /**
