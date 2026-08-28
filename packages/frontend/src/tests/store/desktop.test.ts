@@ -389,14 +389,29 @@ describe('Desktop Store', () => {
           },
         },
         activeAgents: {
-          a1: { id: 'a1', status: 'Thinking...', startedAt: 1, statusSince: 1, subagentCount: 0 },
-          a2: { id: 'a2', status: 'Thinking...', startedAt: 1, statusSince: 1, subagentCount: 0 },
+          a1: {
+            id: 'a1',
+            status: 'Thinking...',
+            startedAt: 1,
+            statusSince: 1,
+            subagentCount: 0,
+            kind: 'monitor',
+          },
+          a2: {
+            id: 'a2',
+            status: 'Thinking...',
+            startedAt: 1,
+            statusSince: 1,
+            subagentCount: 0,
+            kind: 'monitor',
+          },
           ghost: {
             id: 'ghost',
             status: 'Thinking...',
             startedAt: 1,
             statusSince: 1,
             subagentCount: 0,
+            kind: 'monitor',
           },
         },
         windowAgents: {

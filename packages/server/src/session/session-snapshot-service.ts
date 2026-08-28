@@ -13,7 +13,7 @@
  * that changes the thing it asks about cannot be asked twice with the same answer.
  */
 
-import type { ActiveAgentSnapshot, OSAction } from '@yaar/shared';
+import type { ActiveAgentSnapshot, AgentKind, OSAction } from '@yaar/shared';
 import type { SessionId } from './types.js';
 import type { SurfaceRegistry } from './surface-state.js';
 import { windowCreateAction, type WindowStateRegistry } from './window-state.js';
@@ -25,6 +25,8 @@ export interface SnapshotAgent {
   label: string;
   busy: boolean;
   monitorId?: string;
+  /** The roster's tier — the client cannot derive it here, see {@link ActiveAgentSnapshot}. */
+  type: AgentKind;
 }
 
 export interface SessionSnapshotDeps {
@@ -63,6 +65,7 @@ export class SessionSnapshotService {
       .map((a) => ({
         agentId: a.id,
         status: a.label,
+        kind: a.type,
         ...(a.monitorId ? { monitorId: a.monitorId } : {}),
       }));
     return { actions: [...windows, ...this.deps.surfaces.snapshot()], agents };

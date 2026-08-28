@@ -172,7 +172,7 @@ export interface AgentsSliceState {
 }
 
 export interface AgentsSliceActions {
-  setAgentActive: (agentId: string, status: string) => void;
+  setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
   clearAgent: (agentId: string) => void;
   clearAllAgents: () => void;
   toggleAgentPanel: () => void;

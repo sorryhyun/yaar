@@ -58,3 +58,42 @@ describe('Agent status elapsed clock', () => {
     expect(agent.statusSince).toBeGreaterThan(agent.startedAt);
   });
 });
+
+/**
+ * What the status bar colors and numbers each chip by. Both come off events the store
+ * already receives — the tier is read from the role the wire calls `agentId`, the
+ * monitor is passed through — so neither costs a round trip to place an agent.
+ */
+describe('Agent tier and monitor', () => {
+  beforeEach(() => {
+    useDesktopStore.setState({ activeAgents: {} });
+  });
+
+  it('reads the tier off the role', () => {
+    useDesktopStore.getState().setAgentActive('monitor-1-msg1', 'Thinking...', '1');
+    useDesktopStore.getState().setAgentActive('app-notes-m0-msg2', 'Thinking...', '0');
+    useDesktopStore.getState().setAgentActive('app-persona-chitchats-ada', 'Thinking...', '0');
+
+    const agents = useDesktopStore.getState().activeAgents;
+    expect(agents['monitor-1-msg1'].kind).toBe('monitor');
+    expect(agents['app-notes-m0-msg2'].kind).toBe('app');
+    expect(agents['app-persona-chitchats-ada'].kind).toBe('persona');
+    expect(agents['monitor-1-msg1'].monitorId).toBe('1');
+  });
+
+  it('keeps the monitor when a later event omits it', () => {
+    useDesktopStore.getState().setAgentActive('monitor-2-msg1', 'Thinking...', '2');
+    useDesktopStore.getState().setAgentActive('monitor-2-msg1', 'Running: Bash');
+
+    expect(useDesktopStore.getState().activeAgents['monitor-2-msg1'].monitorId).toBe('2');
+  });
+
+  it('learns a monitor that arrives after the first event, despite the coalescing', () => {
+    // The status is identical, so the re-render guard would otherwise drop this write
+    // and the agent's chip would never get its number.
+    useDesktopStore.getState().setAgentActive('monitor-3-msg1', 'Thinking...');
+    useDesktopStore.getState().setAgentActive('monitor-3-msg1', 'Thinking...', '3');
+
+    expect(useDesktopStore.getState().activeAgents['monitor-3-msg1'].monitorId).toBe('3');
+  });
+});

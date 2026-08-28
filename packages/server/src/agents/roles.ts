@@ -17,16 +17,22 @@
  * together here: change a prefix and the tier that reads it is on the next screen.
  */
 
+import {
+  SESSION_ROLE_PREFIX,
+  APP_ROLE_PREFIX,
+  MONITOR_ROLE_PREFIX,
+  EPHEMERAL_ROLE_PREFIX,
+} from '@yaar/shared';
 import type { AgentRole } from './agent-context.js';
 
-/** The user's deputy. The only tier `access: 'session-principal'` admits. */
-export const SESSION_ROLE_PREFIX = 'session-';
-/** An app agent or one of its sub-agents. The unprivileged `app` tier. */
-export const APP_ROLE_PREFIX = 'app-';
-/** A monitor agent's turn. */
-export const MONITOR_ROLE_PREFIX = 'monitor-';
-/** A one-shot agent with a fresh provider and no context; tiers as `monitor`. */
-export const EPHEMERAL_ROLE_PREFIX = 'ephemeral-';
+/**
+ * The prefixes themselves live in `@yaar/shared` and are re-exported here, because the
+ * *client* has to read a tier off a role too — a role is what the wire calls `agentId`,
+ * and the status bar colors a chip by it (`agentKindFromRole`). Minting and the access
+ * gate stay here; only the strings are shared, so there is still one definition of what
+ * `app-` means.
+ */
+export { SESSION_ROLE_PREFIX, APP_ROLE_PREFIX, MONITOR_ROLE_PREFIX, EPHEMERAL_ROLE_PREFIX };
 
 /**
  * A monitor's stable identity, with no turn in it.

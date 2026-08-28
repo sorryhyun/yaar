@@ -86,6 +86,33 @@ export const PALETTE_LIGHT = {
 } as const;
 
 /**
+ * Agent tiers — the shell status bar's one color axis.
+ *
+ * Categorical, not semantic: the bar draws one chip per live agent and colors it by
+ * which tier the agent belongs to (`AgentKind` in `agent-kind.ts`), so these say
+ * *which kind* and never *how it is going*. Fixed hues rather than `--color-accent`,
+ * which the accent picker rewrites at runtime and could land on top of a sibling tier.
+ *
+ * Shell-only: apps have no agent roster to draw, so `buildAppCss` does not emit them.
+ */
+export const AGENT_TIERS_DARK = {
+  monitor: '#539bf5',
+  app: '#ffa657',
+  persona: '#bc8cff',
+  session: '#a5b4fc',
+  ephemeral: '#8b98a5',
+} as const;
+
+/** Darkened for the light theme, where the agent panel sits on a light surface. */
+export const AGENT_TIERS_LIGHT = {
+  monitor: '#0969da',
+  app: '#bc4c00',
+  persona: '#8250df',
+  session: '#4f46e5',
+  ephemeral: '#6e7781',
+} as const;
+
+/**
  * Accent presets for the shell accent picker. Keys are persisted in user
  * settings — never rename them; only values may change.
  */

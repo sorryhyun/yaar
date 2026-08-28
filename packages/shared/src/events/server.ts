@@ -3,6 +3,7 @@
  */
 
 import type { CapabilityLine, OSAction, PermissionOptions } from '../actions.js';
+import type { AgentKind } from '../agent-kind.js';
 import type { AppProtocolRequest } from '../app-protocol.js';
 import { ServerEventType } from './routing.js';
 
@@ -298,9 +299,16 @@ export interface MonitorsEvent {
 
 /** An agent the server considers to be running right now. */
 export interface ActiveAgentSnapshot {
+  /**
+   * The pool's instanceId — **not** a role, unlike the `agentId` on the streaming
+   * events. That is why {@link ActiveAgentSnapshot.kind} has to be sent: an instanceId
+   * carries no prefix to read a tier off.
+   */
   agentId: string;
   status: string;
   monitorId?: string;
+  /** Which tier, straight from the pool's roster. Absent from an older server. */
+  kind?: AgentKind;
 }
 
 /**

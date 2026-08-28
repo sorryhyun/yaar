@@ -358,19 +358,33 @@ describe('server event dispatcher', () => {
     expect(handlers.clearAgent).toHaveBeenCalledWith('a1');
   });
 
-  it('dispatches tool progress as active status updates', () => {
+  it('dispatches tool progress as active status updates, carrying the monitor', () => {
+    // The monitor rides along on every status write: it is what the status bar's chip
+    // shows, and an agent whose events never named one has no number to draw.
     const handlers = createHandlers();
     dispatchServerEvent(
-      { type: 'TOOL_PROGRESS', toolName: 'search', status: 'running', agentId: 'a2' },
+      {
+        type: 'TOOL_PROGRESS',
+        toolName: 'search',
+        status: 'running',
+        agentId: 'a2',
+        monitorId: '1',
+      },
       handlers,
     );
-    expect(handlers.setAgentActive).toHaveBeenCalledWith('a2', 'Running: search');
+    expect(handlers.setAgentActive).toHaveBeenCalledWith('a2', 'Running: search', '1');
 
     dispatchServerEvent(
-      { type: 'TOOL_PROGRESS', toolName: 'search', status: 'complete', agentId: 'a2' },
+      {
+        type: 'TOOL_PROGRESS',
+        toolName: 'search',
+        status: 'complete',
+        agentId: 'a2',
+        monitorId: '1',
+      },
       handlers,
     );
-    expect(handlers.setAgentActive).toHaveBeenCalledWith('a2', 'Thinking...');
+    expect(handlers.setAgentActive).toHaveBeenCalledWith('a2', 'Thinking...', '1');
   });
 
   it('tails a running tool output by appending each chunk in order', () => {

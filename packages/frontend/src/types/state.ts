@@ -1,7 +1,7 @@
 /**
  * Desktop state - everything that can appear on screen.
  */
-import type { WindowBounds, WindowContent, WindowVariant, OSAction } from '@yaar/shared';
+import type { AgentKind, WindowBounds, WindowContent, WindowVariant, OSAction } from '@yaar/shared';
 
 export interface WindowModel {
   id: string;
@@ -128,6 +128,16 @@ export interface ActiveAgent {
    */
   statusSince: number;
   subagentCount: number; // Active collab subagents (Codex)
+  /**
+   * Which tier — read off the role for a live agent, sent verbatim by the snapshot.
+   * The status bar's only color axis; see `DesktopStatusBar`.
+   */
+  kind: AgentKind;
+  /**
+   * The monitor this agent is working for, when the event said. Every tier but
+   * `session` names one, so a chip without a number is the session agent.
+   */
+  monitorId?: string;
 }
 
 export interface WindowAgent {
@@ -259,7 +269,7 @@ export interface DesktopActions {
   dismissRestorePrompt: () => void;
 
   // Active agents
-  setAgentActive: (agentId: string, status: string) => void;
+  setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
   clearAgent: (agentId: string) => void;
   clearAllAgents: () => void;
   toggleAgentPanel: () => void;

@@ -34,7 +34,7 @@ export interface ServerEventDispatchHandlers {
   /** Re-mint iframe tokens after reattaching to a session incarnation we did not leave. */
   refreshStaleIframeTokens: (sessionId: string) => void;
   addDebugEntry: (entry: { direction: 'in'; type: string; data: ServerEvent }) => void;
-  setAgentActive: (agentId: string, status: string) => void;
+  setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
   clearAgent: (agentId: string) => void;
   registerWindowAgent: (
     windowId: string,
@@ -219,7 +219,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     case ServerEventType.AGENT_THINKING: {
       const agentId = extractAgentId(message);
       const monitorId = (message as { monitorId?: string }).monitorId;
-      handlers.setAgentActive(agentId, message.content ? 'Reasoning...' : 'Thinking...');
+      handlers.setAgentActive(agentId, message.content ? 'Reasoning...' : 'Thinking...', monitorId);
       handlers.updateCliStreaming(agentId, message.content ?? '', 'thinking', monitorId);
       handlers.clearAllMessageStatuses();
       break;
@@ -232,7 +232,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         handlers.clearAgent(agentId);
         handlers.finalizeCliStreaming(agentId);
       } else {
-        handlers.setAgentActive(agentId, 'Responding...');
+        handlers.setAgentActive(agentId, 'Responding...', monitorId);
         handlers.updateCliStreaming(agentId, message.content, 'response', monitorId);
       }
       break;
@@ -254,7 +254,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
           // The announcement. Flush the preceding text/thinking block first, for
           // the same chronological reason as the `running` case.
           handlers.finalizeCliStreaming(agentId);
-          handlers.setAgentActive(agentId, `Preparing: ${toolName}`);
+          handlers.setAgentActive(agentId, `Preparing: ${toolName}`, monitorId);
           handlers.updateCliStreaming(agentId, `[${toolName}] `, 'tool', monitorId);
         } else {
           handlers.appendCliStreaming(agentId, fragment, 'tool', monitorId);
@@ -304,15 +304,16 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
             statusText = `Subagent: ${shortDesc}`;
           }
         }
-        handlers.setAgentActive(agentId, statusText);
+        handlers.setAgentActive(agentId, statusText, monitorId);
       } else if (status === 'error') {
         const errorMsg = (message as { message?: string }).message;
         handlers.setAgentActive(
           agentId,
           `Error: ${toolName}${errorMsg ? ' — ' + errorMsg.slice(0, 80) : ''}`,
+          monitorId,
         );
       } else if (status === 'complete') {
-        handlers.setAgentActive(agentId, 'Thinking...');
+        handlers.setAgentActive(agentId, 'Thinking...', monitorId);
       }
       if (isSubagent && status === 'running' && toolName === SUBAGENT_TOOL_NAME) {
         handlers.incrementSubagentCount(agentId);

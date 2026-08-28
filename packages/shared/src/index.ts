@@ -25,6 +25,7 @@ export type {
 } from './bridge.js';
 
 export * from './session.js';
+export * from './agent-kind.js';
 
 // Neither module below imports Zod (directly or transitively) — confirmed before switching
 // these from hand-maintained named lists to `export *`, so this stays Zod-free like the rest

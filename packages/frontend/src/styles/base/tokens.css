@@ -51,6 +51,14 @@
   --color-danger-emphasis: #c93c37;
   --color-danger-emphasis-hover: #e5534b;
 
+  /* Agent tiers — categorical, not semantic: which kind of agent a status-bar chip
+     stands for, never how its turn is going. See AGENT_TIERS_DARK. */
+  --agent-monitor: #539bf5;
+  --agent-app: #ffa657;
+  --agent-persona: #bc8cff;
+  --agent-session: #a5b4fc;
+  --agent-ephemeral: #8b98a5;
+
   /* Decorative hues — no semantic meaning, never stand in for a semantic above */
   --hue-lavender: #a5b4fc;
   --hue-peach: #ffa657;
@@ -174,6 +182,12 @@
   --color-success-emphasis-hover: #1a7f37;
   --color-danger-emphasis: #cf222e;
   --color-danger-emphasis-hover: #a40e26;
+
+  --agent-monitor: #0969da;
+  --agent-app: #bc4c00;
+  --agent-persona: #8250df;
+  --agent-session: #4f46e5;
+  --agent-ephemeral: #6e7781;
 
   --color-border: #d0d7de;
   --color-border-muted: #d8dee4;

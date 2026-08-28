@@ -345,6 +345,11 @@ export const useDesktopStore = create<DesktopStore>()(
             // claiming a duration it does not know.
             statusSince: Date.now(),
             subagentCount: 0,
+            // Sent, not parsed: these are instanceIds, not roles, so there is no prefix
+            // to read a tier off. The fallback is `agentKindFromRole`'s own default, for
+            // an older server that sends no kind.
+            kind: agent.kind ?? 'monitor',
+            ...(agent.monitorId ? { monitorId: agent.monitorId } : {}),
           };
         }
       });

@@ -32,7 +32,7 @@
  */
 
 import type { AgentProfile } from './types.js';
-import { APP_ROLE_PREFIX } from '../roles.js';
+import { SUB_AGENT_ROLE_PREFIX } from '@yaar/shared';
 
 /** Max characters of caller-supplied prompt accepted. Generous; a guard, not a budget. */
 export const MAX_SUB_AGENT_PROMPT_CHARS = 20_000;
@@ -188,7 +188,9 @@ export function toolSpecChars(tools: SubAgentToolSpec[]): number {
 // ── Roles ───────────────────────────────────────────────────────────────────
 
 /**
- * The prefix of every sub-agent's per-turn role string.
+ * The prefix of every sub-agent's per-turn role string. Defined in `@yaar/shared`
+ * alongside the other role prefixes (the client reads a tier off a role too) and
+ * re-exported here, where everything that mints or matches it lives.
  *
  * Must start with `app-`, and that is load-bearing in three places: it is what
  * `assembleSystemPromptForRole` keys on to return the prompt **verbatim** (no
@@ -201,7 +203,7 @@ export function toolSpecChars(tools: SubAgentToolSpec[]): number {
  * already speaks: the URI segment, the spawn param, and the `persona:` command prefix
  * all say persona, and a role string is the one of the four nobody reads but the log.
  */
-export const SUB_AGENT_ROLE_PREFIX = `${APP_ROLE_PREFIX}persona-`;
+export { SUB_AGENT_ROLE_PREFIX };
 
 export function subAgentRole(appId: string, subId: string): string {
   return `${SUB_AGENT_ROLE_PREFIX}${appId}-${subId}`;

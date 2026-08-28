@@ -20,6 +20,8 @@ import {
   FONT_MONO,
   SHADOWS_DARK,
   SHADOWS_LIGHT,
+  AGENT_TIERS_DARK,
+  AGENT_TIERS_LIGHT,
   DURATIONS,
   TRANSITIONS,
   Z_INDEX,
@@ -33,6 +35,11 @@ const accent = (key: string) => {
   if (!p) throw new Error(`unknown accent preset: ${key}`);
   return p;
 };
+
+const tiers = (t: Record<string, string>) =>
+  Object.entries(t)
+    .map(([k, v]) => `  --agent-${k}: ${v};`)
+    .join('\n');
 
 export function buildShellTokensCss(): string {
   return `/**
@@ -84,6 +91,10 @@ ${FONT_FACE_CSS}
   --color-success-emphasis-hover: ${D.successEmphasisHover};
   --color-danger-emphasis: ${D.dangerEmphasis};
   --color-danger-emphasis-hover: ${D.dangerEmphasisHover};
+
+  /* Agent tiers — categorical, not semantic: which kind of agent a status-bar chip
+     stands for, never how its turn is going. See AGENT_TIERS_DARK. */
+${tiers(AGENT_TIERS_DARK)}
 
   /* Decorative hues — no semantic meaning, never stand in for a semantic above */
   --hue-lavender: ${accent('lavender').color};
@@ -202,6 +213,8 @@ ${Object.entries(SPACING)
   --color-success-emphasis-hover: ${L.successEmphasisHover};
   --color-danger-emphasis: ${L.dangerEmphasis};
   --color-danger-emphasis-hover: ${L.dangerEmphasisHover};
+
+${tiers(AGENT_TIERS_LIGHT)}
 
   --color-border: ${L.border};
   --color-border-muted: ${L.borderMuted};
