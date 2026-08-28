@@ -1,6 +1,6 @@
 {
   "name": "yaar",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "private": true,
   "type": "module",
   "description": "Reactive AI interface where the AI decides what to show and do next",
