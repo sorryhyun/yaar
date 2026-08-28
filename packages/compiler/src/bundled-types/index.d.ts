@@ -2604,6 +2604,65 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
   }): Promise<WebResult<{ installed: boolean }>>;
 
+  // ── Network log ────────────────────────────────────────────────
+  //
+  // What a tab fetched — metadata only, no headers or bodies. PER TAB (a request
+  // belongs to the page that made it) and always on: the last 500 requests are
+  // kept across navigations, oldest evicted first.
+
+  export interface NetworkLogEntry {
+    /** Monotonic per tab; pass the result's `lastSeq` back as `afterSeq` to poll. */
+    seq: number;
+    /** Chrome's request id; a redirect chain shares one. */
+    requestId: string;
+    url: string;
+    method: string;
+    /** CDP resource type: Document, XHR, Fetch, Media, Script, Image, Font, ... */
+    resourceType: string;
+    /** The page that issued it — filter on this for one navigation's traffic. */
+    documentUrl: string;
+    /** Epoch ms. */
+    startedAt: number;
+    status?: number;
+    mimeType?: string;
+    redirectedTo?: string;
+    fromCache?: boolean;
+    /** Bytes on the wire. */
+    size?: number;
+    durationMs?: number;
+    /** Chrome's error text when the request did not complete. */
+    failed?: string;
+    /** Refused by `setRequestBlocking`. */
+    blocked?: boolean;
+    /** The `url` was cut at `maxUrlLength`; query again with `maxUrlLength: 0` for all of it. */
+    urlTruncated?: boolean;
+  }
+
+  /**
+   * The tab's recent requests, newest last. `urlPattern` is a substring, or a
+   * wildcard pattern when it contains `*`. `limit` defaults to 50 (max 200);
+   * `totalMatched` says how many there were before the slice. URLs are cut to
+   * 300 characters unless `maxUrlLength: 0` — a signed CDN URL is kilobytes, and
+   * a caller that intends to re-fetch one (through `yaar://http`) needs it whole.
+   */
+  export function getNetworkLog(opts?: {
+    urlPattern?: string;
+    resourceType?: string | string[];
+    failedOnly?: boolean;
+    afterSeq?: number;
+    limit?: number;
+    maxUrlLength?: number;
+    browserId?: string;
+  }): Promise<
+    WebResult<{
+      entries: NetworkLogEntry[];
+      totalMatched: number;
+      lastSeq: number;
+      size: number;
+      capacity: number;
+    }>
+  >;
+
   // ── Observation ────────────────────────────────────────────────
   export function waitFor(opts: {
     selector: string;

@@ -128,6 +128,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
             'create',
             'set_request_blocking',
             'get_request_block_stats',
+            'get_network_log',
             'set_init_script',
           ],
         },

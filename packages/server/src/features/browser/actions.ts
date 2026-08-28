@@ -639,6 +639,37 @@ export async function handleGetRequestBlockStats(
 }
 
 /**
+ * Network log — what the tab fetched, metadata only (issue #96). Per tab, unlike
+ * the shield: a request belongs to the page that made it. Always on; the events
+ * were already arriving for the block counter, so there is nothing to enable.
+ * Truncates URLs by default because the reader is usually a model; a caller that
+ * means to re-fetch one passes `maxUrlLength: 0`.
+ */
+export async function handleGetNetworkLog(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  const num = (v: unknown): number | undefined =>
+    typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  const resourceType =
+    typeof p.resourceType === 'string' || Array.isArray(p.resourceType)
+      ? (p.resourceType as string | string[])
+      : undefined;
+  return okJson(
+    session.getNetworkLog({
+      urlPattern: typeof p.urlPattern === 'string' ? p.urlPattern : undefined,
+      resourceType,
+      failedOnly: p.failedOnly === true,
+      afterSeq: num(p.afterSeq),
+      limit: num(p.limit),
+      maxUrlLength: num(p.maxUrlLength),
+    }),
+  );
+}
+
+/**
  * Init script — runs before any page script, on every navigation, in every tab
  * (provider-wide, like the blocklist). The only place a `window.open` override
  * wins the race against a popunder that binds on load. Empty string clears.
@@ -711,6 +742,8 @@ export async function runBrowserAction(
       return handleSetRequestBlocking(pool, body);
     case 'get_request_block_stats':
       return handleGetRequestBlockStats(pool, browserId);
+    case 'get_network_log':
+      return handleGetNetworkLog(pool, browserId, body);
     case 'set_init_script':
       return handleSetInitScript(pool, body);
     default:

@@ -236,6 +236,21 @@ export async function setInitScript(opts: { script: string; browserId?: string }
   return browserPost({ action: 'set_init_script', browserId, ...params });
 }
 
+// ── Network log (per tab, metadata only) ────────────────────────
+
+export async function getNetworkLog(opts?: {
+  urlPattern?: string;
+  resourceType?: string | string[];
+  failedOnly?: boolean;
+  afterSeq?: number;
+  limit?: number;
+  maxUrlLength?: number;
+  browserId?: string;
+}) {
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'get_network_log', browserId, ...params });
+}
+
 // ── Visual ──────────────────────────────────────────────────────
 
 export async function annotate(browserId?: string) {

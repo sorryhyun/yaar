@@ -421,4 +421,56 @@ describe('BrowserSession shield', () => {
     handlers.get('Page.frameNavigated')!({ frame: { id: 'top' } });
     expect(session.getRequestBlockStats()).toEqual({ blocked: 0, requests: 0 });
   });
+
+  it('feeds Network.* events into the per-tab log, which survives navigation', async () => {
+    const session = await BrowserSession.create('nl-1', 'ws://127.0.0.1:9222/devtools/page/a');
+    const handlers = new Map<string, (p: unknown) => void>();
+    for (const call of mockOn.mock.calls as unknown as Array<[string, (p: unknown) => void]>) {
+      handlers.set(call[0], call[1]);
+    }
+    handlers.get('Network.requestWillBeSent')!({
+      requestId: 'q1',
+      documentURL: 'https://page.test/',
+      request: { url: 'https://api.test/x', method: 'POST' },
+      type: 'Fetch',
+      timestamp: 1,
+    });
+    handlers.get('Network.responseReceived')!({
+      requestId: 'q1',
+      response: { status: 201, mimeType: 'application/json' },
+    });
+    handlers.get('Network.loadingFinished')!({
+      requestId: 'q1',
+      timestamp: 1.5,
+      encodedDataLength: 9,
+    });
+    handlers.get('Network.requestWillBeSent')!({
+      requestId: 'q2',
+      request: { url: 'https://ads.test/b' },
+      type: 'Image',
+    });
+    handlers.get('Network.loadingFailed')!({
+      requestId: 'q2',
+      blockedReason: 'inspector',
+      errorText: 'blocked',
+    });
+    handlers.get('Page.frameNavigated')!({ frame: { id: 'top' } });
+
+    const { entries, totalMatched } = session.getNetworkLog();
+    expect(totalMatched).toBe(2);
+    expect(entries[0]).toMatchObject({
+      url: 'https://api.test/x',
+      method: 'POST',
+      resourceType: 'Fetch',
+      status: 201,
+      size: 9,
+      durationMs: 500,
+    });
+    expect(entries[1]).toMatchObject({
+      url: 'https://ads.test/b',
+      blocked: true,
+      failed: 'blocked',
+    });
+    expect(session.getNetworkLog({ resourceType: 'fetch' }).entries).toHaveLength(1);
+  });
 });

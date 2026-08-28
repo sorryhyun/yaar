@@ -10,6 +10,7 @@
 
 import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
+import { NetworkLog, type NetworkLogQuery, type NetworkLogResult } from './network-log.js';
 import type {
   BrowserAnnotatedElement,
   BrowserCookie,
@@ -208,6 +209,12 @@ export class BrowserSession extends EventEmitter {
   /** Chrome's handle for the installed init script on the *current* target. */
   private initScriptId: string | null = null;
   private blockStats: RequestBlockStats = { blocked: 0, requests: 0 };
+  /**
+   * What this tab fetched, metadata only (issue #96). Survives navigation and
+   * reattach: the log is per tab, not per socket, and a page's traffic is
+   * exactly what someone asks about *after* the navigation that caused it.
+   */
+  private readonly networkLog = new NetworkLog();
 
   private constructor(id: string, cdp: CDPClient, mobile: boolean, adopted: boolean) {
     super();
@@ -252,8 +259,15 @@ export class BrowserSession extends EventEmitter {
       const frame = (params as { frame?: { parentId?: string } }).frame;
       if (frame && !frame.parentId) this.blockStats = { blocked: 0, requests: 0 };
     });
-    cdp.on('Network.requestWillBeSent', () => {
+    cdp.on('Network.requestWillBeSent', (params: unknown) => {
       this.blockStats.requests++;
+      this.networkLog.onRequestWillBeSent(params);
+    });
+    cdp.on('Network.responseReceived', (params: unknown) => {
+      this.networkLog.onResponseReceived(params);
+    });
+    cdp.on('Network.loadingFinished', (params: unknown) => {
+      this.networkLog.onLoadingFinished(params);
     });
     cdp.on('Network.loadingFailed', (params: unknown) => {
       // 'inspector' is the reason Chrome gives for a request a DevTools blocklist
@@ -261,6 +275,7 @@ export class BrowserSession extends EventEmitter {
       if ((params as { blockedReason?: string }).blockedReason === 'inspector') {
         this.blockStats.blocked++;
       }
+      this.networkLog.onLoadingFailed(params);
     });
     // A fresh target has none of the previous one's shield state.
     this.initScriptId = null;
@@ -1313,6 +1328,11 @@ export class BrowserSession extends EventEmitter {
 
   getRequestBlockStats(): RequestBlockStats {
     return { ...this.blockStats };
+  }
+
+  /** The tab's recent requests, filtered; see {@link NetworkLog}. */
+  getNetworkLog(query?: NetworkLogQuery): NetworkLogResult {
+    return this.networkLog.query(query);
   }
 
   private async pushShield(cdp: CDPClient): Promise<void> {
