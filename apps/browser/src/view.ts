@@ -209,7 +209,9 @@ function LiveStatsBar() {
 function Stage() {
   return html`
     <div class="screenshot-area">
-      <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
+      <div class="loading-track">
+        <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
+      </div>
       ${() =>
         !liveMode() && !showScreenshot()
           ? html` <div class="placeholder y-text-muted y-text-sm">${() => placeholderText()}</div> `

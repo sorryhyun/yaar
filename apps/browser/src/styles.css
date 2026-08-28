@@ -199,6 +199,22 @@
  * (injected into every app by the token layer) instead of a local
  * width-animating one, so there's one indeterminate-slide animation, not two.
  */
+.loading-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  /*
+   * The slide runs the sliver to 125% of the width. The area is `overflow: auto`
+   * for tall stills, so an unclipped sliver grew it a horizontal scrollbar for
+   * part of every 1.2s cycle — 15px off the live canvas, a viewport re-sync in
+   * the remote tab, and back again: the page visibly pulsed once a second.
+   */
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .loading-bar {
   position: absolute;
   top: 0;

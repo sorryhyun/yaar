@@ -1,5 +1,11 @@
 import * as z from '@bundled/zod';
-import { setShowScreenshot, setPlaceholderText, updateUrlBar, activeBrowserId } from './store';
+import {
+  setShowScreenshot,
+  setPlaceholderText,
+  updateUrlBar,
+  activeBrowserId,
+  setLoading,
+} from './store';
 import { liveMode } from './live/state';
 import { eventsUrl, screenshotUrl } from './endpoints';
 import { getScreenshotEl } from './dom';
@@ -142,6 +148,13 @@ export function connectSSE(browserId: string): void {
       // The only navigation signal this app gets. `onNavigated` de-duplicates,
       // so the repeated frames of one page load cost one injection.
       onNavigated(data.url);
+    }
+    // Live: the screencast paints the new page itself, and a still here would be
+    // the second encode the poll above refuses. The navigation the bar was raised
+    // for has landed, which is all the still's onload was telling us.
+    if (liveMode()) {
+      setLoading(false);
+      return;
     }
     refreshScreenshot();
   };
