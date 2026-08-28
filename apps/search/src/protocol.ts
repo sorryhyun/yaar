@@ -308,7 +308,7 @@ export async function cloneApp(appId: string, destPath?: string): Promise<CloneO
   setState('statusText', `Cloning ${appId}…`);
   try {
     const result = await invoke<{
-      files?: { path: string; content: string }[];
+      files?: { path: string; content: string; encoding?: 'base64' }[];
       meta?: { name: string; icon: string; description: string };
     }>(`yaar://apps/${appId}`, { action: 'clone' });
     if (!result.files?.length) {
@@ -317,7 +317,11 @@ export async function cloneApp(appId: string, destPath?: string): Promise<CloneO
     }
     let written = 0;
     for (const file of result.files) {
-      await appStorage.save(`${dest}/${file.path}`, file.content);
+      // The clone verb marks binary files (.glb, .png, fonts) with encoding 'base64' and
+      // sends their bytes encoded. Saving that string without passing the flag back stores
+      // the base64 TEXT -- a file 4/3 the real size that no loader can parse.
+      const options = file.encoding === 'base64' ? { encoding: 'base64' as const } : undefined;
+      await appStorage.save(`${dest}/${file.path}`, file.content, options);
       written++;
     }
     setState('statusText', `Cloned ${appId}: ${written} files → Search storage/${dest}/`);
