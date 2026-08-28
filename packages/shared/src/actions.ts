@@ -64,6 +64,13 @@ export const WINDOW_PLACEMENT = {
    * monitor can be added or switched — i.e. effectively always.
    */
   paletteInset: 127,
+  /**
+   * Top viewport space reserved for the agent status bar:
+   * 8 top offset + ~35 pill (6 padding + 15px/1.5 text + 6 padding) + 9 margin.
+   * The bar is always mounted, so a window opened flush with the viewport top
+   * would otherwise start underneath it.
+   */
+  statusBarInset: 52,
 } as const;
 
 /**
@@ -81,12 +88,13 @@ export function cascadeWindowBounds(
   const step = (index * P.cascadeStep) % P.cascadeMax;
   if (!viewport) return { x: P.fallbackOrigin + step, y: P.fallbackOrigin + step, w, h };
 
-  const usableH = viewport.h - P.paletteInset;
+  const top = P.statusBarInset;
+  const usableH = viewport.h - P.paletteInset - top;
   const originX = Math.max(0, Math.round((viewport.w - w) / 2) - P.cascadeMax / 2);
-  const originY = Math.max(0, Math.round((usableH - h) / 2) - P.cascadeMax / 2);
+  const originY = top + Math.max(0, Math.round((usableH - h) / 2) - P.cascadeMax / 2);
   return {
     x: Math.max(0, Math.min(originX + step, viewport.w - w)),
-    y: Math.max(0, Math.min(originY + step, usableH - h)),
+    y: Math.max(top, Math.min(originY + step, top + usableH - h)),
     w,
     h,
   };
