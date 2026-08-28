@@ -640,11 +640,13 @@ describe('S10 — list on a window is that window, not the monitor', () => {
     // which offered the caller no way to discover what a window could be asked.
     //
     // The window's own keys come first and the app's follow, because the answer is "what is
-    // addressable under this URI" — and three of those keys are the window's, not the app's.
+    // addressable under this URI" — and four of those entries are the window's, not the app's:
+    // the three built-in state keys, then the window's own replay log.
     expect(links.map((link) => link.uri)).toEqual([
       'yaar://windows/memo/state/__content',
       'yaar://windows/memo/state/__screenshot',
       'yaar://windows/memo/state/__console',
+      'yaar://windows/memo/history',
       'yaar://windows/memo/state/drafts',
       'yaar://windows/memo/state/memos',
       'yaar://windows/memo/commands/pinMemo',
@@ -686,6 +688,7 @@ describe('S10 — list on a window is that window, not the monitor', () => {
     // Same session, same monitor, one call apart — so the id in the URI is doing the work,
     // not the session's window list.
     expect(links.map((link) => link.uri).filter((uri) => !uri.includes('/__'))).toEqual([
+      'yaar://windows/storage/history',
       'yaar://windows/storage/state/cwd',
       'yaar://windows/storage/commands/openPath',
     ]);
