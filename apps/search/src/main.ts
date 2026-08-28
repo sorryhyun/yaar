@@ -16,6 +16,7 @@ import {
   sliceMatches,
   RESULTS_CAP,
   validateSearchPattern,
+  describeSearch,
 } from './protocol';
 import { AppCommandError, errMsg, showToast, defineApp } from '@bundled/yaar';
 import { analyzeDeps, getLastDepsReport, clearDepsGraph } from './deps';
@@ -79,7 +80,7 @@ function groupByFile(
 function triggerSearch() {
   const pattern = state.query.trim();
   if (!pattern) return;
-  performSearch(pattern, state.glob || undefined, state.scope || undefined);
+  performSearch(pattern, state.glob || undefined, state.scope || undefined, state.includeBuilt);
 }
 
 function handleSearchKeydown(e: KeyboardEvent) {
@@ -163,6 +164,16 @@ const App = () => html`
         onInput=${(e: InputEvent) => setState('glob', (e.target as HTMLInputElement).value)}
         onKeydown=${handleSearchKeydown}
       />
+      <button
+        class=${() => `y-btn y-btn-sm${state.includeBuilt ? ' y-btn-primary' : ''}`}
+        title="Include generated output (dist/, node_modules/, .min.js, .map). Off by default: one minified line crowds out every real match."
+        onClick=${() => {
+          setState('includeBuilt', !state.includeBuilt);
+          if (state.query.trim()) triggerSearch();
+        }}
+      >
+        Built
+      </button>
       <button class="y-btn y-btn-sm y-btn-primary" onClick=${triggerSearch}
         disabled=${() => state.searching}>
         ${() => (state.searching ? '…' : 'Go')}
@@ -298,9 +309,26 @@ export default defineApp({
     },
     results: {
       description:
-        'Current search results: { matches, total, returned, offset, capped, truncated }. Each match is a plain object with path, line, content, appId. Capped at 500 — use the get-results command for paging beyond that.',
+        'Current search results: { matches, total, returned, offset, capped, truncated, excluded, notes }. Each match is a plain object with path, line, content, appId. Capped at 500 — use the get-results command for paging beyond that. `excluded` counts matches dropped as generated output, so null here with excluded > 0 means “found, but only in build output” rather than “not found”; `notes` says that in words.',
       get: () => {
-        if (!state.matches.length) return null;
+        const { status, notes } = describeSearch(
+          state.matches.length,
+          state.excluded,
+          state.truncated,
+        );
+        if (!state.matches.length)
+          return state.excluded
+            ? {
+                matches: [],
+                total: 0,
+                returned: 0,
+                offset: 0,
+                capped: false,
+                truncated: state.truncated,
+                excluded: state.excluded,
+                notes,
+              }
+            : null;
         const { items, total } = sliceMatches(0, RESULTS_CAP);
         return {
           matches: items,
@@ -309,6 +337,9 @@ export default defineApp({
           offset: 0,
           capped: total > items.length,
           truncated: state.truncated,
+          excluded: state.excluded,
+          ...(notes.length ? { notes } : {}),
+          status,
         };
       },
     },
@@ -339,7 +370,14 @@ export default defineApp({
   },
   commands: {
     search: {
-      description: 'Run regex search across storage',
+      description:
+        'Run regex search across storage, source only: generated output (dist/, build/, out/, ' +
+        'node_modules/, coverage/, .git/, .cache/, .next/, .output/ as directory segments at ' +
+        'any depth, plus .min.js/.min.css/.map files) is skipped unless includeBuilt says ' +
+        'otherwise. Paths are tested relative to `scope`, so scoping INTO build output searches ' +
+        'it normally — descending is its own opt-in. Storage caps the raw match list before that ' +
+        'filter runs, so a truncated search of a built-heavy scope can be missing source matches ' +
+        'entirely; `excluded` and `notes` in the result say when that has happened.',
       params: {
         type: 'object',
         properties: {
@@ -351,6 +389,14 @@ export default defineApp({
               'with a "/" it matches the path from the scope root ("apps/**/*.ts").',
           },
           scope: { type: 'string', description: 'Directory scope within storage' },
+          includeBuilt: {
+            type: 'boolean',
+            description:
+              'Search generated output too (default false). For when the built output IS the ' +
+              'subject — checking what a bundler emitted, or whether a string survived into ' +
+              'dist/. Expect minified lines thousands of characters wide. Not needed to search ' +
+              'a scope that already points inside build output.',
+          },
         },
         required: ['pattern'],
       },
@@ -368,11 +414,15 @@ export default defineApp({
           pattern,
           params.glob as string | undefined,
           params.scope as string | undefined,
+          params.includeBuilt === true,
         );
+        const { notes } = describeSearch(state.matches.length, state.excluded, state.truncated);
         return {
           success: true,
           matchCount: state.matches.length,
+          excluded: state.excluded,
           truncated: state.truncated,
+          ...(notes.length ? { notes } : {}),
         };
       },
     },
@@ -404,6 +454,7 @@ export default defineApp({
         const rawLimit = Number(params.limit ?? 100) || 100;
         const limit = Math.max(1, Math.min(rawLimit, RESULTS_CAP));
         const { items, total, offset: start } = sliceMatches(offset, limit);
+        const { notes } = describeSearch(total, state.excluded, state.truncated);
         return {
           matches: items,
           total,
@@ -411,6 +462,8 @@ export default defineApp({
           offset: start,
           hasMore: start + items.length < total,
           truncated: state.truncated,
+          excluded: state.excluded,
+          ...(notes.length ? { notes } : {}),
         };
       },
     },

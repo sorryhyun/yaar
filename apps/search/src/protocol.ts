@@ -1,6 +1,7 @@
 export {};
 import { appStorage, invoke, del, list, storage, errMsg } from '@bundled/yaar';
 import { state, setState } from './store';
+import { isGeneratedPath } from './paths';
 import type { SearchResult, SearchMatch } from './types';
 
 /** Cloned source is private to Search; ordinary searches continue to use shared storage. */
@@ -28,9 +29,52 @@ export function validateSearchPattern(pattern: string): void {
   new RegExp(pattern);
 }
 
-export async function performSearch(pattern: string, glob?: string, scope?: string) {
+/**
+ * Phrase the result of one search, given what survived filtering and what did not.
+ *
+ * Pure and shared by the statusbar and the protocol return so the UI and an agent are
+ * never told different things about the same search. `notes` is the honest half: an
+ * empty result after filtering is NOT the same answer as no match anywhere, and
+ * reporting it as one sends the caller looking for a string they already found.
+ */
+export function describeSearch(
+  matchCount: number,
+  excluded: number,
+  truncated: boolean,
+): { status: string; notes: string[] } {
+  const plural = matchCount === 1 ? '' : 'es';
+  let status = `${matchCount} match${plural}`;
+  if (excluded > 0) status += ` (+${excluded} generated hidden)`;
+  if (truncated) status += ' (truncated)';
+
+  const notes: string[] = [];
+  if (matchCount === 0 && excluded > 0) {
+    notes.push(
+      `No matches in source. ${excluded} match(es) were in generated output — pass includeBuilt: true to see them.`,
+    );
+  } else if (excluded > 0) {
+    notes.push(`${excluded} match(es) in generated output skipped — pass includeBuilt for those.`);
+  }
+  if (truncated) {
+    notes.push(
+      excluded > 0
+        ? 'Storage capped the raw match list BEFORE generated output was filtered out, so source matches may be missing entirely — narrow the scope or glob rather than trusting this count.'
+        : 'Storage capped the match list — narrow the scope or glob to see the rest.',
+    );
+  }
+  return { status, notes };
+}
+
+export async function performSearch(
+  pattern: string,
+  glob?: string,
+  scope?: string,
+  includeBuilt = false,
+) {
   if (!pattern) return;
   setState('searching', true);
+  setState('includeBuilt', includeBuilt);
+  setState('excluded', 0);
   // Record the scope these results are actually relative to. Using the UI's
   // `scope` for path reconstruction is wrong: a protocol-driven search may pass
   // no scope while a stale `scope` from an earlier search is still in the store.
@@ -51,14 +95,20 @@ export async function performSearch(pattern: string, glob?: string, scope?: stri
     const payload: Record<string, unknown> = { action: 'grep', pattern };
     if (glob) payload.glob = glob;
     const result = await invoke<SearchResult>(uri, payload);
-    setState('matches', result.matches ?? []);
-    setState('truncated', result.truncated ?? false);
-    const count = result.matches?.length ?? 0;
-    const suffix = result.truncated ? ' (truncated to 100)' : '';
-    setState('statusText', `${count} match${count !== 1 ? 'es' : ''}${suffix}`);
+    // The filter runs here and not on the server: the storage grep action takes one
+    // positive glob and no exclusions, so a negative filter cannot be expressed as a
+    // query. Paths are scope-relative, which is deliberate — see isGeneratedPath.
+    const raw = result.matches ?? [];
+    const kept = includeBuilt ? raw : raw.filter((m) => !isGeneratedPath(m.file));
+    const truncated = result.truncated ?? false;
+    setState('matches', kept);
+    setState('excluded', raw.length - kept.length);
+    setState('truncated', truncated);
+    setState('statusText', describeSearch(kept.length, raw.length - kept.length, truncated).status);
   } catch (e: unknown) {
     const msg = errMsg(e);
     setState('matches', []);
+    setState('excluded', 0);
     setState('statusText', `Error: ${msg}`);
   } finally {
     setState('searching', false);
@@ -298,6 +348,7 @@ export function clearSearch() {
   setState('glob', '');
   setState('resultScope', '');
   setState('matches', []);
+  setState('excluded', 0);
   setState('truncated', false);
   setState('selectedIndex', null);
   setState('previewPath', null);

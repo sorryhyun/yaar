@@ -22,6 +22,15 @@ Full-text search over YAAR storage, plus app-source cloning and dependency analy
 - **Store values are Proxies.** Anything returned from a protocol command or state getter must
   be rebuilt from primitives (`toPlainMatch` in `protocol.ts`), or postMessage throws
   DataCloneError and the state key silently reads as broken.
+- **Generated output is filtered client-side, and the cap lands first.** `performSearch` drops
+  build output with `isGeneratedPath` (`paths.ts`, kept byte-identical to Dev Tools' `lib/paths.ts`
+  so the two searches hide the same set) because the storage grep action takes one positive glob
+  and no exclusions. Storage caps the raw match list *before* that filter runs, so a truncated
+  built-heavy search can be missing source matches entirely — `state.excluded` and
+  `describeSearch()` exist so that is stated rather than read as “not found”. Paths are tested
+  relative to the search scope, which is what makes descending into a bundle its own opt-in.
+  **The filter lives only in `performSearch`**: `clone-app` and `analyze-deps` walk their own
+  trees and must keep working on a clone whose path legitimately contains `dist/`.
 - **Two storage trees.** Clones live in Search's PRIVATE app storage (`appStorage`,
   `apps-source/…`); ordinary search reads the shared `yaar://storage/` commons. `deps.ts`
   picks between them off `RootRef.kind`, and `previewDepsFile` must use the same rule as

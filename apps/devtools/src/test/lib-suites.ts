@@ -6,6 +6,7 @@ import {
   relativizeProjectPaths,
   isImagePath,
   isBinaryPath,
+  isGeneratedPath,
   assetImportLine,
   appIdFromName,
   scaffoldMain,
@@ -74,6 +75,23 @@ const paths = suite('paths', {
     eq(isBinaryPath('a/b.glb'), true);
     eq(isBinaryPath('a/b.gltf'), false);
     eq(isBinaryPath('a/b.svg'), false);
+  },
+
+  'generated output is recognised wherever it sits in the tree'() {
+    eq(isGeneratedPath('dist/index.html'), true);
+    eq(isGeneratedPath('node_modules/x/index.js'), true);
+    eq(isGeneratedPath('.git/config'), true);
+    eq(isGeneratedPath('packages/app/build/out.js'), true, 'nested build output');
+    eq(isGeneratedPath('src/vendor/lib.min.js'), true);
+    eq(isGeneratedPath('src/main.js.map'), true);
+  },
+
+  // The whole point of the filter is that source survives it.
+  'source is not mistaken for generated output'() {
+    eq(isGeneratedPath('src/main.ts'), false);
+    eq(isGeneratedPath('src/protocol/build.ts'), false, 'a file named build is source');
+    eq(isGeneratedPath('src/services/dist.ts'), false);
+    eq(isGeneratedPath('AGENTS.md'), false);
   },
 
   'assetImportLine writes a specifier relative to src/main.ts'() {

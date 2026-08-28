@@ -733,7 +733,8 @@ const WORKER_TOOLS = [
     name: 'grep',
     description:
       'Search file contents across the active project with a regex. Returns matches as ' +
-      'path:line with the matching line text.',
+      'path:line with the matching line text. Searches source only — generated output ' +
+      '(dist/, build/, node_modules/, minified files, source maps) is never searched.',
     input: {
       pattern: { type: 'string', description: 'Regex pattern to search for.' },
       glob: { type: 'string', description: 'File glob filter, e.g. src/**/*.ts.', optional: true },

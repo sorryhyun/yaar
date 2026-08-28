@@ -409,18 +409,39 @@ export const fileCommands = {
     },
   }),
   grep: defineAppCommand({
-    description: 'Search file contents with regex across the project',
+    description:
+      'Search file contents with regex across the project, source only: generated output ' +
+      '(dist/, build/, out/, node_modules/, coverage/, .git/, and .min.js/.map files) is ' +
+      'skipped unless includeBuilt says otherwise. A hit inside a bundle is one minified ' +
+      'line thousands of characters wide, which is why it is not the default.',
     params: {
       type: 'object',
       properties: {
         pattern: { type: 'string', description: 'Regex pattern to search for' },
         glob: { type: 'string', description: 'File glob filter (e.g. "src/**/*.ts")' },
+        includeBuilt: {
+          type: 'boolean',
+          description:
+            'Search generated output too (default false). For when the built output IS the ' +
+            'subject — checking what the bundler emitted, or whether a string survived into ' +
+            'dist/. Expect minified lines.',
+        },
       },
       required: ['pattern'],
     },
     run: async (p) => {
-      const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
-      if (result.matches.length === 0) return 'No matches found.';
+      const result = await grep(
+        String(p.pattern),
+        p.glob ? String(p.glob) : undefined,
+        p.includeBuilt === true,
+      );
+      // An empty result after filtering is not the same answer as no match anywhere, and
+      // reporting it as one sends the caller looking for a string they already found.
+      if (result.matches.length === 0) {
+        return result.excluded
+          ? `No matches in source. ${result.excluded} match(es) were in generated output — pass includeBuilt to see them.`
+          : 'No matches found.';
+      }
       const proj = activeProject();
       const projectId = proj?.id ?? 'unknown';
       const byFile = new Map<string, typeof result.matches>();
@@ -444,8 +465,14 @@ export const fileCommands = {
           },
         });
       }
-      if (result.truncated) {
-        return [...blocks, { type: 'text' as const, text: '(results truncated)' }];
+      const notes = [
+        ...(result.truncated ? ['results truncated'] : []),
+        ...(result.excluded
+          ? [`${result.excluded} match(es) in generated output skipped — pass includeBuilt for those`]
+          : []),
+      ];
+      if (notes.length > 0) {
+        return [...blocks, { type: 'text' as const, text: `(${notes.join('; ')})` }];
       }
       return blocks;
     },

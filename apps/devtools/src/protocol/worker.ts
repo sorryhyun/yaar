@@ -541,8 +541,14 @@ export const workerCommands = {
       const pattern = String(p.pattern);
       noteWorkerToolCall(`grep /${pattern}/${p.glob ? ` in ${p.glob}` : ''}`);
       if (!activeProject()) return NO_PROJECT;
+      // Generated output stays filtered out for the worker with no way to ask for it: it
+      // explores source, and a minified bundle line would eat its context for nothing.
       const result = await grep(pattern, p.glob ? String(p.glob) : undefined);
-      if (result.matches.length === 0) return 'No matches found.';
+      if (result.matches.length === 0) {
+        return result.excluded
+          ? `No matches in source (${result.excluded} were in generated output, which this tool skips).`
+          : 'No matches found.';
+      }
       const body = result.matches.map((m) => `${m.file}:${m.line}│${m.content}`).join('\n');
       return result.truncated ? `${body}\n(results truncated)` : body;
     },

@@ -9,7 +9,11 @@ export const [state, setState] = createStore({
   /** The scope the CURRENT results were actually fetched with (may differ from the UI's `scope`). */
   resultScope: '',
   matches: [] as SearchMatch[],
+  /** Search generated output too. Off by default; the toolbar toggle and the `includeBuilt` param both set it. */
+  includeBuilt: false,
   truncated: false,
+  /** Matches the last search dropped as generated output. Only meaningful when includeBuilt is false. */
+  excluded: 0,
   searching: false,
   selectedIndex: null as number | null,
   previewPath: null as string | null,
