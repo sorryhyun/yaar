@@ -3,6 +3,7 @@ import { navigate } from '@bundled/yaar-web';
 import { activeBrowserId, setLoading, setShowScreenshot } from './store';
 import { getScreenshotEl } from './dom';
 import { screenshotUrl } from './endpoints';
+import { parseAddress } from './url';
 
 /** One wording for every fire-and-forget failure, so the console reads consistently. */
 function logFailure(what: string, err: unknown): void {
@@ -44,27 +45,46 @@ export function handleUrlFocus(e: FocusEvent): void {
   (e.target as HTMLInputElement).select();
 }
 
+/**
+ * Navigate the remote tab and let the SSE stream bring the picture back.
+ *
+ * The loading flag is cleared here only on failure. On success the arriving frame
+ * is what clears it (`refreshScreenshot`), and clearing it here would drop the bar
+ * while the page is still on its way.
+ */
 async function navigateDirect(url: string): Promise<void> {
   setLoading(true);
   try {
     await navigate(url, activeBrowserId());
-    // SSE will handle screenshot refresh
   } catch (err) {
+    setLoading(false);
     logFailure('navigate', err);
   }
 }
 
+/**
+ * Enter in the address bar.
+ *
+ * An address is navigated here and nowhere else. The app can carry out a page load
+ * by itself, so telling the agent about one buys nothing and costs a whole turn --
+ * it would wake up only to be told that the navigation it might have performed has
+ * already happened. Anything that is *not* an address is a request this app cannot
+ * carry out at all, and that, alone, is what the agent is woken for.
+ */
 export function handleUrlKeydown(e: KeyboardEvent): void {
   if (e.key !== 'Enter') return;
   e.preventDefault();
   const input = e.target as HTMLInputElement;
-  let url = input.value.trim();
-  if (!url) return;
-  if (!/^https?:\/\//i.test(url)) {
-    url = 'https://' + url;
+  const typed = input.value.trim();
+  if (!typed) return;
+
+  const url = parseAddress(typed);
+  if (url) {
+    input.value = url;
+    input.blur();
+    void navigateDirect(url);
+    return;
   }
-  input.value = url;
-  input.blur();
-  void navigateDirect(url);
-  app?.sendInteraction({ event: 'user_navigated', url });
+
+  app?.sendInteraction({ event: 'user_query', query: typed });
 }

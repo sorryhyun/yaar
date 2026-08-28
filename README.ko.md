@@ -1,5 +1,7 @@
 # YAAR
 
+**고쳐 쓰고, 간직하고, 나누는 소프트웨어 — 어떤 에이전트든 다룰 수 있는 모양으로.**
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Bun](https://img.shields.io/badge/Bun_≥1.3-F9F1E1?logo=bun&logoColor=black)](https://bun.sh/)
@@ -9,43 +11,54 @@
 
 [English](./README.md)
 
-> **Y**ou **A**re **A**bsolutely **R**ight — AI가 다음에 무엇을 보여주고 할지 스스로 결정하는 리액티브 AI 인터페이스.
-
-
 ![YAAR Desktop](./docs/assets/image.png)
 
-MCP 도구, 스킬, 플러그인, A2A까지 — 시스템 프롬프트 8K 토큰 안에서 전부 동작합니다. 앱을 만들고, 데이터를 시각화하고, 외부 서비스와 연동합니다.
+YAAR는 로컬 데스크톱입니다. 이미 쓰고 있는 에이전트 — Claude Code 또는 Codex — 가 앱을
+만들고, 당신은 지금 보고 있는 앱에게 말을 걸어 그 앱을 바꿉니다. 모든 앱은 디스크 위의 폴더
+하나이고, 자기만의 git 히스토리를 가집니다. 호스팅되는 것도, 빌려 쓰는 것도 없습니다.
 
+```
+"테트리스 게임 만들어줘"                   → 작성하고, 빌드하고, 창을 엽니다
+"블록 떨어지는 속도 더 빠르게"              → 실행 중인 앱을 그 자리에서 수정하고 다시 배포합니다
+"방금 거 되돌려줘"                         → 직전 배포로 롤백합니다
+"이거 올려줘"                              → 소스를 YAAR Market에 게시합니다
+```
+
+채팅 어시스턴트는 매번 새로 생성하고, 앱스토어는 다시 빌드해서 다시 제출하게 합니다. YAAR는
+그 사이에 있습니다: 지금 쓰고 있는 앱이 곧 고쳐 쓸 수 있는 앱이고, 고치는 것도 그 앱을 만든
+에이전트입니다.
 
 ## 설치
 
-Codex 혹은 Claude Code 사용자 인증이 필수입니다.
+Codex 또는 Claude Code 인증이 필요합니다.
 
 ```bash
 curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
 yaar                # 브라우저가 자동으로 열립니다
 ```
 
-Linux, macOS (Intel & Apple Silicon), Windows (WSL) 지원. 바이너리 하나로 실행되며, Bun이나 Node.js 설치가 필요 없습니다.
+Linux, macOS (Intel & Apple Silicon), Windows (WSL)를 지원합니다. 단일 바이너리 — Bun이나 Node.js가 필요 없습니다.
 
 Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
 
-실행 후 "필수 앱 설치해줘" 같은 말로 시작하시면 됩니다.
+실행되면 "필수 앱 설치해줘" 같은 말로 시작해 보세요.
 
 <details>
-<summary>기타 설치 옵션</summary>
+<summary>다른 설치 방법</summary>
 
-**특정 버전 / 설치 경로 변경:**
+**버전 고정 / 설치 경로 지정:**
+
 ```bash
-VERSION=v0.18.0 curl -fsSL ... | bash    # 특정 버전 (기본: 최신)
+VERSION=v0.18.0 curl -fsSL ... | bash             # 특정 버전 (기본: latest)
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 (기본: ~/.local/bin)
 ```
 
-**Windows:** `yaar.exe`를 [릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 직접 다운로드할 수도 있습니다.
+**Windows:** [Releases 페이지](https://github.com/sorryhyun/yaar/releases)에서 `yaar.exe`를 직접 받을 수도 있습니다.
 
-번들 앱은 바이너리와 별도로 `yaar-apps.tar.gz`로 배포되며, 설치 스크립트가 바이너리 옆에 자동으로 풀어줍니다.
+번들 앱은 `yaar-apps.tar.gz`로 따로 배포되며, 설치 스크립트가 바이너리 옆에 자동으로 풀어 둡니다.
 
 **소스에서 빌드** ([Bun](https://bun.sh/) >= 1.4 필요):
+
 ```bash
 git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
@@ -54,122 +67,83 @@ make dev          # 브라우저가 자동으로 열립니다
 
 </details>
 
+## 왜 YAAR인가
 
-## 이런 걸 할 수 있습니다
+- **앱은 당신의 것입니다.** 폴더 하나 = 앱 하나: `app.json`, 소스, 선택적인 에이전트
+  프롬프트가 자체 완결된 HTML 파일 하나로 컴파일됩니다. 넣으면 설치, 지우면 삭제, 원하는
+  곳에 `git`으로 올리면 됩니다. 배포할 때마다 섀도 git 저장소에 스냅샷이 남으므로, 에이전트가
+  한 모든 수정은 읽을 수 있는 diff이고 되돌릴 수 있는 버전입니다.
 
-- **"이 CSV 분석해줘"** → AI가 데이터를 읽고 차트 윈도우를 띄웁니다
-- **"발표자료 만들어줘"** → Slides Lite가 슬라이드 덱을 생성합니다
-- **우클릭 드래그로 스케치** → AI가 그림을 해석해 코드나 다이어그램으로 변환합니다
-- **"테트리스 만들어줘"** → AI가 코드를 작성·빌드하고, 바로 플레이 가능한 앱으로 배포합니다
+- **그 자리에서 고칩니다.** Dev Tools는 다른 앱을 고치는 앱입니다. 소스를 복제하고, 수정하고,
+  결과를 라이브로 미리 보고, 다시 배포합니다 — 데스크톱을 떠나지 않고, 처음부터 다시 시작하지
+  않고. "이거 나한테 맞게 바꿔줘"는 새 대화가 아니라 일급 작업입니다.
 
-텍스트 입력창만이 아니라 데스크톱 전체가 입력 수단입니다:
+- **모든 앱은 계약을 말합니다.** 앱은 매니페스트를 공개합니다 — 타입이 있는 커맨드, 상태 키,
+  이벤트 채널. 앱을 고치거나 조종하는 에이전트는 스크린샷이 아니라 스키마를 상대로 일합니다.
+  `yaar://`를 말할 수 있는 에이전트라면 어떤 앱이든 다룰 수 있습니다.
 
-| 입력 방식 | 동작 |
-|-----------|------|
-| 타이핑 | 메시지 전송 |
-| 이미지 붙여넣기 / 드래그 앤 드롭 | AI에게 이미지 전달 |
-| 우클릭 드래그 | 그림을 그려서 AI에게 전달 |
-| 버튼 클릭 | 윈도우 내 액션 실행 |
-| 우클릭 → 윈도우 선택 | 특정 윈도우에 지시사항 전송 |
-| 파일/영역을 앱으로 드래그 | 앱 간 데이터 전달 |
+- **에이전트는 당신 것을 씁니다.** YAAR는 이미 로그인된 Claude Code나 Codex를 서브프로세스로
+  구동합니다. 계정도, API 키도, 호스팅 서비스도 없습니다. 대화는 원래 그 프로바이더가
+  보내던 곳으로만 갑니다.
 
+- **에이전트는 문단이 아니라 UI로 답합니다.** 분석을 요청하면 차트 창이 열립니다. 창은
+  유지되고, 주소를 가지며, 개별적으로 메시지를 받을 수 있고, 데이터와 함께 살아 있습니다 —
+  `yaar://` 리소스가 바뀌면 서버가 밀어 줍니다. 폴링도, 다시 물어보는 것도 없습니다.
 
-## 뭐가 다른가요?
+- **동사 다섯 개, 평평한 프롬프트.** 창, 파일, 앱, 설정, 다른 에이전트까지 전부 `yaar://`
+  URI이고, `describe · read · list · invoke · delete` 다섯 동사가 그 전부를 다룹니다. 기능
+  탐색은 런타임에 일어나므로 앱이 3개든 100개든 시스템 프롬프트는 ~8K 토큰에 머뭅니다.
 
-- **단 5개의 도구로 모든 것을 합니다.** 윈도우, 파일, 앱, 설정 — 모든 리소스가 `yaar://` URI이고, 5개의 범용 verb로 조작합니다. 에이전트가 `describe`로 기능을 런타임에 발견하므로, 앱을 100개 설치해도 시스템 프롬프트는 8K 토큰 이하로 유지됩니다.
+왜 TUI가 아니라 GUI인지, 왜 OS 모양인지, 왜 웹인지 — 그 이유가 궁금하다면 [FAQ](./docs/ko/faq.md)를 보세요.
 
-  ```
-  describe · read · list · invoke · delete
+## 데스크톱 전체가 입력입니다
 
-  invoke('yaar://windows/chart', { ... })    read('yaar://storage/data.csv')
-  list('yaar://apps')                        delete('yaar://windows/old-panel')
-  ```
+| 입력                          | 일어나는 일                                  |
+| ----------------------------- | -------------------------------------------- |
+| 타이핑                        | 메시지 전송                                  |
+| 이미지 붙여넣기 / 드래그 앤 드롭 | 에이전트에게 이미지 전송                      |
+| 우클릭 드래그                 | 스케치 — 에이전트가 코드나 다이어그램으로 바꿉니다 |
+| 창 안의 버튼 클릭             | 그 창의 액션 실행                            |
+| 우클릭 → 창 선택              | 특정 창 하나에게 말하기                      |
+| 파일/선택 영역을 앱으로 드래그 | 앱 사이에 데이터 이동                        |
 
-- **폴더 하나 = 앱 하나.** 스킬, 플러그인, 에이전트, UI가 하나의 폴더 규약으로 통일됩니다: 메타데이터(`app.json`, 그 `description`이 AI가 읽는 설명을 겸함), 전용 에이전트 프롬프트(`agent/prompt.md`, 선택), 그리고 단일 HTML 파일로 빌드되는 소스. 폴더를 넣으면 설치, 지우면 제거 — 등록 코드가 없습니다.
+## 앱 만들기
 
-- **앱마다 자기 에이전트를 가집니다.** `agent/prompt.md`를 넣으면 그 앱 전용 에이전트가 생기고, 모니터 에이전트와 서로 메시지를 주고받습니다. 앱이 다른 앱을 직접 조종할 수도 있습니다 (`app.json`의 `controls`) — 예를 들어 Dev Tools는 실제 브라우저 앱을 몰아 앱을 만들고 테스트까지 끝냅니다.
+앱은 평범한 TypeScript에 필요한 것들이 딸려 옵니다:
 
-- **권한이 명시적이고 범위가 한정적입니다.** 앱은 `app.json`에 선언한 `permissions`와 자기 스토리지로 한정됩니다. 외부 HTTP는 도메인 허용 목록에 등록된 곳만 가능하고, 신규 도메인은 사용자 승인이 필요하며, 모든 승인/거부 결정이 기록됩니다. 자세한 내용은 [보안](#보안) 섹션 참고.
+- **번들 라이브러리** — Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js 등을 `@bundled/*`로 import, `npm install` 없이
+- **`appDb`** — 앱별 격리 SQLite, Mongo 스타일 필터와 FTS5 전문 검색 ([가이드](./docs/ko/sqlite.md))
+- **앱 에이전트** — `agent/prompt.md`를 추가하면 그 앱만의 에이전트가 생기고, `controls`를 선언하면 다른 앱을 조종할 수 있습니다
+- **게이트된 SDK** — `app.json`에 선언하면 열립니다: `yaar-dev`(컴파일/배포), `yaar-web`(브라우저 자동화), `yaar-ml`(브라우저 내 ONNX 추론)
+- **YAAR Market** — 카탈로그에서 설치하거나 직접 게시. 마켓은 소스를 배포하고, 설치는 로컬에서 컴파일합니다
 
-- **AI가 UI를 직접 생성합니다.** 텍스트 응답 대신 윈도우를 띄우고, 알림을 표시하고, 앱을 조작하는 방식으로 반응합니다 — 응답은 캐싱되어 윈도우를 다시 렌더링할 때 AI에게 재질의하지 않습니다.
+자세한 내용은 [앱 개발 가이드](./docs/ko/app-development.md)를 보세요.
 
-- **UI가 데이터를 따라 살아 움직입니다.** 앱은 `yaar://` URI를 구독해두면 그 리소스가 바뀔 때 서버가 밀어줍니다. 폴링 없이, 다시 물어볼 필요 없이 화면이 갱신됩니다.
+## 신뢰 모델
 
-왜 이렇게 만들었는지 — 왜 TUI가 아니라 GUI인지, 왜 OS 형태인지, 왜 웹인지 — 궁금하다면 [FAQ](./docs/faq.md)를 참고하세요.
+YAAR는 에이전트가 당신의 머신에서 코드를 쓰고 실행하게 하므로, 에이전트를 믿지 않는다는 전제로 만들어졌습니다:
 
+- **범위가 정해진 파일시스템** — 에이전트가 보는 것은 `storage/`, `config/`, `apps/`, `session_logs/`뿐. 그 밖은 명시적으로 마운트해야 합니다 (읽기 전용 지원)
+- **단일 접근 관문** — 모든 라우트가 *누가* 부르는지와 *어떤* URI + 동사인지를 같은 검사로 확인합니다
+- **앱 권한** — 앱은 자기 네임스페이스와 `app.json`에 선언한 것만 만집니다. 나머지는 설치 시 물어봅니다
+- **오리진 격리** — 앱은 데스크톱과 다른 브라우저 오리진에서 실행되므로 데스크톱 요청을 위조하거나 DOM에 닿을 수 없습니다
+- **에이전트 등급** — 위험한 네임스페이스(`yaar://session/*`, 실제 브라우저 제어 포함)는 특권 세션 에이전트만 닿습니다
+- **네트워크 허용 목록 + SSRF 방어** — 외부 HTTP는 승인된 도메인으로 제한되고, 내부 주소는 차단됩니다
 
-## 기본 구조
+샌드박스가 *막지 못하는* 것까지 포함한 전체 내용: [보안](./docs/ko/faq.md), [OS 아키텍처 맵](./docs/architecture/os_architecture.md).
 
-```
-브라우저 (UI) ←→ 로컬 서버 ←→ Claude Code / Codex (AI)
-```
+## 그리고
 
-실행 시 자동으로 `storage/, config/, apps/, session_logs/` 폴더를 생성하며, AI의 파일 접근은 기본적으로 이 폴더들로 한정됩니다. 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
-
-
-## 주요 기능
-
-### 앱 생태계
-
-앱은 YAAR Market에서 둘러보고 바로 설치할 수 있습니다 — 파일 매니저, 스프레드시트, 문서/슬라이드 편집기, PDF·이미지·영상 뷰어, RSS 리더, GitHub 관리, 브라우저, 인앱 IDE(Dev Tools), 프로세스 탐색기, MCP 매니저 등이 기본 제공됩니다. 목록은 계속 늘어나므로 여기 옮겨 적는 대신 Market에서 확인하세요.
-
-직접 앱을 개발할 수도 있습니다:
-
-- **번들 라이브러리** — Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js 등을 `npm install` 없이 `@bundled/*`로 바로 import
-- **단일 HTML 번들** — 빌드 결과물이 HTML 파일 하나라 어디서든 독립 실행 가능
-- **`appDb`** — 앱마다 격리된 SQLite. Mongo 스타일 필터와 FTS5 전문 검색 지원 ([가이드](./docs/guides/sqlite.md))
-- **게이트된 SDK** — `app.json`에 선언해야 열리는 확장 권한: `yaar-dev`(컴파일·배포), `yaar-web`(브라우저 자동화), `yaar-ml`(브라우저 내 ONNX 추론)
-- **배포 되돌리기** — 앱마다 shadow git 저장소가 있어 배포 전후로 스냅샷이 남고, 언제든 이전 버전으로 복구 가능
-
-자세한 내용은 [앱 개발 가이드](./docs/guides/app-development.md)를 참고하세요.
-
-
-### 멀티 모니터 & 세션
-
-여러 **가상 데스크톱(모니터)** 을 만들어 작업을 분리할 수 있습니다. 각 모니터는 독립된 모니터 에이전트와 대화 히스토리를 가집니다. 그 위에는 모니터를 가로질러 상황을 파악하는 **세션 에이전트**가 있습니다. 세션은 브라우저를 닫아도 유지되며, `?sessionId=X`로 다른 탭/기기에서 같은 세션에 접속할 수 있습니다.
-
-
-### 원격 접속
-
-`make claude` 또는 `make codex`로 실행하면 원격 모드가 자동 활성화됩니다. 터미널에 QR 코드가 표시되며, 핸드폰으로 스캔하면 토큰 인증까지 자동으로 처리되어 바로 접속됩니다. SSH 터널링을 통해 외부 네트워크에서도 사용 가능합니다. 자세한 내용은 [원격 접속 가이드](./docs/guides/remote_mode.md)를 참고하세요.
-
-
-### Hooks
-
-`config/hooks.json`으로 이벤트 기반 자동화를 설정할 수 있습니다. 특정 이벤트 발생 시 자동으로 액션을 실행합니다. 자세한 내용은 [Hooks 가이드](./docs/guides/hooks.md)를 참고하세요.
-
-
-## 보안
-
-AI가 코드를 실행하고 외부 서비스와 통신하는 만큼, 여러 보안 레이어를 갖추고 있습니다.
-
-- **단일 접근 관문** — 모든 HTTP 라우트가 호출자를 principal(데스크톱 `host` / 앱 `app`)로 판별하고, 수행하려는 `yaar://` URI와 verb를 명시해 같은 검사를 통과합니다. 라우트가 제각각 권한 검사를 발명하지 않습니다.
-- **앱 권한 범위** — 앱은 `app.json`의 `permissions`와 자동으로 부여되는 자기 네임스페이스(`yaar://apps/self/…` — 스토리지, 데이터베이스, 페르소나)로 한정됩니다.
-- **게이트된 SDK 도어** — `yaar-dev` / `yaar-web` / `yaar-ml` 전용 엔드포인트는 서버에서 재확인합니다. 컴파일 타임 게이트만으로는 손으로 쓴 `fetch()`를 막지 못하기 때문입니다.
-- **에이전트 티어** — `yaar://session/*`(사용자의 실제 Chrome을 조작하는 문 포함)은 세션 에이전트만 접근 가능하며, 나머지는 기본 거부됩니다.
-- **도메인 허용 목록 + SSRF 방어** — `config/curl_allowed_domains.yaml`에 등록된 도메인만 허용, 신규 도메인은 사용자 승인 필요. 내부망 주소로의 우회 요청도 차단합니다.
-- **MCP 인증** — 전송 계층은 공유 Bearer 토큰으로, 호출 주체 식별은 에이전트별로 발급·바인딩되는 별도 토큰(`X-Agent-Token`)으로 처리합니다.
-- **권한 기억** — 승인/거부 결정을 `config/permissions.json`에 저장
-- **경로 검증** — path traversal 방지
-
-- **앱 오리진 격리** (모든 모드에서 기본 활성화) — 설치된 앱은 데스크톱과 다른 브라우저 오리진에서 제공되어, 앱이 토큰을 생략하고 데스크톱 행세를 할 수 없고, 브라우저가 `window.parent`로 데스크톱의 DOM·JS 메모리에 접근하는 것도 막습니다. 로컬에서는 데스크톱이 `localhost`, 앱이 `127.0.0.1`이고, 네트워크 너머에서는 Tailscale Serve가 같은 짝을 `…ts.net` / `…ts.net:8443`으로 게시합니다. `YAAR_APP_ORIGIN_ISOLATION=0`으로 끌 수 있습니다.
-
-
-## 프로젝트 구조
+- **여러 데스크톱** — 모니터마다 자기 에이전트와 히스토리가 있고, 세션 에이전트가 그 위에서 조율합니다. 탭을 닫아도 세션은 살아 있고, `?sessionId=X`로 다시 붙습니다.
+- **원격 접속** — `make claude` / `make codex`가 QR 코드를 찍어 줍니다. [Tailscale Serve](https://tailscale.com)로 폰에서 접속하세요. [가이드](./docs/ko/remote_mode.md)
+- **Hooks** — `config/hooks.json`으로 이벤트 기반 자동화. [가이드](./docs/ko/hooks.md)
 
 ```
-yaar/
-├── apps/              # 여기에 폴더를 넣으면 앱이 됩니다
-├── config/            # 사용자 설정 및 자격 증명 (git-ignored)
-├── storage/           # AI가 접근하는 파일 저장소 (git-ignored)
-├── packages/
-│   ├── shared/        # OS Actions, WebSocket 이벤트, Component DSL 타입
-│   ├── compiler/      # 앱 컴파일러 (@bundled/* 해석, 단일 HTML 번들)
-│   ├── server/        # WebSocket 서버 + AI 프로바이더 (Claude/Codex)
-│   ├── frontend/      # React 프론트엔드
-│   └── tests/         # 통합 및 보안 테스트
+브라우저 (UI) ←→ 로컬 서버 ←→ Claude Code / Codex
 ```
 
-YAAR의 구조는 전통적인 OS 아키텍처로도 해석될 수 있습니다. `LiveSession`은 커널, 에이전트는 프로세스, MCP 도구는 시스템 콜, `storage/`는 파일시스템에 대응됩니다. 자세한 매핑은 [OS Architecture Map](./docs/architecture/os_architecture.md)을 참고하세요.
+개발 환경과 아키텍처: [CLAUDE.md](./CLAUDE.md).
 
-개발 관련 상세 내용은 [CLAUDE.md](./CLAUDE.md)를 참고하세요.
+---
+
+_YAAR: **Y**ou **A**re **A**bsolutely **R**ight — 에이전트를 많이 써 본 사람이라면 수백 번은 읽은 그 문장. 어차피 그 말을 할 거라면, 데스크톱도 맡기는 게 낫습니다._

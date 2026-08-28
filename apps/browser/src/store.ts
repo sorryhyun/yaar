@@ -1,22 +1,12 @@
 import { createSignal, createMemo } from '@bundled/solid-js';
+import { parseHttpUrl } from './url';
 
 const params = new URLSearchParams(window.location.search);
 
 export const initialBrowserId = params.get('browserId') || '0';
 
-const rawInitialUrl = params.get('url') || '';
-let parsedInitialUrl = 'about:blank';
-if (rawInitialUrl) {
-  try {
-    const parsed = new URL(rawInitialUrl);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      parsedInitialUrl = parsed.toString();
-    }
-  } catch {
-    // ignore invalid url and keep about:blank
-  }
-}
-export { parsedInitialUrl };
+/** The `?url=` launch parameter, or `about:blank` when it is absent or not http(s). */
+export const parsedInitialUrl = parseHttpUrl(params.get('url') ?? '') ?? 'about:blank';
 
 export const [activeBrowserId, setActiveBrowserId] = createSignal(initialBrowserId);
 export const [currentUrl, setCurrentUrl] = createSignal(parsedInitialUrl);
@@ -30,7 +20,7 @@ export interface LockState {
   icon: string;
 }
 
-export function getLockState(url: string): LockState {
+function getLockState(url: string): LockState {
   if (url === 'about:blank') return { cls: 'lock hidden', icon: '' };
   try {
     const parsed = new URL(url);

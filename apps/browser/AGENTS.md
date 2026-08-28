@@ -24,6 +24,7 @@ store.ts         display signals (url, title, loading, placeholder, lock)
 endpoints.ts     every /api/browser/... URL, with the iframe token attached
 dom.ts           the shared <img> handle (see "no cycles" below)
 actions.ts       toolbar handlers + the still-screenshot refresh
+url.ts           address-vs-phrase parsing (imports nothing)
 sse.ts           the event stream and the 200 ms still-screenshot poll
 schema.ts        zod boundary schema for SSE frames
 live/index.ts    barrel + the live-mode design notes; implementation beside it
@@ -37,6 +38,26 @@ live/index.ts    barrel + the live-mode design notes; implementation beside it
   live/input.ts    pointer, wheel, keyboard, viewport sync
   live/ime.ts      the hidden anchor that makes composition possible
 ```
+
+## The address bar does not wake the agent
+
+Typing an address and pressing Enter is a **local** action, start to finish:
+`handleUrlKeydown` navigates the remote tab itself and tells no one. It used to also
+fire `app.sendInteraction({ event: 'user_navigated' })`, which woke the agent for a
+page load that had already happened — a whole turn spent learning that there was
+nothing left to do. Do not add such a notification back.
+
+What decides this is `parseAddress` in `url.ts`: a string it can read as an address is
+navigated locally, and a string it cannot (`what is the weather`, `summarize this
+page`) is the only thing that reaches the agent, as `{ event: 'user_query', query }`.
+So the two failure directions are not symmetric — a phrase misread as an address
+navigates to a host that does not exist, while an address misread as a phrase merely
+costs the turn this section exists to save.
+
+`url.ts` imports nothing, so it is testable and can never be half of a cycle. The
+same parser reads the `?url=` launch parameter, via the stricter `parseHttpUrl`:
+that value comes from another program rather than from a person, so a `file:` or
+`javascript:` URL there is refused rather than repaired.
 
 ## No cycles
 

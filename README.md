@@ -1,5 +1,7 @@
 # YAAR
 
+**Software you can rewrite, keep, and share — in a shape any agent can drive.**
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Bun](https://img.shields.io/badge/Bun_≥1.3-F9F1E1?logo=bun&logoColor=black)](https://bun.sh/)
@@ -9,12 +11,21 @@
 
 [한국어](./README.ko.md)
 
-> **Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
-
 ![YAAR Desktop](./docs/assets/image.png)
 
-MCP tools, skills, plugins, and A2A — all within an 8K-token system prompt. Build apps, visualize data, and connect to external services.
+YAAR is a local desktop where the agent you already use — Claude Code or Codex — builds the
+apps, and you change them by talking to the app you're looking at. Every app is a folder on
+your disk with its own git history. Nothing is hosted, nothing is rented.
 
+```
+"Build me a Tetris game"                 → writes it, builds it, opens it
+"Make the pieces fall faster"            → edits the running app in place, redeploys, restores it
+"Undo that"                              → rolls back to the previous deploy
+"Publish it"                             → ships the source to YAAR Market
+```
+
+Chat assistants regenerate; app stores make you rebuild and resubmit. YAAR is the thing in
+between: an app you're using is an app you can rewrite, right there, with the agent that wrote it.
 
 ## Install
 
@@ -35,6 +46,7 @@ Once running, start with something like "install essential apps".
 <summary>Other install options</summary>
 
 **Pin a version / custom install path:**
+
 ```bash
 VERSION=v0.18.0 curl -fsSL ... | bash             # Specific version (default: latest)
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Install path (default: ~/.local/bin)
@@ -45,6 +57,7 @@ INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Install path (default: ~/.lo
 Bundled apps ship separately as `yaar-apps.tar.gz`; the install scripts extract them next to the binary automatically.
 
 **Build from source** (requires [Bun](https://bun.sh/) >= 1.4):
+
 ```bash
 git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
@@ -53,122 +66,84 @@ make dev          # Browser opens automatically
 
 </details>
 
+## Why YAAR
 
-## What You Can Do
+- **You own the app.** One folder = one app: `app.json`, source, and an optional agent prompt,
+  compiled to a single self-contained HTML file. Drop it in to install, delete it to uninstall,
+  `git` it wherever you like. Every deploy is snapshotted to a shadow git repo, so any edit the
+  agent makes is a diff you can read and a version you can restore.
 
-- **"Analyze this CSV"** → AI reads the data and opens a chart window with visualizations
-- **"Make a presentation"** → Slides Lite generates a slide deck
-- **Right-click drag to sketch** → AI interprets your drawing and converts it to code or diagrams
-- **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable app
+- **You edit it in place.** Dev Tools is an app that edits other apps: it clones the source,
+  changes it, previews the result live, and redeploys — without leaving the desktop and without
+  starting over. "Customize this for me" is a first-class operation, not a new conversation.
 
-The whole desktop is an input surface, not just the text box:
+- **Every app speaks a contract.** An app publishes a manifest — typed commands, state keys,
+  event channels — so the agent that edits or drives it works against a schema, not a
+  screenshot. Any agent that can speak `yaar://` can drive any app.
 
-| Input | Action |
-|-------|--------|
-| Typing | Send a message |
-| Paste image / drag & drop | Send image to AI |
-| Right-click drag | Draw and send sketch to AI |
-| Button click | Execute in-window action |
-| Right-click → select window | Send instructions to a specific window |
-| Drag file/selection to app | Transfer data between apps |
+- **You bring your own agent.** YAAR drives Claude Code or Codex as a subprocess using the login
+  you already have. No account, no API key, no hosted service; your conversations go wherever
+  your provider already sends them, nowhere else.
 
+- **The agent answers with UI, not paragraphs.** Ask for an analysis and you get a chart window.
+  Windows persist, are addressable, can be messaged individually, and stay live with their data —
+  the server pushes updates when a `yaar://` resource changes, no polling, no re-asking.
 
-## What's Different?
+- **Five verbs, flat prompt.** Everything — windows, files, apps, config, other agents — is a
+  `yaar://` URI, and `describe · read · list · invoke · delete` operate on all of it. Capability
+  discovery happens at runtime, so the system prompt stays ~8K tokens with 3 apps or 100.
 
-- **Everything runs on just 5 tools.** Every resource — windows, files, apps, config — is a `yaar://` URI, and five generic verbs operate on all of them. Agents discover capabilities at runtime via `describe`, so the system prompt stays flat whether you have 3 apps installed or 100 (see the [FAQ](./docs/faq.md#how-does-the-agent-actually-access-things-does-it-have-50-tools) for the concrete token budget).
+Curious about the reasoning — why a GUI instead of a TUI, why it's shaped like an OS, why the
+web? See the [FAQ](./docs/faq.md).
 
-  ```
-  describe · read · list · invoke · delete
+## The whole desktop is an input
 
-  invoke('yaar://windows/chart', { ... })    read('yaar://storage/data.csv')
-  list('yaar://apps')                        delete('yaar://windows/old-panel')
-  ```
+| Input                          | What happens                             |
+| ------------------------------ | ---------------------------------------- |
+| Typing                         | Send a message                           |
+| Paste image / drag & drop      | Send an image to the agent               |
+| Right-click drag               | Sketch — the agent turns it into code or diagrams |
+| Button click inside a window   | Execute that window's action             |
+| Right-click → select window    | Talk to one specific window              |
+| Drag a file/selection to an app | Move data between apps                  |
 
-- **One folder = one app.** Skills, plugins, agents, and UI are unified into a single convention: metadata (`app.json`, whose `description` doubles as AI-readable docs), an optional dedicated agent prompt (`agent/prompt.md`), and source that builds to one self-contained HTML file. Drop the folder in to install, delete it to uninstall — zero registration code.
+## Build apps
 
-- **Every app can have its own agent.** Drop in an `agent/prompt.md` and that app gets a dedicated agent that exchanges messages with the monitor agent. Apps can even drive other apps directly (`controls` in `app.json`) — Dev Tools, for example, pilots the real browser app to build and test an app end to end.
+Apps are plain TypeScript with batteries included:
 
-- **Permissions are explicit and scoped.** An app is confined to the `permissions` declared in its `app.json` plus its own storage. Outbound HTTP is limited to a domain allowlist, new domains require your approval, and every allow/deny decision is recorded. Details in [Security](#security).
-
-- **The AI responds with UI, not text.** Instead of markdown replies, it opens windows, shows notifications, and manipulates apps — and its responses are cached, so re-rendering a window doesn't re-query the AI.
-
-- **The UI stays live with its data.** Apps subscribe to `yaar://` URIs and the server pushes updates when those resources change — no polling, no asking the AI again to refresh a view.
-
-Curious about the reasoning — why a GUI instead of a TUI, why it's shaped like an OS, why the web? See the [FAQ](./docs/faq.md).
-
-
-## How It Works
-
-```
-Browser (UI) ←→ Local Server ←→ Claude Code / Codex (AI)
-```
-
-On startup, the program creates `storage/, config/, apps/, session_logs/` folders, and the AI's file access is scoped to these by default. To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
-
-
-## Key Features
-
-### App Ecosystem
-
-Browse and install apps from YAAR Market — a file manager, spreadsheet, document and slide editors, PDF/image/video viewers, an RSS reader, GitHub management, a browser, an in-app IDE (Dev Tools), a process explorer, an MCP manager, and more ship bundled. The list keeps growing, so check Market rather than a table here.
-
-You can also develop your own apps:
-
-- **Bundled libraries** — import Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js and more via `@bundled/*`, no `npm install`
-- **Single-HTML bundle** — builds to one HTML file that runs standalone anywhere
+- **Bundled libraries** — Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js and more via `@bundled/*`, no `npm install`
 - **`appDb`** — per-app isolated SQLite with Mongo-style filters and FTS5 full-text search ([guide](./docs/guides/sqlite.md))
-- **Gated SDKs** — extra capabilities you must declare in `app.json`: `yaar-dev` (compile/deploy), `yaar-web` (browser automation), `yaar-ml` (in-browser ONNX inference)
-- **Reversible deploys** — each app has a shadow git repo that snapshots around every deploy, so you can restore any earlier version
+- **App agents** — add `agent/prompt.md` and the app gets its own agent; declare `controls` and it can drive other apps
+- **Gated SDKs** — declare them in `app.json` to unlock `yaar-dev` (compile/deploy), `yaar-web` (browser automation), `yaar-ml` (in-browser ONNX inference)
+- **YAAR Market** — install from the catalog or publish your own; the market ships source, and installs compile locally
 
-See the [App Development Guide](./docs/guides/app-development.md) for details.
+See the [App Development Guide](./docs/guides/app-development.md).
 
+## Trust model
 
-### Multi-Monitor & Sessions
+YAAR lets an agent write and run code on your machine, so it is built assuming you don't trust it:
 
-Create multiple **virtual desktops (monitors)** to organize your work. Each monitor has its own monitor agent and conversation history, and above them sits a **session agent** that keeps track of things across monitors. Sessions persist across browser closures, and you can join the same session from another tab or device with `?sessionId=X`.
+- **Scoped filesystem** — the agent sees `storage/`, `config/`, `apps/`, `session_logs/`; anything else must be mounted explicitly (read-only supported)
+- **One access gate** — every route resolves *who* is calling and *what* URI + verb they want through the same check
+- **App permissions** — an app touches its own namespace plus whatever its `app.json` declares; installs prompt for the rest
+- **Origin isolation** — apps run on a different browser origin than the desktop, so they can't forge desktop requests or reach its DOM
+- **Agent tiers** — the dangerous namespaces (`yaar://session/*`, including real-browser control) are reachable only by the privileged session agent
+- **Network allowlist + SSRF guard** — outbound HTTP is limited to approved domains; internal addresses are blocked
 
+Full detail, including what the sandbox does *not* cover: [Security](./docs/faq.md#the-ai-writes-and-runs-code-why-would-i-trust-that) and the [OS Architecture Map](./docs/architecture/os_architecture.md).
 
-### Remote Access
+## Also
 
-Running with `make claude` or `make codex` automatically enables remote mode. A QR code is printed to the terminal — scan it with your phone for automatic token authentication and instant connection. Access from outside your network goes over [Tailscale Serve](https://tailscale.com): any device on your tailnet can connect (no shared wifi needed), and nothing off it can. See the [Remote Access Guide](./docs/guides/remote_mode.md) for details.
-
-
-### Hooks
-
-Set up event-driven automation with `config/hooks.json`. Automatically execute actions when specific events occur. See the [Hooks Guide](./docs/guides/hooks.md) for details.
-
-
-## Security
-
-Since YAAR lets the AI execute code and communicate with external services, it ships with multiple security layers.
-
-- **A single access chokepoint** — every HTTP route resolves its caller to a principal (the desktop `host`, or an `app`) and names the `yaar://` URI and verb it is about to perform, all through the same check. Routes never invent their own permission logic.
-- **Scoped app permissions** — an app is confined to the `permissions` in its `app.json`, plus its own namespace (`yaar://apps/self/…` — storage, database, personas), which is granted automatically.
-- **Gated SDK doors** — endpoints for `yaar-dev` / `yaar-web` / `yaar-ml` are re-verified server-side, because a compile-time gate says nothing about a hand-written `fetch()`.
-- **Agent tiers** — `yaar://session/*` (including the door that drives your real Chrome) is reachable only by the session agent; everything else is denied by default.
-- **Domain allowlist + SSRF protection** — only domains listed in `config/curl_allowed_domains.yaml` are permitted, new ones require user approval, and requests are blocked from being redirected at internal network addresses.
-- **MCP authentication** — a shared bearer token authenticates the transport, while a separate per-agent token (`X-Agent-Token`), minted and bound server-side, identifies *which* agent is calling.
-- **Remembered permissions** — allow/deny decisions persisted in `config/permissions.json`
-- **Path validation** — guards against path traversal attacks
-
-- **App-origin isolation** (on by default, every mode) — installed apps are served from a distinct browser origin, so an app can no longer omit its token and be read as the desktop, and the browser blocks its `window.parent` reach into the desktop's DOM and JS memory. Locally that's `127.0.0.1` while the desktop stays on `localhost`; over the network Tailscale Serve publishes the same pair as `…ts.net` and `…ts.net:8443`. Set `YAAR_APP_ORIGIN_ISOLATION=0` to disable.
-
-
-## Project Structure
+- **Multiple desktops** — each monitor has its own agent and history; a session agent coordinates across them. Sessions survive a closed tab; rejoin with `?sessionId=X`.
+- **Remote access** — `make claude` / `make codex` print a QR code; connect from your phone over [Tailscale Serve](https://tailscale.com). [Guide](./docs/guides/remote_mode.md)
+- **Hooks** — event-driven automation in `config/hooks.json`. [Guide](./docs/guides/hooks.md)
 
 ```
-yaar/
-├── apps/              # Drop folders here to create apps
-├── config/            # User settings and credentials (git-ignored)
-├── storage/           # AI-accessible file storage (git-ignored)
-├── packages/
-│   ├── shared/        # OS Actions, WebSocket events, Component DSL types
-│   ├── compiler/      # App compiler (@bundled/* resolution, single-HTML bundle)
-│   ├── server/        # WebSocket server + AI providers (Claude/Codex)
-│   ├── frontend/      # React frontend
-│   └── tests/         # Integration and security tests
+Browser (UI) ←→ Local Server ←→ Claude Code / Codex
 ```
 
-YAAR's architecture can be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/architecture/os_architecture.md) for the full mapping.
+Development setup and architecture: [CLAUDE.md](./CLAUDE.md).
 
-See [CLAUDE.md](./CLAUDE.md) for development details.
+---
+
+_YAAR: **Y**ou **A**re **A**bsolutely **R**ight — the phrase every heavy agent user has read a few hundred times. If the agent is going to say it anyway, it may as well run the desktop._

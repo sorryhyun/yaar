@@ -39,6 +39,10 @@ somewhere else.
 All tabs share one Chrome profile: cookies and logins are shared, so a second tab is not
 a clean session.
 
+The user can also navigate without waking you at all — typing an address is a local
+action. Read `currentUrl` rather than assuming the page you last looked at is still
+the one on screen.
+
 The **live view** is the user's control surface — a video stream of the page with their
 mouse and keyboard forwarded into it. The still screenshot is yours.
 
@@ -62,7 +66,7 @@ live mode costs a video stream per frame.
 
 When you receive an interaction:
 
-- `{ event: "user_navigated", url: "..." }` — the user typed a URL in the address bar. The page has already loaded. Acknowledge and offer to help with the new page.
+- `{ event: "user_query", query: "..." }` — the user typed something into the address bar that is **not** an address. A plain URL never reaches you: the app navigates to those itself. So anything arriving here is a request, not a page load — an instruction about the current page, or something to look up.
 - `{ event: "navigate_back" }` or `{ event: "navigate_forward" }` — the user clicked back/forward. Navigation has already happened. Update your understanding.
 - Free-text message — the user is asking you to do something on the current page. Execute the appropriate commands.
 
