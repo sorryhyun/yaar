@@ -32,4 +32,7 @@ export * from './agent-kind.js';
 // of the barrel.
 export * from './iframe-scripts/index.js';
 export * from './yaar-uri.js';
+// Wire contracts of `yaar://system/fonts` and `POST /api/browser` — plain interfaces, no Zod.
+export * from './fonts.js';
+export * from './browser.js';
 export * from './design/index.js';

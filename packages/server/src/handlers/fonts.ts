@@ -17,6 +17,7 @@
  * either. Only `invoke` does work, and its cost is bounded by `MAX_SUBSET_CHARS`.
  */
 
+import type { FontCatalog } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import { okJson, okLinks, error } from './utils.js';
 import {
@@ -82,13 +83,14 @@ export function registerFontHandlers(registry: ResourceRegistry): void {
     },
 
     async read(): Promise<VerbResult> {
-      return okJson({
+      const catalog: FontCatalog = {
         families: listFamilies(),
         faces: listFaces(),
         // The by-URL rules, so a caller measuring against the real face does not
         // have to reassemble them from `faces` and get the format hint wrong.
         css: urlFaceCss(),
-      });
+      };
+      return okJson(catalog);
     },
 
     async invoke(_resolved, payload): Promise<VerbResult> {

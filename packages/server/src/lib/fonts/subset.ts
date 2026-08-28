@@ -28,6 +28,7 @@
  * reason — a `/W` array is the other half of placing a glyph.
  */
 
+import type { FontMetrics } from '@yaar/shared';
 import type { OpenTypeFont, OutlineFormat } from './otf.js';
 import { subsetCff } from './cff-subset.js';
 import { subsetGlyf } from './glyf-subset.js';
@@ -35,15 +36,8 @@ import { rebuildSfnt } from './sfnt.js';
 
 export { parseOpenType, type OpenTypeFont, type OutlineFormat } from './otf.js';
 
-export interface FaceMetrics {
-  unitsPerEm: number;
-  /** Typographic ascent/descent in font units; descent is negative. */
-  ascent: number;
-  descent: number;
-  capHeight: number;
-  /** [xMin, yMin, xMax, yMax] in font units. */
-  bbox: [number, number, number, number];
-}
+/** The wire shape (`@yaar/shared`), so a subset's metrics go out unchanged. */
+export type FaceMetrics = FontMetrics;
 
 export interface FaceSubset {
   /** A complete OpenType file — load it as a CSS `@font-face`. */

@@ -2414,16 +2414,69 @@ declare module '@bundled/yaar-web' {
 
   /**
    * Every function here resolves to this envelope, NOT to the payload directly.
-   * The payload is in `content[0].text` — a plain string for text results, a
-   * JSON string for structured ones (parse it). Always check `isError`.
+   * Check `ok` first; on success the payload is `data` — a formatted page-state
+   * summary (a string) for most actions, structured JSON for the ones whose
+   * signature says so. An HTTP failure rejects instead.
    */
-  export interface WebResult {
-    content: Array<
-      | { type: 'text'; text: string }
-      | { type: 'image'; data: string; mimeType: string }
-      | { type: string; [key: string]: unknown }
-    >;
-    isError?: boolean;
+  export type WebResult<T = string> = { ok: true; data: T } | { ok: false; error: string };
+
+  /** The envelope of an action that returns a picture (`screenshot`, `extractImages`). */
+  export type WebImageResult =
+    | {
+        ok: true;
+        text: string;
+        images: Array<{ data: string; mimeType: string; src?: string }>;
+      }
+    | { ok: false; error: string };
+
+  /** One open tab, as `listTabs()` reports it. */
+  export interface WebTab {
+    id: string;
+    url: string;
+    title: string;
+    mobile: boolean;
+    /** The desktop window showing this tab, when one is open. */
+    windowId?: string;
+    /** Present when the tab is pointed at YAAR itself. */
+    isSelf?: true;
+  }
+
+  /** What `scrollToBottom()` answers. */
+  export interface WebScrollToBottomResult {
+    steps: number;
+    finalHeight: number;
+    reachedBottom: boolean;
+  }
+
+  /** What `html({ includeMeta: true })` answers. */
+  export interface WebHtmlWithMeta {
+    html: string;
+    url: string;
+    title: string;
+    readyState: string;
+  }
+
+  /** One element the `annotate()` overlay numbered. */
+  export interface WebAnnotatedElement {
+    index: number;
+    tag: string;
+    text: string;
+    href?: string | null;
+    selector?: string | null;
+    x: number;
+    y: number;
+  }
+
+  /** One cookie, as `getCookies()` reports it. */
+  export interface WebCookie {
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    expires: number;
+    httpOnly: boolean;
+    secure: boolean;
+    sameSite: string;
   }
 
   /** Create a new browser tab without navigating. */
@@ -2431,11 +2484,11 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
     mobile?: boolean;
     visible?: boolean;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   /** List all open browser tabs. */
-  export function listTabs(): Promise<unknown>;
+  export function listTabs(): Promise<WebResult<WebTab[]>>;
   /** Close a browser tab. */
-  export function closeTab(browserId?: string): Promise<unknown>;
+  export function closeTab(browserId?: string): Promise<WebResult>;
 
   // ── Navigation ─────────────────────────────────────────────────
   /** Open a URL (creates tab if needed, reuses if exists). */
@@ -2447,32 +2500,32 @@ declare module '@bundled/yaar-web' {
       visible?: boolean;
       waitUntil?: 'load' | 'domcontentloaded' | 'networkidle';
     },
-  ): Promise<unknown>;
+  ): Promise<WebResult>;
   /** Navigate to a URL or go back/forward in history. */
-  export function navigate(url: string, browserId?: string): Promise<unknown>;
+  export function navigate(url: string, browserId?: string): Promise<WebResult>;
   export function navigate(opts: {
     direction: 'back' | 'forward';
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   /** Scroll by `amount` pixels (default 500) in one step. */
   export function scroll(opts: {
     direction: 'up' | 'down';
     amount?: number;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   /**
    * Scroll to the bottom one viewport at a time, dwelling after each step so
    * lazy-loaded content can extend the page. Stops when the document height
    * stops growing or `maxSteps` (default 40) is reached.
    *
-   * `content[0].text` is JSON: `{ steps, finalHeight, reachedBottom }`.
+   * `data` is `{ steps, finalHeight, reachedBottom }`.
    */
   export function scrollToBottom(opts?: {
     maxSteps?: number;
     /** Pause after each step, ms (default 400). Raise it for slow loaders. */
     dwellMs?: number;
     browserId?: string;
-  }): Promise<WebResult>;
+  }): Promise<WebResult<WebScrollToBottomResult>>;
 
   // ── Interaction ────────────────────────────────────────────────
   export function click(opts: {
@@ -2482,45 +2535,45 @@ declare module '@bundled/yaar-web' {
     y?: number;
     index?: number;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   export function type(opts: {
     selector: string;
     text: string;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   export function press(opts: {
     key: string;
     selector?: string;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   export function hover(opts: {
     selector?: string;
     text?: string;
     x?: number;
     y?: number;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
 
   // ── Observation ────────────────────────────────────────────────
   export function waitFor(opts: {
     selector: string;
     timeout?: number;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   export function screenshot(opts?: {
     x0?: number;
     y0?: number;
     x1?: number;
     y1?: number;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebImageResult>;
   export function extract(opts?: {
     selector?: string;
     mainContentOnly?: boolean;
     maxTextLength?: number;
     maxLinks?: number;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   export function extractImages(opts?: {
     selector?: string;
     mainContentOnly?: boolean;
@@ -2528,9 +2581,9 @@ declare module '@bundled/yaar-web' {
     minHeight?: number;
     extensions?: string[];
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebImageResult>;
   /**
-   * Page HTML, in `content[0].text`.
+   * Page HTML, in `data`.
    *
    * The default is `document.body.innerHTML` — a FRAGMENT. There is no doctype,
    * no `<head>`, no `<title>`, and no page metadata of any kind. Do not feed it
@@ -2538,18 +2591,18 @@ declare module '@bundled/yaar-web' {
    *
    * - `outerHTML: true` — include the element's own tag; with no selector that
    *   is the whole `<html>` element (still no doctype).
-   * - `includeMeta: true` — `content[0].text` becomes JSON
-   *   `{ html, url, title, readyState }` instead of a bare string. This is the
-   *   only way to learn which URL the HTML actually came from.
+   * - `includeMeta: true` — `data` becomes `{ html, url, title, readyState }`
+   *   instead of a bare string. This is the only way to learn which URL the
+   *   HTML actually came from.
    */
   export function html(opts?: {
     selector?: string;
     outerHTML?: boolean;
     includeMeta?: boolean;
     browserId?: string;
-  }): Promise<WebResult>;
+  }): Promise<WebResult<string | WebHtmlWithMeta>>;
   /**
-   * Evaluate an expression in the page; the result is JSON in `content[0].text`.
+   * Evaluate an expression in the page; `data` is its JSON value (null when it had none).
    *
    * Promises are awaited, so a page-side `await sleep(...)` counts against the
    * budget. `timeoutMs` defaults to 15000 and is capped at 120000 — raise it for
@@ -2560,25 +2613,17 @@ declare module '@bundled/yaar-web' {
     expression: string;
     timeoutMs?: number;
     browserId?: string;
-  }): Promise<WebResult>;
+  }): Promise<WebResult<unknown>>;
 
   // ── Visual ─────────────────────────────────────────────────────
-  export function annotate(browserId?: string): Promise<unknown>;
-  export function removeAnnotations(browserId?: string): Promise<unknown>;
+  export function annotate(browserId?: string): Promise<WebResult<WebAnnotatedElement[]>>;
+  export function removeAnnotations(browserId?: string): Promise<WebResult>;
 
   // ── Cookies ────────────────────────────────────────────────────
-  export function getCookies(opts?: { urls?: string[]; browserId?: string }): Promise<
-    Array<{
-      name: string;
-      value: string;
-      domain: string;
-      path: string;
-      expires: number;
-      httpOnly: boolean;
-      secure: boolean;
-      sameSite: string;
-    }>
-  >;
+  export function getCookies(opts?: {
+    urls?: string[];
+    browserId?: string;
+  }): Promise<WebResult<WebCookie[]>>;
   export function setCookie(opts: {
     name: string;
     value: string;
@@ -2590,18 +2635,18 @@ declare module '@bundled/yaar-web' {
     sameSite?: 'Strict' | 'Lax' | 'None';
     url?: string;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
   export function deleteCookies(opts: {
     name: string;
     domain?: string;
     path?: string;
     url?: string;
     browserId?: string;
-  }): Promise<unknown>;
+  }): Promise<WebResult>;
 
   // ── Deprecated ─────────────────────────────────────────────────
   /** @deprecated Use `listTabs()` instead. */
-  export function listSessions(): Promise<unknown>;
+  export function listSessions(): Promise<WebResult<WebTab[]>>;
   /** @deprecated Use `closeTab()` instead. */
-  export function closeSession(browserId?: string): Promise<unknown>;
+  export function closeSession(browserId?: string): Promise<WebResult>;
 }

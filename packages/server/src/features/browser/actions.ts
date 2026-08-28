@@ -13,7 +13,7 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
 import { isYaarOriginUrl, enforceBrowserGuards, isMutatingAction } from './guards.js';
 import { getAgentId } from '../../agents/agent-context.js';
-import { ServerEventType, type OSAction } from '@yaar/shared';
+import { ServerEventType, type BrowserTabSummary, type OSAction } from '@yaar/shared';
 import { handleCreate as handleWindowCreate } from '../window/create.js';
 
 type Payload = Record<string, unknown>;
@@ -105,7 +105,7 @@ export async function handleCreate(
 export async function handleListTabs(pool: BrowserProvider): Promise<VerbResult> {
   const browsers = pool.getAllSessions();
   if (browsers.size === 0) return okJson([]);
-  const items = [...browsers.entries()].map(([bid, s]) => ({
+  const items: BrowserTabSummary[] = [...browsers.entries()].map(([bid, s]) => ({
     id: bid,
     url: s.currentUrl,
     title: s.currentTitle || '(no title)',
@@ -113,7 +113,7 @@ export async function handleListTabs(pool: BrowserProvider): Promise<VerbResult>
     windowId: s.windowId,
     // Flag YAAR's own tab — it's an addressed target like any other, but
     // mutating it via raw automation is refused (use OS Actions instead).
-    ...(isYaarOriginUrl(s.currentUrl) ? { isSelf: true } : {}),
+    ...(isYaarOriginUrl(s.currentUrl) ? { isSelf: true as const } : {}),
   }));
   return okJson(items);
 }

@@ -10,6 +10,12 @@
 
 import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
+import type {
+  BrowserAnnotatedElement,
+  BrowserCookie,
+  BrowserHtmlWithMeta,
+  BrowserScrollToBottomResult,
+} from '@yaar/shared';
 import type { PageState, PageContent } from './types.js';
 import {
   PAGE_STATE,
@@ -935,11 +941,10 @@ export class BrowserSession extends EventEmitter {
    * step so lazy-loading content can extend the document. Stops when the height
    * stops growing (two consecutive stable reads) or `maxSteps` is reached.
    */
-  async scrollToBottom(opts?: { maxSteps?: number; dwellMs?: number }): Promise<{
-    steps: number;
-    finalHeight: number;
-    reachedBottom: boolean;
-  }> {
+  async scrollToBottom(opts?: {
+    maxSteps?: number;
+    dwellMs?: number;
+  }): Promise<BrowserScrollToBottomResult> {
     this.touch();
 
     const maxSteps = Math.max(1, Math.min(opts?.maxSteps ?? 40, 500));
@@ -1048,7 +1053,7 @@ export class BrowserSession extends EventEmitter {
   async getHtmlWithMeta(
     selector?: string,
     opts?: { outerHTML?: boolean },
-  ): Promise<{ html: string; url: string; title: string; readyState: string }> {
+  ): Promise<BrowserHtmlWithMeta> {
     const html = await this.getHtml(selector, opts);
     const meta = await this.eval<{ url: string; title: string; readyState: string }>(
       `({ url: location.href, title: document.title, readyState: document.readyState })`,
@@ -1088,17 +1093,7 @@ export class BrowserSession extends EventEmitter {
   }
 
   /** Inject numbered badges on all visible interactive elements and return element metadata. */
-  async annotateElements(): Promise<
-    Array<{
-      index: number;
-      tag: string;
-      text: string;
-      href?: string | null;
-      selector?: string | null;
-      x: number;
-      y: number;
-    }>
-  > {
+  async annotateElements(): Promise<BrowserAnnotatedElement[]> {
     return (await this.eval(ANNOTATE_ELEMENTS)) || [];
   }
 
@@ -1108,18 +1103,7 @@ export class BrowserSession extends EventEmitter {
   }
 
   /** Get cookies from the browser for the current page (or a specific URL). */
-  async getCookies(urls?: string[]): Promise<
-    Array<{
-      name: string;
-      value: string;
-      domain: string;
-      path: string;
-      expires: number;
-      httpOnly: boolean;
-      secure: boolean;
-      sameSite: string;
-    }>
-  > {
+  async getCookies(urls?: string[]): Promise<BrowserCookie[]> {
     this.touch();
     await this.cdp.send('Network.enable');
     const params: Record<string, unknown> = {};

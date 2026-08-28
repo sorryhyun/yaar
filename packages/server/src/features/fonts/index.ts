@@ -14,6 +14,7 @@
  * to prevent, so they are cut from the same subset in the same call.
  */
 
+import type { FontSubsetFace, FontSubsetRequest, FontSubsetResult } from '@yaar/shared';
 import { subsetFace } from '../../lib/fonts/index.js';
 import { listFaces, listFamilies, loadFace, matchWeight, type ServedFace } from './catalog.js';
 
@@ -35,66 +36,14 @@ export const MAX_SUBSET_CHARS = 5000;
 /** Faces one request may ask for at once — four weights is the whole family. */
 export const MAX_SUBSET_WEIGHTS = 8;
 
-export interface SubsetRequest {
-  /** Characters to cover. Duplicates and whitespace are harmless. */
-  text: string;
-  /** Family name as `listFamilies()` reports it. Defaults to the first served. */
-  family?: string;
-  /** CSS weights to cover, each resolved through `matchWeight`. Defaults to `[400]`. */
-  weights?: number[];
-  /**
-   * Include the raw outline table, base64'd, for a PDF `/FontFile3`.
-   *
-   * Off by default: it roughly doubles the response, and a caller that only
-   * wants the rasteriser to draw the right glyphs never looks at it.
-   */
-  outlineTable?: boolean;
-}
-
-export interface SubsetFaceResult {
-  family: string;
-  /** The weight *asked for*, so a caller can key its CSS by it. */
-  weight: number;
-  /** The weight actually served, when CSS matching resolved to a different file. */
-  servedWeight: number;
-  style: 'normal' | 'italic';
-  /** PostScript-style name for a PDF `/BaseFont`. */
-  baseFont: string;
-  /** The subsetted face as a `data:` URL — an `@font-face` `src`. */
-  dataUrl: string;
-  /** Subset size in bytes, before base64. */
-  bytes: number;
-  /** Glyphs carried, excluding `.notdef`. */
-  glyphs: number;
-  outlines: 'cff' | 'glyf';
-  /** Base64 `CFF ` table when `outlineTable` was asked for and the face is CFF. */
-  outlineTableBase64?: string;
-  /** Requested character -> glyph id. A character the face lacks is absent. */
-  gids: Record<string, number>;
-  /** Requested character -> advance width, in font units. */
-  advances: Record<string, number>;
-  metrics: {
-    unitsPerEm: number;
-    ascent: number;
-    descent: number;
-    capHeight: number;
-    bbox: [number, number, number, number];
-  };
-}
-
-export interface SubsetResult {
-  /** `@font-face` rules carrying the subsets inline, ready to paste. */
-  css: string;
-  faces: SubsetFaceResult[];
-  /**
-   * Characters no returned face has a glyph for.
-   *
-   * Reported rather than thrown: a caller's fallback for them (leave them in the
-   * raster, draw them from another family) is a decision this layer cannot make,
-   * and one uncovered emoji should not cost a whole page.
-   */
-  missing: string[];
-}
+/**
+ * The request and result are the wire contract in `@yaar/shared`, restated
+ * for the app SDK in the compiler's `bundled-types/index.d.ts`. The local names
+ * stay for the server's own callers.
+ */
+export type SubsetRequest = FontSubsetRequest;
+export type SubsetFaceResult = FontSubsetFace;
+export type SubsetResult = FontSubsetResult;
 
 /** Thrown for a request this module refuses. Callers turn it into a verb error. */
 export class FontRequestError extends Error {

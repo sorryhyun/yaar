@@ -23,20 +23,13 @@
 
 import { getFrontendAsset } from '../../config.js';
 import { createLogger } from '../../observability/log.js';
+import type { FontFamilySummary, ServedFontFace } from '@yaar/shared';
 import { parseOpenType, type OpenTypeFont } from '../../lib/fonts/index.js';
 
 const log = createLogger('Fonts');
 
-export interface ServedFace {
-  family: string;
-  /** CSS `font-weight` this file answers for. */
-  weight: number;
-  style: 'normal' | 'italic';
-  /** Where the browser can fetch the *full* face, same-origin and unauthenticated. */
-  url: string;
-  /** True when the family is monospaced — what a code block should ask for. */
-  mono: boolean;
-}
+/** The wire shape (`@yaar/shared`): what `read('yaar://system/fonts')` lists per face. */
+export type ServedFace = ServedFontFace;
 
 /**
  * Every face the repo can serve, whether or not its file is present.
@@ -104,8 +97,8 @@ export function listFaces(): ServedFace[] {
 }
 
 /** The families served, each with the weights it has files for. */
-export function listFamilies(): Array<{ family: string; mono: boolean; weights: number[] }> {
-  const byFamily = new Map<string, { family: string; mono: boolean; weights: number[] }>();
+export function listFamilies(): FontFamilySummary[] {
+  const byFamily = new Map<string, FontFamilySummary>();
   for (const face of listFaces()) {
     const hit = byFamily.get(face.family);
     if (hit) hit.weights.push(face.weight);

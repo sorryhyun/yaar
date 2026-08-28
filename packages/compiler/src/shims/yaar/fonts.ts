@@ -33,93 +33,27 @@
  * (`isStaticAsset`), so a grant here would guard nothing.
  */
 
+import type { FontSubsetRequest, FontCatalog, FontSubsetResult } from '@yaar/shared';
 import { y } from './verbs.js';
 
 const FONTS_URI = 'yaar://system/fonts';
 
-export interface YaarServedFace {
-  family: string;
-  /** CSS `font-weight` this file answers for. */
-  weight: number;
-  style: 'normal' | 'italic';
-  /** Where the full face can be fetched, same-origin. */
-  url: string;
-  /** True when the family is monospaced — what a code block should ask for. */
-  mono: boolean;
-}
-
-export interface YaarFontCatalog {
-  families: Array<{ family: string; mono: boolean; weights: number[] }>;
-  faces: YaarServedFace[];
-  /** `@font-face` rules pointing at the full files, by URL. */
-  css: string;
-}
-
-export interface YaarFontMetrics {
-  unitsPerEm: number;
-  /** Typographic ascent/descent in font units; descent is negative. */
-  ascent: number;
-  descent: number;
-  capHeight: number;
-  /** [xMin, yMin, xMax, yMax] in font units. */
-  bbox: [number, number, number, number];
-}
-
-export interface YaarInlinedFace {
-  family: string;
-  /** The weight you asked for — key your CSS by this. */
-  weight: number;
-  /** The weight actually served, when CSS matching landed on another file. */
-  servedWeight: number;
-  style: 'normal' | 'italic';
-  /** PostScript-style name for a PDF `/BaseFont`. */
-  baseFont: string;
-  /** The subsetted face as a `data:` URL. */
-  dataUrl: string;
-  bytes: number;
-  /** Glyphs carried, excluding `.notdef`. */
-  glyphs: number;
-  outlines: 'cff' | 'glyf';
-  /** Base64 `CFF ` table, when `outlineTable` was asked for. */
-  outlineTableBase64?: string;
-  /** Character -> glyph id. A character the face lacks is absent. */
-  gids: Record<string, number>;
-  /** Character -> advance width, in font units. */
-  advances: Record<string, number>;
-  metrics: YaarFontMetrics;
-}
-
-export interface YaarInlinedFonts {
-  /** `@font-face` rules carrying the subsets inline. Paste into the SVG's `<style>`. */
-  css: string;
-  faces: YaarInlinedFace[];
-  /**
-   * Characters no returned face has a glyph for.
-   *
-   * Not an error — what to do about them (leave them in the raster, draw them
-   * from another family, drop them) is a decision only the caller can make.
-   */
-  missing: string[];
-}
-
-export interface InlineFontsOptions {
-  /** Family to subset. Defaults to the first proportional family served. */
-  family?: string;
-  /**
-   * CSS weights to cover, e.g. `[400, 700]`. Each is resolved by CSS font
-   * matching against the files served, so asking for 500 gets whichever face a
-   * browser would pick. Defaults to `[400]`.
-   */
-  weights?: number[];
-  /**
-   * Also return the raw CFF table for a PDF `/FontFile3`. Roughly doubles the
-   * response; only a caller embedding glyphs in a PDF wants it.
-   */
-  outlineTable?: boolean;
-}
+// The result shapes are the wire contract in `@yaar/shared`; the `Yaar*` names
+// are what apps have imported since the SDK shipped. The app-facing copy with
+// doc comments lives in `bundled-types/index.d.ts` (kept in step by
+// `bundled-types-parity.test.ts`); this file is `@ts-nocheck`, so these aliases
+// only matter to a reader.
+export type {
+  ServedFontFace as YaarServedFace,
+  FontCatalog as YaarFontCatalog,
+  FontMetrics as YaarFontMetrics,
+  FontSubsetFace as YaarInlinedFace,
+  FontSubsetResult as YaarInlinedFonts,
+} from '@yaar/shared';
+export type InlineFontsOptions = Omit<FontSubsetRequest, 'text'>;
 
 /** The faces this build serves, with the by-URL `@font-face` rules. */
-export async function faces(): Promise<YaarFontCatalog> {
+export async function faces(): Promise<FontCatalog> {
   return y.read(FONTS_URI);
 }
 
@@ -138,7 +72,7 @@ export async function faces(): Promise<YaarFontCatalog> {
 export async function inline(
   text: string,
   opts: InlineFontsOptions = {},
-): Promise<YaarInlinedFonts> {
+): Promise<FontSubsetResult> {
   return y.invoke(FONTS_URI, {
     text,
     ...(opts.family ? { family: opts.family } : {}),

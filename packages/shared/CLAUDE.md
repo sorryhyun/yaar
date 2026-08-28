@@ -30,6 +30,7 @@ Shared types between frontend and server.
     later with a message about its own logic (devtools' `copyFile` called with
     `{source, destination}` reported "Source and destination are the same path").
 - `yaar-uri.ts` - Shared URI utilities: `parseYaarUri`, `buildYaarUri`, `isYaarUri`, `resolveContentUri`, `extractAppId`, `parseFileUri`, `parseBareWindowUri`, `expandBraceUri`, plus the devtools preview identity helpers (`PREVIEW_APP_PREFIX`, `previewAppId`, `isPreviewAppId`)
+- `fonts.ts` / `browser.ts` - Wire contracts of `yaar://system/fonts` and `POST /api/browser` (plain interfaces, no Zod). The server builds them; the app-facing `@bundled/yaar*` declarations in `compiler/src/bundled-types/index.d.ts` restate them, and `bundled-types-parity.test.ts` proves the restatement identical
 - `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk)
   - `windows-sdk.ts` owns **everything about a link leaving an app**: `openUrl`, the
     `window.open` override, the click guard that keeps an anchor from navigating the app's own
