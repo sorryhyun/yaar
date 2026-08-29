@@ -730,7 +730,7 @@ export class LiveSession {
     await this.router.dispatch(event, connectionId);
   }
 
-  /** The session's monitors. Authoritative — the client renders this, it does not mint it. */
+  /** See {@link MonitorRegistry.list}. */
   getMonitors(): MonitorInfo[] {
     return this.monitorRegistry.list();
   }

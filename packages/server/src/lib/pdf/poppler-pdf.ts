@@ -71,7 +71,6 @@ export async function pdfToImages(
   const poppler = getPoppler();
   const images: PdfPageImage[] = [];
 
-  // Create a unique temp directory for this conversion
   const tempDir = join(tmpdir(), `yaar-pdf-${crypto.randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
@@ -129,7 +128,6 @@ export async function renderPdfPage(
 ): Promise<Buffer> {
   const poppler = getPoppler();
 
-  // Create a unique temp directory for this conversion
   const tempDir = join(tmpdir(), `yaar-pdf-${crypto.randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 

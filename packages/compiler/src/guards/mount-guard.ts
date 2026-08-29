@@ -27,16 +27,13 @@ import {
   snippetOf,
   walk,
   type GuardLabel,
+  type TsExpression,
+  type TsModule,
+  type TsSourceFile,
 } from './guard-report.js';
 
 /** The id of the mount element `generateHtmlWrapper` emits. The single source of truth. */
 export const APP_MOUNT_ID = 'app';
-
-/** Minimal structural view of the `typescript` module this scanner needs. */
-type TsModule = typeof import('typescript');
-type TsNode = import('typescript').Node;
-type TsExpression = import('typescript').Expression;
-type TsSourceFile = import('typescript').SourceFile;
 
 export interface MountFinding {
   line: number;

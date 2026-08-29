@@ -50,6 +50,7 @@ import {
   buildAgentTree,
   isAgentBusy,
   listAgents as buildRoster,
+  type AgentHost,
   type AgentEntry,
   type AgentTreeNode,
   type PooledAgent,
@@ -102,19 +103,21 @@ export class AgentPool {
    * registry's, and the pool supplies it only the two services below.
    * `ContextPool.agentPool` is the same shape one level up.
    */
-  readonly appAgents = new AppAgentRegistry({
-    createAgent: () => this.createWithFreshProvider(),
-    disposeAgent: (agent, label) => this.disposeAgent(agent, label),
-  });
+  readonly appAgents = new AppAgentRegistry(this.registryHost());
 
   /**
    * The sub-agent tier — the app tier's children, one key-extension down. The same
    * door pattern as {@link appAgents}.
    */
-  readonly subAgents = new SubAgentRegistry({
-    createAgent: () => this.createWithFreshProvider(),
-    disposeAgent: (agent, label) => this.disposeAgent(agent, label),
-  });
+  readonly subAgents = new SubAgentRegistry(this.registryHost());
+
+  /** The two services every registry tier gets, bound to this pool. */
+  private registryHost(): AgentHost {
+    return {
+      createAgent: () => this.createWithFreshProvider(),
+      disposeAgent: (agent, label) => this.disposeAgent(agent, label),
+    };
+  }
 
   /** Session agent — lazy singleton for cross-monitor oversight. */
   private sessionAgent: PooledAgent | null = null;

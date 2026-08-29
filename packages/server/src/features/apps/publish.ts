@@ -234,7 +234,6 @@ export async function publishApp(appId: string): Promise<PublishResult> {
   }
 
   const result = await uploadTarball(appId, tarball);
-  // The catalog will not show this for about a minute; tell the guard directly.
   if (result.success) notePublishedVersion(appId, version);
   return result;
 }

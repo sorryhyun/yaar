@@ -203,12 +203,12 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    */
   private fallbackReported = new Set<string>();
 
-  /** This agent's turn was stopped: drop the actions its in-flight tools still emit. */
+  /** See {@link InterruptGate.mark}. */
   markInterrupted(agentId: string): void {
     this.interrupts.mark(agentId);
   }
 
-  /** This agent is running again (or gone): stop dropping its actions. */
+  /** See {@link InterruptGate.clear}. */
   clearInterrupted(agentId: string): void {
     this.interrupts.clear(agentId);
   }

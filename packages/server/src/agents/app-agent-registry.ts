@@ -18,6 +18,7 @@ import {
   appAgentKey,
   parseAppKey,
   isAgentBusy,
+  type AgentHost,
   type PooledAgent,
   type RosterMember,
 } from './agent-roster.js';
@@ -30,14 +31,6 @@ const log = createLogger('AppAgentRegistry');
 interface SpawnTag {
   monitorId: string;
   appId: string;
-}
-
-/** The pool's two services, and the only things this tier reaches back for. */
-export interface AppAgentHost {
-  /** Acquire a provider and build an agent on it, or `null` when there is no slot. */
-  createAgent: () => Promise<PooledAgent | null>;
-  /** Tear one down, after this registry has already removed it from its map. */
-  disposeAgent: (agent: PooledAgent, label: string) => Promise<void>;
 }
 
 export class AppAgentRegistry {
@@ -61,7 +54,7 @@ export class AppAgentRegistry {
    */
   private idleSweepTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly host: AppAgentHost) {}
+  constructor(private readonly host: AgentHost) {}
 
   /**
    * Get or create the agent for one app on one monitor. First call for a

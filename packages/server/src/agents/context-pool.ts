@@ -585,16 +585,12 @@ export class ContextPool implements PoolContext {
     return monitorId;
   }
 
-  /** The windowId for a given agent instanceId. Checks app agents via AppTaskProcessor. */
+  /** See {@link WindowEventCoordinator.findWindowForAgent}. */
   findWindowForAgent(agentId: string): string | undefined {
     return this.windowEvents.findWindowForAgent(agentId);
   }
 
-  /**
-   * Resolve the most recently active window for an app on a monitor (used by
-   * DirectMessage and cross-app control routing). Scoped to the monitor so a
-   * caller on monitor 1 can never reach into monitor 0's copy of the app.
-   */
+  /** See {@link WindowEventCoordinator.getActiveAppWindow}. */
   getActiveAppWindow(monitorId: string, appId: string): string | undefined {
     return this.windowEvents.getActiveAppWindow(monitorId, appId);
   }

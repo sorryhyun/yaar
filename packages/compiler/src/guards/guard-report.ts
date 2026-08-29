@@ -15,9 +15,11 @@
  *   two comments, and `guard-report.test.ts` asserts it.
  */
 
-type TsModule = typeof import('typescript');
-type TsNode = import('typescript').Node;
-type TsSourceFile = import('typescript').SourceFile;
+/** Minimal structural view of the `typescript` module the guards need. */
+export type TsModule = typeof import('typescript');
+export type TsNode = import('typescript').Node;
+export type TsExpression = import('typescript').Expression;
+export type TsSourceFile = import('typescript').SourceFile;
 
 /**
  * Parse an app source file the way every guard needs it.

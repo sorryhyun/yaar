@@ -89,7 +89,6 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   /** Whether this provider drives the user's own browser (see interface docs). */
   abstract readonly controlsUserBrowser: boolean;
 
-  /** Whether this provider can serve sessions in the current environment. */
   abstract isAvailable(): Promise<boolean>;
 
   /**

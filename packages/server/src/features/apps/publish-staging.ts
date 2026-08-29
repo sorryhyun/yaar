@@ -351,7 +351,6 @@ export async function finalizePublication(
   // unaccepted-terms refusal is exactly such a retryable state — the freeze stays,
   // and the dialog can send the acceptance and confirm again.
   if (result.success) {
-    // The catalog will not show this for about a minute; tell the guard directly.
     notePublishedVersion(p.appId, p.version);
     await cancelPublication(publicationId);
   }

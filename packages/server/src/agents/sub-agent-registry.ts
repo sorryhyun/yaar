@@ -22,7 +22,13 @@
 import { buildSubAgentProfile, subAgentRole } from './profiles/sub-agent.js';
 import type { SubAgentToolSpec } from './profiles/sub-agent.js';
 import { monitorSource } from './context.js';
-import { isAgentBusy, subAgentKey, type PooledAgent, type RosterMember } from './agent-roster.js';
+import {
+  isAgentBusy,
+  subAgentKey,
+  type AgentHost,
+  type PooledAgent,
+  type RosterMember,
+} from './agent-roster.js';
 import { SpawnReservations } from './spawn-reservations.js';
 import { createLogger } from '../observability/log.js';
 
@@ -102,19 +108,11 @@ export interface SpawnSubAgentOptions {
   tools?: SubAgentToolSpec[];
 }
 
-/** The pool's three services, and the only things this tier reaches back for. */
-export interface SubAgentHost {
-  /** Acquire a provider and build an agent on it, or `null` when there is no slot. */
-  createAgent: () => Promise<PooledAgent | null>;
-  /** Tear one down, after this registry has already removed it from its map. */
-  disposeAgent: (agent: PooledAgent, label: string) => Promise<void>;
-}
-
 export class SubAgentRegistry {
   private records = new Map<string, SubAgent>();
   private spawns = new SpawnReservations<SubAgent, { monitorId: string; appId: string }>();
 
-  constructor(private readonly host: SubAgentHost) {}
+  constructor(private readonly host: AgentHost) {}
 
   /**
    * Spawn a sub-agent for one app on one monitor, or hand back the one that already

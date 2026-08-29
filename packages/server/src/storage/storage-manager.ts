@@ -33,38 +33,21 @@ import { isTextFile } from './text-extensions.js';
  * Returns null if the path escapes the storage directory.
  */
 export function resolvePath(filePath: string): ResolvedPath | null {
-  // Normalize backslashes from Windows paths / URL-decoded %5C
-  const cleanedPath = filePath.replaceAll('\\', '/');
-
-  // 1. Check mount prefix
-  const mountResult = resolveMountPath(cleanedPath);
-  if (mountResult) return mountResult;
-
-  // 2. Default: resolve against STORAGE_DIR
-  const normalizedPath = normalize(join(STORAGE_DIR, cleanedPath));
-  const relativePath = relative(STORAGE_DIR, normalizedPath);
-  if (relativePath.startsWith('..') || relativePath.includes('..')) {
-    return null;
-  }
-  return { absolutePath: normalizedPath, readOnly: false };
+  const cleanedPath = normalizeSeparators(filePath);
+  return resolveMountPath(cleanedPath) ?? resolveInStorageDir(cleanedPath);
 }
 
 /**
  * Async variant of resolvePath that resolves symlinks before containment check.
  */
 export async function resolvePathAsync(filePath: string): Promise<ResolvedPath | null> {
-  const cleanedPath = filePath.replaceAll('\\', '/');
-
-  // 1. Check mount prefix
+  const cleanedPath = normalizeSeparators(filePath);
   const mountResult = resolveMountPath(cleanedPath);
   if (mountResult) return mountResult;
 
-  // 2. Default: resolve against STORAGE_DIR
-  const normalizedPath = normalize(join(STORAGE_DIR, cleanedPath));
-  const relativePath = relative(STORAGE_DIR, normalizedPath);
-  if (relativePath.startsWith('..') || relativePath.includes('..')) {
-    return null;
-  }
+  const resolved = resolveInStorageDir(cleanedPath);
+  if (!resolved) return null;
+  const normalizedPath = resolved.absolutePath;
 
   try {
     const realPath = await realpath(normalizedPath);
@@ -78,6 +61,21 @@ export async function resolvePathAsync(filePath: string): Promise<ResolvedPath |
     // File doesn't exist yet — fall back to sync check
     return { absolutePath: normalizedPath, readOnly: false };
   }
+}
+
+/** Backslashes from Windows paths / URL-decoded %5C. */
+function normalizeSeparators(filePath: string): string {
+  return filePath.replaceAll('\\', '/');
+}
+
+/** The non-mount default: under STORAGE_DIR, and null when the path climbs out of it. */
+function resolveInStorageDir(cleanedPath: string): ResolvedPath | null {
+  const normalizedPath = normalize(join(STORAGE_DIR, cleanedPath));
+  const relativePath = relative(STORAGE_DIR, normalizedPath);
+  if (relativePath.startsWith('..') || relativePath.includes('..')) {
+    return null;
+  }
+  return { absolutePath: normalizedPath, readOnly: false };
 }
 
 /**

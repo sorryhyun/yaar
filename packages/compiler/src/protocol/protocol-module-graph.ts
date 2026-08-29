@@ -79,9 +79,6 @@ export interface ModuleScope {
 
 export const MODULE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.js', '.jsx'];
 
-/** Recursion ceiling when folding a value. A JSON Schema nests a few levels. */
-const MAX_VALUE_DEPTH = 100;
-
 /** Recursion ceiling when walking relative imports. Apps are far shallower. */
 export const MAX_MODULE_DEPTH = 200;
 

@@ -41,6 +41,17 @@ export interface PooledAgent {
  * stats, the roster below, and the sub-agent registry — and "busy" must mean the same
  * thing to all of them.
  */
+/**
+ * The pool's services a registry tier reaches back for, and the only ones. The pool
+ * hands the same pair to every tier (`AgentPool.appAgents` / `.subAgents`).
+ */
+export interface AgentHost {
+  /** Acquire a provider and build an agent on it, or `null` when there is no slot. */
+  createAgent: () => Promise<PooledAgent | null>;
+  /** Tear one down, after the registry has already removed it from its map. */
+  disposeAgent: (agent: PooledAgent, label: string) => Promise<void>;
+}
+
 export function isAgentBusy(agent: PooledAgent): boolean {
   return agent.session.isRunning() || agent.currentRole !== null;
 }

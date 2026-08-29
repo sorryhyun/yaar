@@ -210,8 +210,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         message.error,
       );
       if (message.provider && message.sessionId) {
-        // sessionId is the hub key (WebSocket rejoin, iframe tokens); logSessionId names
-        // the transcript on disk, which is what /api/sessions is keyed by.
+        // Same sessionId / logSessionId split as the ATTACHED case above.
         handlers.setSession(message.provider, message.sessionId);
         handlers.checkForPreviousSession(message.logSessionId ?? message.sessionId);
       }

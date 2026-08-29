@@ -21,7 +21,9 @@ import {
   positionOf,
   snippetOf,
   walk,
+  type GuardEntry,
   type GuardLabel,
+  type TsModule,
 } from './guard-report.js';
 
 /** The comment marker solid substitutes for each `${...}` expression. */
@@ -48,12 +50,8 @@ const TAG_RE = /(?:<!--[\S\s]*?-->|<(?:"[^"]*"['"]*|'[^']*'['"]*|[^'">])+>)/g;
 
 export type SolidHtmlDefectKind = 'no-tag' | 'leading-text' | 'lone-expression';
 
-export interface SolidHtmlDefect {
+export interface SolidHtmlDefect extends Pick<GuardEntry, 'problem' | 'fix'> {
   kind: SolidHtmlDefectKind;
-  /** What goes wrong at runtime. */
-  problem: string;
-  /** What the author should write instead. */
-  fix: string;
 }
 
 /**
@@ -102,9 +100,6 @@ export interface SolidHtmlFinding extends SolidHtmlDefect {
   column: number;
   snippet: string;
 }
-
-/** Minimal structural view of the `typescript` module this scanner needs. */
-type TsModule = typeof import('typescript');
 
 /**
  * Walk an already-parsed source file for `` html`...` `` tagged templates and
