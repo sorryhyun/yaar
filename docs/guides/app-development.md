@@ -517,8 +517,6 @@ The app agent's entire system prompt is replaced with this file. Use it when the
 
 Never restate a command or state name as a heading or a bullet subject — the protocol is served from `yaar://apps/{appId}/protocol` and regenerated on every deploy, so a restatement is a sentence that will disagree with the schema next to it. `bun run check:apps` warns on it (`skill-restates-protocol`, advisory — a name inside a workflow sentence like "run `compile` before `deploy`" is exactly what the file is for, so the check names what it matched and lets you judge).
 
-Not to be confused with the `SKILLS/` directory in [`docs/architecture/shell_to_userland.md`](../architecture/shell_to_userland.md): that is a namespaced set of topics reached by `read('yaar://skills/{appId}/{topic}')`. One file returned by `describe` versus many read on demand.
-
 ### AGENTS.md (the coding agent's doc)
 
 `AGENTS.md` at the app's root is a different file with a different reader: it's the conventional name a coding agent looks for when *editing* a directory, and devtools is that agent. YAAR reads it for nothing. Put in it what the source cannot say for itself — architecture, invariants, why a thing is hand-rolled, what breaks if you change it. An app of any size wants one; small apps don't need it. [`apps/devtools/AGENTS.md`](../../apps/devtools/AGENTS.md) is the worked example.

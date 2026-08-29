@@ -7,7 +7,6 @@ export { LoadingScreen } from './LoadingScreen';
 export { NotificationCenter } from './NotificationCenter';
 export { RecentActionsPanel } from './RecentActionsPanel';
 export { RestorePromptBanner } from './RestorePromptBanner';
-export { SessionsModal } from './SessionsModal';
 export { TerminalPane } from './TerminalPane';
 export { ToastContainer } from './ToastContainer';
 export { UserPrompt } from './UserPrompt';

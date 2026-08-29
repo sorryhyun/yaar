@@ -203,9 +203,6 @@ export interface DesktopState {
   // Recent actions panel
   recentActionsPanelOpen: boolean;
 
-  // Sessions modal
-  sessionsModalOpen: boolean;
-
   // Restore prompt
   restorePrompt: RestorePrompt | null;
 
@@ -260,9 +257,6 @@ export interface DesktopActions {
   // Recent actions panel
   toggleRecentActionsPanel: () => void;
   clearActivityLog: () => void;
-
-  // Sessions modal
-  toggleSessionsModal: () => void;
 
   // Restore prompt
   setRestorePrompt: (prompt: RestorePrompt | null) => void;

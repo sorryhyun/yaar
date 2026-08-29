@@ -81,27 +81,6 @@
       "failed": "接続に失敗しました"
     }
   },
-  "sessions": {
-    "title": "セッション",
-    "loading": "セッションを読み込み中...",
-    "empty": "セッションが見つかりません",
-    "transcript": {
-      "loading": "トランスクリプトを読み込み中...",
-      "empty": "トランスクリプトがありません"
-    },
-    "restore": "復元",
-    "restoreTitle": "このセッションを復元",
-    "export": "エクスポート",
-    "exportTitle": "このセッションをエクスポート",
-    "error": {
-      "fetchSessions": "セッションの取得に失敗しました",
-      "loadSessions": "セッションの読み込みに失敗しました",
-      "fetchTranscript": "トランスクリプトの取得に失敗しました",
-      "loadTranscript": "トランスクリプトの読み込みに失敗しました",
-      "restore": "セッションの復元に失敗しました",
-      "export": "セッションのエクスポートに失敗しました"
-    }
-  },
   "userPrompt": {
     "askedBy": "{{monitor}} からの質問",
     "skip": "スキップ",

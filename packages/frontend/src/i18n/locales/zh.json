@@ -81,27 +81,6 @@
       "failed": "连接失败"
     }
   },
-  "sessions": {
-    "title": "会话",
-    "loading": "加载会话中...",
-    "empty": "未找到会话",
-    "transcript": {
-      "loading": "加载对话记录中...",
-      "empty": "暂无对话记录"
-    },
-    "restore": "恢复",
-    "restoreTitle": "恢复此会话",
-    "export": "导出",
-    "exportTitle": "导出此会话",
-    "error": {
-      "fetchSessions": "获取会话失败",
-      "loadSessions": "加载会话失败",
-      "fetchTranscript": "获取对话记录失败",
-      "loadTranscript": "加载对话记录失败",
-      "restore": "恢复会话失败",
-      "export": "导出会话失败"
-    }
-  },
   "userPrompt": {
     "askedBy": "来自 {{monitor}} 的提问",
     "skip": "跳过",

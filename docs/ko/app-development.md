@@ -466,8 +466,6 @@ and type checker.
 
 command나 state 이름을 제목이나 항목의 주어로 다시 적지 마세요 — 프로토콜은 `yaar://apps/{appId}/protocol`에서 서빙되고 배포마다 다시 생성되므로, 다시 적은 문장은 옆에 있는 스키마와 결국 어긋납니다. `bun run check:apps`가 이를 경고합니다(`skill-restates-protocol`, 권고 수준 — "`compile`을 `deploy`보다 먼저 실행하라" 같은 워크플로우 문장 속 이름은 이 파일의 존재 이유 그 자체이므로, 무엇이 걸렸는지 알려주고 판단은 맡깁니다).
 
-[`docs/architecture/shell_to_userland.md`](../architecture/shell_to_userland.md)의 `SKILLS/` 디렉터리와 혼동하지 마세요: 그쪽은 `read('yaar://skills/{appId}/{topic}')`로 접근하는 네임스페이스 토픽 모음입니다.
-
 ### AGENTS.md (코딩 에이전트의 문서)
 
 앱 루트의 `AGENTS.md`는 읽는 대상이 다른, 별개의 파일입니다: 코딩 에이전트가 디렉터리를 *편집*할 때 찾는 관례적인 이름이고, devtools가 바로 그 에이전트입니다. YAAR은 이 파일을 어디에서도 읽지 않습니다. 소스가 스스로 말해주지 못하는 것 — 아키텍처, 불변 조건, 왜 이 부분을 직접 구현했는지, 무엇을 바꾸면 무엇이 깨지는지 — 을 여기에 적으세요. 규모가 있는 앱이라면 하나쯤 두는 편이 좋고, 작은 앱에는 필요 없습니다. [`apps/devtools/AGENTS.md`](../../apps/devtools/AGENTS.md)가 실제 예시입니다.

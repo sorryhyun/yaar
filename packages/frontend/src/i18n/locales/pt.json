@@ -81,27 +81,6 @@
       "failed": "Falha na conexão"
     }
   },
-  "sessions": {
-    "title": "Sessões",
-    "loading": "Carregando sessões...",
-    "empty": "Nenhuma sessão encontrada",
-    "transcript": {
-      "loading": "Carregando transcrição...",
-      "empty": "Nenhuma transcrição disponível"
-    },
-    "restore": "Restaurar",
-    "restoreTitle": "Restaurar esta sessão",
-    "export": "Exportar",
-    "exportTitle": "Exportar esta sessão",
-    "error": {
-      "fetchSessions": "Falha ao buscar sessões",
-      "loadSessions": "Falha ao carregar sessões",
-      "fetchTranscript": "Falha ao buscar transcrição",
-      "loadTranscript": "Falha ao carregar transcrição",
-      "restore": "Falha ao restaurar sessão",
-      "export": "Falha ao exportar sessão"
-    }
-  },
   "userPrompt": {
     "askedBy": "Perguntado por {{monitor}}",
     "skip": "Pular",

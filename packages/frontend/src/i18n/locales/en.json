@@ -82,27 +82,6 @@
       "failed": "Connection failed"
     }
   },
-  "sessions": {
-    "title": "Sessions",
-    "loading": "Loading sessions...",
-    "empty": "No sessions found",
-    "transcript": {
-      "loading": "Loading transcript...",
-      "empty": "No transcript available"
-    },
-    "restore": "Restore",
-    "restoreTitle": "Restore this session",
-    "export": "Export",
-    "exportTitle": "Export this session",
-    "error": {
-      "fetchSessions": "Failed to fetch sessions",
-      "loadSessions": "Failed to load sessions",
-      "fetchTranscript": "Failed to fetch transcript",
-      "loadTranscript": "Failed to load transcript",
-      "restore": "Failed to restore session",
-      "export": "Failed to export session"
-    }
-  },
   "userPrompt": {
     "askedBy": "Asked by {{monitor}}",
     "skip": "Skip",

@@ -81,27 +81,6 @@
       "failed": "Échec de la connexion"
     }
   },
-  "sessions": {
-    "title": "Sessions",
-    "loading": "Chargement des sessions...",
-    "empty": "Aucune session trouvée",
-    "transcript": {
-      "loading": "Chargement de la transcription...",
-      "empty": "Aucune transcription disponible"
-    },
-    "restore": "Restaurer",
-    "restoreTitle": "Restaurer cette session",
-    "export": "Exporter",
-    "exportTitle": "Exporter cette session",
-    "error": {
-      "fetchSessions": "Échec de la récupération des sessions",
-      "loadSessions": "Échec du chargement des sessions",
-      "fetchTranscript": "Échec de la récupération de la transcription",
-      "loadTranscript": "Échec du chargement de la transcription",
-      "restore": "Échec de la restauration de la session",
-      "export": "Échec de l'exportation de la session"
-    }
-  },
   "userPrompt": {
     "askedBy": "Demandé par {{monitor}}",
     "skip": "Ignorer",

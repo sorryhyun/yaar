@@ -81,27 +81,6 @@
       "failed": "연결 실패"
     }
   },
-  "sessions": {
-    "title": "세션",
-    "loading": "세션 불러오는 중...",
-    "empty": "세션을 찾을 수 없습니다",
-    "transcript": {
-      "loading": "대화록 불러오는 중...",
-      "empty": "대화록이 없습니다"
-    },
-    "restore": "복원",
-    "restoreTitle": "이 세션 복원",
-    "export": "내보내기",
-    "exportTitle": "이 세션 내보내기",
-    "error": {
-      "fetchSessions": "세션을 가져오지 못했습니다",
-      "loadSessions": "세션을 불러오지 못했습니다",
-      "fetchTranscript": "대화록을 가져오지 못했습니다",
-      "loadTranscript": "대화록을 불러오지 못했습니다",
-      "restore": "세션 복원에 실패했습니다",
-      "export": "세션 내보내기에 실패했습니다"
-    }
-  },
   "userPrompt": {
     "askedBy": "{{monitor}}의 질문",
     "skip": "건너뛰기",

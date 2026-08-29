@@ -1,17 +1,11 @@
 /**
- * UI slice - manages sessions modal and restore prompt.
+ * UI slice - manages the restore prompt and window selection.
  */
 import type { SliceCreator, UiSlice } from '../types';
 
 export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
-  sessionsModalOpen: false,
   restorePrompt: null,
   selectedWindowIds: [],
-
-  toggleSessionsModal: () =>
-    set((state) => {
-      state.sessionsModalOpen = !state.sessionsModalOpen;
-    }),
 
   setRestorePrompt: (prompt) =>
     set((state) => {

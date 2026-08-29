@@ -614,11 +614,6 @@ async function loadAppDoc(appId: string, relPath: string): Promise<string | null
  * told about the app; `skill` is the hand-written manual any caller can ask for. All
  * are optional, and most apps ship none.
  *
- * `skill` is deliberately not the `SKILLS/` directory proposed in
- * `docs/architecture/shell_to_userland.md` — that is a namespaced topic set reached by
- * `read`. One file returned by `describe` versus many read on demand; the two compose,
- * but the names are one letter apart and must not be confused.
- *
  * `legacy` is a root filename still read when the doc is absent at its path;
  * `retired` is one that is deliberately no longer read. `HINT.md` means nothing
  * else to anybody, so it costs nothing to keep answering to it. `AGENTS.md` means

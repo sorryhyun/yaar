@@ -81,27 +81,6 @@
       "failed": "Verbindung fehlgeschlagen"
     }
   },
-  "sessions": {
-    "title": "Sitzungen",
-    "loading": "Sitzungen werden geladen...",
-    "empty": "Keine Sitzungen gefunden",
-    "transcript": {
-      "loading": "Transkript wird geladen...",
-      "empty": "Kein Transkript verfügbar"
-    },
-    "restore": "Wiederherstellen",
-    "restoreTitle": "Diese Sitzung wiederherstellen",
-    "export": "Exportieren",
-    "exportTitle": "Diese Sitzung exportieren",
-    "error": {
-      "fetchSessions": "Sitzungen konnten nicht abgerufen werden",
-      "loadSessions": "Sitzungen konnten nicht geladen werden",
-      "fetchTranscript": "Transkript konnte nicht abgerufen werden",
-      "loadTranscript": "Transkript konnte nicht geladen werden",
-      "restore": "Sitzung konnte nicht wiederhergestellt werden",
-      "export": "Sitzung konnte nicht exportiert werden"
-    }
-  },
   "userPrompt": {
     "askedBy": "Gefragt von {{monitor}}",
     "skip": "Überspringen",

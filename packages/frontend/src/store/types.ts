@@ -186,13 +186,11 @@ export interface AgentsSliceActions {
 export type AgentsSlice = AgentsSliceState & AgentsSliceActions;
 
 export interface UiSliceState {
-  sessionsModalOpen: boolean;
   restorePrompt: RestorePrompt | null;
   selectedWindowIds: string[];
 }
 
 export interface UiSliceActions {
-  toggleSessionsModal: () => void;
   setRestorePrompt: (prompt: RestorePrompt | null) => void;
   dismissRestorePrompt: () => void;
   setSelectedWindows: (ids: string[]) => void;
