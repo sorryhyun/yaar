@@ -1097,7 +1097,7 @@ Two rules, both of which have cost real bugs:
 
 ## App-Scoped Database (`appDb`)
 
-For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`. Unlike `appStorage`, it supports queries, counting, pagination, and full-text search server-side — no load-all-JSON-and-filter. Binary blobs and simple single files stay on `appStorage`. Design, filter-to-SQL translation, and the full storage-type breakdown: [`docs/guides/sqlite.md`](./sqlite.md).
+For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`. Unlike `appStorage`, it supports queries, counting, pagination, and full-text search server-side — no load-all-JSON-and-filter. Binary blobs and simple single files stay on `appStorage`. Design, filter-to-SQL translation, and the full storage-type breakdown: [`app_db_reference.md`](../reference/app_db_reference.md).
 
 ```typescript
 import { appDb } from '@bundled/yaar';
@@ -1130,7 +1130,7 @@ const [docs, { insert, update, remove, refresh }] = appDb.createReactiveCollecti
 );
 ```
 
-Filters take exact match, array-contains (same syntax as scalar equality), `$gt`/`$gte`/`$lt`/`$lte`, `$ne` (which also matches docs missing the field), `$in`, `$exists`, and dotted paths into nested objects — [`sqlite.md`](./sqlite.md#filter-syntax) has the table.
+Filters take exact match, array-contains (same syntax as scalar equality), `$gt`/`$gte`/`$lt`/`$lte`, `$ne` (which also matches docs missing the field), `$in`, `$exists`, and dotted paths into nested objects — [`app_db_reference.md`](../reference/app_db_reference.md#filter-syntax) has the table.
 
 ### From Agent (MCP Tools)
 

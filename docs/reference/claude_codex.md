@@ -296,7 +296,7 @@ Channels mapped to **notice** (`providers/claude/errors.ts`):
 
 | Channel | Note |
 |---|---|
-| `assistant.error` | A typed `SDKAssistantMessageError` |
+| `assistant.error` | A typed `SDKAssistantMessageError` (`rate_limit`, `billing_error`, `account_on_hold`, …) |
 | `system/api_retry` | The SDK is retrying |
 | `system/permission_denied` | |
 | `system/model_refusal_*` | |
@@ -336,7 +336,7 @@ Beyond that:
 |---|---|---|
 | `warning`, `guardianWarning`, `configWarning`, `deprecationNotice` | fell through to `console.debug` | notice |
 | `account/rateLimits/updated`, `model/rerouted` | in `IGNORED_METHODS` by name | notice |
-| Turn failure | reduced to `TurnError.message`, discarding the typed `CodexErrorInfo` beside it | both carried |
+| Turn failure | reduced to `TurnError.message`, discarding the typed `CodexErrorInfo` beside it | both carried (`CodexErrorInfo` codes: `contextWindowExceeded`, `cyberPolicy`, `misalignmentPolicyViolation`, …) |
 
 `NOTICE_METHODS` exists so a handled method's *quiet* state (`status: 'ready'`, a gauge below its
 limit) is not logged as unhandled. Covered by `tests/codex-error-notices.test.ts`.
@@ -386,4 +386,4 @@ This means:
 | `providers/codex/raw-ws.ts` | Base WebSocket transport (raw TCP, bypasses Bun/tungstenite issues) |
 | `providers/codex/jsonrpc-ws-client.ts` | JSON-RPC client layered over `raw-ws.ts` |
 | `providers/codex/message-mapper.ts` | Notification → StreamMessage |
-| `agents/profiles/orchestrator.ts` | Shared system prompt (`ORCHESTRATOR_PROMPT`/`getOrchestratorPrompt`) — imported by both `providers/claude/session-provider.ts` and `providers/codex/provider.ts`; neither provider has its own `system-prompt.ts` |
+| `agents/profiles/orchestrator/index.ts` | Shared system prompt (`ORCHESTRATOR_PROMPT`/`getOrchestratorPrompt`) — imported by both `providers/claude/session-provider.ts` and `providers/codex/provider.ts`; neither provider has its own `system-prompt.ts` |

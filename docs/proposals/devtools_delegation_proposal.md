@@ -2,9 +2,8 @@
 
 **Status:** proposal
 **Date:** 2026-08-20
-**Sibling proposals:** [`app_agent_docs_proposal.md`](./app_agent_docs_proposal.md),
-[`devtools_authoring_guide_proposal.md`](./devtools_authoring_guide_proposal.md), the
-instruction-channel audit.
+**Sibling proposals:** the app-agent docs proposal, the devtools authoring-guide proposal, and
+the instruction-channel audit — none of which were checked in; this is the only survivor.
 
 ## Problem
 

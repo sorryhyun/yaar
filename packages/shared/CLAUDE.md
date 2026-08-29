@@ -31,7 +31,10 @@ Shared types between frontend and server.
     `{source, destination}` reported "Source and destination are the same path").
 - `yaar-uri.ts` - Shared URI utilities: `parseYaarUri`, `buildYaarUri`, `isYaarUri`, `resolveContentUri`, `extractAppId`, `parseFileUri`, `parseBareWindowUri`, `expandBraceUri`, plus the devtools preview identity helpers (`PREVIEW_APP_PREFIX`, `previewAppId`, `isPreviewAppId`)
 - `fonts.ts` / `browser.ts` - Wire contracts of `yaar://system/fonts` and `POST /api/browser` (plain interfaces, no Zod). The server builds them; the app-facing `@bundled/yaar*` declarations in `compiler/src/bundled-types/index.d.ts` restate them, and `bundled-types-parity.test.ts` proves the restatement identical
-- `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk)
+- `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk, ime-guard, console-capture, prelude)
+  - `ime-guard.ts` - swallows the composing-IME keydowns (notably Enter) a capture-phase `window` listener sees before any app handler, so a submit-on-Enter app doesn't fire early and double on commit
+  - `console-capture.ts` - overrides `console.log`/`warn`/`error`/`info` to post captured entries to the parent frame, for devtools to read as a preview app's console output
+  - `prelude.ts` - shared source fragments (`API_BOOTSTRAP`, `installGuard`, `RESPONSE_FROM_PROXY`) string-interpolated into the other injected scripts, which have no module system of their own on the iframe side
   - `windows-sdk.ts` owns **everything about a link leaving an app**: `openUrl`, the
     `window.open` override, the click guard that keeps an anchor from navigating the app's own
     document, and the `yaar.links` surface (`open`/`onOpen`/`resolve`) an app configures all

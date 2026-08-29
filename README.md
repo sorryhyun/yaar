@@ -112,7 +112,7 @@ web? See the [FAQ](./docs/faq.md).
 Apps are plain TypeScript with batteries included:
 
 - **Bundled libraries** — Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js and more via `@bundled/*`, no `npm install`
-- **`appDb`** — per-app isolated SQLite with Mongo-style filters and FTS5 full-text search ([guide](./docs/guides/sqlite.md))
+- **`appDb`** — per-app isolated SQLite with Mongo-style filters and FTS5 full-text search ([reference](./docs/reference/app_db_reference.md))
 - **App agents** — add `agent/prompt.md` and the app gets its own agent; declare `controls` and it can drive other apps
 - **Gated SDKs** — declare them in `app.json` to unlock `yaar-dev` (compile/deploy), `yaar-web` (browser automation), `yaar-ml` (in-browser ONNX inference)
 - **YAAR Market** — install from the catalog or publish your own; the market ships source, and installs compile locally

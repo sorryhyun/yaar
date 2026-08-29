@@ -123,9 +123,12 @@ contrasting itself with "the app-scoped one above", so app storage must precede 
 
 ## App Storage                            ⟨always⟩
 …                                         ⟵ app-agent/prompts/app-storage.md, static
-                                            (names the storage:* override rule; the
-                                            overriding commands themselves show up
-                                            under Available Commands like any other)
+                                            (leads with the `app/{path}` spelling for
+                                            the app's own tree, alongside `shared/{path}`
+                                            for the commons; names the storage:*
+                                            override rule; the overriding commands
+                                            themselves show up under Available Commands
+                                            like any other)
 
 ## Shared Storage (`yaar://storage/`)
 …

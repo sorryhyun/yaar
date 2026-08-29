@@ -31,6 +31,7 @@ Create a new window on the desktop.
 
 **Behavior:**
 - Bounds are clamped to the viewport.
+- Default placement (when the caller leaves position unset) cascades from a centered origin, starting below the agent status bar and clear of the command palette (`WINDOW_PLACEMENT`, `packages/shared/src/actions.ts`).
 - Variant determines z-order layer: panels are excluded from stacking, widgets stack below standard windows.
 - Standard windows steal focus on creation unless `minimized` is true.
 
@@ -46,6 +47,8 @@ Close and remove a window.
 If the closed window was focused, focus moves to the topmost remaining window.
 
 Closing a window also settles every app-protocol request still addressed to it, as `closed` rather than as a timeout — see [App Protocol](./app_protocol_reference.md). A command that closes its own window can never be answered, and waiting out its deadline reports "the app did not respond" for an operation that succeeded.
+
+Refused while another agent holds the window's lock.
 
 ### `window.reload`
 

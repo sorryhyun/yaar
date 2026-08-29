@@ -84,9 +84,9 @@ This was briefly gated on the manifest declaring an entry under `yaar://storage/
 
 **Past the commons, a declaration is still owed.** Every shared-tree call goes through `authorizeSharedStorage` → `permissionsAllow`, per path and per verb, so `{ uri: "yaar://storage/reports/", verbs: ["read","list"] }` reaches those files and still refuses `storage:write` on them — and another app's private tree is refused in either spelling. That is where the boundary that matters actually is: one app reading another's output, or the files the user and the monitor keep at the storage root.
 
-A `protocol.json` command that persists on the agent's behalf is still the better door when the app has one — it keeps the app's own invariants, and the UI reads the state it writes. `apps/session-logs` (`saveReport`) and `apps/devtools` (`protocol/shared-tree.ts`) are the worked examples; the built-ins are for the jobs no command covers. The iframe side is unchanged throughout — `SELF_GRANTS`, the commons, and every `POST /api/verb` path.
+A `protocol.json` command that persists on the agent's behalf is still the better door when the app has one — it keeps the app's own invariants, and the UI reads the state it writes. `apps/session-logs` (`saveReport`) is the worked example; the built-ins are for the jobs no command covers. The iframe side is unchanged throughout — `SELF_GRANTS`, the commons, and every `POST /api/verb` path.
 
-`query`/`command`/`describe` are the app agent's app-protocol tools. Its remaining tools — `relay` (hand a request to the monitor agent) and `direct_message` (message another app's agent, when `app.json` sets `"messaging": "all"`) — are _not_ app-protocol calls and don't touch the executor below; see `agents/profiles/app-agent.ts`.
+`query`/`command`/`describe` are the app agent's app-protocol tools. Its remaining tools — `relay` (hand a request to the monitor agent) and `direct_message` (message another app's agent, when `app.json` sets `"messaging": "all"`) — are _not_ app-protocol calls and don't touch the executor below; see `agents/profiles/app-agent/index.ts`.
 
 **Behavior (both entry points):**
 1. Validates the window exists and uses the `iframe` renderer.
@@ -124,6 +124,8 @@ interface AppManifest {
   state: Record<string, AppStateDescriptor>;
   commands: Record<string, AppCommandDescriptor>;
   events?: Record<string, AppEventDescriptor>;  // declared app.emit() channels (optional)
+  keybindings?: Record<string, string>;         // combo -> declared command name (optional), e.g.
+                                                 // { "ArrowRight": "nextPage", "Ctrl+s": "save" }
   $defs?: Record<string, object>;               // subschemas shared by more than one descriptor
 }
 
@@ -143,6 +145,14 @@ interface AppEventDescriptor {
   description: string;
 }
 ```
+
+**`keybindings`** declares combos that dispatch a command while the app iframe has focus. A
+combo carrying no `Ctrl`/`Meta`/`Alt` modifier is suppressed when an editable element has focus,
+so a plain key like `ArrowRight` never steals cursor movement from a text input; `Ctrl` also
+matches `Cmd`. The build rejects an unparseable combo, a duplicate (two combos normalizing to the
+same chord), and one of the OS shell's own reserved combos (`Shift+Tab`, `Ctrl+1`–`Ctrl+9`,
+`Ctrl+W`, `Ctrl+R`, `F5`) — validated by `listKeybindingIssues` in `packages/shared/src/app-protocol.ts`,
+shared by both protocol readers so the AST and fold paths reject identically.
 
 The manifest is built automatically from the registration config by stripping handler functions and exposing only descriptions and schemas. A per-key `describe()` is stripped along with the handlers — it is answered on demand (see [Describe](#describe)) and never rides in the manifest.
 

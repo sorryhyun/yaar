@@ -1,5 +1,7 @@
 # Codex App Server Protocol Reference
 
+**Source:** `packages/server/src/providers/codex/app-server.ts`, `packages/server/src/providers/codex/message-mapper.ts`, `packages/server/src/providers/codex/version.ts`, `packages/server/src/providers/codex/errors.ts`, `packages/server/src/providers/codex/provider.ts`, `packages/server/src/config/providers/codex.ts`
+
 This document covers the Codex App Server JSON-RPC protocol, configuration, and internals. For a comparison of Claude vs Codex provider behavior within YAAR, see [claude_codex.md](./claude_codex.md).
 
 ## Quick Start
@@ -273,18 +275,41 @@ inspecting `p.turn?.status` in `message-mapper.ts`.
 | `item/started` | `StreamMessage { type: 'tool_use' }` (or `null`) | Item begins — dispatched by `item.type`: `mcpToolCall`, `commandExecution`, `webSearch`, `collabAgentToolCall` each map to a tool-use message; unrecognized item types are logged and skipped |
 | `item/completed` | `StreamMessage { type: 'tool_result' }` (or `null`) | Item finalized — same `item.type` dispatch as `item/started`, mapping to the matching tool-result message |
 | `turn/completed` | `StreamMessage { type: 'complete' }` or `{ type: 'error' }` | Turn finished — `status: 'failed'` or `'interrupted'` maps to `error`, otherwise `complete` |
+| `thread/tokenUsage/updated` | `StreamMessage { type: 'usage' }` (or `null`) | The thread's running token total, re-sent several times per turn (`usageScope: 'session'`; summing repeats would multiply the real figure). Codex counts `cachedInputTokens`/`cacheWriteInputTokens` *inside* `inputTokens`, unlike Claude, which reports them beside it — the mapper subtracts both out so `inputTokens` means the same thing (the fresh remainder) on both providers |
 | `error` | `StreamMessage { type: 'error' }` | Protocol error |
 | `item/commandExecution/outputDelta` | `StreamMessage { type: 'tool_output_delta' }` | Live tail of a running command's output — not the authoritative result (`item/commandExecution/completed`'s `aggregatedOutput` still is), so not fed back into context or the transcript |
 
 ### Events We Skip
+
+Two mechanisms, both in `message-mapper.ts`. A method with its own `switch` case in
+`mapNotification` returns `null` directly:
 
 | Event | Reason |
 |-------|--------|
 | `turn/started` | No content to yield |
 | `item/agentMessage/completed` | Already streamed via deltas |
 | `item/reasoning/completed`, `item/reasoning/summaryTextDelta`, `item/reasoning/summaryTextCompleted`, `item/reasoning/summaryPartAdded` | Reasoning lifecycle/summary events — not needed beyond the `textDelta` stream |
-| `item/mcpToolCall/progress`, `item/commandExecution/terminalInteraction` | Sub-item progress — the coarser `item/started`/`item/completed` pair already covers these tool calls |
-| `codex/event/*`, `fuzzyFileSearch/*` | Internal telemetry |
+
+`item/reasoning/summaryTextDelta` and `item/reasoning/summaryPartAdded` are also listed in
+`IGNORED_METHODS` below; that listing is unreachable since the explicit case above matches first.
+
+Everything else falls to the `default` case, which checks `IGNORED_METHODS` (exact names) and
+`IGNORED_PREFIXES` (`codex/event/`, `fuzzyFileSearch/` — internal telemetry) before logging an
+event as genuinely unknown:
+
+| `IGNORED_METHODS` entry | Note |
+|---|---|
+| `thread/compacted` | |
+| `account/updated`, `account/login/completed` | |
+| `app/list/updated` | |
+| `turn/plan/updated`, `turn/diff/updated`, `item/plan/delta` | |
+| `model/verification`, `turn/moderationMetadata` | Policy bookkeeping with no user-visible consequence — see `errors.ts` |
+| `item/fileChange/outputDelta` | |
+| `item/commandExecution/terminalInteraction` | Sub-item progress — the coarser `item/started`/`item/completed` pair already covers this tool call |
+| `item/mcpToolCall/progress` | Sub-item progress — same as above |
+| `item/reasoning/summaryTextDelta`, `item/reasoning/summaryPartAdded` | Unreachable — an earlier explicit case already returns `null` for both (see above) |
+| `item/autoApprovalReview/started`, `item/autoApprovalReview/completed` | |
+| `rawResponseItem/completed` | |
 
 ### Dead Notification Cases (defensive, unreachable)
 

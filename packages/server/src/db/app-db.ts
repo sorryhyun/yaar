@@ -1,7 +1,7 @@
 /**
  * AppDatabase — per-app SQLite wrapper (bun:sqlite) for structured app data.
  *
- * Collection model (see docs/guides/sqlite.md): one SQL table per collection,
+ * Collection model (see docs/reference/app_db_reference.md): one SQL table per collection,
  * documents stored as JSON in `_data` with `_id` / `_created_at` /
  * `_updated_at` meta columns, plus an FTS5 index kept in sync by triggers.
  *

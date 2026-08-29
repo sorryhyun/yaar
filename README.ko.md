@@ -112,7 +112,7 @@ make dev          # 브라우저가 자동으로 열립니다
 앱은 평범한 TypeScript에 필요한 것들이 딸려 옵니다:
 
 - **번들 라이브러리** — Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js 등을 `@bundled/*`로 import, `npm install` 없이
-- **`appDb`** — 앱별 격리 SQLite, Mongo 스타일 필터와 FTS5 전문 검색 ([가이드](./docs/ko/sqlite.md))
+- **`appDb`** — 앱별 격리 SQLite, Mongo 스타일 필터와 FTS5 전문 검색 ([레퍼런스](./docs/reference/app_db_reference.md))
 - **앱 에이전트** — `agent/prompt.md`를 추가하면 그 앱만의 에이전트가 생기고, `controls`를 선언하면 다른 앱을 조종할 수 있습니다
 - **게이트된 SDK** — `app.json`에 선언하면 열립니다: `yaar-dev`(컴파일/배포), `yaar-web`(브라우저 자동화), `yaar-ml`(브라우저 내 ONNX 추론)
 - **YAAR Market** — 카탈로그에서 설치하거나 직접 게시. 마켓은 소스를 배포하고, 설치는 로컬에서 컴파일합니다

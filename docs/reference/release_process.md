@@ -1,5 +1,7 @@
 # Release Process, CI Tiers, and Branch Protection
 
+**Source:** `.github/workflows/checks.yml`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/release-draft-check.yml`, `scripts/release/`, `packages/server/src/config/env.ts`
+
 How a change travels from `dev` to a published release, and which checks guard each step.
 
 ## Branches
@@ -67,7 +69,7 @@ pipes one to a shell has already trusted that URL.
 `YAAR_VERSION` (`packages/server/src/config/env.ts`), served by `GET /api/version` with
 `bundled`/`platform`/`arch`. Two sources, one per build shape — the `__YAAR_VERSION` compile-time
 define for the exe (which has no `package.json` beside it, since `PROJECT_ROOT` there is wherever
-the binary was dropped), and `PROJECT_ROOT/package.json` under `bun run`.
+the binary was dropped), and `package.json` at `PROJECT_ROOT` under `bun run`.
 `scripts/release/set-version.ts` stamps that file and `scripts/build/exe-bundle.js` reads it for
 the define, so the two agree by construction; `0.0.0-unknown` means neither answered. The route is
 on `PUBLIC_ENDPOINTS` (the iframe allowlist) with no permission check, so an app can read the

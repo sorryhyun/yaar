@@ -1,5 +1,7 @@
 # Crystallization — compiling repeated flows into apps
 
+**Status:** proposal. Nothing below is implemented; the reload cache it critiques still exists at `packages/server/src/reload/`.
+
 YAAR pays a frontier-model turn for everything interesting it does, every time it does it. The
 reload cache was the first attempt to claw some of that back, and it is honest to call it a
 failure: it is almost never hit. This document explains why, and proposes the replacement — a

@@ -117,7 +117,7 @@ The system prompt **is** the instruction set architecture. It defines:
 - The `Task` tool delegation pattern (when to handle directly vs. spawn subagents)
 - Mandatory `skill()` calls before using app/component tools
 
-Located at `agents/system-prompt.ts` — one shared prompt, not one per provider. The provider-specific half is a section picked at build time (`CLAUDE_PROVIDER_SECTION` / `CODEX_PROVIDER_SECTION` from `agents/profiles/shared-sections.ts`). Users can override with `config/system-prompt.txt`.
+Located at `agents/system-prompt.ts` — one shared prompt, not one per provider. The provider-specific half is a section chosen per turn by `providerSection()` in that same file: Codex gets `agents/profiles/prompts/provider-codex.md`, Claude gets no section at all. Users can override with `config/system-prompt.txt`.
 
 No separate formal ISA document is needed — the prompt itself is concise (~108 lines) and readable.
 

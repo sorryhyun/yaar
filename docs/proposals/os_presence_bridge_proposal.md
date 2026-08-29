@@ -1,5 +1,7 @@
 # Proposal: OS Presence Bridge — Observing the User's Real Browser Without Touching It
 
+**Status:** superseded. The need — seeing the user's real browser — is now met by the YAAR Bridge extension and the `browser-user` app (`packages/server/src/features/browser/bridge-actions.ts`, `POST /api/bridge`), an app-mediated channel rather than the passive OS-signal feed proposed here. None of the names below (`MprisWatcher`, `yaar://browser/presence`, `handlers/browser-presence.ts`) exist in the tree. Kept for the rationale in §1–2 only.
+
 YAAR's agents and apps are blind to what the user is doing in their *everyday* browser. The user
 watches YouTube in their real, logged-in Chrome; YAAR — one tab over — has no idea. This proposal
 adds the cheapest possible awareness: a **read-only presence feed** built entirely from signals the

@@ -278,6 +278,16 @@ interface StorageWriteResult {
   error?: string;
 }
 
+interface StorageWriteStream {
+  write(chunk: Uint8Array): Promise<void>;   // append a chunk, flushed through to the partial file
+  commit(): Promise<StorageWriteResult & { bytes: number }>;  // close and rename into place
+  abort(): Promise<void>;                    // close and discard the partial file
+}
+
+type StorageWriteStreamResult =
+  | { success: true; stream: StorageWriteStream }
+  | { success: false; error: string };
+
 interface StorageListResult {
   success: boolean;
   entries?: StorageEntry[];
@@ -338,6 +348,7 @@ Core functions used by both MCP tools and REST routes:
 | `storageList` | `(dirPath?: string) → Promise<StorageListResult>` | List directory; injects virtual `mounts/` entry at root |
 | `storageDelete` | `(filePath: string) → Promise<StorageDeleteResult>` | Delete file or directory (recursively); respects read-only mounts |
 | `storageGrep` | `(dirPath: string, pattern: string, glob?: string) → Promise<StorageGrepResult>` | Regex search across text files under a directory; max 100 matches |
+| `storageWriteStream` | `(filePath: string) → Promise<StorageWriteStreamResult>` | Open a streaming write: bytes land in a sibling `.part-*` file and are renamed into place on `commit()`, so a transfer that dies partway leaves nothing at the destination. Validates the destination and creates parent directories exactly as `storageWrite` does. Not exposed as its own verb or REST route — the one caller is `invoke('yaar://http', { saveTo })`'s streamed download (`handlers/http.ts`), which is bound by `YAAR_MAX_DOWNLOAD_MB` instead of the inline body cap |
 | `ensureStorageDir` | `() → Promise<void>` | Create `storage/` if missing |
 | `resolvePath` | `(filePath: string) → ResolvedPath \| null` | Resolve storage-relative path; checks mounts first, then default storage dir |
 | `resolvePathAsync` | `(filePath: string) → Promise<ResolvedPath \| null>` | Same as `resolvePath` but resolves symlinks before the containment check |
@@ -524,6 +535,8 @@ interface Settings {
   iconSize: 'small' | 'medium' | 'large';
   theme: 'dark' | 'light';
   allowAllApps: boolean;
+  remote: boolean;       // Remote-mode preference, read at boot and applied to process.env.REMOTE
+                          // (an explicit REMOTE env var overrides it); takes effect on restart
 }
 ```
 

@@ -168,6 +168,26 @@ The canonical way agents address windows. The monitor is injected automatically 
 | `invoke` | `yaar://windows/{windowId}/history` | `{ action: 'restore', upTo: <seq> }` — forget every entry after `upTo` (0 = all) and remount; the kept commands are replayed on re-registration, so the window comes back as it stood at that seq. Commands the app declares `replay: 'never'` stay in the log but are not re-sent, and the response says how many. Refused on a window locked by another agent, like `reload` |
 | `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description`. A command also carries `signature`, a rendered `invoke` example, and its `schema` |
 
+**`invoke` actions on `yaar://windows/{windowId}`** (the `action` payload field; `create` runs only on the bare `yaar://windows/` collection):
+
+| Action | Params | Effect |
+|--------|--------|--------|
+| `create` | `title, renderer, content, x?, y?, width?, height?, minimized?, jsonfile?` | Create a window (`yaar://windows/` only) |
+| `update` | `operation` (`append`\|`prepend`\|`replace`\|`insertAt`\|`clear`, required), `content?`, `position?` | Change a window's content |
+| `close` | — | Close the window |
+| `reload` | — | Re-mount the content; the window, its app agent and its subscriptions survive, the iframe's in-memory state does not |
+| `lock` / `unlock` | — | Claim or release the window's edit lock for the calling agent |
+| `move` | `x, y` (numbers, required) | Reposition the window |
+| `resize` | `width, height` (positive numbers, required) | Resize the window |
+| `app_query` | `stateKey?` (default `"manifest"`) | Read one state key — equivalent to `read('.../state/{key}')` |
+| `app_command` | `command, params?, timeoutMs?` | Run one app command (default wait 30s, max 180s) |
+| `app_eval` | `expression, timeoutMs?` | Evaluate a JS expression in the iframe, JSON-serialized result capped at 16KB (default wait 5s, max 180s). Devtools preview windows only |
+| `message` | `message, hook?, fresh?` | Send a message to the window's app agent; `hook: "response"` notifies on reply, `fresh` answers on a brand-new agent |
+| `subscribe` | `events?` (any of `content, interaction, close, lock, unlock, move, resize, title`; default `content, interaction, close`), `debounceMs?` (default 500, clamped 100–5000) | Subscribe to window change events → `{ subscriptionId }` |
+| `unsubscribe` | `subscriptionId` | Cancel a `subscribe` subscription |
+| `app_subscribe` | `channels?` (default `["*"]`), `mode?` (`wake`\|`buffer`, default `wake`), `debounceMs?` (default 500, clamped 100–5000) | Subscribe to an app's declared `app.emit()` channels → `{ subscriptionId }` |
+| `app_unsubscribe` | `subscriptionId` | Cancel an `app_subscribe` subscription |
+
 > **Two protocol sources exist**, and `describe` says which it read. `protocol.json` on disk and the
 > iframe's own registration diverge after a deploy without a reload; a manual that doesn't name its
 > source makes that divergence invisible — the agent reads a command list, calls a command the
@@ -238,6 +258,8 @@ so an agent reading the manifest is handed URIs it can call directly.
 | `yaar://config/mounts` | Host directory mounts |
 | `yaar://config/app/{appId}` | App credentials/config |
 | `yaar://config/domains` | HTTP domain allowlist |
+| `yaar://config/mcp` | MCP server configuration (`mcp-servers.json`). `read` lists all `{ servers }`; `invoke { name, config }` adds or updates one |
+| `yaar://config/mcp/{name}` | One MCP server config entry. `read` for its config; `delete` to remove it |
 
 ### Session — `yaar://session/...`
 
@@ -452,7 +474,7 @@ invoke('yaar://windows/studio-3d/commands/setTransform', [   -> one URI, many pa
 ])
 ```
 
-**URI axis** — brace expansion, handled above the registry (`handlers/index.ts`). Expanded URIs name distinct resources, so they run concurrently and every result is reported.
+**URI axis** — brace expansion, available on **all five verbs**, not only `invoke`: `describe`, `read`, `list`, `invoke` and `delete` each expand their `uri` the same way, handled once above the registry (`handlers/index.ts`) before dispatch, and every MCP tool description says so. Expanded URIs name distinct resources, so they run concurrently and every result is reported.
 
 **Payload axis** — an array payload to `invoke`, handled in `ResourceRegistry.execute`. Because the elements are edits to *one* resource they run **sequentially**, and the batch **stops at the first failure**, reporting the index that failed and how many were not attempted — resend from that index. Max 100 elements; a longer list is refused, never truncated. Handlers never see the array: each element reaches `handler.invoke` as an ordinary payload, so no resource opts in or can get it wrong. Available to agents (the `invoke` MCP tool) and to apps (`POST /api/verb`, `invoke()` from `@bundled/yaar`) alike.
 
@@ -465,7 +487,7 @@ One MCP tool per verb, served from the `verbs` namespace:
 | Tool Name | Parameters |
 |-----------|------------|
 | `describe` | `{ uri }` |
-| `read` | `{ uri }` |
+| `read` | `{ uri, lines?, pattern?, context?, pdfText?, pdfPages?, rawImage? }` — `lines` (e.g. `"10-20"`, `"50"`, `"100-"`) and `pattern` (regex, matching lines only) filter text files; `context` sets lines of context around a `pattern` match (default 0); `pdfText` (`boolean \| string`) extracts a PDF's text layer, `pdfPages` (e.g. `"1-3"`) rasterizes a page range to images — omitting both returns PDF metadata only; `rawImage` returns an image's stored bytes instead of the WebP re-encode reads normally apply |
 | `list` | `{ uri }` |
 | `invoke` | `{ uri, payload? }` — `payload` is an object, or an array of objects (see [Batching](#batching)) |
 | `delete` | `{ uri }` |
@@ -641,6 +663,8 @@ Apps should use `@bundled/yaar` imports (the underlying globals are injected by 
 | `list(uri)` | `POST /api/verb` |
 | `describe(uri)` | `POST /api/verb` |
 | `del(uri)` | `POST /api/verb` |
-| `subscribe(uri, cb)` | `POST /api/verb/subscribe` |
+| `subscribe(uri, cb)` | `POST /api/verb/subscribe` (`mode: 'change'`) |
+| `stream(uri, onFrame, opts?)` | `POST /api/verb/subscribe` (`mode: 'stream'`) — like `subscribe`, but the server pushes typed `{ uri, seq, kind, data, ts }` frames instead of bare change pings; `opts.kinds` narrows delivery to listed frame kinds. Returns an unsubscribe thunk |
+| `httpFetch(input, init?)` | Cross-origin: `POST /api/fetch` (domain-allowlisted, real `Response` returned); same-origin/relative: passthrough `window.fetch` with the `X-Iframe-Token` header attached |
 
 All requests automatically include the `X-Iframe-Token` header. Subscription updates arrive via `postMessage` with type `yaar:subscription-update`, carrying the URI that changed — apps call `read` to fetch the new value.

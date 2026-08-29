@@ -863,7 +863,7 @@ delete('yaar://apps/my-app/storage/data.json')
 
 ## 앱 전용 데이터베이스 (`appDb`)
 
-구조화된 레코드를 위해 각 앱은 `storage/apps/{appId}/data.db`에 SQLite 데이터베이스도 갖습니다. `appStorage`와 달리 쿼리, 카운팅, 페이지네이션, 전문 검색(full-text search)을 서버 측에서 지원하므로 JSON을 통째로 불러와 필터링할 필요가 없습니다. 바이너리 blob과 단순한 단일 파일은 계속 `appStorage`에 두세요. 설계, 필터→SQL 변환, 저장소 종류별 구분: [`docs/guides/sqlite.md`](./sqlite.md).
+구조화된 레코드를 위해 각 앱은 `storage/apps/{appId}/data.db`에 SQLite 데이터베이스도 갖습니다. `appStorage`와 달리 쿼리, 카운팅, 페이지네이션, 전문 검색(full-text search)을 서버 측에서 지원하므로 JSON을 통째로 불러와 필터링할 필요가 없습니다. 바이너리 blob과 단순한 단일 파일은 계속 `appStorage`에 두세요. 설계, 필터→SQL 변환, 저장소 종류별 구분: [`app_db_reference.md`](../reference/app_db_reference.md).
 
 ```typescript
 import { appDb } from '@bundled/yaar';
@@ -896,7 +896,7 @@ const [docs, { insert, update, remove, refresh }] = appDb.createReactiveCollecti
 );
 ```
 
-필터는 정확히 일치, 배열 포함(스칼라 동등 비교와 같은 문법), `$gt`/`$gte`/`$lt`/`$lte`, `$ne`(필드가 없는 문서도 매치), `$in`, `$exists`, 그리고 중첩 객체로 들어가는 점 표기 경로를 받습니다 — 표는 [`sqlite.md`](./sqlite.md#필터-문법)에 있습니다.
+필터는 정확히 일치, 배열 포함(스칼라 동등 비교와 같은 문법), `$gt`/`$gte`/`$lt`/`$lte`, `$ne`(필드가 없는 문서도 매치), `$in`, `$exists`, 그리고 중첩 객체로 들어가는 점 표기 경로를 받습니다 — 표는 [`app_db_reference.md`](../reference/app_db_reference.md#filter-syntax)에 있습니다.
 
 ### 에이전트에서 (MCP 도구)
 

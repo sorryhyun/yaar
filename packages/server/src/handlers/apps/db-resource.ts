@@ -6,7 +6,7 @@
  * cannot register itself. `handleDbVerb` returns `null` for a non-db URI, which is
  * how the composite falls through to storage and then to the app itself.
  *
- * See docs/guides/sqlite.md. On disk: storage/apps/{appId}/data.db
+ * See docs/reference/app_db_reference.md. On disk: storage/apps/{appId}/data.db
  */
 
 import type { VerbResult } from '../uri-registry.js';
