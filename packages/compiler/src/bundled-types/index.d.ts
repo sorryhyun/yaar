@@ -2762,10 +2762,10 @@ declare module '@bundled/yaar-web' {
 
 declare module '@bundled/yaar-media' {
   // Media download via the server's OPTIONAL yt-dlp binary (yaar://system/ytdlp).
-  // Requires "bundles": ["yaar-media"] in app.json to import, AND
-  // "yaar://system/ytdlp" in app.json permissions — without the permission every
-  // call is refused at the verb door. Check `ytdlpStatus()` first: when yt-dlp is
-  // not installed on the machine, `available` is false and actions refuse with
+  // Requires "bundles": ["yaar-media"] in app.json — the bundle alone grants the
+  // capability at the verb door; no permissions entry is needed (a declared
+  // yaar://system/ytdlp grants nothing). Check `ytdlpStatus()` first: when yt-dlp
+  // is not installed on the machine, `available` is false and actions refuse with
   // install guidance to show the user.
   //
   // Downloads always land at yaar://storage/shared/media/{videoId}.{ext} — the

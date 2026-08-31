@@ -10,7 +10,7 @@
 
 import { join } from 'path';
 import type { CapabilityLine } from '@yaar/shared';
-import type { PermissionEntry } from '../../http/access.js';
+import { namesYtdlpDoor, type PermissionEntry } from '../../http/access.js';
 import { coversSharedTreeOnly } from '../../http/uri-match.js';
 import { parseSubAgents, type SubAgentsEntry } from './discovery.js';
 import { resolveAppSource } from './roots.js';
@@ -44,7 +44,7 @@ const BUNDLE_DESCRIPTIONS: Record<string, string> = {
   'yaar-dev': 'compile, typecheck, and deploy apps on this machine',
   'yaar-web': 'drive a browser — navigate, click, and read pages',
   'yaar-ml': 'download and run machine-learning models in the browser',
-  'yaar-media': 'download media via yt-dlp (needs the yaar://system/ytdlp permission to act)',
+  'yaar-media': 'download audio from YouTube via the yt-dlp binary, into shared storage',
 };
 
 interface PermissionDescription extends CapabilityLine {
@@ -104,7 +104,6 @@ const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://system/',                icon: '🖥️',  title: 'Read system status' },
   { match: 'yaar://system/fonts',           icon: '🔤',  title: 'Use the fonts YAAR ships',             detail: 'Granted to every app — no approval needed' },
   { match: 'yaar://system/update',          icon: '⬇️',  title: 'Check for and install YAAR updates',   warn: true },
-  { match: 'yaar://system/ytdlp',           icon: '🎧',  title: 'Download audio from YouTube',          detail: 'Via the yt-dlp binary, into shared storage', warn: true },
 ];
 
 /** A trailing slash is a spelling, not a grant: `yaar://http` and `yaar://http/` are one. */
@@ -212,6 +211,12 @@ function permissionKey(p: PermissionEntry): string {
  * is granted the commons at token mint time (`SHARED_GRANT` in iframe-tokens.ts), so a
  * row asking the user to approve it offers a choice they do not have. Apps should not
  * declare it at all; one that still does is describing the status quo, not a request.
+ *
+ * A declared `yaar://system/ytdlp` is dropped for the inverse of that reason: the URI
+ * is bundle-granted (`namesYtdlpDoor` in http/access.ts — the `yaar-media` bundle is
+ * the whole grant), so a permissions entry naming it grants nothing, and a dialog row
+ * would describe authority the declaration never confers. The bundle's own warned row
+ * is where the user prices this capability.
  */
 export async function readAppCapabilities(appDir: string): Promise<AppCapabilities> {
   const caps: AppCapabilities = { permissions: [], bundles: [], streams: [] };
@@ -220,7 +225,7 @@ export async function readAppCapabilities(appDir: string): Promise<AppCapabiliti
     const meta = JSON.parse(metaContent);
     if (Array.isArray(meta.permissions)) {
       caps.permissions = (meta.permissions as PermissionEntry[]).filter(
-        (p) => !coversSharedTreeOnly(p),
+        (p) => !coversSharedTreeOnly(p) && !namesYtdlpDoor(typeof p === 'string' ? p : p.uri),
       );
     }
     if (Array.isArray(meta.bundles)) {

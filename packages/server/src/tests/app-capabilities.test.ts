@@ -114,6 +114,29 @@ describe('reading a manifest', () => {
     }
   });
 
+  it('drops a declared yt-dlp permission — the yaar-media bundle is the grant', async () => {
+    // `yaar://system/ytdlp` is bundle-granted at the door (`namesYtdlpDoor` in
+    // http/access.ts), so a permissions entry naming it grants nothing and a dialog
+    // row would describe authority the declaration never confers. The bundle's own
+    // warned row is where the user prices the capability.
+    const mediaDir = join(USER_APPS_DIR, 'capability-media-fixture');
+    mkdirSync(mediaDir, { recursive: true });
+    writeFileSync(
+      join(mediaDir, 'app.json'),
+      JSON.stringify({
+        permissions: ['yaar://system/ytdlp', 'yaar://http'],
+        bundles: ['yaar-media'],
+      }),
+    );
+    try {
+      const read = await readAppCapabilities(mediaDir);
+      expect(read.permissions).toEqual(['yaar://http']);
+      expect(read.bundles).toEqual(['yaar-media']);
+    } finally {
+      rmSync(mediaDir, { recursive: true, force: true });
+    }
+  });
+
   it('reads nothing from a directory with no manifest', async () => {
     expect(isEmpty(await readAppCapabilities(join(USER_APPS_DIR, 'no-such-app')))).toBe(true);
   });

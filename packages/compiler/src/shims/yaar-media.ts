@@ -3,10 +3,11 @@
  * Gated SDK for @bundled/yaar-media.
  *
  * Media download via the server's optional yt-dlp binary (`yaar://system/ytdlp`).
- * Requires "yaar-media" in app.json `bundles` to import — and the app must ALSO
- * declare `"yaar://system/ytdlp"` in `permissions`, or every call is refused at
- * the verb door. The bundle declaration admits the code; only the permission
- * grants the capability.
+ * Requires "yaar-media" in app.json `bundles` — the bundle both admits the code
+ * and grants the capability at the verb door, like the other gated SDKs
+ * (yaar-dev / yaar-web / yaar-ml). No `permissions` entry is needed, and a
+ * declared `yaar://system/ytdlp` grants nothing: app manifests never hold
+ * `yaar://system/*` URIs.
  *
  * Downloads always land in the storage commons at
  * `yaar://storage/shared/media/{videoId}.{ext}` — the server decides the path,

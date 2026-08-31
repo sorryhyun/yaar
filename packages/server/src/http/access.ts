@@ -256,6 +256,23 @@ function isSessionUri(uri: string): boolean {
   return uri === 'yaar://session' || uri.startsWith('yaar://session/');
 }
 
+/**
+ * Is this the yt-dlp door — the capability the `yaar-media` bundle grants?
+ *
+ * Deliberately a bundle, never a permissions entry. The other gated SDKs
+ * (`yaar-dev`, `yaar-web`, `yaar-ml`) are granted by their bundle declaration
+ * alone — the install dialog prices a bundle as a warned, privileged row — and
+ * `yaar-media` follows them rather than being the one capability an app reaches
+ * by declaring a `yaar://system/*` URI. That keeps app manifests out of the
+ * system namespace entirely: a manifest entry naming this URI grants nothing
+ * (`readAppCapabilities` drops it from the install dialog for the same reason),
+ * so `system/` never becomes a namespace apps learn to ask for. Agents are
+ * unaffected — they reach the verb layer without a token and never pass here.
+ */
+export function namesYtdlpDoor(uri: string): boolean {
+  return uri === 'yaar://system/ytdlp' || uri.startsWith('yaar://system/ytdlp/');
+}
+
 // ── The gates ───────────────────────────────────────────────────────────────
 
 /**
@@ -374,6 +391,13 @@ export function requirePermission(principal: Principal, uri: string, verb: Verb)
   // app came to be admitted here and 403'd there.
   if (isSessionUri(uri) && !principal.systemApp) {
     return errorResponse('yaar://session/* is restricted to the session agent', 403);
+  }
+
+  // Bundle-as-grant: the yt-dlp door takes the `yaar-media` bundle, never a
+  // permissions entry — see namesYtdlpDoor. `describe` stays metadata-only,
+  // the same carve-out permissionsAllow applies to every other URI.
+  if (namesYtdlpDoor(uri)) {
+    return verb === 'describe' ? null : requireBundle(principal, 'yaar-media');
   }
 
   if (!permissionsAllow(principal.permissions, principal.appId, uri, verb)) {
