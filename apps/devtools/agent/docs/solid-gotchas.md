@@ -18,8 +18,14 @@ audience: agent
   too, so you do not have to reach a compile to find out.
 - **`flex: 1` breaks inside reactive expressions** — Solid's `html` inserts comment markers
   that break flex chains. Use `position: absolute; inset: 0`.
-- **Don't pass event handlers as component props** — `html` wraps props in reactive getters,
-  so handlers fire during render. Delegate on a parent DOM element.
+- **Zero-arg function props are invoked, not passed through** — `html` wraps any component
+  prop whose value is a zero-argument function in a reactive getter, so
+  `` html`<${C} foo=${accessor} />` `` hands the component the *current value*, not the
+  accessor, and `props.foo()` throws `foo is not a function` (typechecks clean, renders a
+  blank window). Same mechanism fires a zero-arg event handler during render. Wrap it
+  (`foo=${() => accessor}`) to deliver the callable, share a module-level signal, or delegate
+  handlers on a parent DOM element. Functions with declared parameters (`(e) => …`) pass
+  through untouched.
 - **HTML entities inside `${}` don't decode** — interpolated strings are set as
   `textContent`, so `&#128247;` renders literally. Use the actual character (📷). Entities
   work only in static template text.

@@ -172,7 +172,7 @@ Apps use Solid.js with `html` tagged templates (not JSX). Known issues:
 - **Nothing may precede the first tag**: `solid-js/html` discards top-level text that appears before the template's first tag, and a template whose only top-level node is the expression makes it emit `.firstChild` with no parent. So `` html`${x}` ``, `` html`hi ${x}` ``, and `` html`hi` `` throw a stackless `SyntaxError`/`TypeError` from `new Function`, while `` html`lead <b>x</b>` `` silently drops `lead `. Wrap content in an element (`` html`<span>hi ${x}</span>` ``), or return the accessor (`() => x`) instead of wrapping it. The compiler fails the build on all four — see `guards/solid-html-guard.ts`.
 - **`flex: 1` breaks reactivity**: Use `position: absolute; inset: 0` instead
 - **Closing tags**: `</${Component}>` is auto-fixed by compiler plugin to `</>`
-- **Event handler props**: Can re-fire during render if passed as reactive props — bind handlers outside reactive scope
+- **Zero-arg function props are invoked, not passed through**: `wrapProps` turns any component prop whose interpolated value is a zero-argument function into a reactive getter, so `` html`<${C} foo=${accessor} />` `` hands the component the *current value*, not the accessor — unlike JSX — and `props.foo()` throws. Same mechanism makes a zero-arg event handler fire during render. Wrap it (`foo=${() => accessor}`) so the component receives the callable, or share a module-level signal. Functions with declared parameters (`(e) => …`) pass through untouched.
 
 ## Compiler & Bundled Libraries
 
