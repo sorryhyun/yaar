@@ -228,6 +228,7 @@ Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app
 | Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, and per-app version history: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()`, etc. | `"yaar-web"` |
 | ML runtime | `@bundled/yaar-ml` | In-browser model inference (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
+| Media download | `@bundled/yaar-media` | YouTube audio download via the server's optional yt-dlp binary: `ytdlpStatus()`, `resolveMedia()`, `downloadAudio()`, `cancelDownload()`. Also needs `"yaar://system/ytdlp"` in `permissions` — the bundle admits the code, only the permission grants the capability. Files land in `shared/media/` | `"yaar-media"` |
 
 See [`docs/guides/yaar_ml_runtime.md`](./yaar_ml_runtime.md) for the ML runtime's capabilities, memory limits, and "what fits" guidance.
 
@@ -556,7 +557,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `kind` | `"system"` | Marks a protected/auto-trusted app. **Bundled apps only** — ignored for installed apps |
 | `createShortcut` | `boolean` | `false` hides the app from the launcher (`"hidden": true` is a synonym) |
 | `permissions` | `(string \| { uri, verbs? })[]` | Pre-granted URI permissions, e.g. `"yaar://storage/"` or `{ "uri": "yaar://http", "verbs": ["read"] }` |
-| `bundles` | `string[]` | Opt in to gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`). The compiler rejects the import without it |
+| `bundles` | `string[]` | Opt in to gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`, `yaar-media`). The compiler rejects the import without it |
 | `agentType` | `string` | Override the agent profile used for this app's agent |
 | `agent` | `{ prompt?, hint?, skill? }` | Override the default paths for this app's agent docs |
 | `links` | `{ base }` | The site relative hrefs in this app's rendered content belong to — the link guard resolves anchors against it. See [`apps/CLAUDE.md`](../../apps/CLAUDE.md#links-out-of-an-app) |

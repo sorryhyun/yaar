@@ -195,6 +195,7 @@ import anime from '@bundled/anime';
 | Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, 그리고 앱별 버전 이력: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()` 등 | `"yaar-web"` |
 | ML 런타임 | `@bundled/yaar-ml` | 브라우저 내 모델 추론(WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
+| 미디어 다운로드 | `@bundled/yaar-media` | 서버의 선택적 yt-dlp 바이너리를 통한 YouTube 오디오 다운로드: `ytdlpStatus()`, `resolveMedia()`, `downloadAudio()`, `cancelDownload()`. `permissions`에 `"yaar://system/ytdlp"` 선언도 필요 — bundle은 코드 접근만 허용하고, 권한이 있어야 실제 호출이 허용됩니다. 파일은 `shared/media/`에 저장됩니다 | `"yaar-media"` |
 
 ML 런타임의 기능, 메모리 제한, "무엇이 들어맞는지"에 대한 가이드는 [`docs/guides/yaar_ml_runtime.md`](./yaar_ml_runtime.md)를 참조하세요.
 
@@ -505,7 +506,7 @@ apps/my-app/
 | `kind` | `"system"` | 보호되고 자동 신뢰되는 앱임을 표시. **번들 앱 전용** — 설치된 앱에서는 무시됨 |
 | `createShortcut` | `boolean` | `false`면 런처에서 앱을 숨김 (`"hidden": true`도 동일한 의미) |
 | `permissions` | `(string \| { uri, verbs? })[]` | 미리 부여된 URI 권한, 예: `"yaar://storage/"` 또는 `{ "uri": "yaar://http", "verbs": ["read"] }` |
-| `bundles` | `string[]` | 게이트된 SDK(`yaar-dev`, `yaar-web`, `yaar-ml`) 사용 동의. 선언하지 않으면 컴파일러가 import를 거부 |
+| `bundles` | `string[]` | 게이트된 SDK(`yaar-dev`, `yaar-web`, `yaar-ml`, `yaar-media`) 사용 동의. 선언하지 않으면 컴파일러가 import를 거부 |
 | `agentType` | `string` | 이 앱의 에이전트에 사용할 에이전트 프로필 오버라이드 |
 | `agent` | `{ prompt?, hint?, skill? }` | 이 앱의 에이전트 문서 기본 경로 오버라이드 |
 | `links` | `{ base }` | 이 앱이 렌더링하는 콘텐츠의 상대 href가 속한 사이트 — 링크 가드가 이를 기준으로 앵커를 해석합니다. [`apps/CLAUDE.md`](../../apps/CLAUDE.md#links-out-of-an-app) 참조 |

@@ -41,6 +41,7 @@ export const BUNDLED_SHIMS: Record<string, string> = {
   'yaar-dev': toForwardSlash(join(SHIMS_DIR, 'yaar-dev.ts')),
   'yaar-web': toForwardSlash(join(SHIMS_DIR, 'yaar-web.ts')),
   'yaar-ml': toForwardSlash(join(SHIMS_DIR, 'yaar-ml.ts')),
+  'yaar-media': toForwardSlash(join(SHIMS_DIR, 'yaar-media.ts')),
 };
 
 /**
@@ -126,6 +127,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   'yaar-dev': 'yaar-dev',
   'yaar-web': 'yaar-web',
   'yaar-ml': 'yaar-ml',
+  'yaar-media': 'yaar-media',
 };
 
 export const GATED_BUNDLED_LIBRARIES = Object.freeze(

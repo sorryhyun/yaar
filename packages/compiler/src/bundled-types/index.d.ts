@@ -2192,7 +2192,7 @@ declare module '@bundled/yaar' {
 }
 
 // ── Gated SDKs ─────────────────────────────────────────────────────────────
-// Require "bundles": ["yaar-dev"] or ["yaar-web"] in app.json to import.
+// Require the matching name in app.json "bundles" (e.g. ["yaar-dev"]) to import.
 
 declare module '@bundled/yaar-dev' {
   export function compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
@@ -2758,4 +2758,87 @@ declare module '@bundled/yaar-web' {
   export function listSessions(): Promise<WebResult<WebTab[]>>;
   /** @deprecated Use `closeTab()` instead. */
   export function closeSession(browserId?: string): Promise<WebResult>;
+}
+
+declare module '@bundled/yaar-media' {
+  // Media download via the server's OPTIONAL yt-dlp binary (yaar://system/ytdlp).
+  // Requires "bundles": ["yaar-media"] in app.json to import, AND
+  // "yaar://system/ytdlp" in app.json permissions — without the permission every
+  // call is refused at the verb door. Check `ytdlpStatus()` first: when yt-dlp is
+  // not installed on the machine, `available` is false and actions refuse with
+  // install guidance to show the user.
+  //
+  // Downloads always land at yaar://storage/shared/media/{videoId}.{ext} — the
+  // server picks the path — readable by every app with plain storage calls.
+  // YouTube URLs only (youtube.com / youtu.be / music.youtube.com).
+
+  export interface YtDlpJob {
+    id: string;
+    url: string;
+    stage: 'downloading' | 'saving' | 'done' | 'error' | 'cancelled';
+    title?: string;
+    durationSec?: number | null;
+    /** Set when done: the finished file, e.g. `yaar://storage/shared/media/abc.m4a`. */
+    uri?: string;
+    bytes?: number;
+    error?: string;
+    startedAt: number;
+    finishedAt?: number;
+  }
+
+  export interface YtDlpStatus {
+    /** False when the yt-dlp binary is not installed on the server's machine. */
+    available: boolean;
+    version: string | null;
+    binaryPath: string | null;
+    /** Recent jobs, newest first. */
+    jobs: YtDlpJob[];
+  }
+
+  export interface YtDlpAudioFormat {
+    formatId: string;
+    ext: string;
+    acodec: string;
+    abrKbps: number | null;
+    filesizeBytes: number | null;
+  }
+
+  export interface YtDlpMediaInfo {
+    id: string;
+    title: string;
+    channel: string | null;
+    durationSec: number | null;
+    webpageUrl: string;
+    extractor: string;
+    audioFormats: YtDlpAudioFormat[];
+  }
+
+  /** yt-dlp availability + the recent job table. Memory-only server-side; poll freely. */
+  export function ytdlpStatus(): Promise<YtDlpStatus>;
+
+  /** Metadata + audio-only format list for a YouTube URL. Blocking, no media bytes. */
+  export function resolveMedia(url: string): Promise<YtDlpMediaInfo>;
+
+  /** Start an audio download job and return its snapshot immediately (fire-and-forget). */
+  export function startAudioDownload(url: string): Promise<YtDlpJob>;
+
+  /** Cancel a running download job. */
+  export function cancelDownload(jobId: string): Promise<YtDlpJob>;
+
+  /**
+   * Download a YouTube URL's best audio track and wait for completion.
+   * Resolves with the finished job (`uri` names the file in shared/media/); rejects
+   * on error/cancel/timeout — a timeout also cancels the job server-side.
+   */
+  export function downloadAudio(
+    url: string,
+    opts?: {
+      /** Poll interval while waiting (default 2000ms). */
+      pollMs?: number;
+      /** Give up (and cancel the job) after this long (default 15 minutes). */
+      timeoutMs?: number;
+      /** Called with the job snapshot on every poll. */
+      onUpdate?: (job: YtDlpJob) => void;
+    },
+  ): Promise<YtDlpJob>;
 }
