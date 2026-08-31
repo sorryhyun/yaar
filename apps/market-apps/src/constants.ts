@@ -1,4 +1,4 @@
-import type { Account, GithubStatus } from './types.js';
+import type { Account, GithubStatus, UpdateRun } from './types.js';
 
 /**
  * The marketplace. There is one, it is fixed, and the app is compiled against it —
@@ -42,6 +42,15 @@ export const GITHUB_STATUS_HEALTHY: GithubStatus = {
   level: 'operational',
   components: [],
   incident: null,
+};
+
+/** No run has started yet. A finished run keeps its own final state instead of resetting to this. */
+export const IDLE_UPDATE_RUN: UpdateRun = {
+  active: false,
+  total: 0,
+  completed: 0,
+  current: null,
+  results: [],
 };
 
 export const SIGNED_OUT_ACCOUNT: Account = {

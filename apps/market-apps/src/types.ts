@@ -31,6 +31,41 @@ export type DisplayApp = ListedApp & {
 };
 
 /**
+ * How one app fared in an Update All run. A failure is recorded rather than thrown:
+ * the run steps over it and carries on, so `results` always has one entry per app
+ * that was attempted.
+ */
+export type UpdateOutcome = {
+  id: string;
+  name: string;
+  /** The installed version replaced, when it was known before the install. */
+  from?: string;
+  /** The marketplace version installed over it. */
+  to?: string;
+  ok: boolean;
+  /** Present only when `ok` is false. */
+  error?: string;
+};
+
+/**
+ * Progress of the sequential Update All run — what the header button and the status
+ * line both read. `active` doubles as the concurrency guard: a second run started
+ * while it is true is refused, not queued.
+ *
+ * The final state of a finished run is kept rather than cleared, so its per-app
+ * results stay readable (over the protocol, and for the summary line) afterwards.
+ */
+export type UpdateRun = {
+  active: boolean;
+  total: number;
+  /** Apps finished, successfully or not — `completed`/`total` is the N/M on screen. */
+  completed: number;
+  /** The app being installed right now, or null whenever no run is in flight. */
+  current: string | null;
+  results: UpdateOutcome[];
+};
+
+/**
  * Publisher sign-in state, mirrored from the server's Google auth + the
  * marketplace's GET /api/me. The ID token never reaches this iframe — the server
  * makes the marketplace call and hands back only the email and owned app ids.

@@ -3,8 +3,15 @@
 // import from this file, so there is exactly one definition of each signal.
 
 import { createSignal } from '@bundled/solid-js';
-import { GITHUB_STATUS_HEALTHY, SIGNED_OUT_ACCOUNT } from '../constants.js';
-import type { Account, GithubStatus, InstalledApp, ListedApp, PendingPublish } from '../types.js';
+import { GITHUB_STATUS_HEALTHY, IDLE_UPDATE_RUN, SIGNED_OUT_ACCOUNT } from '../constants.js';
+import type {
+  Account,
+  GithubStatus,
+  InstalledApp,
+  ListedApp,
+  PendingPublish,
+  UpdateRun,
+} from '../types.js';
 
 // ── Catalog ────────────────────────────────────────────────────────────
 
@@ -29,6 +36,14 @@ export const [search, setSearch] = createSignal('');
 export const SEARCH_MODES = ['title', 'author', 'official'] as const;
 export type SearchMode = (typeof SEARCH_MODES)[number];
 export const [searchMode, setSearchMode] = createSignal<SearchMode>('title');
+
+// ── Update All ───────────────────────────────────────────────
+
+/**
+ * Progress of the bulk update. Written only by `actions/update-all.ts`, whose
+ * `active` flag is also what refuses a second concurrent run.
+ */
+export const [updateRun, setUpdateRun] = createSignal<UpdateRun>(IDLE_UPDATE_RUN);
 
 // ── Publisher account ──────────────────────────────────────────────────
 

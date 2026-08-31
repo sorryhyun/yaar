@@ -33,7 +33,8 @@
   color: var(--yaar-text-dim, var(--yaar-text-muted));
 }
 
-.refresh-btn {
+.refresh-btn,
+.update-all-btn {
   font-size: 14px;
   padding: 7px 16px;
   flex-shrink: 0;

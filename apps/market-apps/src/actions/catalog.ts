@@ -50,7 +50,7 @@ export async function refreshData(): Promise<void> {
 }
 
 /** Silently reconcile the optimistic install with the host's authoritative list. */
-async function reconcileInstalledFromHost(): Promise<void> {
+export async function reconcileInstalledFromHost(): Promise<void> {
   const requestStartedAt = Date.now();
   try {
     reconcileInstalledApps(await hostListInstalled(), requestStartedAt);

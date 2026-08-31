@@ -16,4 +16,4 @@ export {
   recordMarketplaceInstall,
   reconcileInstalledApps,
 } from './installed.js';
-export { displayApps, visibleApps } from './selectors.js';
+export { displayApps, outdatedApps, visibleApps } from './selectors.js';

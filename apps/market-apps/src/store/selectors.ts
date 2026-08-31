@@ -3,7 +3,13 @@
 
 import { normalizeId } from '../parsers/index.js';
 import type { DisplayApp } from '../types.js';
-import { hasInstalled, installedVersionOf, isOfficialAuthor } from './queries.js';
+import {
+  hasInstalled,
+  hasMarketplaceUpdate,
+  installedVersionOf,
+  isOfficialAuthor,
+  isSystem,
+} from './queries.js';
 import { hideInstalled, installedApps, marketApps, search, searchMode } from './signals.js';
 
 /**
@@ -34,6 +40,21 @@ export function displayApps(): DisplayApp[] {
       installedVersion: a.version,
     }));
   return [...marketMapped, ...installedOnly].filter((a) => a.kind !== 'system');
+}
+
+/**
+ * Installed apps the marketplace is demonstrably ahead of — what the header counts
+ * and what Update All installs, in the order they appear in the list.
+ *
+ * `isSystem` is re-tested here rather than relied on from `displayApps`: a system
+ * app that also has a marketplace listing comes through the mapped-market branch
+ * carrying the catalog entry's fields, which include no `kind` to filter on.
+ *
+ * Apps installed but never published have no catalog version, so `hasMarketplaceUpdate`
+ * answers 'unknown' for them and they never appear here.
+ */
+export function outdatedApps(): DisplayApp[] {
+  return displayApps().filter((a) => a.installed && !isSystem(a.id) && hasMarketplaceUpdate(a));
 }
 
 /**

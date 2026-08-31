@@ -3,12 +3,20 @@ import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
 import './styles/index';
 import { App } from './components/index.js';
-import { refreshAccount, refreshData, startGithubStatusPolling } from './actions/index.js';
+import {
+  refreshAccount,
+  refreshData,
+  startGithubStatusPolling,
+  updateAllApps,
+} from './actions/index.js';
 import {
   marketApps,
   setMarketApps,
   installedApps,
   setInstalledApps,
+  installedVersionOf,
+  outdatedApps,
+  updateRun,
   statusText,
   lastUpdated,
   loading,
@@ -79,6 +87,25 @@ export default defineApp({
       description:
         "Which field the search filters on: 'title', 'author', or 'official' (YAAR-only view)",
       get: () => searchMode(),
+    },
+    outdatedApps: {
+      description:
+        'Installed apps whose marketplace version is newer than the local one — what updateAll installs',
+      get: () =>
+        outdatedApps().map((a) => ({
+          id: a.id,
+          name: a.name,
+          installedVersion: installedVersionOf(a.id) ?? null,
+          marketVersion: a.version ?? null,
+        })),
+    },
+    updateRun: {
+      description:
+        'Progress of the running or last-finished updateAll: active, total, completed, current app, and a per-app result list',
+      get: () => {
+        const run = updateRun();
+        return { ...run, results: [...run.results] };
+      },
     },
   },
   commands: {
@@ -186,6 +213,21 @@ export default defineApp({
         setSearchMode(p.mode as SearchMode);
         return { searchMode: searchMode() };
       },
+    },
+    updateAll: {
+      description:
+        'Install the marketplace version of every app in `outdatedApps`, one at a time. A failing app is recorded in the results and the run continues. Refused while a run is already in flight, and when nothing is outdated.',
+      params: {
+        type: 'object',
+        properties: {
+          confirm: {
+            type: 'boolean',
+            description:
+              'Ask the user to approve the batch first, as the header button does. Off by default: updating replaces each installed copy on disk.',
+          },
+        },
+      },
+      run: (p) => updateAllApps({ confirm: p.confirm === true }),
     },
     clearData: {
       description: 'Clear all app data',

@@ -15,10 +15,10 @@ it and `constants`/`types`/`schema` read by everything.
 | `parsers/` | Pure readers for untrusted input: ids, versions, the two app lists, GitHub status | Touch signals or the network |
 | `api/` | Every outbound call. `http.ts` = marketplace + GitHub + YAAR auth routes; `host.ts` = `yaar://apps/{id}` verbs | Touch signals |
 | `store/` | All state. `signals.ts` (the signals), `queries.ts` (questions about one app), `installed.ts` (install reconciliation), `selectors.ts` (the derived lists) | Perform I/O |
-| `actions/` | Everything the user can *do*, by domain: `catalog`, `publish`, `auth`, `github-status` | Render |
+| `actions/` | Everything the user can *do*, by domain: `catalog`, `update-all`, `publish`, `auth`, `github-status` | Render |
 | `components/` | One module per band of the UI, each paired with the stylesheet of the same name in `styles/` | Hold state (except a private UI signal) |
 
-`main.ts` is the protocol surface only: `defineApp` with 8 state keys and 7 commands,
+`main.ts` is the protocol surface only: `defineApp` with 10 state keys and 8 commands,
 all delegating into `store` and `actions`.
 
 ## Invariants worth knowing
@@ -35,6 +35,16 @@ all delegating into `store` and `actions`.
 - **A failed installed-list read is not "nothing is installed".** `refreshData`
   deliberately does not reconcile on that path — reconciling an empty list would
   clear every installed card on a transient hiccup.
+- **Update All never throws on one app.** `actions/update-all.ts` records a failed
+  install in its `results` and moves to the next: a batch that aborts on the first
+  refusal leaves the rest stale with nothing on screen saying so. Its guard against a
+  second concurrent run is the module-level `runInFlight`, not `updateRun().active` —
+  the signal is raised several awaits in, and it must also cover the open confirm
+  dialog. `updateRun` is for display and for the protocol; it is not the lock.
+- **The batch asks once, not once per app.** Every app in a run is installed *over* an
+  existing copy, the case `confirmReplaceInstall` exists for, so the same warning is
+  shown once up front. The protocol command defaults that prompt off — an agent calling
+  `updateAll` has already been told to update.
 - **The install grace window** (`INSTALL_RECONCILIATION_GRACE_MS`) exists because the
   host's app list lags a successful install. `store/installed.ts` is the whole of it.
 - **`SearchMode` values appear as literals in three places** — the tuple in
