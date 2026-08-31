@@ -103,6 +103,7 @@ const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://system/',                icon: '🖥️',  title: 'Read system status' },
   { match: 'yaar://system/fonts',           icon: '🔤',  title: 'Use the fonts YAAR ships',             detail: 'Granted to every app — no approval needed' },
   { match: 'yaar://system/update',          icon: '⬇️',  title: 'Check for and install YAAR updates',   warn: true },
+  { match: 'yaar://system/ytdlp',           icon: '🎧',  title: 'Download audio from YouTube',          detail: 'Via the yt-dlp binary, into shared storage', warn: true },
 ];
 
 /** A trailing slash is a spelling, not a grant: `yaar://http` and `yaar://http/` are one. */

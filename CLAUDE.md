@@ -152,6 +152,7 @@ Beyond agents and providers, the server has additional subsystems:
 - **`lib/`** — Standalone utilities with no server internal dependencies:
   - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability). Sessions are named and process-shaped: a persisted profile, a record that outlives the socket (`session-store.ts`), an idle sweep that spares a watched tab, and crash-restart with URL replay. Listed and killable at `yaar://system/browsers`
   - `pdf/` — PDF rendering via poppler
+  - `ytdlp/` — optional yt-dlp binary wrapper (discovered on PATH/`~/.local/bin`/`YTDLP_PATH`, never bundled) behind `yaar://system/ytdlp`: YouTube audio download into the storage commons, with async jobs in `features/ytdlp/`
   - `tunnel/` — Tailscale Serve tunnel setup for remote mode
   - `download/` — chunked file download handling
   - `ssrf.ts` — SSRF protection (URL validation, safe fetch with redirect following)

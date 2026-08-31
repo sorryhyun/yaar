@@ -141,6 +141,8 @@ src/
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts, app-grants.ts
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ tunnel/ download/
+    ├── ytdlp/                 # Optional yt-dlp binary wrapper (discovered, never bundled) —
+    │                          #   resolve + audio download; jobs/policy live in features/ytdlp/
     ├── fonts/                 # OpenType reader + CFF and glyf subsetters — bytes in, bytes out
     │                          #   (the catalog and loading are features/fonts/)
     ├── ssrf.ts               # URL validation, safe fetch with redirect following

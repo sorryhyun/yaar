@@ -40,7 +40,8 @@ function browserIdFrom(resolved: ResolvedUri): string | null {
 export function registerSystemHandlers(registry: ResourceRegistry): void {
   // ── yaar://system — namespace root ──
   registry.register('yaar://system', {
-    description: 'The running YAAR installation — version, updates, and the fonts it serves.',
+    description:
+      'The running YAAR installation — version, updates, the fonts it serves, and media download.',
     verbs: ['describe', 'list'],
 
     async list() {
@@ -59,6 +60,11 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
           uri: BROWSERS_ROOT,
           name: 'browsers',
           description: 'Sandbox browser sessions — live, suspended, and crashed',
+        },
+        {
+          uri: 'yaar://system/ytdlp',
+          name: 'ytdlp',
+          description: 'Audio download from YouTube via the optional yt-dlp binary',
         },
       ]);
     },
