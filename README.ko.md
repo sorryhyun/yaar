@@ -49,7 +49,7 @@ Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/dow
 **버전 고정 / 설치 경로 지정:**
 
 ```bash
-VERSION=v0.18.1 curl -fsSL ... | bash             # 특정 버전 (기본: latest)
+VERSION=v0.19.0 curl -fsSL ... | bash             # 특정 버전 (기본: latest)
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 (기본: ~/.local/bin)
 ```
 
