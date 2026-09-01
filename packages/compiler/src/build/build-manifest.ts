@@ -127,8 +127,15 @@ import { join, basename } from 'path';
  * as the two above — the declaration lives in the compiled-in SDK, so an app keeps
  * manufacturing one `File not found` per optional file per mount until it is rebuilt,
  * and the apps that read the most preferences are the ones nobody is about to edit.
+ *
+ * '30': `yaar-ml` runs wasm-only sessions on the full-CPU ORT flavor. The native-WebGPU
+ * (asyncify) artifact every session used to load has fp64 kernels compiled out, so a
+ * graph that computes in f64 — transcribe's nemo128 mel preprocessor casts the waveform
+ * to double for its STFT — failed session creation with "Could not find an
+ * implementation for Cast(13)". The routing lives in the compiled-in shim, so every
+ * yaar-ml app carries the broken copy until rebuilt.
  */
-export const COMPILER_VERSION = '29';
+export const COMPILER_VERSION = '30';
 
 export interface BuildManifest {
   sourceHash: string;

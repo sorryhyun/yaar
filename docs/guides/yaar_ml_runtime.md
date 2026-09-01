@@ -60,12 +60,14 @@ console.log(out);
   The SDK points `ort.env.wasm.wasmPaths` at `/api/ml-runtime/`, a static route
   (immutable, hard-cached). In dev it serves from the installed
   `onnxruntime-web/dist`; a standalone exe has no `node_modules`, so
-  `build/exe-bundle.js` embeds the three artifacts the SDK pins
-  (`ort.webgpu.bundle.min.mjs` + the asyncify `.mjs`/`.wasm` pair, ~24MB) into the
-  binary and the route serves them from there. `YAAR_ML_RUNTIME_DIR` overrides both.
-  If you change `ORT_URL` or the backend in the shim, update `ML_RUNTIME_ARTIFACTS`
-  in the build script to match — it fails the build rather than shipping a binary
-  whose ML route 404s.
+  `build/exe-bundle.js` embeds the artifacts the SDK pins — the native-WebGPU
+  flavor (`ort.webgpu.bundle.min.mjs` + the asyncify `.mjs`/`.wasm` pair) plus the
+  full-CPU flavor wasm-only sessions run on (`ort.wasm.bundle.min.mjs` + the plain
+  `.mjs`/`.wasm` pair; the asyncify build has fp64 kernels compiled out), ~38MB in
+  all — into the binary and the route serves them from there. `YAAR_ML_RUNTIME_DIR`
+  overrides both. If you change `ORT_URL`/`ORT_WASM_URL` or the backend in the
+  shim, update `ML_RUNTIME_ARTIFACTS` in the build script to match — it fails the
+  build rather than shipping a binary whose ML route 404s.
 - **Weights.** Deployed apps run under CSP `connect-src 'self'`, so the SDK
   fetches weights through the same-origin **streaming** proxy `/api/ml-weights?url=…`
   instead of hitting the model host cross-origin. The proxy enforces SSRF

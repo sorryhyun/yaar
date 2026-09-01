@@ -105,17 +105,22 @@ if (hasBundledLibs) {
 //
 // The @bundled/yaar-ml SDK loads ORT from the server's /api/ml-runtime/ route. A
 // standalone exe has no node_modules to serve that from, so the artifacts ride
-// inside the binary like the frontend does. Only the three files the shim actually
+// inside the binary like the frontend does. Only the files the shim actually
 // pins are embedded — dist/ as a whole is 129MB of variants (jspi/webgl/node/all)
 // nothing here loads.
 //
 // Keep this list in sync with packages/compiler/src/shims/yaar-ml.ts:
 //   ORT_URL                  → ort.webgpu.bundle.min.mjs   (the module the app imports)
-//   ort.env.wasm.wasmPaths   → the .mjs glue + .wasm the bundle fetches at runtime
+//   ORT_WASM_URL             → ort.wasm.bundle.min.mjs     (full-CPU flavor for wasm-only
+//                              sessions — the asyncify build has fp64 compiled out)
+//   ort.env.wasm.wasmPaths   → the .mjs glue + .wasm each bundle fetches at runtime
 const ML_RUNTIME_ARTIFACTS = [
   'ort.webgpu.bundle.min.mjs',
   'ort-wasm-simd-threaded.asyncify.mjs',
   'ort-wasm-simd-threaded.asyncify.wasm',
+  'ort.wasm.bundle.min.mjs',
+  'ort-wasm-simd-threaded.mjs',
+  'ort-wasm-simd-threaded.wasm',
 ];
 
 function resolveMlRuntimeDir() {
@@ -137,7 +142,7 @@ try {
     }
     return { name, absPath };
   });
-  console.log(`Embedding ${mlRuntimeFiles.length} ML runtime artifacts (~24MB)...`);
+  console.log(`Embedding ${mlRuntimeFiles.length} ML runtime artifacts (~38MB)...`);
 } catch (err) {
   // Hard failure, not a warning. A binary without these silently 404s every
   // /api/ml-runtime/ request, and the only symptom is a blank window in whatever
@@ -153,7 +158,7 @@ try {
 // the runtime prefixes. Symlinks for the two directories (followed when handed to
 // `--asset` directly) and hard links for the ML artifacts, which have to sit *inside* a
 // directory — `--asset` skips a symlink it encounters while walking one. Both are free;
-// nothing here copies 24MB of onnxruntime on every build.
+// nothing here copies ~38MB of onnxruntime on every build.
 
 const assetsDir = join(rootDir, 'dist', '.exe-assets');
 rmSync(assetsDir, { recursive: true, force: true });

@@ -21,12 +21,19 @@
  * The ORT `.wasm` runtime artifacts are served from `/api/ml-runtime/`.
  */
 
-// The `/webgpu` flavor is the NEW native (Dawn-based) WebGPU EP compiled into the
-// asyncify wasm artifact. The package default ('.') is the older JSEP WebGPU EP,
-// whose buffer allocator miscomputes fp16 graphs with single-consumer alias views
-// (measured: adaLN Split→Unsqueeze→broadcast in the anima DiT comes back ~10× too
-// large per block → residual overflow → all-NaN). The native EP does not share
-// that allocator. Both flavors load their artifacts from /api/ml-runtime/.
+// TWO flavors of onnxruntime-web, each covering the other's hole:
+//
+// - The `/webgpu` flavor is the NEW native (Dawn-based) WebGPU EP compiled into the
+//   asyncify wasm artifact. The package default ('.') is the older JSEP WebGPU EP,
+//   whose buffer allocator miscomputes fp16 graphs with single-consumer alias views
+//   (measured: adaLN Split→Unsqueeze→broadcast in the anima DiT comes back ~10× too
+//   large per block → residual overflow → all-NaN). The native EP does not share
+//   that allocator.
+// - The `/wasm` flavor is the full CPU build, loaded lazily for sessions that
+//   resolve to the wasm EP alone — the asyncify artifact's CPU side is REDUCED
+//   (see ORT_WASM_URL below).
+//
+// All flavors load their artifacts from /api/ml-runtime/.
 //
 // ORT is imported at RUNTIME from its own same-origin URL, not bundled into the
 // app — see `ORT_URL` below. The type-only import is erased, so no copy of ORT
@@ -48,6 +55,23 @@ import type * as Ort from 'onnxruntime-web/webgpu';
  */
 const ORT_URL = '/api/ml-runtime/ort.webgpu.bundle.min.mjs';
 
+/**
+ * The full-CPU flavor, for sessions that resolve to the wasm EP alone.
+ *
+ * The native-WebGPU (asyncify) artifact above ships a *reduced* CPU build: its
+ * float64 kernels are compiled out, so a graph that computes in f64 — e.g. the
+ * transcribe app's nemo128 mel preprocessor, which casts the waveform to double
+ * for its STFT — fails session creation with "Could not find an implementation
+ * for Cast(13)". Measured on ORT 1.27 and 1.29, so it is a build decision, not a
+ * version bug. The `/wasm` flavor is the complete CPU build (13.5 MB vs the
+ * default bundle's 27 MB JSEP artifact) and carries no WebGPU EP at all, so the
+ * JSEP allocator bug above cannot reach it. Tensors are duck-typed across ORT
+ * module instances — a session from this flavor accepts tensors built with the
+ * `Tensor` exported from the flavor above (verified: `s.run` reads
+ * type/data/dims, never `instanceof`).
+ */
+const ORT_WASM_URL = '/api/ml-runtime/ort.wasm.bundle.min.mjs';
+
 // The specifier has to be opaque to Bun's bundler: a literal `import(ORT_URL)`
 // gets resolved at build time (and fails — it's a server route, not a module on
 // disk). Going through `Function` keeps it a runtime import, which the app CSP
@@ -57,6 +81,17 @@ const ORT_URL = '/api/ml-runtime/ort.webgpu.bundle.min.mjs';
 const importModule = new Function('u', 'return import(u)') as (u: string) => Promise<typeof Ort>;
 
 const ort = await importModule(ORT_URL);
+
+// The wasm flavor costs a second runtime download, so it loads on first use, not
+// on import — a page that only ever runs WebGPU sessions never pays for it.
+let _wasmOrt: Promise<typeof Ort> | undefined;
+function wasmFlavor(): Promise<typeof Ort> {
+  _wasmOrt ??= importModule(ORT_WASM_URL).then((m) => {
+    configureOrtEnv(m);
+    return m;
+  });
+  return _wasmOrt;
+}
 
 /**
  * The app's iframe token, for the weight routes.
@@ -150,46 +185,50 @@ function authorizeExternalData(
   };
 }
 
-// ── Runtime configuration (runs once on import) ──────────────────────────────
+// ── Runtime configuration (runs once per flavor) ─────────────────────────────
 
-// ORT loads its `.wasm` binaries at runtime from this same-origin static route
-// (served by the server from onnxruntime-web/dist). Must be set before any
-// session is created.
-ort.env.wasm.wasmPaths = '/api/ml-runtime/';
-// YAAR iframes are not cross-origin isolated (no COOP/COEP) → SharedArrayBuffer
-// is unavailable, so multithreaded wasm cannot run. Pin to a single thread; the
-// WebGPU EP does not need threads anyway.
-ort.env.wasm.numThreads = 1;
-// Run the session on a worker instead of the calling thread.
-//
-// This is not a nicety, it is what keeps the desktop alive. App iframes are
-// same-origin and unsandboxed, so an app shares the event loop with the whole
-// YAAR UI. `InferenceSession.create` is one long *synchronous* wasm call —
-// graph parse, external-data copy into the wasm heap, weight upload to the GPU —
-// and awaiting it does not yield, because there is nothing to yield to. Loading
-// a multi-GB model on this thread freezes the taskbar, the palette, and every
-// other window for as long as it takes. On a worker, the main thread only ever
-// waits on a postMessage.
-//
-// Two things proxy mode does not support, both of which the SDK stays clear of:
-// `preferredOutputLocation` (session option) and GPU-resident input tensors.
-ort.env.wasm.proxy = true;
-// Warnings off; errors still print.
-//
-// The one ORT emits on nearly every session is the EP-partition notice —
-// "Some nodes were not assigned to the preferred execution providers" — which
-// fires whenever the graph does not land 100% on WebGPU. That is the normal
-// case, not a fault: ORT deliberately keeps shape-related ops on CPU because
-// round-tripping them to the GPU costs more than it saves, and the message says
-// so in its own second sentence. An app author can do nothing with it, and every
-// ML app pays it twice per model load, so it trains people to ignore the console
-// that real failures also print to.
-//
-// Nothing actionable is lost. The failures that matter — a GPU too small for the
-// model, an EP that cannot initialize — are thrown, not logged, and
-// `createSession` below translates them into messages aimed at the app author.
-// An app that wants the firehose can reopen it via the exported `env`.
-ort.env.logLevel = 'error';
+function configureOrtEnv(rt: typeof Ort): void {
+  // ORT loads its `.wasm` binaries at runtime from this same-origin static route
+  // (served by the server from onnxruntime-web/dist). Must be set before any
+  // session is created.
+  rt.env.wasm.wasmPaths = '/api/ml-runtime/';
+  // YAAR iframes are not cross-origin isolated (no COOP/COEP) → SharedArrayBuffer
+  // is unavailable, so multithreaded wasm cannot run. Pin to a single thread; the
+  // WebGPU EP does not need threads anyway.
+  rt.env.wasm.numThreads = 1;
+  // Run the session on a worker instead of the calling thread.
+  //
+  // This is not a nicety, it is what keeps the desktop alive. App iframes are
+  // same-origin and unsandboxed, so an app shares the event loop with the whole
+  // YAAR UI. `InferenceSession.create` is one long *synchronous* wasm call —
+  // graph parse, external-data copy into the wasm heap, weight upload to the GPU —
+  // and awaiting it does not yield, because there is nothing to yield to. Loading
+  // a multi-GB model on this thread freezes the taskbar, the palette, and every
+  // other window for as long as it takes. On a worker, the main thread only ever
+  // waits on a postMessage.
+  //
+  // Two things proxy mode does not support, both of which the SDK stays clear of:
+  // `preferredOutputLocation` (session option) and GPU-resident input tensors.
+  rt.env.wasm.proxy = true;
+  // Warnings off; errors still print.
+  //
+  // The one ORT emits on nearly every session is the EP-partition notice —
+  // "Some nodes were not assigned to the preferred execution providers" — which
+  // fires whenever the graph does not land 100% on WebGPU. That is the normal
+  // case, not a fault: ORT deliberately keeps shape-related ops on CPU because
+  // round-tripping them to the GPU costs more than it saves, and the message says
+  // so in its own second sentence. An app author can do nothing with it, and every
+  // ML app pays it twice per model load, so it trains people to ignore the console
+  // that real failures also print to.
+  //
+  // Nothing actionable is lost. The failures that matter — a GPU too small for the
+  // model, an EP that cannot initialize — are thrown, not logged, and
+  // `createSession` below translates them into messages aimed at the app author.
+  // An app that wants the firehose can reopen it via the exported `env`.
+  rt.env.logLevel = 'error';
+}
+
+configureOrtEnv(ort);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -689,14 +728,17 @@ async function createSession(
   rawExtra?: Record<string, unknown>,
 ): Promise<ort.InferenceSession> {
   const providers = await resolveProviders(backend);
+  // wasm-only sessions run on the full-CPU flavor — the native-WebGPU artifact's
+  // CPU build has fp64 compiled out (see ORT_WASM_URL).
+  const rt = providers.includes('webgpu') ? ort : await wasmFlavor();
   // ORT fetches these URLs from its own worker, where the Referer carries no token.
   const extra = authorizeExternalData(rawExtra);
   // `create` transfers the model buffer to the worker in proxy mode, which detaches
   // it here — so each attempt needs its own copy, or the wasm fallback below would
   // hand ORT an empty model. The graph proto is small (weights ride in externalData).
-  const modelBytes = () => (ort.env.wasm.proxy ? bytes.slice() : bytes);
+  const modelBytes = () => (rt.env.wasm.proxy ? bytes.slice() : bytes);
   try {
-    return await ort.InferenceSession.create(modelBytes(), {
+    return await rt.InferenceSession.create(modelBytes(), {
       executionProviders: providers,
       ...extra,
     });
@@ -713,9 +755,11 @@ async function createSession(
             `(original error: ${String((err as Error)?.message ?? err)})`,
         );
       }
-      // Auto mode: fall back to the CPU wasm backend on any WebGPU failure.
+      // Auto mode: fall back to the CPU wasm backend on any WebGPU failure —
+      // on the full-CPU flavor, so the fallback actually has every kernel.
       if (backend === 'auto') {
-        return ort.InferenceSession.create(modelBytes(), {
+        const cpu = await wasmFlavor();
+        return cpu.InferenceSession.create(modelBytes(), {
           executionProviders: ['wasm'],
           ...extra,
         });
@@ -833,7 +877,11 @@ export async function releaseSessions(match: (url: string) => boolean): Promise<
 
 /** onnxruntime-web Tensor constructor — build model inputs with `new Tensor(...)`. */
 export const Tensor = ort.Tensor;
-/** onnxruntime-web env (advanced tuning: `env.wasm`, `env.webgpu`, `env.logLevel`). */
+/**
+ * onnxruntime-web env (advanced tuning: `env.wasm`, `env.webgpu`, `env.logLevel`).
+ * This is the native-WebGPU flavor's env; the full-CPU flavor that wasm-only
+ * sessions run on keeps the SDK defaults regardless of edits here.
+ */
 export const env = ort.env;
 /** The raw onnxruntime-web namespace, for APIs not surfaced above. */
 export { ort };
