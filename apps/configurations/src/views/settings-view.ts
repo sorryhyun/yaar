@@ -121,14 +121,14 @@ export function SettingsView() {
         <div class="y-label s-section-title">👤 Profile</div>
         <div class="s-row">
           <label class="s-label">Display Name</label>
-          <input class="s-input" type="text" placeholder="Your name"
+          <input class="y-input s-input" type="text" placeholder="Your name"
             value=${() => String(get('userName') ?? '')}
             onInput=${onInputHandler((v) => set('userName', v))}
           />
         </div>
         <div class="s-row">
           <label class="s-label">Language <span class="s-hint">e.g. en, ko, ja</span></label>
-          <input class="s-input" type="text" placeholder="en"
+          <input class="y-input s-input" type="text" placeholder="en"
             value=${() => String(get('language') ?? 'en')}
             onInput=${onInputHandler((v) => set('language', v))}
           />
@@ -139,7 +139,7 @@ export function SettingsView() {
         <div class="y-label s-section-title">🎨 Appearance</div>
         <div class="s-row">
           <label class="s-label">Theme</label>
-          <select class="s-select"
+          <select class="y-select s-select"
             value=${() => String(get('theme') ?? 'dark')}
             onChange=${onChangeHandler((v) => set('theme', v))}
           >
@@ -148,7 +148,7 @@ export function SettingsView() {
         </div>
         <div class="s-row">
           <label class="s-label">Wallpaper</label>
-          <select class="s-select"
+          <select class="y-select s-select"
             value=${() => String(get('wallpaper') ?? '')}
             onChange=${onChangeHandler((v) => set('wallpaper', v))}
           >
@@ -175,7 +175,7 @@ export function SettingsView() {
         </div>
         <div class="s-row">
           <label class="s-label">Icon Size</label>
-          <select class="s-select"
+          <select class="y-select s-select"
             value=${() => String(get('iconSize') ?? '')}
             onChange=${onChangeHandler((v) => set('iconSize', v))}
           >
@@ -190,7 +190,7 @@ export function SettingsView() {
         <div class="y-label s-section-title">⚙️ System</div>
         <div class="s-row">
           <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
-          <select class="s-select"
+          <select class="y-select s-select"
             value=${() => String(get('provider') ?? '')}
             onChange=${onChangeHandler((v) => set('provider', v))}
           >

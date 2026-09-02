@@ -116,12 +116,12 @@ export function DomainsView() {
         <div class="s-section" style=${() => (data().allow_all_domains ? 'opacity:0.5;pointer-events:none;' : '')}>
           <div class="y-label s-section-title" style="display:flex;align-items:center;justify-content:space-between;">
             <span>📋 Allowed Domains</span>
-            <span class="item-badge">${() => data().allowed_domains.length} domains</span>
+            <span class="y-badge item-badge">${() => data().allowed_domains.length} domains</span>
           </div>
 
           <div style="display:flex;gap:8px;margin-bottom:12px;">
             <input
-              class="s-input"
+              class="y-input s-input"
               style="flex:1;width:auto;"
               type="text"
               placeholder="api.example.com"

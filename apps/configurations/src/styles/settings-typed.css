@@ -67,28 +67,12 @@
   padding: 0 3px;
 }
 
-/* Consolidated input/select styles */
+/* Layered over y-input / y-select: a settings row wants a fixed-width control
+   on the right, not the full-width field y-input defaults to. */
 .s-input,
 .s-select {
-  font-size: 13px;
-  background: var(--yaar-bg);
-  border: 1px solid var(--yaar-border);
-  border-radius: var(--yaar-radius);
-  color: var(--yaar-text);
-  padding: 5px 10px;
   width: 180px;
   box-sizing: border-box;
-  transition: border-color 0.15s;
-}
-
-.s-select {
-  cursor: pointer;
-}
-
-.s-input:focus,
-.s-select:focus {
-  outline: none;
-  border-color: var(--yaar-accent);
 }
 
 /* Toggle switch */

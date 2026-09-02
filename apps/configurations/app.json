@@ -6,7 +6,7 @@
     "yaar://config/",
     "yaar://system/update"
   ],
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "YAAR",
   "description": "System settings — user profile, wallpaper and accent, desktop shortcuts, event-driven hooks, allowed HTTP domains, and YAAR updates.",
   "kind": "system",

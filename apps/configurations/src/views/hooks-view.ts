@@ -195,8 +195,8 @@ export function HooksView() {
                   <div style="flex:1;min-width:0">
                     <div class="detail-title">${h.label}</div>
                     <div class="detail-title-sub" style="display:flex;gap:6px;margin-top:4px">
-                      <span class="item-badge item-badge-event">${h.event}</span>
-                      <span class=${h.enabled ? 'item-badge item-badge-enabled' : 'item-badge item-badge-disabled'}>
+                      <span class="y-badge y-badge-accent item-badge">${h.event}</span>
+                      <span class=${h.enabled ? 'y-badge y-badge-success item-badge' : 'y-badge item-badge'}>
                         ${h.enabled ? '✓ enabled' : '○ disabled'}
                       </span>
                     </div>

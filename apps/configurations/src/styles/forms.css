@@ -16,30 +16,9 @@
   margin-bottom: 4px;
 }
 
-/* Badges */
+/* Layered over y-badge (+ y-badge-accent / y-badge-success): a badge beside a
+   long title must neither wrap nor give up width. */
 .item-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  background: var(--yaar-bg);
-  border: 1px solid var(--yaar-border);
-  color: var(--yaar-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
-  display: inline-block;
-}
-.item-badge-event {
-  background: var(--yaar-wash-accent);
-  border-color: var(--yaar-accent);
-  color: var(--yaar-accent);
-}
-.item-badge-enabled {
-  background: var(--yaar-wash-success);
-  border-color: var(--yaar-success);
-  color: var(--yaar-success);
-}
-.item-badge-disabled {
-  background: var(--yaar-bg);
-  border-color: var(--yaar-border);
-  color: var(--yaar-text-muted);
 }

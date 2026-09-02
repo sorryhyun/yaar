@@ -21,11 +21,11 @@ function shiftTab(delta: number) {
 function App() {
   return html`
     <div class="cfg-layout">
-      <div class="cfg-tabs">
+      <div class="y-tabs cfg-tabs">
         ${TABS.map(
           (tab) => html`
           <button
-            class=${() => `cfg-tab${activeTab() === tab.id ? ' active' : ''}`}
+            class=${() => `y-tab${activeTab() === tab.id ? ' active' : ''}`}
             onClick=${() => setActiveTab(tab.id)}
           >
             ${tab.icon} ${tab.label}
