@@ -6,15 +6,7 @@
   height: 100vh;
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
-  border-bottom: 1px solid var(--yaar-border);
-  background: var(--yaar-bg-surface);
-  flex-shrink: 0;
-}
+/* .app-header is y-toolbar y-toolbar-dense in markup. */
 
 .sidebar-toggle {
   flex-shrink: 0;

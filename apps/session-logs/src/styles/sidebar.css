@@ -1,12 +1,8 @@
 /* ── Sidebar ─────────────────────────────────────── */
 
+/* Layered over y-sidebar. */
 .sidebar {
   width: 280px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--yaar-border);
-  display: flex;
-  flex-direction: column;
-  background: var(--yaar-bg);
   min-height: 0;
 }
 

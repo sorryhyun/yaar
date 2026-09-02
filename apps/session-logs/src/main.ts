@@ -72,7 +72,7 @@ function Root() {
   return html`
   <div class="layout">
 
-    <div class="app-header">
+    <div class="y-toolbar y-toolbar-dense app-header">
       <button
         class="y-btn y-btn-sm y-btn-ghost sidebar-toggle"
         onClick=${toggleSidebar}
@@ -92,7 +92,7 @@ function Root() {
 
     <div class=${bodyCls}>
 
-      <div class="sidebar">
+      <div class="y-sidebar sidebar">
         <div class="search-wrap">
           <input
             class="y-input search-input"
