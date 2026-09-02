@@ -58,11 +58,13 @@ export interface EncodedImage {
  * limit on `apply`.
  *
  * Exported for `appStorage.readBinary`, which needs the same conversion on bytes it did
- * not encode. Deliberately not in the barrel — an app that wants base64 out of a blob it
- * holds is describing `toWebP`, or a `blobToDataUrl` it can slice.
+ * not encode, and re-exported from the barrel as `bytesToBase64` for the app that holds
+ * non-image bytes (a font file, a PNG it will not re-encode) and wants the raw base64
+ * `appStorage.save(..., 'base64')` takes. For an image about to be stored, `toWebP`
+ * already returns it.
  */
-export function base64FromBuffer(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+export function base64FromBuffer(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.length; i += 0x8000) {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000) as unknown as number[]);

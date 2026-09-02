@@ -1762,6 +1762,30 @@ declare module '@bundled/yaar' {
   export function blobToDataUrl(blob: Blob): Promise<string>;
 
   /**
+   * The return trip: a `data:` URL back into a Blob with its declared MIME
+   * type — for bytes the app already holds as one (a canvas `toDataURL`, a
+   * stored image read back). Handles `;base64,` and percent-encoded bodies.
+   * Throws on a string that is not a data URL; wrap it if you want `null`.
+   */
+  export function dataUrlToBlob(dataUrl: string): Blob;
+
+  /**
+   * Base64 → bytes, whitespace stripped first (APIs that wrap base64 at a
+   * column, like GitHub's contents endpoint, hand back newlines `atob`
+   * rejects). Text arrives via `new TextDecoder().decode(base64ToBytes(b64))`.
+   * Throws on malformed input.
+   */
+  export function base64ToBytes(b64: string): Uint8Array;
+
+  /**
+   * Bytes → base64, chunked so a multi-megabyte buffer does not overflow the
+   * call stack. The raw form `appStorage.save(path, data, { encoding: 'base64' })`
+   * takes, for bytes that are not an image you are re-encoding — for those,
+   * `toWebP` already returns it.
+   */
+  export function bytesToBase64(bytes: ArrayBuffer | Uint8Array): string;
+
+  /**
    * Bytes as a human-readable size: `'0 B'`, `'834 B'`, `'1.5 KB'`, `'2.0 MB'`.
    * Binary steps (1024), one decimal above bytes. Use it rather than a local
    * ladder, so two windows never label the same file differently.

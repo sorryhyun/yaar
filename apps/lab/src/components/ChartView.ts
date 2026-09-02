@@ -1,9 +1,8 @@
 import { createEffect, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { showToast, errMsg } from '@bundled/yaar';
+import { showToast, errMsg, downloadBlob, dataUrlToBlob } from '@bundled/yaar';
 import { renderChart, chartToPNG } from '../lib/chart-render';
 import { saveChart, sharedPath } from '../lib/shared-tree';
-import { downloadDataUrl } from '../lib/data-url';
 import type { ChartSpec } from '../types';
 
 /** A live Chart.js canvas plus its save/export buttons. Owns the chart instance. */
@@ -33,7 +32,7 @@ export function ChartView(props: { spec: ChartSpec }) {
   const download = async () => {
     try {
       const png = await chartToPNG(props.spec);
-      downloadDataUrl(png, 'chart-' + Date.now() + '.png');
+      downloadBlob(dataUrlToBlob(png), 'chart-' + Date.now() + '.png');
     } catch (e) {
       showToast('Export failed: ' + errMsg(e), 'error');
     }

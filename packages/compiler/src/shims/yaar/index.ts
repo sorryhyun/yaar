@@ -70,7 +70,8 @@ export { sanitizeHtml, escapeHtml } from './sanitize.js';
 export type { SanitizeHtmlOptions } from './sanitize.js';
 
 // ── File plumbing ───────────────────────────────────────────────
-export { downloadBlob, blobToDataUrl } from './files.js';
+export { downloadBlob, blobToDataUrl, dataUrlToBlob, base64ToBytes } from './files.js';
+export { base64FromBuffer as bytesToBase64 } from './image.js';
 
 // ── Consistent value rendering ──────────────────────────────────
 export { formatBytes, formatDuration, formatClock } from './format.js';

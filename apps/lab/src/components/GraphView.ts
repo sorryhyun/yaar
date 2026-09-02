@@ -1,12 +1,11 @@
 import { createEffect, createMemo, createSignal, For, Show, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { showToast, errMsg } from '@bundled/yaar';
+import { showToast, errMsg, downloadBlob, dataUrlToBlob } from '@bundled/yaar';
 import { sliderVars } from '../graph/compile';
 import { drawGraph, planSeries, defaultParams, formLabel, type SeriesPlan } from '../graph/render';
 import { makeTransform, viewFromSpec, type View } from '../graph/sample';
 import { graphToPNG } from '../lib/graph-render';
 import { saveGraph, sharedPath } from '../lib/shared-tree';
-import { downloadDataUrl } from '../lib/data-url';
 import type { GraphSpec } from '../types';
 
 /**
@@ -193,7 +192,7 @@ export function GraphView(props: { spec: GraphSpec }) {
   const download = async () => {
     try {
       const png = await graphToPNG(props.spec, { bounds: bounds(), params: params() });
-      downloadDataUrl(png, 'graph-' + Date.now() + '.png');
+      downloadBlob(dataUrlToBlob(png), 'graph-' + Date.now() + '.png');
     } catch (e) {
       showToast('Export failed: ' + errMsg(e), 'error');
     }

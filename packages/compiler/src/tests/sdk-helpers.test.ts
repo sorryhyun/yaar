@@ -112,7 +112,9 @@ process.on('exit', () => {
 const { safeParseOr } = await import('../shims/yaar/boundary.js');
 const { tryToast } = await import('../shims/yaar/ui.js');
 const { escapeHtml } = await import('../shims/yaar/sanitize.js');
-const { downloadBlob, blobToDataUrl } = await import('../shims/yaar/files.js');
+const { downloadBlob, blobToDataUrl, dataUrlToBlob, base64ToBytes } =
+  await import('../shims/yaar/files.js');
+const { base64FromBuffer: bytesToBase64 } = await import('../shims/yaar/image.js');
 const { formatBytes, formatClock, formatDuration } = await import('../shims/yaar/format.js');
 
 beforeEach(() => {
@@ -267,6 +269,58 @@ describe('blobToDataUrl', () => {
     expect(url.startsWith('data:text/plain')).toBe(true);
     expect(url).toContain(';base64,');
     expect(atob(url.split(',')[1])).toBe('hi');
+  });
+});
+
+describe('dataUrlToBlob', () => {
+  test('a base64 data URL comes back with its bytes and declared MIME', async () => {
+    const blob = dataUrlToBlob('data:text/plain;base64,aGk=');
+    // Bun's Blob appends `;charset=utf-8` to a text/* type on its own.
+    expect(blob.type.startsWith('text/plain')).toBe(true);
+    expect(await blob.text()).toBe('hi');
+  });
+
+  test('the percent-encoded form decodes too, and no MIME means octet-stream', async () => {
+    const blob = dataUrlToBlob('data:,a%20b');
+    expect(blob.type).toBe('application/octet-stream');
+    expect(await blob.text()).toBe('a b');
+  });
+
+  test('a charset parameter does not hide the base64 marker', async () => {
+    const blob = dataUrlToBlob('data:text/plain;charset=utf-8;base64,aGk=');
+    expect(blob.type.startsWith('text/plain')).toBe(true);
+    expect(await blob.text()).toBe('hi');
+  });
+
+  test('round-trips blobToDataUrl', async () => {
+    const original = new Blob([new Uint8Array([0, 255, 128])], { type: 'image/png' });
+    const back = dataUrlToBlob(await blobToDataUrl(original));
+    expect(back.type).toBe('image/png');
+    expect(new Uint8Array(await back.arrayBuffer())).toEqual(new Uint8Array([0, 255, 128]));
+  });
+
+  test('throws on a string that is not a data URL — the caller decides about null', () => {
+    expect(() => dataUrlToBlob('https://example.com/a.png')).toThrow(/data: URL/);
+    expect(() => dataUrlToBlob('')).toThrow(/data: URL/);
+  });
+});
+
+describe('base64ToBytes / bytesToBase64', () => {
+  test('decodes, and tolerates the column wrapping GitHub applies', () => {
+    expect(base64ToBytes('aGk=')).toEqual(new Uint8Array([104, 105]));
+    expect(base64ToBytes('aG\nVs\nbG8=\n')).toEqual(new Uint8Array([104, 101, 108, 108, 111]));
+    expect(new TextDecoder().decode(base64ToBytes('7ZWc'))).toBe('한');
+  });
+
+  test('throws on malformed input rather than returning garbage', () => {
+    expect(() => base64ToBytes('not base64!')).toThrow();
+  });
+
+  test('bytesToBase64 is the inverse, for a Uint8Array or an ArrayBuffer, past the chunk size', () => {
+    const big = new Uint8Array(0x8000 * 3 + 7);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 31) & 0xff;
+    expect(base64ToBytes(bytesToBase64(big))).toEqual(big);
+    expect(bytesToBase64(big.buffer)).toBe(bytesToBase64(big));
   });
 });
 

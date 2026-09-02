@@ -57,7 +57,7 @@ src/
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms) — and escapeHtml
     │   ├── boundary.ts    # safeParseOr — parse untrusted JSON, log, fall back (absence stays silent; `onInvalid` replaces the log)
     │   ├── standard-schema.ts # internal: isStandardSchema + describeIssues, shared by defineApp and safeParseOr
-    │   ├── files.ts       # downloadBlob, blobToDataUrl
+    │   ├── files.ts       # downloadBlob, blobToDataUrl, dataUrlToBlob, base64ToBytes
     │   ├── format.ts      # formatBytes, formatDuration, formatClock — one rendering per value, OS-wide
     │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
     │   ├── fonts.ts       # fonts.faces/faceCss/inline — YAAR's faces, subsetted server-side into a data: URL @font-face
@@ -256,7 +256,8 @@ agent before it is called by an app:
   The last additions cleared it by a wide margin and are the calibration to argue against:
   `safeParseOr` (82 call sites / 22 apps), `tryToast` (~50), `escapeHtml` (6, three of them
   attribute-unsafe), `downloadBlob`/`blobToDataUrl` (6 and 4), `formatBytes`/`formatDuration`/
-  `formatClock` (4, 3 and 6, all rendering the same value differently).
+  `formatClock` (4, 3 and 6, all rendering the same value differently), `dataUrlToBlob`/
+  `base64ToBytes`/`bytesToBase64` (6, 3 and 2 — the return trips of the two above).
 
   **Count the call sites by contract, not by shape.** The adoption pass that exercised
   those seven found the audit had overcounted wherever it matched a *shape*: `tryToast`'s

@@ -938,6 +938,7 @@ Two more edges:
 import {
   errMsg, showToast, withLoading, tryToast, wait, AppCommandError,
   formatBytes, formatDuration, formatClock, downloadBlob, blobToDataUrl, toWebP,
+  dataUrlToBlob, base64ToBytes, bytesToBase64,
 } from '@bundled/yaar';
 
 errMsg(e);                       // not: e instanceof Error ? e.message : String(e)
@@ -959,6 +960,9 @@ formatClock(savedAt, { seconds: false });  // '15:04', for a "Saved 15:04" label
 
 downloadBlob(new Blob([csv]), 'report.csv');   // objectURL + <a download> + revoke
 const dataUrl = await blobToDataUrl(file);     // FileReader, promisified
+downloadBlob(dataUrlToBlob(canvas.toDataURL()), 'chart.png');  // and the return trip
+const text = new TextDecoder().decode(base64ToBytes(apiBody)); // whitespace-tolerant atob
+await appStorage.save('fonts/a.otf', bytesToBase64(await blob.arrayBuffer()), { encoding: 'base64' });
 const encoded = await toWebP(bitmap, { quality: 0.8, maxSize: 2048 });  // null if unsupported
 ```
 
