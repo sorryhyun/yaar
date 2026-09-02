@@ -238,7 +238,7 @@ export function SettingsView() {
           showExtra()
             ? html`
           <textarea
-            class="settings-editor"
+            class="y-input settings-editor"
             style="margin-top: 8px; min-height: 120px;"
             value=${extraRaw}
             onInput=${(e: InputEvent) => setExtraRaw((e.target as HTMLTextAreaElement).value)}

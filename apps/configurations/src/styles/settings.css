@@ -7,16 +7,12 @@
 }
 
 /* Settings tab */
+/* Layered over y-input: a tall JSON editor on the surface tint. */
 .settings-editor {
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
-  width: 100%;
   min-height: 300px;
   resize: vertical;
   background: var(--yaar-bg-surface);
-  border: 1px solid var(--yaar-border);
-  border-radius: var(--yaar-radius);
-  color: var(--yaar-text);
   padding: var(--yaar-sp-3);
   line-height: 1.6;
   box-sizing: border-box;
