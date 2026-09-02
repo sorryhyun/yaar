@@ -53,7 +53,7 @@ export const DetailEmpty = () => html`
 
 /** Full card grid — the opt-in expansion behind the compact strip. */
 const MetaCards = (d: Record<string, any>) => html`
-  <div class="detail-grid">
+  <div class="detail-grid y-scroll">
     <div class="detail-field">
       <div class="y-label field-label">Provider</div>
       <div class="field-value">

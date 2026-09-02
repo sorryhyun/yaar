@@ -138,7 +138,6 @@
   /* Expanded is opt-in, but it must never squeeze the transcript out of the
      window on a short one — the grid scrolls before the transcript shrinks. */
   max-height: 42vh;
-  overflow-y: auto;
 }
 
 .detail-field {

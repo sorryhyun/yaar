@@ -243,7 +243,7 @@ export const TranscriptSection = () => html`
           ? html`<span class="msg-count y-font-mono">${turns().length} turns</span>`
           : null}
     </div>
-    <div class="transcript-body">
+    <div class="transcript-body y-scroll">
       ${() => {
         if (turns().length) {
           return html`

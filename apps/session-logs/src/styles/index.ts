@@ -5,4 +5,3 @@ import './sidebar.css';
 import './detail-panel.css';
 import './transcript.css';
 import './message-cards.css';
-import './scrollbars.css';

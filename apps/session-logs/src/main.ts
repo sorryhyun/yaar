@@ -101,18 +101,18 @@ function Root() {
           />
         </div>
 
-        <div class="session-list">
+        <div class="session-list y-scroll">
           ${() =>
             state.loading && state.sessions.length === 0
-              ? html`<div class="list-status"><span class="y-spinner"></span></div>`
+              ? html`<div class="list-status y-scroll"><span class="y-spinner"></span></div>`
               : null}
           ${() =>
             !state.loading && state.sessions.length === 0 && state.loadError
-              ? html`<div class="list-status list-error">⚠️ ${state.loadError}</div>`
+              ? html`<div class="list-status list-error y-scroll">⚠️ ${state.loadError}</div>`
               : null}
           ${() =>
             !state.loading && filteredSessions().length === 0 && !state.loadError
-              ? html`<div class="list-status">No sessions found</div>`
+              ? html`<div class="list-status y-scroll">No sessions found</div>`
               : null}
 
           <${For} each=${groupedSessions}>
