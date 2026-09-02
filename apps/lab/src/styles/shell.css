@@ -12,18 +12,16 @@
   left: 0;
 }
 
+/* Layered over y-toolbar: the look is the platform's, the geometry is the
+   shell's — pinned to the top edge at a fixed height because the shell lays
+   out with absolute positioning (flex:1 breaks Solid html reactivity). */
 .lab-toolbar {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   height: 38px;
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
   padding: 0 var(--yaar-sp-3);
-  border-bottom: 1px solid var(--yaar-border);
-  background: var(--yaar-bg-surface);
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -43,19 +41,17 @@
   overflow-y: auto;
   padding: var(--yaar-sp-3);
 }
+/* Layered over y-statusbar, pinned to the bottom edge the same way. Items
+   sit left-to-right with a gap rather than spread to the corners. */
 .lab-status {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   height: 26px;
-  display: flex;
-  align-items: center;
+  justify-content: flex-start;
   gap: var(--yaar-sp-2);
   padding: 0 var(--yaar-sp-3);
-  border-top: 1px solid var(--yaar-border);
-  background: var(--yaar-bg-surface);
-  font-size: var(--yaar-text-xs);
   color: var(--yaar-text-dim);
   overflow: hidden;
 }

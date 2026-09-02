@@ -11,13 +11,7 @@
   display: flex;
   flex-direction: column;
 }
-.lab-side-head {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  border-bottom: 1px solid var(--yaar-border);
-}
+/* .lab-side-head is y-toolbar in markup. */
 .lab-side-title {
   font-weight: 600;
   font-size: var(--yaar-text-sm);

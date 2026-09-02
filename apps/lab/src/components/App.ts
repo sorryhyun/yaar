@@ -43,7 +43,7 @@ export default function App() {
     <div class=${() => 'lab-root' + (sidebar() ? '' : ' lab-no-side')}>
       ${() => (sidebar() ? Sidebar() : null)}
       <div class="lab-main">
-        <div class="lab-toolbar">
+        <div class="y-toolbar lab-toolbar">
           <button class="lab-mini" title="Toggle notebook list" onClick=${() => setSidebar(!sidebar())}>☰</button>
           <input
             class="lab-title"
@@ -86,7 +86,7 @@ export default function App() {
           </label>
         </div>
         ${() => (onNotebook() ? NotebookView() : AgentPanel())}
-        <div class="lab-status">
+        <div class="y-statusbar lab-status">
           <${Show} when=${busy} fallback=${() => html`<span class="y-dot"></span><span>idle</span>`}>
             <span class="y-dot y-dot-warn y-dot-pulse"></span><span>running…</span>
             <button class="lab-mini lab-mini-danger" onClick=${() => cancelRun()}>Cancel</button>

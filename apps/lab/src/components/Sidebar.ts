@@ -8,7 +8,7 @@ import { current, notebooks } from '../state/signals';
 export function Sidebar() {
   return html`
     <div class="lab-sidebar">
-      <div class="lab-side-head">
+      <div class="y-toolbar lab-side-head">
         <span class="lab-side-title">Notebooks</span>
         <button class="lab-mini" title="New notebook" onClick=${async () => {
           await saveCurrent();

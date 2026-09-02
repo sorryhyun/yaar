@@ -3,7 +3,7 @@
   "name": "Lab",
   "kind": "system",
   "icon": "🧪",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Sandboxed compute notebook — run JS cells over storage data, chart results, without dragging the data through the agent's context.",
   "permissions": [
     "yaar://storage/",
