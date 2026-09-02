@@ -140,7 +140,7 @@ export function Editor() {
           <div class="editor-empty y-text-sm y-text-muted">Select a file to view</div>
         `}
       >
-        <div class="editor-header y-text-xs y-text-muted">
+        <div class="y-editbar y-toolbar-dense editor-header y-text-muted">
           <span class="editor-file-name">${() => openFilePath()}</span>
           <${Show} when=${isDirty}>
             <span class="y-dot y-dot-accent"></span>

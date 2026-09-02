@@ -8,16 +8,7 @@
 
 /* Wraps rather than clips: the change view sits in whatever width the sidebar
    leaves it, and a narrow window used to cut the Close button in half. */
-.changes-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--yaar-sp-1);
-  padding: 3px var(--yaar-sp-2);
-  background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
-  flex-shrink: 0;
-}
+/* .changes-toolbar is y-editbar y-toolbar-dense in markup. */
 
 .changes-toolbar-gap {
   flex: 1;
@@ -96,15 +87,10 @@
   min-height: 0;
 }
 
+/* Layered over y-toolbar y-toolbar-dense: stays put while the diff scrolls. */
 .change-head {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: 4px var(--yaar-sp-2);
-  border-bottom: 1px solid var(--yaar-border);
   position: sticky;
   top: 0;
-  background: var(--yaar-bg-surface);
   z-index: 1;
 }
 
@@ -140,20 +126,15 @@
   min-height: 0;
 }
 
+/* Layered over y-input: a code textarea, so mono, no wrapping, tight padding. */
 .diff-textarea {
   flex: 1;
   min-height: 60px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
   line-height: 1.4;
   tab-size: 2;
-  background: var(--yaar-bg);
-  color: var(--yaar-text);
-  border: 1px solid var(--yaar-border);
-  border-radius: 4px;
   padding: var(--yaar-sp-1);
   resize: none;
-  outline: none;
   white-space: pre;
   overflow: auto;
 }
@@ -168,14 +149,7 @@
   justify-content: flex-end;
 }
 
-.diff-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: 4px var(--yaar-sp-2);
-  background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
-}
+/* .diff-toolbar is y-toolbar y-toolbar-dense in markup. */
 
 .diff-output {
   overflow: auto;

@@ -20,14 +20,7 @@
   height: 100%;
 }
 
-.editor-header {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-1);
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
-  border-bottom: 1px solid var(--yaar-border);
-  background: var(--yaar-bg-surface);
-}
+/* .editor-header is y-editbar y-toolbar-dense in markup. */
 
 .editor-content {
   display: flex;

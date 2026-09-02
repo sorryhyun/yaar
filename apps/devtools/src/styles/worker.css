@@ -7,14 +7,7 @@
   min-height: 0;
 }
 
-.worker-status {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
-  border-bottom: 1px solid var(--yaar-border);
-  background: var(--yaar-bg-surface);
-}
+/* .worker-status is y-toolbar y-toolbar-dense in markup. */
 
 .worker-list {
   flex: 1;

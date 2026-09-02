@@ -71,7 +71,7 @@ export function WorkerPanel() {
 
   return html`
     <div class="worker-panel">
-      <div class="worker-status">
+      <div class="y-toolbar y-toolbar-dense worker-status">
         <span class=${statusDot}></span>
         <span class="y-text-xs y-text-muted">${statusLabel}</span>
         <${Show} when=${() => workerStatus() === 'running'}>

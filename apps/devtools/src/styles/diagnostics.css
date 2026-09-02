@@ -17,12 +17,10 @@
    needed a tall bottom panel to show a diff. The diff moved to the editor area, so
    the panel is back to the 200px cap the two log views were always sized for. */
 
+/* Layered over y-tabs / y-tab, the same way as .sidebar-tabs. */
 .bottom-tabs {
-  display: flex;
   align-items: center;
-  gap: 0;
   background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
 }
 
 .bottom-tab {
@@ -30,22 +28,8 @@
   align-items: center;
   gap: 4px;
   padding: var(--yaar-sp-1) var(--yaar-sp-2);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--yaar-text-muted);
-  cursor: pointer;
+  font-size: var(--yaar-text-xs);
   font-weight: 600;
-  font-family: inherit;
-}
-
-.bottom-tab:hover {
-  color: var(--yaar-text);
-}
-
-.bottom-tab.active {
-  color: var(--yaar-text);
-  border-bottom-color: var(--yaar-accent);
 }
 
 .bottom-tab-action {

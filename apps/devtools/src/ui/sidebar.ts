@@ -50,16 +50,16 @@ export function Sidebar() {
   followNewChanges();
   return html`
     <div class="y-sidebar sidebar-pane">
-      <div class="sidebar-tabs">
+      <div class="y-tabs sidebar-tabs">
         <button
-          class=${() => `sidebar-tab y-text-xs${sidebarTab() === 'files' ? ' active' : ''}`}
+          class=${() => `y-tab sidebar-tab${sidebarTab() === 'files' ? ' active' : ''}`}
           onClick=${showFiles}
           title="Project files"
         >
           Files
         </button>
         <button
-          class=${() => `sidebar-tab y-text-xs${sidebarTab() === 'changes' ? ' active' : ''}`}
+          class=${() => `y-tab sidebar-tab${sidebarTab() === 'changes' ? ' active' : ''}`}
           onClick=${showChanges}
           title="Files this session changed"
         >
@@ -71,7 +71,7 @@ export function Sidebar() {
           <//>
         </button>
         <button
-          class=${() => `sidebar-tab y-text-xs${sidebarTab() === 'worker' ? ' active' : ''}`}
+          class=${() => `y-tab sidebar-tab${sidebarTab() === 'worker' ? ' active' : ''}`}
           onClick=${showWorker}
           title="Worker sub-agent — a sonnet explorer for the active project"
         >

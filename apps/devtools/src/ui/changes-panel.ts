@@ -103,7 +103,7 @@ function ChangeDetail() {
           </div>
         `}
       >
-        <div class="change-head">
+        <div class="y-toolbar y-toolbar-dense change-head">
           <span class="change-head-path y-text-xs y-font-mono y-truncate"
             >${() => patchView()?.change.path ?? ''}</span
           >
@@ -139,7 +139,7 @@ function ManualCompare() {
       <div class="diff-input-col">
         <label class="y-text-xs y-text-muted">Old</label>
         <textarea
-          class="diff-textarea"
+          class="y-input diff-textarea"
           placeholder="Paste original text..."
           value=${oldText}
           onInput=${(e: Event) => setOldText((e.target as HTMLTextAreaElement).value)}
@@ -148,7 +148,7 @@ function ManualCompare() {
       <div class="diff-input-col">
         <label class="y-text-xs y-text-muted">New</label>
         <textarea
-          class="diff-textarea"
+          class="y-input diff-textarea"
           placeholder="Paste modified text..."
           value=${newText}
           onInput=${(e: Event) => setNewText((e.target as HTMLTextAreaElement).value)}
@@ -172,7 +172,7 @@ function ManualCompare() {
 export function ChangeView() {
   return html`
     <div class="change-view">
-      <div class="changes-toolbar">
+      <div class="y-editbar y-toolbar-dense changes-toolbar">
         <span class="y-text-xs y-text-muted">Changes</span>
         <select
           class="y-select y-text-xs"

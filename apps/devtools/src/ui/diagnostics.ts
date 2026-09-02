@@ -46,9 +46,9 @@ function ProblemsPanel() {
 export function DiagnosticsPanel() {
   return html`
     <div class="diagnostics">
-      <div class="bottom-tabs">
+      <div class="y-tabs bottom-tabs">
         <button
-          class=${() => `bottom-tab y-text-xs${activeBottomTab() === 'problems' ? ' active' : ''}`}
+          class=${() => `y-tab bottom-tab${activeBottomTab() === 'problems' ? ' active' : ''}`}
           onClick=${() => setActiveBottomTab('problems')}
         >
           Problems
@@ -59,7 +59,7 @@ export function DiagnosticsPanel() {
           <//>
         </button>
         <button
-          class=${() => `bottom-tab y-text-xs${activeBottomTab() === 'console' ? ' active' : ''}`}
+          class=${() => `y-tab bottom-tab${activeBottomTab() === 'console' ? ' active' : ''}`}
           onClick=${() => setActiveBottomTab('console')}
         >
           Console
