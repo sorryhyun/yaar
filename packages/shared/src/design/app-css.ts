@@ -260,6 +260,21 @@ button,input,select,textarea{font-family:inherit}
 .y-chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--yaar-text-xs);font-weight:600;border-radius:var(--yaar-radius-full);padding:5px 11px;background:var(--yaar-wash-accent);color:var(--yaar-accent);white-space:nowrap}
 .y-chip-warning{background:var(--yaar-wash-warning-strong);color:var(--yaar-warning)}
 .y-chip-muted{background:${O.light};color:var(--yaar-text-dim)}
+/* ── Density ──────────────────────────────────────────────────────────
+   IDE-shaped apps (devtools, process-explorer, mesh-edit) want the same
+   chrome one notch tighter: 2px vertical padding, the xs type size, and
+   28px controls instead of 32px. Before these existed each of them
+   re-declared the whole bar to change two numbers, and the copies drifted.
+   Declared after .y-editbar/.y-tbtn so the modifier wins at equal
+   specificity on either bar. Two modifiers only; a -dense for modal, list
+   or tabs waits for a second consumer. */
+.y-toolbar-dense{padding:2px var(--yaar-sp-2);font-size:var(--yaar-text-xs)}
+.y-toolbar-dense .y-tbtn{height:28px;min-width:28px}
+.y-toolbar-dense .y-tselect{height:28px}
+.y-statusbar-dense{padding:2px var(--yaar-sp-2);font-size:var(--yaar-text-xs)}
+/* Ghost means no border: a ghost button that is also danger/warning keeps the
+   tinted text and hover wash but not the coloured edge the solid variants draw. */
+.y-btn-ghost.y-btn-danger,.y-btn-ghost.y-btn-warning{border-color:transparent}
 /* ── Nav-overlay chrome ────────────────────────────────────────────────
    The hover-open + pin + resize left panel shared verbatim by storage and
    thesingularity-reader (their navOverlay.ts state machines are identical).

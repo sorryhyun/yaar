@@ -307,7 +307,7 @@ render(() => html`
 `, document.getElementById('app')!);
 ```
 
-Chrome classes: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). A collapsible sidebar/overlay uses the `y-nav-*` family (`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer`, …). The skeleton is intentionally a **snippet, not a component** — the chrome you copy is short and yours to edit.
+Chrome classes: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). IDE-shaped apps add `y-toolbar-dense` (on `y-toolbar` or `y-editbar`) and `y-statusbar-dense` for 2px vertical padding, xs type and 28px controls — do not re-declare the bar to change two numbers. A collapsible sidebar/overlay uses the `y-nav-*` family (`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer`, …). The skeleton is intentionally a **snippet, not a component** — the chrome you copy is short and yours to edit.
 
 ### Headless behavior primitives
 

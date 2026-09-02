@@ -36,7 +36,15 @@ describe('the guard and the prompt agree', () => {
     // `.y-flex{...}.y-flex-col{...}` share a line; an anchored regex silently
     // dropped every class but the first, advertising a smaller API than exists.
     const reference = describeDesignTokens();
-    for (const cls of ['y-flex-col', 'y-gap-2', 'y-p-4', 'y-btn-danger', 'y-clamp-3']) {
+    for (const cls of [
+      'y-flex-col',
+      'y-gap-2',
+      'y-p-4',
+      'y-btn-danger',
+      'y-clamp-3',
+      'y-toolbar-dense',
+      'y-statusbar-dense',
+    ]) {
       expect(reference).toContain(`.${cls}`);
     }
   });
