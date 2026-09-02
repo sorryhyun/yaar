@@ -100,14 +100,14 @@ const App = () => {
   <!-- Full-window background: the file preview, or a hint when nothing is open -->
   <div class="bg-layer">
     <div class=${() => `preview${state.showPreview ? '' : ' hidden'}`}>
-      <div class="y-label preview-header y-flex-between">
+      <div class="y-toolbar y-label preview-header y-flex-between">
         <span class="y-truncate">${() => state.previewTitleText}</span>
         <button class="preview-close" onClick=${closePreview} title="Close preview">✕</button>
       </div>
       <div class="preview-body" ref=${(el: HTMLDivElement) => {
         setElPreviewBody(el);
       }}></div>
-      <div class="preview-meta y-text-xs y-text-muted">${() => state.previewMetaText}</div>
+      <div class="y-statusbar preview-meta">${() => state.previewMetaText}</div>
     </div>
 
     <${Show} when=${() => !state.showPreview}>
