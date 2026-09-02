@@ -8,7 +8,7 @@ import { ProcessList } from './ProcessList';
 function WindowRow(props: { win: WindowInfo }) {
   const w = () => props.win;
   return html`
-    <div class="process-row">
+    <div class="y-list-item process-row">
       <div class="process-info">
         <div class="process-detail">
           <div class="process-title">
@@ -24,7 +24,7 @@ function WindowRow(props: { win: WindowInfo }) {
       </div>
       <div class="process-actions">
         <button
-          class="y-btn y-btn-ghost btn-sm btn-danger"
+          class="y-btn y-btn-ghost y-btn-sm y-btn-danger"
           onClick=${() => closeWindow(w().id)}
           title="Close window"
         >

@@ -12,14 +12,14 @@ export function StatusBar() {
   const sessionUsage = () => formatUsage(agentStats()?.usage);
 
   return html`
-    <div class="status-bar">
+    <div class="y-statusbar y-statusbar-dense">
       <span>Last refresh: ${() => formatTime(lastRefresh())}</span>
       <${Show} when=${sessionUsage}>
         <span class="meta-tokens" title="Session total, including agents already disposed. Cache reads excluded; cache writes count as input."
           >${sessionUsage}</span
         >
       </>
-      <button class="y-btn y-btn-ghost btn-sm" onClick=${() => refreshAll()}>Refresh</button>
+      <button class="y-btn y-btn-ghost y-btn-sm" onClick=${() => refreshAll()}>Refresh</button>
     </div>
   `;
 }

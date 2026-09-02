@@ -46,7 +46,7 @@ function AgentRow(props: { agent: AgentEntry }) {
   const usageText = () => formatUsage(act()?.usage ?? a().usage);
 
   return html`
-    <div class="process-row">
+    <div class="y-list-item process-row">
       <div class="process-info">
         <span class=${dotClass}></span>
         <div class="process-detail">
@@ -83,7 +83,7 @@ function AgentRow(props: { agent: AgentEntry }) {
       </div>
       <div class="process-actions">
         <button
-          class="y-btn y-btn-ghost btn-sm btn-danger"
+          class="y-btn y-btn-ghost y-btn-sm y-btn-danger"
           onClick=${() => interruptAgent(a().id)}
           title="Interrupt"
         >

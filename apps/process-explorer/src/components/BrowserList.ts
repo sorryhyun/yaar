@@ -22,7 +22,7 @@ function BrowserRow(props: { session: BrowserSession }) {
   const suspended = () => b().state !== 'live';
 
   return html`
-    <div class="process-row">
+    <div class="y-list-item process-row">
       <div class="process-info">
         <div class="process-detail">
           <div class="process-title">
@@ -48,7 +48,7 @@ function BrowserRow(props: { session: BrowserSession }) {
       <div class="process-actions">
         <${Show} when=${suspended}>
           <button
-            class="y-btn y-btn-ghost btn-sm"
+            class="y-btn y-btn-ghost y-btn-sm"
             onClick=${() => reviveBrowser(b().id)}
             title="Reopen this session on the page it was left on"
           >
@@ -56,7 +56,7 @@ function BrowserRow(props: { session: BrowserSession }) {
           </button>
         </>
         <button
-          class="y-btn y-btn-ghost btn-sm btn-danger"
+          class="y-btn y-btn-ghost y-btn-sm y-btn-danger"
           onClick=${() => killBrowser(b().id)}
           title="Close this browser session and its window"
         >

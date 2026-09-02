@@ -26,7 +26,7 @@ function AppRow(props: { proc: AppProcess }) {
   };
 
   return html`
-    <div class="process-row">
+    <div class="y-list-item process-row">
       <div class="process-info">
         <span class=${dotClass}></span>
         <div class="process-detail">
@@ -48,7 +48,7 @@ function AppRow(props: { proc: AppProcess }) {
       <div class="process-actions">
         <${Show} when=${() => p().windows.length > 0}>
           <button
-            class="y-btn y-btn-ghost btn-sm"
+            class="y-btn y-btn-ghost y-btn-sm"
             onClick=${() => closeAppWindows(p().appId)}
             title="Close all windows of this app"
           >
@@ -57,7 +57,7 @@ function AppRow(props: { proc: AppProcess }) {
         </>
         <${Show} when=${() => p().agent !== null}>
           <button
-            class="y-btn y-btn-ghost btn-sm btn-danger"
+            class="y-btn y-btn-ghost y-btn-sm y-btn-danger"
             onClick=${() => killAppAgent(p().appId)}
             title="Dispose the app agent, freeing its slot and dropping its context"
           >

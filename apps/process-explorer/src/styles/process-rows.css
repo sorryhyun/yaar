@@ -1,16 +1,10 @@
 /* ── Process rows ─────────────────────────────────────────── */
 
+/* Layered over y-list-item. A row here is not selectable — its buttons are
+   the interaction — so it does not promise a click with the pointer cursor. */
 .process-row {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  cursor: default;
   border-radius: var(--yaar-radius);
-  color: var(--yaar-text);
-}
-
-.process-row:hover {
-  background: var(--yaar-bg-surface);
 }
 
 .process-info {
