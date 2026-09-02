@@ -105,18 +105,27 @@ export function publishModal() {
         const needsTerms = !!terms && !terms.accepted;
         return html`
           <div
-            class="publish-backdrop"
+            class="y-overlay"
             onClick=${onBackdropClick(() => {
               // Click the dim area (not the card) to cancel.
               if (!confirmBusy()) void cancelPublish();
             })}
+            onKeyDown=${(e: KeyboardEvent) => {
+              if (e.key === 'Escape' && !confirmBusy()) void cancelPublish();
+            }}
           >
-            <div class="publish-modal y-surface" role="dialog" aria-modal="true">
-              <div class="publish-modal-title">Publish ${app.name}</div>
+            <div
+              class="y-modal"
+              role="dialog"
+              aria-modal="true"
+              tabindex="-1"
+              ref=${(el: HTMLElement) => queueMicrotask(() => el.focus())}
+            >
+              <div class="y-modal-title">Publish ${app.name}</div>
               ${publishMeta(summary)}
               ${drifted ? driftWarning(files) : ''}
               ${terms ? termsBlock(terms) : ''}
-              <div class="publish-actions">
+              <div class="y-modal-actions">
                 <button
                   class="y-btn y-btn-sm"
                   disabled=${() => confirmBusy()}

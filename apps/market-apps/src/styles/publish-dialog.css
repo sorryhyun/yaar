@@ -1,32 +1,8 @@
 /* ── Publish confirmation dialog ───────────────────────────────────── */
 /* Freeze-and-confirm: the digest + size the user approves before upload. */
 
-.publish-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--yaar-sp-4);
-  background: color-mix(in srgb, #000 55%, transparent);
-}
-
-.publish-modal {
-  width: 100%;
-  max-width: 420px;
-  padding: var(--yaar-sp-4);
-  border: 1px solid var(--yaar-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-}
-
-.publish-modal-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: var(--yaar-sp-3);
-}
-
+/* y-overlay / y-modal / y-modal-title / y-modal-actions in markup; what
+   follows is the digest, drift and terms content inside the card. */
 .publish-meta {
   margin: 0 0 var(--yaar-sp-3);
   display: flex;
@@ -128,10 +104,4 @@
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
-}
-
-.publish-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--yaar-sp-2);
 }
