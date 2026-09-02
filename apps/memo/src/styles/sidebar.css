@@ -21,41 +21,24 @@
   padding: var(--yaar-sp-1) 0;
 }
 
+/* Layered over y-list-item (hover / .active come from it): three stacked
+   lines, not the row y-list-item lays out. */
 .memo-list-item {
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  cursor: pointer;
-  border-left: 2px solid transparent;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-  position: relative;
-}
-
-.memo-list-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.memo-list-item.active {
-  background: var(--yaar-wash-accent);
-  border-left-color: var(--yaar-accent);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
 }
 
 .memo-list-item-title {
   font-size: 13px;
   font-weight: 500;
   color: var(--yaar-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   margin-bottom: 2px;
 }
 
 .memo-list-item-preview {
   font-size: 11px;
   color: var(--yaar-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .memo-list-item-date {

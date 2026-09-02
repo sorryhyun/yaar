@@ -124,11 +124,11 @@ function App() {
   function MemoListItem(props: { id: string; title: string; content: string; updatedAt: string }) {
     return html`
       <div
-        class=${() => `memo-list-item${selectedId() === props.id ? ' active' : ''}`}
+        class=${() => `y-list-item memo-list-item${selectedId() === props.id ? ' active' : ''}`}
         onClick=${() => selectMemo(props.id)}
       >
-        <div class="memo-list-item-title">${() => props.title}</div>
-        <div class="memo-list-item-preview">${() => props.content.slice(0, 60) || '(empty)'}</div>
+        <div class="memo-list-item-title y-truncate">${() => props.title}</div>
+        <div class="memo-list-item-preview y-truncate">${() => props.content.slice(0, 60) || '(empty)'}</div>
         <div class="memo-list-item-date">${() => formatDate(props.updatedAt)}</div>
       </div>
     `;
@@ -193,7 +193,7 @@ function App() {
 
   return html`
     <div class="memo-app">
-      <div class="memo-toolbar">
+      <div class="y-toolbar">
         <span class="memo-toolbar-title">📝 Memo</span>
         <input
           class="y-input memo-search"
@@ -211,7 +211,7 @@ function App() {
             <${Show}
               when=${() => filteredMemos().length > 0}
               fallback=${html`<div class="y-empty" style="padding: 24px 0">
-                <div class="memo-empty-icon">📝</div>
+                <div class="y-empty-icon">📝</div>
                 <div class="memo-empty-text">
                   ${() => (searchQuery() ? 'No results' : 'No memos yet')}
                 </div>
@@ -238,8 +238,8 @@ function App() {
             <${ViewPanel} />
           </Show>
           <${Show} when=${() => editMode() === 'none' && selectedMemo() === undefined}>
-            <div class="memo-empty">
-              <div class="memo-empty-icon">📝</div>
+            <div class="y-empty y-flex-1">
+              <div class="y-empty-icon">📝</div>
               <div class="memo-empty-text">Select a memo or create a new one</div>
               <button class="y-btn y-btn-primary" onClick=${startNew}>+ New Memo</button>
             </div>

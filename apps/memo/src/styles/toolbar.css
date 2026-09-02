@@ -1,14 +1,4 @@
-/* Toolbar */
-.memo-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
-  flex-shrink: 0;
-}
-
+/* Toolbar — y-toolbar in markup; only the title is local. */
 .memo-toolbar-title {
   font-weight: 600;
   font-size: 14px;

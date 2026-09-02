@@ -64,22 +64,7 @@
   flex-shrink: 0;
 }
 
-/* Empty state */
-.memo-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--yaar-text-muted);
-  gap: var(--yaar-sp-2);
-}
-
-.memo-empty-icon {
-  font-size: 48px;
-  opacity: 0.2;
-}
-
+/* Empty state — y-empty / y-empty-icon in markup. */
 .memo-empty-text {
   font-size: 13px;
   opacity: 0.5;
