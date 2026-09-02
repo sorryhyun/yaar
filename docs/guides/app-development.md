@@ -204,7 +204,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | Tone.js | `@bundled/tone` | Audio/music synthesis |
 | mediabunny | `@bundled/mediabunny` | Media files: read/write/convert mp4, webm, mp3, wav. Frame-accurate encoding decoupled from real time — use it instead of `MediaRecorder` + `canvas.captureStream()`, which drops frames under load and cannot read an existing file. Needs WebCodecs; call `getFirstEncodableVideoCodec([...])` before encoding. ~0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
-| marked | `@bundled/marked` | Markdown → HTML |
+| marked | `@bundled/marked` | Markdown → HTML — render it through `renderMarkdown` (parse → sanitize → links out of the frame), not `marked.parse` by hand |
 | Mermaid | `@bundled/mermaid` | Text → diagrams (flowchart, sequence, class, state, ER, gantt, mindmap…). Use `renderMermaid(src)`, which themes to the design tokens and returns sanitized SVG — do not sanitize it again. ~3.3 MB, so import it only in apps that draw diagrams |
 | Prism | `@bundled/prismjs` | Syntax highlighting |
 | DOMPurify | `@bundled/dompurify` | HTML sanitization — call it through `sanitizeHtml` from `@bundled/yaar`, not directly |
@@ -379,7 +379,28 @@ through **`sanitizeHtml` from `@bundled/yaar`** before it reaches the DOM. Apps 
 iframe, but that iframe holds the app's own storage, credentials, and protocol channel to
 its agent; an injected script owns all of it.
 
-Every rich-content pipeline follows this order:
+**For Markdown, reach for `renderMarkdown` from `@bundled/marked` first.** It is the
+whole pipeline below, written once: parse (GFM), sanitize the complete fragment, and
+rewrite every link to open outside the app frame (an `<a>` left alone navigates the
+iframe itself). It never throws — a parse failure comes back as the source in escaped
+paragraphs, not an empty box — and its output is already safe for `innerHTML`, so do not
+sanitize it again.
+
+```typescript
+import { renderMarkdown } from '@bundled/marked';
+
+el.innerHTML = renderMarkdown(source);                       // a README, a memo
+el.innerHTML = renderMarkdown(text, { breaks: true });       // chat-like text
+el.innerHTML = renderMarkdown(src, { use: [myFenceRenderer] }); // per-call marked extension
+```
+
+An app that rewrites links itself passes `{ externalLinks: false }` and runs its own
+pass over the returned fragment — that is step 3 below, on already-safe HTML. Use
+`marked.parse` + `sanitizeHtml` by hand only when the render must stay unsanitized because
+the sanitize step sits somewhere else (a document editor that sanitizes at its insertion
+sites), and say why next to the call; `check:apps` flags every hand-rolled `marked.parse`.
+
+Every other rich-content pipeline follows this order:
 
 1. parse the Markdown or source content;
 2. **sanitize the complete fragment**;
@@ -390,7 +411,7 @@ Every rich-content pipeline follows this order:
 ```typescript
 import { sanitizeHtml } from '@bundled/yaar';
 
-const clean = sanitizeHtml(marked.parse(source) as string);
+const clean = sanitizeHtml(scrapedHtml);
 const doc = new DOMParser().parseFromString(clean, 'text/html');
 rewriteRelativeLinks(doc);       // app logic, on already-safe HTML
 el.innerHTML = doc.body.innerHTML;

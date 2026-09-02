@@ -1,6 +1,6 @@
 import { Show, For, Switch, Match } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { renderMarkdown } from '../lib/markdown';
+import { renderMarkdown } from '@bundled/marked';
 import { ChartView } from './ChartView';
 import { GraphView } from './GraphView';
 import { ImageView } from './ImageView';

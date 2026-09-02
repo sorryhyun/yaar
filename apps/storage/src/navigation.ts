@@ -1,7 +1,7 @@
 export {};
-import { marked } from '@bundled/marked';
+import { renderMarkdown } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
-import { sanitizeHtml, storage, windows } from '@bundled/yaar';
+import { storage, windows } from '@bundled/yaar';
 import { setState, elPreviewBody } from './state';
 import {
   basename,
@@ -121,10 +121,10 @@ export async function selectFile(entry: import('./types').StorageEntry) {
     try {
       const content = (await storage.read(entry.path, { as: 'text' })) as string;
       setState('previewContent', content);
-      // Stored file content is untrusted and marked does NOT escape raw HTML,
-      // so the parsed fragment must be sanitized before it reaches the DOM.
-      // Order: parse -> sanitize whole fragment -> wrap -> insert.
-      const htmlContent = sanitizeHtml(marked.parse(content) as string);
+      // Stored file content is untrusted and marked does NOT escape raw HTML.
+      // renderMarkdown parses, sanitizes the whole fragment, and sends links
+      // outside the frame before any of it reaches the DOM.
+      const htmlContent = renderMarkdown(content);
       const wrapper = document.createElement('div');
       wrapper.className = 'md-preview';
       wrapper.innerHTML = htmlContent;

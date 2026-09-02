@@ -332,7 +332,7 @@ const dialogRule: Rule = {
 };
 
 // ---------------------------------------------------------------------------
-// Rule 4: marked.parse() reaching innerHTML without an adjacent sanitizer
+// Rule 4: marked.parse() by hand — use renderMarkdown from @bundled/marked
 // ---------------------------------------------------------------------------
 
 // `sanitizeHtml` (the SDK's single DOMPurify policy) is the expected spelling now, and
@@ -341,14 +341,24 @@ const dialogRule: Rule = {
 const SANITIZER = /DOMPurify|\bsanitiz\w*|\bpurify\b|setSafeHtml|safeHtml/i;
 
 /**
- * Advisory by design: regex cannot prove dataflow from `marked.parse()` to an
- * `innerHTML` sink. Heuristic — a `marked.parse()` call with an `innerHTML`
- * write within a few lines and no sanitizer mentioned nearby.
+ * `renderMarkdown` from `@bundled/marked` is parse → sanitize the whole fragment →
+ * rewrite links, written once; six apps hand-rolled exactly that around
+ * `marked.parse()` before it existed. A `marked.parse()` call in app code is now
+ * either one of those copies or a new one.
+ *
+ * Advisory because there is one sanctioned holdout: a render that must stay
+ * unsanitized because the sanitize step sits at the app's own insertion sites
+ * (word-excel's `markdownToHtml`). It says so with
+ * `yaar-check-ignore render-markdown -- <reason>`.
+ *
+ * The message escalates when the call also reaches `innerHTML` with no sanitizer
+ * within a few lines. Regex cannot prove dataflow, but that shape was a bug every
+ * time it was found.
  */
 const markedRule: Rule = {
-  id: 'marked-to-innerhtml',
+  id: 'render-markdown',
   severity: 'ADVISORY',
-  title: '`marked.parse()` reaching `innerHTML` with no adjacent sanitizer (`sanitizeHtml`)',
+  title: '`marked.parse()` by hand — use `renderMarkdown` from `@bundled/marked`',
   scan(code, raw, file) {
     const violations: Violation[] = [];
     const lines = code.split('\n');
@@ -359,12 +369,13 @@ const markedRule: Rule = {
       const from = Math.max(0, line - 1 - WINDOW);
       const to = Math.min(lines.length, line + WINDOW);
       const region = lines.slice(from, to).join('\n');
-      if (!/\binnerHTML\b/.test(region)) continue;
-      if (SANITIZER.test(region)) continue;
+      const unsanitizedSink = /\binnerHTML\b/.test(region) && !SANITIZER.test(region);
       violations.push({
         file,
         line,
-        message: `marked.parse() near innerHTML, no sanitizer within ${WINDOW} lines — ${lineTextAt(raw, line)}`,
+        message: unsanitizedSink
+          ? `marked.parse() near innerHTML, no sanitizer within ${WINDOW} lines — ${lineTextAt(raw, line)}`
+          : `marked.parse() — ${lineTextAt(raw, line)}`,
       });
     }
     return violations;

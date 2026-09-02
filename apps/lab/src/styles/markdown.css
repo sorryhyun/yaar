@@ -1,4 +1,4 @@
-/* Rendered markdown, for both markdown cells and md() output — lib/markdown.ts */
+/* Rendered markdown, for both markdown cells and md() output — renderMarkdown from @bundled/marked */
 
 .lab-md {
   padding: var(--yaar-sp-2) var(--yaar-sp-3);

@@ -72,6 +72,7 @@ src/
     ├── mammoth.ts         # CommonJS default-export workaround
     ├── mediabunny.ts      # re-export barrel workaround
     ├── mermaid.ts         # lazy init, token theming, forced strict mode, serialized renders
+    ├── marked.ts          # renderMarkdown — parse → sanitizeHtml → links out of the frame, one private Marked per call
     ├── dompurify.ts       # keeps purify.es.mjs off the entrypoint slot
     ├── uuid.ts            # re-export barrel workaround
     ├── zod.ts             # re-export barrel workaround for zod/mini
@@ -332,8 +333,10 @@ are worth knowing about before you add a library:
   the same treatment**, and `prebundle-completeness.test.ts` catches it automatically — including
   the default-export variant, since a library's declared default is now probed.
 
-The remaining shims (`anime`, `mermaid`, `yaar-dev`, `yaar-web`, `yaar-ml`) are per-library
-adaptations; each header states its incident.
+The remaining shims (`anime`, `mermaid`, `marked`, `yaar-dev`, `yaar-web`, `yaar-ml`) are per-library
+adaptations; each header states its incident. `mermaid` and `marked` are also where a library's
+render helper lives (`renderMermaid`, `renderMarkdown`) rather than on the `@bundled/yaar` barrel,
+so an app that never renders a diagram or markdown does not pull the library in through the SDK.
 
 ## Build Manifest & Staleness
 

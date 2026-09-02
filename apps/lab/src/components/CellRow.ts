@@ -4,7 +4,7 @@ import { addCell, deleteCell, moveCell, updateCell } from '../state/cells';
 import { flashCell, runningCell } from '../state/signals';
 import { runCell } from '../state/run';
 import { busy } from '../kernel/worker';
-import { renderMarkdown } from '../lib/markdown';
+import { renderMarkdown } from '@bundled/marked';
 import { CellEditor } from './CellEditor';
 import { editors, isEditing, startEdit } from './editor-registry';
 import { OutputView } from './OutputView';

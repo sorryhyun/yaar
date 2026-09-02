@@ -301,7 +301,37 @@ declare module '@bundled/xlsx' {
 }
 
 declare module '@bundled/marked' {
+  // Reach for `renderMarkdown(source)`, not `marked.parse` + `sanitizeHtml` by hand: it
+  // parses (GFM), sanitizes the WHOLE fragment, and rewrites every link to open outside
+  // the app frame — the three things every hand-rolled copy had to get right. Its output
+  // is already safe for `innerHTML`; do not sanitize it again. Use the upstream API only
+  // for a render that must stay unsanitized (a document editor that sanitizes at its
+  // own insertion sites) — and say why next to the call.
   export * from 'marked';
+  import type { MarkedExtension } from 'marked';
+
+  export interface RenderMarkdownOptions {
+    /** GFM line breaks — a single newline becomes `<br>`. For chat-like text. Default `false`. */
+    breaks?: boolean;
+    /**
+     * Rewrite every `<a href>` to `target=_blank rel=noopener noreferrer`. Default `true`:
+     * an `<a>` left alone navigates the app frame itself. Pass `false` only when the app
+     * runs its own link rewrite over the returned (already sanitized) fragment.
+     */
+    externalLinks?: boolean;
+    /**
+     * marked extensions applied to THIS render only — a custom `renderer.code` for a
+     * diagram fence, say. Never registered on the global `marked`.
+     */
+    use?: MarkedExtension[];
+  }
+
+  /**
+   * Markdown → HTML that is safe for `innerHTML`. Parse → sanitize the whole fragment →
+   * rewrite links. Never throws: a parse failure returns the source as escaped
+   * paragraphs rather than `''`. Empty input returns `''`.
+   */
+  export function renderMarkdown(src: string, opts?: RenderMarkdownOptions): string;
 }
 
 declare module '@bundled/mammoth' {
