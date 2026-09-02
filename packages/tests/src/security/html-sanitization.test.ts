@@ -185,6 +185,13 @@ describe('known gaps are documented, not assumed closed', () => {
  * that reaches for the sanitizer is held to the policy from its first commit, and
  * an app leaving the tree is a non-event.
  *
+ * `viaSdk` counts both routes into the one sanitizer: a direct `sanitizeHtml` import
+ * from `@bundled/yaar`, and `renderMarkdown` from `@bundled/marked`, which calls
+ * `sanitizeHtml` on the whole parsed fragment before the link rewrite (the
+ * migration of six apps onto it is exactly what dropped `storage` off the direct
+ * scan and made the floor below fire). The shim's own call is pinned by a test of
+ * its own, so counting the wrapper here is not taking it on faith.
+ *
  * `direct` is the set that imports `@bundled/dompurify` itself. It exists to be
  * asserted empty: the policy now lives once in the SDK's `sanitizeHtml`, and an app
  * that goes around it is writing its own config again — the drift this file was
@@ -205,7 +212,9 @@ function findSanitizingAppFiles(): { viaSdk: string[]; direct: string[] } {
       const src = readFileSync(abs, 'utf8');
       const file = join(app.name, 'src', rel);
       if (src.includes('@bundled/dompurify')) direct.push(file);
-      if (/\bsanitizeHtml\b/.test(src) && src.includes('@bundled/yaar')) viaSdk.push(file);
+      const viaSanitizeHtml = /\bsanitizeHtml\b/.test(src) && src.includes('@bundled/yaar');
+      const viaRenderMarkdown = /\brenderMarkdown\b/.test(src) && src.includes('@bundled/marked');
+      if (viaSanitizeHtml || viaRenderMarkdown) viaSdk.push(file);
     }
   }
   return { viaSdk: viaSdk.sort(), direct: direct.sort() };
@@ -245,6 +254,15 @@ describe('app sanitize policies have not drifted', () => {
     );
     const canonical = FORBID_FORM_TAGS.map((t) => `'${t}'`).join(', ');
     expect(shim.replace(/\s+/g, ' ')).toContain(`[${canonical}]`);
+  });
+
+  test('renderMarkdown still routes every fragment through sanitizeHtml', () => {
+    // The discovery above credits an app for calling `renderMarkdown`. That credit
+    // is only honest while the wrapper itself sanitizes the whole parsed fragment,
+    // which is a single line in the shim that nothing else in the tree would miss.
+    const shim = readFileSync(join(REPO_ROOT, 'packages/compiler/src/shims/marked.ts'), 'utf8');
+    expect(shim).toMatch(/import \{[^}]*\bsanitizeHtml\b[^}]*\} from '\.\/yaar\/sanitize\.js'/);
+    expect(shim).toMatch(/sanitizeHtml\(parsed\)/);
   });
 
   test('no app generates inline event handler attributes', () => {
