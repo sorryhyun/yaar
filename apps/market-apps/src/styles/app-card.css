@@ -26,14 +26,10 @@
   line-height: 1.3;
 }
 
+/* Two lines of description, clamped — y-clamp-2 in markup. */
 .app-subtitle {
   font-size: 12px;
   line-height: 1.4;
-  /* Show up to two lines of description before clamping. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
   overflow-wrap: anywhere;
 }
 

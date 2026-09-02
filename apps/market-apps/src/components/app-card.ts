@@ -135,7 +135,7 @@ export function marketCard(app: DisplayApp) {
               : ''}${() =>
             ownsApp(app.id) ? badge('publisher-badge', '✏️', 'You published this app') : ''}
         </div>
-        <div class="app-subtitle y-text-muted">${subtitle || app.id}</div>
+        <div class="app-subtitle y-clamp-2 y-text-muted">${subtitle || app.id}</div>
       </div>
       <div class="app-actions">${() => cardActions(app)}</div>
     </div>
