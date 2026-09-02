@@ -23,9 +23,12 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, relative, resolve } from 'path';
+import { basename, join, relative, resolve } from 'path';
 // The one parser both the runtime and this lint read topics with — a leaf module with
 // no imports, so pulling it in does not boot the server's config. See its header.
+// The chrome the platform injects, parsed once so `local-chrome-clone` can compare
+// an app's rule blocks against the real y-* declarations rather than a hand-kept list.
+import { YAAR_APP_TOKENS_CSS } from '../../packages/shared/src/design/app-css.ts';
 import {
   AGENT_DOCS_DIR,
   DOC_SLUG_RE,
@@ -733,6 +736,11 @@ function scanAppDocs(appDir: string, appId: string): AppDocScan {
  *   redefinition shadows the shared copy, and the next clone copies the shadow — the
  *   drift the app-UI-pattern work already paid to undo once. *Using* a class in markup
  *   is the point; *redefining* it in a stylesheet is the smell.
+ * - `local-chrome-clone` — an app rule block that restates a `y-*` chrome block under
+ *   its own name (`.tbar` that is `.y-toolbar` declaration for declaration). The shadow
+ *   rule above cannot see this: nothing is *redefined*, the copy just exists — which is
+ *   how eleven apps came to carry their own toolbar, status bar, modal and empty state.
+ *   The fix is to add the `y-*` class and keep only the deltas as the local rule.
  * - `protocol-description-shape` — a command description that is missing, opens with
  *   name-restating boilerplate ("this command…", "allows the agent to…"), or runs to
  *   multiple paragraphs. Descriptions are prompt material read by an agent deciding
@@ -740,6 +748,7 @@ function scanAppDocs(appDir: string, appId: string): AppDocScan {
  *   precondition that makes it fail.
  */
 const CHROME_SHADOW_RULE_ID = 'local-chrome-shadow';
+const CHROME_CLONE_RULE_ID = 'local-chrome-clone';
 const PROTOCOL_DESCRIPTION_RULE_ID = 'protocol-description-shape';
 
 function cssFilesUnder(dir: string, acc: string[] = []): string[] {
@@ -787,6 +796,219 @@ function scanChromeShadow(appDir: string): Violation[] {
           file,
           line: i + 1,
           message: `assigns a design token: ${line.trim().slice(0, 80)} — --yaar-* values are the platform's; define an app-local property instead.`,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
+// local-chrome-clone: a rule block that restates a y-* block
+// ---------------------------------------------------------------------------
+
+/**
+ * A local block is a clone when (a) at least `CLONE_MIN_SHARED` of its declarations
+ * are identical to one y-* block's, (b) those cover at least `CLONE_MIN_FRACTION` of
+ * that chrome block, and (c) at least `CLONE_MIN_DISTINCTIVE` of them are the kind
+ * of declaration that makes chrome chrome — a surface, an edge, padding, a shadow —
+ * rather than the `display/align-items/gap` every flex row shares.
+ *
+ * Each threshold answers a false positive from the first run over `apps/`: without
+ * (b) any bordered box "restated" `.y-input` and any padded row `.y-btn`; without
+ * (c) a muted 12px label with a cursor "restated" `.y-tbtn`. With all three, the
+ * eleven-app sweep of 2026-09 fires on every copy in its table and stays quiet on
+ * the deliberate variants (a card-shaped empty state, an absolutely positioned
+ * toolbar, an anchored popover).
+ */
+const CLONE_MIN_SHARED = 4;
+const CLONE_MIN_FRACTION = 0.5;
+const CLONE_MIN_DISTINCTIVE = 2;
+const CLONE_DISTINCTIVE_PROPS = new Set([
+  'background',
+  'background-color',
+  'border',
+  'border-top',
+  'border-bottom',
+  'border-left',
+  'border-right',
+  'border-radius',
+  'padding',
+  'box-shadow',
+  'z-index',
+  'animation',
+  'transform',
+  'backdrop-filter',
+  'text-overflow',
+  '-webkit-line-clamp',
+  '-webkit-box-orient',
+  'scrollbar-width',
+  'scrollbar-color',
+  'letter-spacing',
+  'text-transform',
+]);
+
+interface CssBlock {
+  selector: string;
+  /** Normalised `prop → value`; custom properties and nested blocks are dropped. */
+  decls: Map<string, string>;
+  /** 1-based line of the selector in the source. */
+  line: number;
+}
+
+/** Comments become spaces (newlines kept) so block line numbers survive. */
+function blankCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+}
+
+/**
+ * The length tokens, so `padding: 8px 12px` and `padding: var(--yaar-sp-2)
+ * var(--yaar-sp-3)` compare equal. Colours are not resolved: an app that writes
+ * the hex of a colour token is a token-guard concern, not a chrome one.
+ */
+const LENGTH_TOKENS: ReadonlyMap<string, string> = (() => {
+  const root = YAAR_APP_TOKENS_CSS.match(/:root\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+  const out = new Map<string, string>();
+  for (const m of root.matchAll(/(--yaar-[a-z0-9-]+)\s*:\s*(-?\d+(?:\.\d+)?px)\s*;/g)) {
+    out.set(m[1], m[2]);
+  }
+  return out;
+})();
+
+function normalizeCssValue(raw: string): string {
+  let v = raw
+    .toLowerCase()
+    .replace(/!important/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  v = v.replace(/var\(\s*(--yaar-[a-z0-9-]+)\s*\)/g, (m, name) => LENGTH_TOKENS.get(name) ?? m);
+  return v
+    .replace(/\s*([(),:])\s*/g, '$1')
+    .replace(/(^|[^\d.])0+\.(\d)/g, '$1.$2')
+    .replace(/(^|[^\d.])0(px|em|rem|%)/g, '$10');
+}
+
+/**
+ * Flat rule blocks, descending into block at-rules (`@media`, `@supports`, …) and
+ * skipping `@keyframes` bodies. A nested-CSS body (braces inside a rule) is skipped
+ * whole — it is rare in app CSS and never worth a false positive.
+ */
+function parseCssBlocks(css: string): CssBlock[] {
+  const src = blankCssComments(css);
+  const blocks: CssBlock[] = [];
+  const lineAt = (index: number) => src.slice(0, index).split('\n').length;
+
+  const walk = (from: number, to: number) => {
+    let i = from;
+    while (i < to) {
+      const open = src.indexOf('{', i);
+      if (open === -1 || open >= to) return;
+      const selector = src.slice(i, open).trim();
+      // Find the matching close brace for this block.
+      let depth = 1;
+      let j = open + 1;
+      while (j < to && depth > 0) {
+        if (src[j] === '{') depth++;
+        else if (src[j] === '}') depth--;
+        j++;
+      }
+      const bodyStart = open + 1;
+      const bodyEnd = j - 1;
+      if (selector.startsWith('@')) {
+        if (
+          !/^@(keyframes|-webkit-keyframes|font-face|page|counter-style|property)\b/.test(selector)
+        ) {
+          walk(bodyStart, bodyEnd);
+        }
+      } else if (src.slice(bodyStart, bodyEnd).includes('{')) {
+        // Nested CSS: skip.
+      } else if (selector) {
+        const decls = new Map<string, string>();
+        for (const decl of src.slice(bodyStart, bodyEnd).split(';')) {
+          const colon = decl.indexOf(':');
+          if (colon === -1) continue;
+          const prop = decl.slice(0, colon).trim().toLowerCase();
+          if (!prop || prop.startsWith('--')) continue;
+          decls.set(prop, normalizeCssValue(decl.slice(colon + 1)));
+        }
+        blocks.push({
+          selector: selector.replace(/\s+/g, ' '),
+          decls,
+          line: lineAt(src.indexOf(selector, i)),
+        });
+      }
+      i = j;
+    }
+  };
+  walk(0, src.length);
+  return blocks;
+}
+
+/** The y-* chrome blocks, keyed by class — bare single-class selectors only. */
+const CHROME_BLOCKS: ReadonlyMap<string, Map<string, string>> = (() => {
+  const out = new Map<string, Map<string, string>>();
+  for (const block of parseCssBlocks(YAAR_APP_TOKENS_CSS)) {
+    const m = block.selector.match(/^\.(y-[a-z0-9-]+)$/);
+    if (!m || block.decls.size < CLONE_MIN_SHARED) continue;
+    // Two families are not authoring targets for a lone block: the y-nav-* classes
+    // are one widget (the hover-open panel state machine) and only mean anything
+    // together — every quiet icon button "restates" y-nav-pin otherwise — and the
+    // y-toast* classes are written by showToast(), never by hand.
+    if (/^y-(nav|toast)\b/.test(m[1])) continue;
+    // A class packed onto one line with others is parsed as several blocks; the
+    // last definition wins, matching the cascade.
+    out.set(m[1], block.decls);
+  }
+  return out;
+})();
+
+function scanChromeClones(appDir: string): Violation[] {
+  const violations: Violation[] = [];
+  for (const cssPath of cssFilesUnder(join(appDir, 'src'))) {
+    const file = relative(REPO_ROOT, cssPath);
+    const raw = readFileSync(cssPath, 'utf8');
+    const lines = raw.split('\n');
+    const suppressed = (line: number) =>
+      [lines[line - 1], lines[line - 2]].some(
+        (l) => l != null && /yaar-check-ignore\s+local-chrome-clone\s+--\s+\S/.test(l),
+      );
+    for (const block of parseCssBlocks(raw)) {
+      // Anything already layered on the chrome (`.tbar.y-toolbar`, `.y-modal .y-input`)
+      // is an override, not a copy; element and root selectors are resets.
+      if (block.selector.includes('.y-') || /^(:root|html|body|\*)\b/.test(block.selector))
+        continue;
+      if (block.decls.size < CLONE_MIN_SHARED || suppressed(block.line)) continue;
+      let best: { name: string; shared: number; distinctive: number } | null = null;
+      const isColumn = block.decls.get('flex-direction') === 'column';
+      for (const [name, chrome] of CHROME_BLOCKS) {
+        // A column stack is never a copy of a row, however many edges they share.
+        if (isColumn && chrome.has('display') && !chrome.has('flex-direction')) continue;
+        let shared = 0;
+        let distinctive = 0;
+        for (const [prop, value] of block.decls) {
+          if (chrome.get(prop) !== value) continue;
+          shared++;
+          if (CLONE_DISTINCTIVE_PROPS.has(prop)) distinctive++;
+        }
+        if (
+          shared < CLONE_MIN_SHARED ||
+          shared < chrome.size * CLONE_MIN_FRACTION ||
+          distinctive < CLONE_MIN_DISTINCTIVE
+        )
+          continue;
+        if (
+          !best ||
+          shared > best.shared ||
+          (shared === best.shared && distinctive > best.distinctive)
+        ) {
+          best = { name, shared, distinctive };
+        }
+      }
+      if (best) {
+        violations.push({
+          file,
+          line: block.line,
+          message: `${block.selector} restates ${best.name} (${best.shared} shared declarations) — add the class to the markup and keep only the deltas here.`,
         });
       }
     }
@@ -888,6 +1110,38 @@ function isSuppressed(rawLines: string[], v: Violation, ruleId: string): boolean
   return [rawLines[v.line - 1], rawLines[v.line - 2]].some((l) => l != null && marker.test(l));
 }
 
+/**
+ * The app directories the per-app rules run over: every `apps/*` folder, narrowed to
+ * the named targets — plus any target that is itself an app folder *outside* `apps/`
+ * (a `user-apps/<id>`, a workspace clone). Those are git-ignored and never scanned by
+ * default, but the CSS rules are calibrated against them, so
+ * `bun run check:apps user-apps/mesh-edit` has to work.
+ */
+function appDirsFor(targets: string[]): string[] {
+  const dirs: string[] = [];
+  for (const app of readdirSync(APPS_DIR)) {
+    const appDir = join(APPS_DIR, app);
+    try {
+      if (!statSync(appDir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    if (targets.length > 0 && !targets.some((t) => resolve(REPO_ROOT, t).startsWith(appDir)))
+      continue;
+    dirs.push(appDir);
+  }
+  for (const target of targets) {
+    const abs = resolve(REPO_ROOT, target);
+    if (abs.startsWith(APPS_DIR)) continue;
+    try {
+      if (statSync(abs).isDirectory() && statSync(join(abs, 'src')).isDirectory()) dirs.push(abs);
+    } catch {
+      /* not an app folder — the source rules still scan it as files */
+    }
+  }
+  return dirs;
+}
+
 function main(): void {
   const rawArgs = process.argv.slice(2);
   const quiet = rawArgs.includes('--quiet');
@@ -915,22 +1169,17 @@ function main(): void {
   const skillViolations: Violation[] = [];
   const docScan: AppDocScan = { frontmatter: [], restates: [], stale: [] };
   const chromeViolations: Violation[] = [];
+  const cloneViolations: Violation[] = [];
   const descriptionViolations: Violation[] = [];
-  for (const app of readdirSync(APPS_DIR)) {
-    const appDir = join(APPS_DIR, app);
-    try {
-      if (!statSync(appDir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    if (targets.length > 0 && !targets.some((t) => resolve(REPO_ROOT, t).startsWith(appDir)))
-      continue;
+  for (const appDir of appDirsFor(targets)) {
+    const app = basename(appDir);
     skillViolations.push(...scanSkillDoc(appDir, app));
     const scan = scanAppDocs(appDir, app);
     docScan.frontmatter.push(...scan.frontmatter);
     docScan.restates.push(...scan.restates);
     docScan.stale.push(...scan.stale);
     chromeViolations.push(...scanChromeShadow(appDir));
+    cloneViolations.push(...scanChromeClones(appDir));
     descriptionViolations.push(...scanProtocolDescriptions(appDir, app));
   }
 
@@ -964,6 +1213,12 @@ function main(): void {
       severity: 'ADVISORY',
       title: 'app CSS does not redefine y-* chrome or assign --yaar-* tokens',
       found: chromeViolations,
+    },
+    {
+      id: CHROME_CLONE_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'app CSS does not restate a y-* chrome block under its own name',
+      found: cloneViolations,
     },
     {
       id: PROTOCOL_DESCRIPTION_RULE_ID,
