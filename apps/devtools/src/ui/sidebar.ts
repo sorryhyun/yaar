@@ -49,7 +49,7 @@ function editorHasFocus(): boolean {
 export function Sidebar() {
   followNewChanges();
   return html`
-    <div class="sidebar-pane">
+    <div class="y-sidebar sidebar-pane">
       <div class="sidebar-tabs">
         <button
           class=${() => `sidebar-tab y-text-xs${sidebarTab() === 'files' ? ' active' : ''}`}

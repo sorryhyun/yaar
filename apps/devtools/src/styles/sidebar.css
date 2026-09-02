@@ -13,13 +13,10 @@
   grid-template-columns: 280px 1fr;
 }
 
-/* ── Sidebar (Files / Changes) ── */
+/* ── Sidebar (Files / Changes) — layered over y-sidebar: a grid cell must be
+   allowed to shrink or the file tree pushes the pane past the window. ── */
 .sidebar-pane {
-  display: flex;
-  flex-direction: column;
   min-height: 0;
-  overflow: hidden;
-  border-right: 1px solid var(--yaar-border);
 }
 
 .sidebar-tabs {

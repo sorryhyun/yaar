@@ -297,7 +297,7 @@ export function ProjectToolbar() {
   );
 
   return html`
-    <div class="toolbar">
+    <div class="y-toolbar y-toolbar-dense">
       <${ProjectMenu} />
 
       <button class="y-btn y-btn-sm" onClick=${openLoadPicker} title="Open an existing project">

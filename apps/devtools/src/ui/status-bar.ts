@@ -20,7 +20,7 @@ const DOT_CLASS: Record<ReturnType<typeof bundleStatus>, string> = {
 
 export function StatusBar() {
   return html`
-    <div class="statusbar">
+    <div class="y-statusbar y-statusbar-dense">
       <div class="y-flex" style="gap: 6px; align-items: center">
         <span class=${() => DOT_CLASS[bundleStatus()]}></span>
         <span>${statusText}</span>

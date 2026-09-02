@@ -1,12 +1,4 @@
-/* ── Toolbar ── */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
-  background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
-}
+/* ── Toolbar — y-toolbar y-toolbar-dense in markup ── */
 
 /* ── Project menu (the active project's name, doubling as the open-project
    dropdown that the old second toolbar row used to be). Capped rather than
