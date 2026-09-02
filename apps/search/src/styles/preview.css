@@ -7,14 +7,10 @@
   background: var(--yaar-bg-surface);
   flex-shrink: 0;
 }
+/* Layered over y-toolbar: title left, controls right. */
 .preview-header {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--yaar-border);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  font-size: 12px;
 }
 .preview-close {
   background: none;

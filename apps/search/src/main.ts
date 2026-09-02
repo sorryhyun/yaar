@@ -234,7 +234,7 @@ const App = () => html`
 
     <${Show} when=${() => state.previewPath}>
       <div class="preview">
-        <div class="preview-header">
+        <div class="y-toolbar preview-header">
           <span class="y-truncate">${() => state.previewPath ?? ''}</span>
           <button class="preview-close" onClick=${closePreview}>✕</button>
         </div>
