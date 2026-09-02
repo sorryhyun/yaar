@@ -131,7 +131,7 @@ function closePreview() {
 const grouped = createMemo(() => [...groupByFile(state.matches).entries()]);
 
 const App = () => html`
-  <div class="toolbar">
+  <div class="y-toolbar">
     <div class="scope-crumb">
       ${() => {
         const parts = state.scope ? state.scope.split('/').filter(Boolean) : [];
@@ -189,8 +189,8 @@ const App = () => html`
         // With a diagram open the empty state is just wasted space — let it have the room.
         if (state.depsGraph) return null;
         return html`
-          <div class="empty-state">
-            <div class="empty-icon">🔍</div>
+          <div class="y-empty empty-state">
+            <div class="y-empty-icon">🔍</div>
             <div>${state.statusText === 'Ready' ? 'Enter a pattern to search storage' : state.statusText}</div>
           </div>
         `;
@@ -265,21 +265,24 @@ const App = () => html`
   </div>
 
   <${Show} when=${() => state.showCloneDialog}>
-    <div class="modal-overlay" onClick=${(e: MouseEvent) => {
+    <div class="y-overlay" onClick=${(e: MouseEvent) => {
       if (e.target === e.currentTarget) closeCloneDialog();
+    }} onKeyDown=${(e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeCloneDialog();
     }}>
-      <div class="modal-card y-card">
-        <div class="modal-title">Clone App Source</div>
+      <div class="y-modal">
+        <div class="y-modal-title">Clone App Source</div>
         <form class="modal-form" onSubmit=${submitClone}>
-          <label class="modal-label y-text-xs y-text-muted">App ID</label>
+          <label class="y-text-xs y-text-muted">App ID</label>
           <input class="modal-input y-input" placeholder="memo" required
+            ref=${(el: HTMLInputElement) => queueMicrotask(() => el.focus())}
             value=${() => state.cloneAppId}
             onInput=${(e: InputEvent) => setState('cloneAppId', (e.target as HTMLInputElement).value)} />
-          <label class="modal-label y-text-xs y-text-muted">Destination path (optional)</label>
+          <label class="y-text-xs y-text-muted">Destination path (optional)</label>
           <input class="modal-input y-input" placeholder="apps-source/{appId}"
             value=${() => state.cloneDestPath}
             onInput=${(e: InputEvent) => setState('cloneDestPath', (e.target as HTMLInputElement).value)} />
-          <div class="modal-actions">
+          <div class="y-modal-actions">
             <button class="y-btn y-btn-sm" type="button" onClick=${closeCloneDialog}>Cancel</button>
             <button class="y-btn y-btn-sm y-btn-primary" type="submit">Clone</button>
           </div>
@@ -288,7 +291,7 @@ const App = () => html`
     </div>
   <//>
 
-  <div class="statusbar">${() => state.statusText}</div>
+  <div class="y-statusbar">${() => state.statusText}</div>
 `;
 
 // ── Init ─────────────────────────────────────────────────────────────────────

@@ -228,7 +228,7 @@ export const DepsPanel = () => {
 
   return html`
     <div class="deps-panel">
-      <div class="deps-toolbar">
+      <div class="y-toolbar deps-toolbar">
         <span class="deps-title y-truncate" title=${() => state.depsGraph?.display ?? ''}>
           🕸 ${() => state.depsGraph?.display ?? ''}
         </span>

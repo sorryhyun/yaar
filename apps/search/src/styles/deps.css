@@ -15,15 +15,10 @@
   min-width: 220px;
   max-width: 55%;
 }
+/* Layered over y-toolbar: title left, actions right, and it may wrap. */
 .deps-toolbar {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  border-bottom: 1px solid var(--yaar-border);
-  background: var(--yaar-bg-surface);
 }
 .deps-title {
   font-size: var(--yaar-text-sm);
