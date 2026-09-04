@@ -11,6 +11,7 @@ import { eventsUrl, screenshotUrl } from './endpoints';
 import { getScreenshotEl } from './dom';
 import { refreshScreenshot } from './actions';
 import { onNavigated, onPopup } from './adblock';
+import { claimDownload } from './downloads';
 import { BrowserEventSchema } from './schema';
 
 type BrowserEvent = z.infer<typeof BrowserEventSchema>;
@@ -137,6 +138,16 @@ export function connectSSE(browserId: string): void {
     // not a navigation), so it is consumed here, ahead of the gate, and only here.
     if (data.popup) {
       onPopup({ browserId: data.popup.browserId, url: data.popup.url });
+      return;
+    }
+
+    // Chrome downloaded something on its own — the page's download button, an
+    // attachment navigation, the download arrow in its built-in PDF viewer. The file
+    // is already on the server's disk; this frame is the only notice of it, and the
+    // id is claimable exactly once. Like a popup, it repeats the tab's unchanged
+    // version on purpose, so it is consumed ahead of the gate and only here.
+    if (data.download) {
+      claimDownload(data.download.id, data.download.suggestedFilename ?? '', browserId);
       return;
     }
 

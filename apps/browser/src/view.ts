@@ -45,6 +45,7 @@ import {
 import { setScreenshotEl } from './dom';
 import { handleNav, handleReload, handleUrlFocus, handleUrlKeydown } from './actions';
 import { toggleLive, changeQuality } from './session';
+import { handleDownload, downloadStatus, downloading } from './downloads';
 import {
   adBlockEnabled,
   blockedCount,
@@ -105,7 +106,17 @@ function UrlBar() {
       >
         ◉ Live
       </button>
+      <button
+        class="y-btn y-btn-sm y-btn-ghost download-btn"
+        title="Save this page to YAAR storage and open it in a window"
+        aria-label="Download"
+        disabled=${() => downloading()}
+        onClick=${() => handleDownload(currentUrl())}
+      >
+        ⤓
+      </button>
       ${ShieldToggle()} ${() => (liveMode() ? QualitySelect() : null)}
+      <span class="download-status y-text-xs y-truncate">${() => downloadStatus()}</span>
       <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
     </div>
   `;

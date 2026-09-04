@@ -295,6 +295,83 @@ export async function deleteCookies(opts: {
   return browserPost({ action: 'delete_cookies', browserId, ...params });
 }
 
+// ── Downloads ──────────────────────────────────────────────────
+
+/**
+ * A file saved out of the remote browser and into `shared/browser/downloads/`.
+ */
+export interface BrowserDownload {
+  /** File name inside `shared/browser/downloads/`. */
+  name: string;
+  /** Where the bytes came from. */
+  url: string;
+  /** Root-relative storage path. */
+  path: string;
+  /** The same file as a `yaar://storage/...` URI. */
+  uri: string;
+  bytes: number;
+  /** Epoch ms. */
+  at: number;
+}
+
+/**
+ * Save a file out of the remote browser.
+ *
+ * The transfer is made **by the tab**, so it carries that tab's cookies: a file behind a
+ * login downloads here exactly as it would for a human sitting in front of that browser.
+ * The bytes go from Chrome straight to the server's disk and never through this app, so
+ * size is bounded by the disk rather than by a response cap.
+ *
+ * Two shapes, matching the two ways a download starts:
+ *
+ * - `{ url }` — ask the tab to download something. Omit `url` to save the page itself,
+ *   which is the common case ("save what I am looking at").
+ * - `{ id }` — claim a download Chrome performed on its own. The page's own download
+ *   button, an `<a download>`, an attachment navigation: those are captured as they
+ *   happen and announced on the session's event stream with an `id`. This redeems it.
+ *
+ * `filename` is a suggestion; the server sanitises it and may add an extension the
+ * response's type requires (an extensionless PDF gets `.pdf`).
+ */
+export async function download(opts?: {
+  url?: string;
+  id?: string;
+  filename?: string;
+  browserId?: string;
+}) {
+  const { browserId, ...params } = opts ?? {};
+  // A download is a transfer, not a command: it outlives the default client budget on
+  // anything larger than a paper, so the budget is raised rather than the transfer cut.
+  return browserPost<{ ok: boolean; data?: BrowserDownload; error?: string }>(
+    { action: 'download', browserId, ...params },
+    180_000,
+  );
+}
+
+/**
+ * Downloads Chrome finished writing that nothing has claimed yet, newest first.
+ *
+ * The event stream is the primary channel — this is what an app that reloaded, or missed
+ * a frame, asks instead of losing the file. `available: false` means this Chrome refused
+ * download capture altogether, which is a different answer from "nothing was downloaded".
+ */
+export async function listDownloads(browserId?: string) {
+  return browserPost<{
+    ok: boolean;
+    error?: string;
+    data?: {
+      available: boolean;
+      pending: {
+        id: string;
+        url: string;
+        suggestedFilename: string;
+        bytes: number;
+        at: number;
+      }[];
+    };
+  }>({ action: 'list_downloads', browserId });
+}
+
 // ── Session management (deprecated — use listTabs / closeTab) ───
 
 /** @deprecated Use `listTabs()` instead. */

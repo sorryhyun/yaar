@@ -194,6 +194,47 @@ validation. A rule *kind* is singular (`host`) and its *field* is plural (`hosts
 `RULE_FIELD` maps between them, because indexing the rules by kind reads `undefined` and
 this project's TypeScript settings do not catch it.
 
+## Downloads are Chrome's, captured server-side
+
+The bytes are downloaded **by the tab**, not by this app. `web.download()` reaches
+`case 'download'` in `packages/server/src/features/browser/actions.ts`, which asks the
+page to fetch the URL and hand it to `<a download>`; Chrome's own download machinery
+writes the file, `Browser.setDownloadBehavior` decides where
+(`packages/server/src/lib/browser/downloads.ts`), and the server moves it into
+`shared/browser/downloads/`.
+
+That shape is the answer to three things, and each was a bug in the version before it:
+
+- **The tab's cookies come along**, because the transfer *is* the tab's. A file behind a
+  login saves here exactly as it would for a human in front of that browser.
+- **Nothing traverses this app.** No base64, no `Range` assembly, no Blob in the iframe's
+  heap. Size is bounded by the server's disk, not by the 10MB cap on one proxied
+  `httpFetch` response. Do not reintroduce a client-side fetch to "fix" a download.
+- **The page's own download button works.** It is still true that this app cannot press
+  it and that no client change ever could — but with download behavior armed, pressing it
+  is captured like any other download and announced on the SSE stream as a `download`
+  frame carrying an `id`. `sse.ts` claims it; an id is redeemable exactly once.
+
+  **The directory is the source of truth, not the CDP event.** `behavior: 'allow'` means
+  Chrome names the file itself (`2609.02367v1.pdf`, not the download's guid — only
+  `allowAndName` uses the guid), and an in-progress download wears a `.crdownload`
+  suffix until it is renamed. So a non-`.crdownload` file appearing in the capture
+  directory *is* a completed download, watched with `fs.watch`. The first version of
+  this keyed records off the guid, found no such file, and timed out on downloads that
+  had completed perfectly — with the bytes sitting on disk the whole time.
+
+Two consequences worth keeping in mind:
+
+- **`downloads.ts` must not import `session.ts`.** `browserOpts()` lives there and is
+  therefore out of reach — the active id comes from `store.ts`, and a caller that already
+  holds one (`sse.ts`) passes it. `sse.ts`, `view.ts` and `protocol.ts` all reach into
+  `downloads.ts`, so an import back would close a cycle.
+- **A stored PDF is opened by framing its storage URL**, which `sharedStorage.url()`
+  builds with this app's iframe token. Framing the *original* URL instead is not a
+  shortcut: the desktop probes `/api/embeddable` first, and a host that refuses framing
+  is routed straight back to this app. This step cannot be verified from a Dev Tools
+  preview — `openUrl` is a silent no-op for the preview principal.
+
 ## This project compiles without strict null checks
 
 Discriminated unions therefore do **not** narrow: `if (res.ok)` leaves `res.error` an

@@ -55,6 +55,11 @@ const MUTATING_ACTIONS = new Set([
   'set_cookie',
   'delete_cookies',
   'close_tab',
+  // `download` clicks a link it injected, with the tab's cookies attached, and lands the
+  // bytes in the shared commons. It is `evaluate` with a filesystem on the end of it, so
+  // it is gated exactly as `evaluate` is — most of all on the user's real Chrome, where
+  // the credentials it would spend are the user's own.
+  'download',
 ]);
 
 export function isMutatingAction(action: string): boolean {

@@ -2807,6 +2807,70 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
   }): Promise<WebResult>;
 
+  // ── Downloads ──────────────────────────────────────────────────
+  //
+  // Reach for these instead of fetching the URL yourself. A `httpFetch` of the
+  // same address is a DIFFERENT HTTP client from the tab: it carries none of the
+  // tab's cookies, and one proxied response is capped at 10MB. `download` is the
+  // tab's own transfer, so a login-walled file works and size is bounded by disk.
+
+  /** A file saved out of the remote browser and into `shared/browser/downloads/`. */
+  export interface BrowserDownload {
+    /** File name inside `shared/browser/downloads/`. */
+    name: string;
+    /** Where the bytes came from. */
+    url: string;
+    /** Root-relative storage path, e.g. `shared/browser/downloads/2609.00591.pdf`. */
+    path: string;
+    /** The same file as a `yaar://storage/...` URI. */
+    uri: string;
+    bytes: number;
+    /** Epoch ms. */
+    at: number;
+  }
+
+  /**
+   * Save a file out of the remote browser into `shared/browser/downloads/`, where
+   * any app can read it without a permission grant.
+   *
+   * Two shapes, matching the two ways a download starts:
+   *
+   * - `{ url }` — ask the tab to download something. Omit `url` to save the page
+   *   itself, which is the common case ("save what I am looking at").
+   * - `{ id }` — claim a download Chrome performed on its own: the page's own
+   *   download button, an `<a download>`, an attachment navigation. Those are
+   *   captured as they happen and announced on the session's event stream with an
+   *   `id` (the file's name in the capture directory); this redeems it, once.
+   *
+   * `filename` is a suggestion — the server sanitises it and adds the extension the
+   * response's type requires (an extensionless PDF gets `.pdf`).
+   */
+  export function download(opts?: {
+    url?: string;
+    id?: string;
+    filename?: string;
+    browserId?: string;
+  }): Promise<WebResult<BrowserDownload>>;
+
+  /**
+   * Downloads Chrome finished writing that nothing has claimed yet, newest first.
+   *
+   * `available: false` means this Chrome refused download capture altogether — a
+   * different answer from "nothing was downloaded", and the one to report.
+   */
+  export function listDownloads(browserId?: string): Promise<
+    WebResult<{
+      available: boolean;
+      pending: {
+        id: string;
+        url: string;
+        suggestedFilename: string;
+        bytes: number;
+        at: number;
+      }[];
+    }>
+  >;
+
   // ── Deprecated ─────────────────────────────────────────────────
   /** @deprecated Use `listTabs()` instead. */
   export function listSessions(): Promise<WebResult<WebTab[]>>;

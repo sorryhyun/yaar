@@ -162,6 +162,29 @@
   line-height: 1.5;
 }
 
+/*
+ * The download control and its status line.
+ *
+ * The status is the answer to the complaint this feature exists for: pressing download
+ * used to do nothing observable, so a save says "Downloading…" while it runs and names
+ * the file or the reason afterwards. It also speaks for downloads nobody pressed the
+ * button for — the page's own download button lands here too. Collapsed when empty, so
+ * the toolbar does not carry a gap for a message that is usually absent.
+ */
+.url-bar .download-btn {
+  flex-shrink: 0;
+}
+
+.url-bar .download-status {
+  flex-shrink: 0;
+  max-width: 240px;
+  color: var(--yaar-text-muted);
+}
+
+.url-bar .download-status:empty {
+  display: none;
+}
+
 .url-bar .quality-select {
   flex-shrink: 0;
   width: auto;

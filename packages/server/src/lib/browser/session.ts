@@ -10,6 +10,7 @@
 
 import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
+import { DownloadCapture, type CapturedDownload } from './downloads.js';
 import { NetworkLog, type NetworkLogQuery, type NetworkLogResult } from './network-log.js';
 import type {
   BrowserAnnotatedElement,
@@ -215,6 +216,12 @@ export class BrowserSession extends EventEmitter {
    * exactly what someone asks about *after* the navigation that caused it.
    */
   private readonly networkLog = new NetworkLog();
+  /**
+   * What Chrome downloaded in this tab. Per tab and not per socket for the same reason
+   * the network log is: a crash-restart reattaches a new socket to the same tab, and a
+   * download captured before it is still this tab's.
+   */
+  private readonly downloads = new DownloadCapture((d) => this.emit('download', d));
 
   private constructor(id: string, cdp: CDPClient, mobile: boolean, adopted: boolean) {
     super();
@@ -277,6 +284,10 @@ export class BrowserSession extends EventEmitter {
       }
       this.networkLog.onLoadingFailed(params);
     });
+    // Downloads land in this session's own directory rather than in whatever
+    // Chrome's profile calls "Downloads". Best-effort: a Chrome that refuses the
+    // command leaves `downloads.available` false and every other action working.
+    await this.downloads.attach(cdp);
     // A fresh target has none of the previous one's shield state.
     this.initScriptId = null;
     await this.pushShield(cdp);
@@ -1280,6 +1291,110 @@ export class BrowserSession extends EventEmitter {
     );
   }
 
+  // ── Downloads ───────────────────────────────────────────────────────────────
+
+  /** Whether Chrome accepted download capture on this tab's connection. */
+  get downloadsAvailable(): boolean {
+    return this.downloads.available;
+  }
+
+  /** Downloads Chrome finished writing that nothing has claimed yet, newest first. */
+  listDownloads(): CapturedDownload[] {
+    return this.downloads.list();
+  }
+
+  /** Claim one. The caller owns the file from here; it is no longer listed. */
+  takeDownload(id: string): CapturedDownload | undefined {
+    return this.downloads.take(id);
+  }
+
+  /**
+   * Ask the tab to download `url`, and wait for Chrome to finish writing it.
+   *
+   * The request is made *by the page*, which is the entire point: it carries the tab's
+   * cookies, so a file behind a login downloads here exactly as it would for a human in
+   * front of that browser. The bytes go from the page's `fetch` to a blob URL to Chrome's
+   * download machinery to disk, and never through CDP — a 200MB file costs this method
+   * a JSON message the size of its filename.
+   *
+   * Two paths, because a cross-origin `fetch` can be refused by CORS while the very same
+   * URL downloads fine from an anchor:
+   *
+   * - **blob** — fetched in the page, handed to `<a download>`. Same-origin always, which
+   *   means the `download` attribute is honoured and the name is ours to choose. This is
+   *   the path the reported case takes: the PDF you are looking at is same-origin to the
+   *   tab showing it.
+   * - **link** — a bare `<a href download>` click, used when the fetch throws. Chrome
+   *   still downloads anything served as an attachment; an inline type may navigate
+   *   instead, which is why it is the fallback and not the default.
+   *
+   * `filename` is a suggestion for Chrome, not a destination — where the file finally
+   * lands is decided by whoever claims it.
+   */
+  async downloadFromTab(
+    url: string,
+    filename?: string,
+    timeoutMs = 120_000,
+  ): Promise<CapturedDownload> {
+    this.touch();
+    if (!this.downloads.available) {
+      throw new Error('This Chrome refused download capture, so downloads cannot be saved.');
+    }
+    // Read the clock before the click, not after: `waitForNext` uses it to tell the
+    // download we just asked for from one that finished while we were asking.
+    const since = Date.now();
+    const started = this.downloads.waitForNext(since, timeoutMs);
+
+    // `evaluate`, not `evalFn`: the page-side function is async, and only `evaluate`
+    // sends `awaitPromise` — `evalFn` would resolve to an unresolved Promise handle
+    // and the click would race the fetch it is supposed to follow.
+    const arg = JSON.stringify({ url, filename: filename ?? '' });
+    try {
+      await this.evaluate(
+        `(async function(arg) {
+        const target = new URL(arg.url, location.href).href;
+        const a = document.createElement('a');
+        let via = 'link';
+        let mimeType = '';
+        try {
+          const res = await fetch(target, { credentials: 'include' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const blob = await res.blob();
+          mimeType = blob.type || '';
+          a.href = URL.createObjectURL(blob);
+          via = 'blob';
+        } catch (e) {
+          a.href = target;
+        }
+        let raw = new URL(target).pathname.split('/').filter(Boolean).pop() || '';
+        // A stray '%' makes decodeURIComponent throw; a name is never worth failing over.
+        try { raw = decodeURIComponent(raw); } catch (e) {}
+        let name = arg.filename || raw;
+        // A PDF served without an extension (arxiv.org/pdf/2609.00591 is the canonical
+        // one) is a file no viewer will open by name. The blob knows its type; use it.
+        if (mimeType.indexOf('application/pdf') !== -1 && !/\\.pdf$/i.test(name)) name += '.pdf';
+        a.download = name || 'download';
+        a.style.display = 'none';
+        (document.body || document.documentElement).appendChild(a);
+        a.click();
+        setTimeout(function () {
+          if (a.href.slice(0, 5) === 'blob:') URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 60000);
+        return { via: via, mimeType: mimeType };
+      })(${arg})`,
+        30_000,
+      );
+    } catch (err) {
+      // The wait is moot once the click never happened, and a rejected promise nobody
+      // is awaiting takes the process down under Bun's unhandled-rejection default.
+      started.catch(() => {});
+      throw err;
+    }
+
+    return started;
+  }
+
   // ---------------------------------------------------------------------------
   // Live mode (spike): CDP screencast out, raw human input in.
   //
@@ -1526,6 +1641,9 @@ export class BrowserSession extends EventEmitter {
     if (this.closed) return;
     this.closed = true;
     this.cdp.close();
+    // Unclaimed captures go with the tab: they only ever existed as a staging area
+    // for a caller that never asked, and the directory is this session's alone.
+    await this.downloads.dispose();
     this.emit('closed');
     this.removeAllListeners();
   }

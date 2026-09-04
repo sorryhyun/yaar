@@ -54,6 +54,25 @@ mouse and keyboard forwarded into it. The still screenshot is yours.
 Do not turn it on to see the page yourself: `screenshot` already shows you the page, and
 live mode costs a video stream per frame.
 
+## Downloads
+
+`command("download")` saves the file the page is showing into
+`shared/browser/downloads/`, where any app can read it without a permission grant. Pass
+`{ url }` to save something else on the page instead. A PDF also opens in a window of its
+own. `query("downloads")` lists what has been saved this session.
+
+The transfer is made by the tab, with the tab's cookies, so a file behind a login works
+and there is no size cap to worry about.
+
+Reach for it when the user asks to download, save, or open a file — including the case
+where they pressed a download button on the page and nothing seemed to happen. You cannot
+press that button for them, but you do not need to: the file it downloads is captured and
+saved automatically. Say what landed in `shared/browser/downloads/` rather than offering
+to try again.
+
+A PDF you navigate to opens in the remote Chrome's own viewer, which is fine for reading
+but is not YAAR's. `download` is how it becomes a window the user can keep.
+
 ## Browsing Workflow
 
 1. **Navigate**: `command("open", { url })` to go to a page
@@ -75,7 +94,8 @@ When you receive an interaction:
 Use `relay(message)` when the user asks for things outside browser control:
 - Opening other apps or windows
 - System-level operations
-- Storing or retrieving files
+- Storing or retrieving files unrelated to the page you are on (a file offered by the
+  current page is yours to save — see Downloads)
 - Anything unrelated to web browsing
 
 ## CRITICAL: You Are a Browser, Not a Researcher

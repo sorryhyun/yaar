@@ -19,6 +19,7 @@ import {
   inspectionCommands,
   adBlockCommands,
   uiCommands,
+  downloadCommands,
 } from './protocol';
 import { initAdBlock, stopStatsPolling } from './adblock';
 import { App } from './view';
@@ -42,6 +43,7 @@ export default defineApp({
     ...inspectionCommands,
     ...adBlockCommands,
     ...uiCommands,
+    ...downloadCommands,
   },
   view: App,
 });

@@ -209,6 +209,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             unsubscribeTabs();
             session.off('updated', onUpdate);
             session.off('closed', onClosed);
+            session.off('download', onDownload);
             // Emit the terminal zero-length chunk on every teardown path — abort,
             // session close, or a failed enqueue. Skipping it drops the socket
             // mid-stream and surfaces as net::ERR_INCOMPLETE_CHUNKED_ENCODING.
@@ -230,6 +231,33 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             );
           };
           const onClosed = () => cleanup();
+          // A download Chrome performed on its own — the page's download button, an
+          // attachment navigation. The file is already on disk; this frame is the app's
+          // only chance to learn it exists, and `id` is how it claims it (the
+          // `download` action). Like `popup`, it repeats the tab's own state and does
+          // NOT advance `version`, so the client must read it before its version gate.
+          const onDownload = (d: {
+            id: string;
+            url: string;
+            suggestedFilename: string;
+            bytes: number;
+          }) => {
+            write(
+              `data: ${JSON.stringify({
+                url: session.currentUrl,
+                title: session.currentTitle,
+                version: session.version,
+                driving: session.driving,
+                isSelf: isYaarOriginUrl(session.currentUrl),
+                download: {
+                  id: d.id,
+                  url: d.url,
+                  suggestedFilename: d.suggestedFilename,
+                  bytes: d.bytes,
+                },
+              })}\n\n`,
+            );
+          };
           // A popup is announced on its OPENER's stream, because that is the window
           // a user is looking at when it happens. The frame repeats the opener's own
           // state (the client keys on `version`, which does not move for this) with
@@ -254,6 +282,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
 
           session.on('updated', onUpdate);
           session.on('closed', onClosed);
+          session.on('download', onDownload);
           req.signal.addEventListener('abort', cleanup);
 
           // Sent last, so cleanup()/heartbeat are already initialized if the very

@@ -15,6 +15,10 @@ import { isYaarOriginUrl, enforceBrowserGuards, isMutatingAction } from './guard
 import { getAgentId } from '../../agents/agent-context.js';
 import { ServerEventType, type BrowserTabSummary, type OSAction } from '@yaar/shared';
 import { handleCreate as handleWindowCreate } from '../window/create.js';
+import { storageWriteStream } from '../../storage/storage-manager.js';
+import { rm } from 'node:fs/promises';
+import { errMessage } from '../../lib/errors.js';
+import { extname } from 'node:path';
 
 type Payload = Record<string, unknown>;
 
@@ -680,6 +684,166 @@ export async function handleSetInitScript(pool: BrowserProvider, p: Payload): Pr
   return okJson({ installed: shield.initScript.length > 0 });
 }
 
+// ── Downloads ───────────────────────────────────────────────────────────────
+
+/**
+ * Where a captured download lands.
+ *
+ * The Browser app's own commons directory, which is also the one place every other app
+ * can read from without a grant (`SHARED_GRANT`) — a downloaded paper is worth nothing
+ * if only the app that fetched it can open it. Fixed rather than caller-chosen: this
+ * door is reached with the `yaar-web` bundle, which is a grant to drive a browser and
+ * not a filesystem, so the destination is not the caller's to name.
+ */
+const DOWNLOAD_DIR = 'shared/browser/downloads';
+
+/** Extensions that must never be written, whatever the page suggested. */
+const REFUSED_EXTENSIONS = new Set(['.html', '.htm', '.svg', '.xhtml']);
+
+/**
+ * A name that cannot climb out of {@link DOWNLOAD_DIR} or confuse a filesystem.
+ *
+ * The input is Chrome's `suggestedFilename`, which is ultimately the *page's* — a
+ * `Content-Disposition` header or a `download` attribute — so it is untrusted the way
+ * any other header is.
+ *
+ * Separators become dashes rather than being stripped: dropping them would turn `a/../b`
+ * into `a..b`, but it would also turn `2609/00591` into `260900591`, which reads as a
+ * different paper.
+ */
+export function safeDownloadName(raw: string): string {
+  const name = raw
+    .replace(/[\\/]/g, '-')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f<>:"|?*]/g, '')
+    .replace(/^\.+/, '')
+    .trim()
+    .slice(0, 120);
+  if (!name) return `download-${Date.now()}`;
+  // An `.html` in the commons is a page any app might later frame, with this download's
+  // origin traded for YAAR's. Nothing about a download needs that; rename it to inert.
+  return REFUSED_EXTENSIONS.has(extname(name).toLowerCase()) ? `${name}.txt` : name;
+}
+
+/**
+ * Move a captured file into storage, then report where it went.
+ *
+ * Streamed rather than read into a Buffer: the whole point of capturing on Chrome's side
+ * is that a 200MB file never has to exist in anyone's heap, and reading it here to write
+ * it back would give that away at the last step.
+ *
+ * The temp file is removed only after a successful commit. A failed one leaves the
+ * capture where it was so the caller can be told why and try again.
+ */
+async function storeCapture(
+  captured: { url: string; suggestedFilename: string; bytes: number; file: string; at: number },
+  requestedName?: string,
+): Promise<VerbResult> {
+  const name = safeDownloadName(requestedName || captured.suggestedFilename);
+  const rel = `${DOWNLOAD_DIR}/${name}`;
+
+  const opened = await storageWriteStream(rel);
+  if (!opened.success) return error(`Could not save "${name}": ${opened.error}`);
+
+  try {
+    const reader = Bun.file(captured.file).stream().getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await opened.stream.write(value);
+    }
+  } catch (err) {
+    await opened.stream.abort();
+    return error(`Could not read the captured download: ${errMessage(err)}`);
+  }
+
+  const written = await opened.stream.commit();
+  if (!written.success) return error(`Downloaded ${captured.bytes} bytes but ${written.error}`);
+  await rm(captured.file, { force: true }).catch(() => {});
+
+  return okJson({
+    name,
+    url: captured.url,
+    path: rel,
+    uri: `yaar://storage/${rel}`,
+    bytes: written.bytes,
+    at: captured.at,
+  });
+}
+
+/**
+ * Save a file out of the remote browser.
+ *
+ * Two shapes, and they are the two ways a download starts:
+ *
+ * - `{ id }` claims something Chrome downloaded on its own — the page's own download
+ *   button, an `<a download>`, an attachment navigation. Those are captured as they
+ *   happen (`lib/browser/downloads.ts`) and announced on the session's event stream; the
+ *   id is how the announcement is redeemed.
+ * - `{ url }` asks the tab to download something. Defaults to the page itself, which is
+ *   the common case: "save what I am looking at".
+ *
+ * Either way the transfer is the tab's, with the tab's cookies, and the bytes go from
+ * Chrome straight to disk. There is no domain-allowlist prompt here and deliberately so:
+ * the tab is already on this page, which is a decision the user already made, and the
+ * allowlist governs YAAR's own HTTP client rather than the browser it drives.
+ */
+export async function handleDownload(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  const filename = typeof p.filename === 'string' ? p.filename : undefined;
+
+  if (typeof p.id === 'string') {
+    const claimed = session.takeDownload(p.id);
+    if (!claimed) {
+      return error(
+        `No captured download "${p.id}". It was already saved, or the tab was closed. ` +
+          'Call list_downloads to see what is still claimable.',
+      );
+    }
+    return storeCapture(claimed, filename);
+  }
+
+  const url = typeof p.url === 'string' && p.url ? p.url : session.currentUrl;
+  if (!/^https?:\/\//i.test(url)) {
+    return error(`Cannot download "${url}" — only http(s) URLs can be fetched by the tab.`);
+  }
+  if (isYaarOriginUrl(url)) {
+    return error('Refusing to download from YAAR itself.');
+  }
+
+  const captured = await session.downloadFromTab(url, filename);
+  return storeCapture(captured, filename);
+}
+
+/**
+ * Downloads Chrome finished writing that nothing has claimed yet.
+ *
+ * The event stream is the primary channel; this is what an app that reloaded, or missed
+ * a frame, asks instead of losing the file. `available: false` means this Chrome refused
+ * download capture — a different answer from "nothing was downloaded", and one a caller
+ * needs in order to say something true to the user.
+ */
+export async function handleListDownloads(
+  pool: BrowserProvider,
+  browserId: string,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  return okJson({
+    available: session.downloadsAvailable,
+    pending: session.listDownloads().map((d) => ({
+      id: d.id,
+      url: d.url,
+      suggestedFilename: d.suggestedFilename,
+      bytes: d.bytes,
+      at: d.at,
+    })),
+  });
+}
+
 /**
  * Shared action dispatcher — the single switch table that both browser doors
  * use. The caller passes the provider instance (headless for `/api/browser`,
@@ -746,6 +910,10 @@ export async function runBrowserAction(
       return handleGetNetworkLog(pool, browserId, body);
     case 'set_init_script':
       return handleSetInitScript(pool, body);
+    case 'download':
+      return handleDownload(pool, browserId, body);
+    case 'list_downloads':
+      return handleListDownloads(pool, browserId);
     default:
       return error(`Unknown action "${action}".`);
   }

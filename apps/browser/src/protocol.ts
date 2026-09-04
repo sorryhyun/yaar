@@ -23,6 +23,7 @@ import {
   networkBlocked,
   popupTabs,
 } from './adblock';
+import { recentDownloads, captureUrl, type DownloadEntry } from './downloads';
 import {
   attach,
   browserOpts,
@@ -105,6 +106,30 @@ export const browserState = {
       },
     },
     get: () => popupTabs(),
+  },
+  downloads: {
+    description:
+      'Files saved out of the remote browser this session, newest first, as ' +
+      '{ name, url, path, uri, bytes, at }. Written to shared/browser/downloads/, so any ' +
+      'app can read one without a permission grant. Empty is the normal state: a file is ' +
+      'saved when the download command is called, the toolbar button is pressed, or the ' +
+      'page itself downloads something. Not a history — it resets when the window reloads, ' +
+      'while the files themselves persist.',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          url: { type: 'string' },
+          path: { type: 'string' },
+          uri: { type: 'string' },
+          bytes: { type: 'number' },
+          at: { type: 'number' },
+        },
+      },
+    },
+    get: (): DownloadEntry[] => recentDownloads(),
   },
 };
 
@@ -470,5 +495,34 @@ export const uiCommands = {
       required: ['tabId'],
     },
     run: async (p) => closeTab(p.tabId),
+  }),
+};
+
+// ── Downloads ────────────────────────────────────────────────────────
+
+export const downloadCommands = {
+  download: defineAppCommand({
+    description:
+      'Save a file out of the browser into shared/browser/downloads/, opening a PDF in a ' +
+      'window of its own. Returns { name, url, path, uri, bytes, at }. The transfer is made ' +
+      'BY THE TAB, so it carries the tab’s cookies and a file behind a login works; the ' +
+      'bytes go straight to disk, so size is bounded by the disk and not by a response cap. ' +
+      'Omit url to save the page currently on screen.',
+    params: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The file to save. Defaults to the page currently on screen.',
+        },
+        filename: {
+          type: 'string',
+          description:
+            'Name to store it under. Default: the name the server suggested, else the URL’s ' +
+            'last path segment, with .pdf appended when the response is a PDF without one.',
+        },
+      },
+    },
+    run: async (p) => captureUrl({ url: p.url, filename: p.filename }),
   }),
 };

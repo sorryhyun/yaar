@@ -15,6 +15,8 @@ export { CdpBrowserProvider } from './cdp-provider.js';
 export { BrowserPool, getBrowserPool } from './pool.js';
 export { BrowserSession } from './session.js';
 export type { BrowserSessionUpdate, ShieldProfile, RequestBlockStats } from './session.js';
+export { DownloadCapture } from './downloads.js';
+export type { CapturedDownload } from './downloads.js';
 export { NetworkLog } from './network-log.js';
 export type { NetworkLogEntry, NetworkLogQuery, NetworkLogResult } from './network-log.js';
 export type {

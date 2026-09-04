@@ -31,4 +31,15 @@ export const BrowserEventSchema = z.looseObject({
       openerBrowserId: z.optional(z.string()),
     }),
   ),
+  // Present on the frame announcing a file Chrome finished downloading in this tab.
+  // Read before the version gate for the same reason `popup` is: the frame repeats
+  // the tab's state and does not advance `version`. `id` is what claims the file.
+  download: z.optional(
+    z.looseObject({
+      id: z.string(),
+      url: z.optional(z.string()),
+      suggestedFilename: z.optional(z.string()),
+      bytes: z.optional(z.number()),
+    }),
+  ),
 });
