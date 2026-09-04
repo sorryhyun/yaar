@@ -228,16 +228,25 @@ export const IS_REMOTE = process.env.REMOTE === '1';
 /**
  * DPI bypass — route TLS through a local fragmenting CONNECT proxy (`lib/freedpi/`).
  *
- * Off unless `YAAR_FREEDPI=1`. This is a censorship-circumvention path, not a default
- * network route: it changes how every outbound TLS handshake is written, resolves names
- * over DoH rather than the system resolver, and adds a stall to the hosts it decides are
- * blocked. None of that should happen to someone who did not ask for it.
+ * **Default on.** `YAAR_FREEDPI=0` forces it off.
  *
- * The flag only *enables* the proxy. Which hosts actually pay for it is learned at
- * runtime — see `lib/freedpi/policy.ts`, where every host starts on the direct path and
- * only an injected-looking reset moves it off.
+ * It was opt-in while it was a feature you had to know you needed, which meant the
+ * people it was written for — the ones whose network resets a ClientHello by its SNI —
+ * only got it if they already knew why YAAR could not load a page. That is the wrong
+ * way round: a blocked host is invisible until you have the bypass to compare against.
+ *
+ * Defaulting on is affordable because the bypass costs nothing until it is used. Every
+ * host starts on the direct path and only an injected-looking reset moves it off
+ * (`lib/freedpi/policy.ts`), so an unblocked network pays one extra loopback hop and
+ * keeps its latency. What the flag being on does change unconditionally is name
+ * resolution — DoH rather than the system resolver — which is why `resolve.ts` falls
+ * back to the system resolver instead of failing the connection when DoH cannot answer.
+ *
+ * Turn it off with `YAAR_FREEDPI=0` if you need the system resolver's answers (split
+ * DNS, a private zone reached by public-looking name) or Chrome's HTTP/3, which
+ * `--disable-quic` has to give up for the proxy to see the traffic at all.
  */
-export const IS_FREEDPI = process.env.YAAR_FREEDPI === '1';
+export const IS_FREEDPI = process.env.YAAR_FREEDPI !== '0';
 
 /**
  * App-origin isolation — the origin boundary that makes an app's principal

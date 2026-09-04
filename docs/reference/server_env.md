@@ -194,15 +194,15 @@ code, tunnel). See [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
 | Variable | Default | Meaning |
 |---|---|---|
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` |
-| `YAAR_FREEDPI` | off | Route outbound TLS through a local fragmenting proxy to get past SNI-matching DPI |
+| `YAAR_FREEDPI` | on | Route outbound TLS through a local fragmenting proxy to get past SNI-matching DPI (`0` disables) |
 
-### `YAAR_FREEDPI` — off by default (`=1` enables)
+### `YAAR_FREEDPI` — on by default (`=0` disables)
 
 Some networks block HTTPS by reading the hostname out of the ClientHello — which is
 plaintext — and injecting a TCP reset. Nothing is wrong with DNS and nothing is wrong with
-the route; the handshake is simply shot in the head every time. With `YAAR_FREEDPI=1` the
-server starts a loopback `CONNECT` proxy and points its two outbound paths at it: Chrome
-gets `--proxy-server`, and `safeFetch` gets `fetch`'s `proxy` option.
+the route; the handshake is simply shot in the head every time. The server starts a
+loopback `CONNECT` proxy and points its two outbound paths at it: Chrome gets
+`--proxy-server`, and `safeFetch` gets `fetch`'s `proxy` option.
 
 The countermeasures are a ladder, tried cheapest first, and every host climbs only as far
 as it has to (`Route` in `lib/freedpi/types.ts`):
@@ -217,10 +217,42 @@ as it has to (`Route` in `lib/freedpi/types.ts`):
    for a box that both reassembles and parses across records; it is the one that costs
    `stallMs`.
 
-**Off by default, and not a candidate to become default-on.** It changes how every outbound
-handshake is written, resolves names over DoH instead of the system resolver, and can add
-seconds of latency to a host that needs the stalled rung. It is also, plainly, a
-censorship-circumvention tool. None of that should arrive unrequested.
+### Why it is on by default
+
+It was opt-in, on the reasoning that a censorship-circumvention tool should not arrive
+unrequested. That reasoning had the failure mode backwards. A host killed by SNI reset
+does not present as censorship — it presents as YAAR being broken on that site — so the
+people the bypass was written for were exactly the ones who would never think to turn it
+on. You cannot recognise a blocked host without something to compare it against.
+
+It is affordable as a default because the ladder makes it cost nothing until it is used.
+Every host starts on `direct`, so an unblocked network pays one extra loopback hop and
+keeps its latency; only a host that gets an injected-looking reset climbs, and only that
+host pays. What *is* unconditional is name resolution — see below — and, in Chrome,
+HTTP/3.
+
+Turn it off with `YAAR_FREEDPI=0` if you need the system resolver's own answers (split
+DNS, an internal zone reached by a public-looking name) or Chrome's HTTP/3.
+
+### DoH first, not DoH only
+
+Resolution goes to DoH (Cloudflare) rather than the system resolver, because a censor
+that resets on SNI usually poisons DNS on the same path; a system answer would be the
+block page's address and no amount of fragmentation would help.
+
+Being the default changes what a DoH *failure* has to mean. Every outbound connection the
+server makes is now resolved in `lib/freedpi/resolve.ts`, so a DoH endpoint that is
+unreachable — captive portal, a network that blocks `1.1.1.1`, plain offline — would take
+all of them down, and a name with only an `AAAA` record would never resolve at all
+(`type=A` is what is asked for). So a DoH failure falls back to the system resolver
+instead of failing the dial.
+
+The fallback cannot leave you worse off than not having the proxy: a poisoned system
+answer resets the connection and the caller sees the failure it would have seen anyway,
+whereas refusing to answer turns a working direct path into a 502. Because the fallback
+can return a v6 address where DoH never could, `refusalForAddress` carries the v6 rules
+`lib/ssrf.ts` does not — `fc00::/7`, `::`, and `::ffff:` v4-mapped addresses, which it
+unwraps so they are refused by the same rule as the bare v4 form.
 
 ### The stall is a measurement, not a constant
 

@@ -178,7 +178,9 @@ export async function launchChrome(
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
-    // `YAAR_FREEDPI=1` only. `--disable-quic` is not optional alongside it: HTTP/3 is
+    // Only when the bypass bound (default; `YAAR_FREEDPI=0` opts out). `--disable-quic`
+    // is not optional alongside `--proxy-server`, and is the flip side of that default —
+    // Chrome gives up HTTP/3 whenever the proxy is up, because HTTP/3 is
     // UDP/443 and never enters an HTTP proxy, so without it Chrome negotiates QUIC and
     // walks straight around the bypass — which looks like the bypass silently failing.
     ...(freeDpiProxyUrl ? [`--proxy-server=${freeDpiProxyUrl}`, '--disable-quic'] : []),

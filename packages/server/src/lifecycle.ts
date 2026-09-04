@@ -57,7 +57,7 @@ const tunnelLog = createLogger('Tunnel');
 let activeTunnel: TunnelProvider | null = null;
 
 /**
- * The DPI bypass proxy, when `YAAR_FREEDPI=1` and it managed to bind.
+ * The DPI bypass proxy, unless `YAAR_FREEDPI=0` or it failed to bind.
  *
  * Started here rather than alongside the tunnel, because both of its consumers can be
  * reached before the HTTP sockets exist — `LAUNCH_CHROME=1` may spawn a browser, and any

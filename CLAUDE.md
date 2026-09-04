@@ -64,7 +64,7 @@ happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 - `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`
 - `YAAR_REMOTE_TOKEN` - Use this remote-mode token instead of a freshly minted one (lets a launcher know the `#remote=<token>` URL up front). Ignored under 32 chars.
 - `LAUNCH_CHROME` - `1` opens a local debuggable Chrome on the desktop once the server is up (set by `make claude`/`make claude-dev`)
-- `YAAR_FREEDPI` - `1` routes outbound TLS through a local fragmenting CONNECT proxy to get past SNI-matching DPI. Off by default; hosts are learned, not configured. See `docs/reference/server_env.md`
+- `YAAR_FREEDPI` - routes outbound TLS through a local fragmenting CONNECT proxy to get past SNI-matching DPI. **On by default**, `0` turns it off; hosts are learned, not configured, so an unblocked network pays a loopback hop and nothing else. See `docs/reference/server_env.md`
 - `CLAUDE_CODE_PATH` - Absolute path to the `claude` binary. Overrides discovery (bundled exe → `~/.local/bin/claude` → `PATH`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - Inherited by the spawned `claude` CLI for non-interactive auth (alternative to `claude login`).
 

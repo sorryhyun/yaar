@@ -7,9 +7,9 @@
  * would invert the dependency and, in `ssrf.ts`'s case, drag the whole server graph into
  * a module that deliberately has almost none.
  *
- * Null whenever `YAAR_FREEDPI=1` is unset or the proxy failed to bind, and every reader
- * treats null as "route normally" — so the feature being off is the same code path the
- * server has always taken.
+ * Null whenever `YAAR_FREEDPI=0` turned the proxy off or it failed to bind, and every
+ * reader treats null as "route normally" — so a bypass that will not start is the same
+ * code path the server took before it existed.
  */
 
 import type { FreeDpiProxy } from './types.js';

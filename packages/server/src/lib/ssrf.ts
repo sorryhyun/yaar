@@ -52,8 +52,9 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 /**
  * The bypass proxy option for one URL, or nothing.
  *
- * Empty unless `YAAR_FREEDPI=1` brought a proxy up, so the default build issues exactly
- * the `fetch` it always did. Private and loopback targets are deliberately excluded:
+ * Empty only when `YAAR_FREEDPI=0` kept the proxy down, or it failed to bind — in which
+ * case this issues exactly the `fetch` it always did. Private and loopback targets are
+ * deliberately excluded even when the proxy is up:
  * the proxy refuses them anyway (`lib/freedpi/resolve.ts`), and routing them at it would
  * turn a working local call into a 403 for no gain — the bypass exists for censored
  * *public* hosts.
