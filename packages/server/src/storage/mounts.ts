@@ -114,10 +114,12 @@ export async function removeMount(alias: string): Promise<string | null> {
 }
 
 /**
- * Resolve a storage path that starts with `mounts/{alias}/...` to its host location.
- * Returns null if the path doesn't match a mount prefix.
+ * Resolve `mounts/{alias}/...` against its mount, keeping the entry the path landed in.
+ * Returns null if the path doesn't match a mount prefix or escapes the host directory.
  */
-export function resolveMountPath(storagePath: string): ResolvedPath | null {
+function resolveMountEntry(
+  storagePath: string,
+): { mount: MountEntry; absolutePath: string } | null {
   // Normalize backslashes (Windows) and strip leading slashes
   const cleaned = storagePath.replaceAll('\\', '/').replace(/^\/+/, '');
   if (!cleaned.startsWith('mounts/')) return null;
@@ -139,7 +141,36 @@ export function resolveMountPath(storagePath: string): ResolvedPath | null {
   const rel = relative(mount.hostPath, absolutePath);
   if (rel.startsWith('..') || isAbsolute(rel)) return null;
 
-  return { absolutePath, readOnly: mount.readOnly };
+  return { mount, absolutePath };
+}
+
+/**
+ * Resolve a storage path that starts with `mounts/{alias}/...` to its host location.
+ * Returns null if the path doesn't match a mount prefix.
+ */
+export function resolveMountPath(storagePath: string): ResolvedPath | null {
+  const resolved = resolveMountEntry(storagePath);
+  if (!resolved) return null;
+  return { absolutePath: resolved.absolutePath, readOnly: resolved.mount.readOnly };
+}
+
+/**
+ * The alias whose *root* a storage path names — null for anything else, including a
+ * path inside a mount and a path outside `mounts/` entirely.
+ *
+ * A mount root is the one storage path that is not storage: it *is* the user's host
+ * directory, so a caller about to do something irreversible needs to tell the two
+ * apart. The test compares the resolved path against the host directory rather than
+ * asking whether the sub-path string is empty, so every spelling that lands on the
+ * root — `mounts/docs`, `mounts/docs/`, `mounts/docs/.`, `mounts/docs/sub/..` —
+ * answers the same way.
+ */
+export function mountRootAlias(storagePath: string): string | null {
+  const resolved = resolveMountEntry(storagePath);
+  if (!resolved) return null;
+  return relative(resolved.mount.hostPath, resolved.absolutePath) === ''
+    ? resolved.mount.alias
+    : null;
 }
 
 /**

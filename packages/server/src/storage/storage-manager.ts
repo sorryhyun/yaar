@@ -24,7 +24,7 @@ import type {
   StorageGrepResult,
   StorageImageContent,
 } from './types.js';
-import { resolveMountPath, loadMounts, type ResolvedPath } from './mounts.js';
+import { resolveMountPath, mountRootAlias, loadMounts, type ResolvedPath } from './mounts.js';
 // A leaf, shared with window content inlining — see text-extensions.ts for why not here.
 import { isTextFile } from './text-extensions.js';
 
@@ -543,6 +543,28 @@ export async function storageDelete(filePath: string): Promise<StorageDeleteResu
   if (resolved.readOnly) {
     return { success: false, path: filePath, error: 'Mount is read-only' };
   }
+
+  // `mounts/{alias}` resolves to the mount's *host* directory, so the recursive delete
+  // below would `rm -rf` the user's real folder — outside storage/ entirely — on a path
+  // that reads like removing one storage entry. Nothing else in the mount lifecycle is
+  // that destructive: mounting asks the user first (features/config/mounts.ts), and
+  // unmounting is a config edit that leaves the host untouched. Neither is what a caller
+  // typing this path meant, and no confirmation stands between them and it, so refuse the
+  // root and name the door that does the intended thing. Paths *inside* a mount are
+  // ordinary deletes and still go through.
+  const rootAlias = mountRootAlias(normalizeSeparators(filePath));
+  if (rootAlias) {
+    return {
+      success: false,
+      path: filePath,
+      error:
+        `Refusing to delete mount root "mounts/${rootAlias}": it is the mounted host ` +
+        `directory itself, not storage, and deleting it would remove that folder and ` +
+        `everything under it. Delete a path inside the mount, or unmount it with ` +
+        `delete yaar://config/mounts/${rootAlias} (which leaves the host directory alone).`,
+    };
+  }
+
   const validatedPath = resolved.absolutePath;
 
   try {
