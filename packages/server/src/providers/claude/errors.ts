@@ -47,6 +47,10 @@ const ASSISTANT_ERROR_TEXT: Record<SDKAssistantMessageError, string> = {
   oauth_org_not_allowed: "This Claude account's organization is not allowed to use the API.",
   account_on_hold:
     'This Claude account is on hold and cannot make API calls until it is reinstated.',
+  verification_required:
+    'This Claude account needs verification before it can make API calls — finish it in the Claude app or run `claude login`.',
+  cloud_credential_error:
+    "The cloud provider's credentials (Bedrock/Vertex) were rejected or could not be loaded.",
   billing_error: 'Claude rejected the request for a billing reason — check the plan or credit.',
   rate_limit: 'Rate limited by the Claude API.',
   overloaded: 'The Claude API is overloaded.',
