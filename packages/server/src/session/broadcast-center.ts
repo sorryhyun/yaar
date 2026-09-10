@@ -16,6 +16,36 @@ import { createLogger } from '../observability/log.js';
 
 const log = createLogger('BroadcastCenter');
 
+/**
+ * How many bytes may sit unsent on one connection before we stop feeding it.
+ *
+ * Every server→client event is an OS Action or a stream delta: a state transition the
+ * client's view of the desktop depends on. That rules out the usual backpressure answers.
+ * *Dropping* one event keeps the socket alive but silently desynchronizes it — a client
+ * that misses a `window.create` shows a desktop that no longer matches the session, with
+ * nothing to reveal the divergence. *Coalescing* needs to know which events supersede which,
+ * which is per-event-type knowledge this hub deliberately does not have.
+ *
+ * So the policy is: never drop an event on a connection we keep open, and close a connection
+ * that has fallen this far behind. A close is recoverable in a way a dropped action is not —
+ * the frontend reconnects on any close code other than 1000
+ * (`use-agent-connection/transport-manager.ts`), re-attaches to the same session, and
+ * re-syncs window state from `SessionSnapshotService`. The session itself is untouched;
+ * sessions outlive their sockets by design.
+ *
+ * 8MB is chosen to be far above normal traffic and below unbounded: the largest single
+ * payloads are monitor screenshots and rasterized PDF pages, a few MB at worst, and a
+ * client that is draining at all stays orders of magnitude under this. Tripping it means the
+ * peer has stopped reading, not that it is briefly slow.
+ *
+ * It also sits deliberately *below* Bun's own `backpressureLimit` (16MB), so this policy —
+ * with its close code and its log line — is what fires, rather than Bun's
+ * `closeOnBackpressureLimit`, which defaults to off and would otherwise let the queue grow
+ * without bound. Measured against a peer that stops reading: `getBufferedAmount()` climbs
+ * past 17MB while `send()` returns -1, and nothing closes the socket.
+ */
+const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
+
 export type ConnectionId = string;
 
 interface ConnectionEntry {
@@ -30,6 +60,12 @@ interface ConnectionEntry {
    * A tab looks at one monitor at a time, so this holds one monitor.
    */
   monitorId?: string;
+  /**
+   * Set once this connection has been closed for falling behind, so a burst still in
+   * flight neither calls `close()` repeatedly nor logs once per event. The entry is
+   * removed for real when the socket's close handler calls `unsubscribe`.
+   */
+  overflowed?: boolean;
 }
 
 export class BroadcastCenter {
@@ -101,6 +137,46 @@ export class BroadcastCenter {
   }
 
   /**
+   * Send one already-serialized payload to one connection, applying the send budget.
+   *
+   * The single place any event reaches a socket, so the budget cannot be bypassed by a
+   * caller and the four publish methods do not each repeat the `readyState`/try-catch dance.
+   * Returns whether the payload was handed to the socket.
+   *
+   * The check is *before* the send, not after: once a peer has stopped reading, adding to
+   * the queue is what we are trying to avoid, and the event we are holding is no more
+   * droppable than the ones already queued — so the connection goes instead.
+   */
+  private deliver(connectionId: ConnectionId, entry: ConnectionEntry, data: string): boolean {
+    if (entry.overflowed || entry.ws.readyState !== WS_OPEN) return false;
+
+    // Bun's ServerWebSocket answers `getBufferedAmount()`; `ws`/client sockets carry a
+    // `bufferedAmount` property. `undefined` from both means the socket does not report a
+    // queue depth (a test fake), and a socket with no opinion is never over budget.
+    const buffered = entry.ws.getBufferedAmount?.() ?? entry.ws.bufferedAmount;
+    if (buffered !== undefined && buffered > MAX_BUFFERED_BYTES) {
+      entry.overflowed = true;
+      log.warn('connection fell behind; closing so it reconnects and re-syncs', {
+        connectionId,
+        sessionId: entry.sessionId,
+        bufferedBytes: buffered,
+        limitBytes: MAX_BUFFERED_BYTES,
+      });
+      // 1013 "Try Again Later" — anything but 1000 makes the frontend reconnect.
+      entry.ws.close?.(1013, 'send buffer exceeded');
+      return false;
+    }
+
+    try {
+      entry.ws.send(data);
+      return true;
+    } catch (err) {
+      log.error('failed to send event', { connectionId, sessionId: entry.sessionId, err });
+      return false;
+    }
+  }
+
+  /**
    * Publish an event directly to a single connection.
    * Returns true if the event was sent successfully.
    */
@@ -110,14 +186,7 @@ export class BroadcastCenter {
       log.warn('connection not available', { connectionId });
       return false;
     }
-
-    try {
-      entry.ws.send(JSON.stringify(event));
-      return true;
-    } catch (err) {
-      log.error('failed to send event to connection', { connectionId, err });
-      return false;
-    }
+    return this.deliver(connectionId, entry, JSON.stringify(event));
   }
 
   /**
@@ -127,15 +196,9 @@ export class BroadcastCenter {
   publishToSession(sessionId: SessionId, event: ServerEvent): number {
     let count = 0;
     const data = JSON.stringify(event);
-    for (const [, entry] of this.connections) {
-      if (entry.sessionId === sessionId && entry.ws.readyState === WS_OPEN) {
-        try {
-          entry.ws.send(data);
-          count++;
-        } catch (err) {
-          log.error('failed to send session event', { sessionId, err });
-        }
-      }
+    for (const [connectionId, entry] of this.connections) {
+      if (entry.sessionId !== sessionId) continue;
+      if (this.deliver(connectionId, entry, data)) count++;
     }
     return count;
   }
@@ -147,19 +210,9 @@ export class BroadcastCenter {
   publishToMonitor(sessionId: SessionId, monitorId: string, event: ServerEvent): number {
     let count = 0;
     const data = JSON.stringify(event);
-    for (const [, entry] of this.connections) {
-      if (
-        entry.sessionId === sessionId &&
-        entry.monitorId === monitorId &&
-        entry.ws.readyState === WS_OPEN
-      ) {
-        try {
-          entry.ws.send(data);
-          count++;
-        } catch (err) {
-          log.error('failed to send monitor event', { sessionId, monitorId, err });
-        }
-      }
+    for (const [connectionId, entry] of this.connections) {
+      if (entry.sessionId !== sessionId || entry.monitorId !== monitorId) continue;
+      if (this.deliver(connectionId, entry, data)) count++;
     }
     return count;
   }
@@ -171,15 +224,8 @@ export class BroadcastCenter {
   broadcast(event: ServerEvent): number {
     let count = 0;
     const data = JSON.stringify(event);
-    for (const [, entry] of this.connections) {
-      if (entry.ws.readyState === WS_OPEN) {
-        try {
-          entry.ws.send(data);
-          count++;
-        } catch (err) {
-          log.error('failed to broadcast', { err });
-        }
-      }
+    for (const [connectionId, entry] of this.connections) {
+      if (this.deliver(connectionId, entry, data)) count++;
     }
     return count;
   }
