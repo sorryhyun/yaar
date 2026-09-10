@@ -78,4 +78,10 @@ version without declaring anything in its `app.json`.
 ## Bun version
 
 CI/release pin the version in `.bun-version` (via setup-bun's `bun-version-file`). `engines.bun`
-states the supported *floor*; the two are intentionally different numbers.
+states the supported *floor*; the two are intentionally different numbers — the floor may lag the
+version CI builds with, and usually does.
+
+They are equal at 1.4.2 today, which is not the steady state. The floor was raised to meet the
+build version because the standalone exe is built with `--bytecode`, and cross-compiling that
+(`scripts/build/exe-bundle.js` produces all three targets from one machine) needs Bun >= 1.4.1.
+A later bump to `.bun-version` alone does not have to move the floor with it.

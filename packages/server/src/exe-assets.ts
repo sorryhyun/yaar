@@ -37,23 +37,60 @@ export const EMBEDDED_ASSET_DIRS = {
 } as const;
 
 /**
- * Root of the executable's virtual filesystem.
+ * Candidate roots for the executable's virtual filesystem, most trustworthy first.
  *
- * Everything compiled into the binary — this module included — reports the mount as its
- * `import.meta.dir`, and an embedded file's `name` is relative to exactly that, so
- * `` `${EMBEDDED_ROOT}/${name}` `` is a path `Bun.file()` opens.
+ * An embedded file's `name` is relative to the mount, so `` `${root}/${name}` `` is the path
+ * `Bun.file()` opens — but only for the *right* root, and which one that is cannot be read
+ * off a single expression:
  *
- * Read straight off `import.meta.dir`, with no literal beside it, because the mount is not
- * `/$bunfs/root` everywhere: on Windows it is `B:\~BUN\root`. Keeping the POSIX spelling as
- * a fallback is what broke the Windows binary — `startsWith('/$bunfs')` is false there, so
- * every asset resolved to a `/$bunfs/root/…` path that cannot open and the exe 404’d its own
- * frontend, its `@bundled/*` libraries and its ML runtime alike. Mixing the separators back
- * the other way is fine: Bun opens `B:\~BUN\root/frontend/index.html`.
+ *  - `import.meta.dir` is the mount for a plain `--compile` build, on every platform. It is
+ *    listed first for that reason, and it is why a bare `/$bunfs/root` literal must never be
+ *    the only answer: on Windows the mount is `B:\~BUN\root`, and hardcoding the POSIX
+ *    spelling is what broke the Windows binary once — every asset resolved to a path that
+ *    cannot open and the exe 404’d its own frontend, `@bundled/*` libraries and ML runtime
+ *    alike. (Mixing separators the other way is fine: Bun opens `B:\~BUN\root/frontend/x`.)
+ *  - Under `--bytecode` it is *wrong*: bytecode output is CommonJS, and the conversion bakes
+ *    `import.meta.dir` to the **build machine's source directory**, which does not exist on
+ *    the user's machine. `Bun.embeddedFiles` is still correct and complete there — only the
+ *    path spelling is lost — so the two known mounts follow as candidates.
  *
- * There is no on-disk case left to keep a floor for, either — outside the exe
- * `Bun.embeddedFiles` is empty, so `embeddedUnder()` builds no paths and this is never used.
+ * `resolveEmbeddedRoot()` picks between them by *opening a real embedded file*, so a wrong
+ * candidate is rejected rather than trusted. Order still matters: `import.meta.dir` wins
+ * whenever it works, which keeps the platform-agnostic answer ahead of the literals.
  */
-const EMBEDDED_ROOT = import.meta.dir;
+const EMBEDDED_ROOT_CANDIDATES = [import.meta.dir, '/$bunfs/root', 'B:\\~BUN\\root'];
+
+/**
+ * The mount the running binary actually reads embedded files from.
+ *
+ * Probes each candidate against a non-empty embedded entry and returns the first that
+ * opens. Throws if none does: every consumer of the three globals treats a miss as "read
+ * from disk instead", so a silently unresolved mount degrades into a binary that 404s its
+ * own frontend and shows up only as a blank window — the exact failure this module exists
+ * to prevent. Better to refuse to boot with the reason attached.
+ *
+ * Never reached outside the exe: `Bun.embeddedFiles` is empty there, and the caller returns
+ * before asking.
+ */
+function resolveEmbeddedRoot(): string {
+  // A zero-length entry cannot tell a resolving root from a missing file, since both
+  // report size 0 — so probe with a file that has bytes.
+  const probe = Bun.embeddedFiles.find((f) => f.size > 0) as File | undefined;
+  if (!probe) return EMBEDDED_ROOT_CANDIDATES[0]!;
+
+  for (const root of EMBEDDED_ROOT_CANDIDATES) {
+    try {
+      if (Bun.file(`${root}/${probe.name}`).size > 0) return root;
+    } catch {
+      // Unopenable candidate; try the next.
+    }
+  }
+  throw new Error(
+    `Cannot locate the embedded asset mount. ${Bun.embeddedFiles.length} file(s) are ` +
+      `compiled in (probed "${probe.name}"), but none of ` +
+      `${EMBEDDED_ROOT_CANDIDATES.map((c) => JSON.stringify(c)).join(', ')} opens it.`,
+  );
+}
 
 /**
  * Every embedded file under `prefix/`, keyed by the rest of its path.
@@ -61,12 +98,12 @@ const EMBEDDED_ROOT = import.meta.dir;
  * Returns an empty object when the prefix embedded nothing, which is how a build without
  * `dist/bundled-libs` stays distinguishable from one that has it.
  */
-function embeddedUnder(prefix: string): Record<string, string> {
+function embeddedUnder(prefix: string, root: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const file of Bun.embeddedFiles) {
     const name = (file as File).name;
     if (!name.startsWith(`${prefix}/`)) continue;
-    out[name.slice(prefix.length + 1)] = `${EMBEDDED_ROOT}/${name}`;
+    out[name.slice(prefix.length + 1)] = `${root}/${name}`;
   }
   return out;
 }
@@ -80,10 +117,14 @@ function embeddedUnder(prefix: string): Record<string, string> {
 export function installEmbeddedAssetMaps(): void {
   const globals = globalThis as Record<string, unknown>;
 
+  // Outside the exe there is nothing to publish, and no mount to resolve.
+  if (Bun.embeddedFiles.length === 0) return;
+  const root = resolveEmbeddedRoot();
+
   // Frontend keys are *URL* paths, rooted — `static.ts` looks up `/index.html`, and
   // `config/assets.ts` is called with `/NanumSquareNeoOTF-Rg.otf`.
   const frontend: Record<string, string> = {};
-  for (const [rest, path] of Object.entries(embeddedUnder(EMBEDDED_ASSET_DIRS.frontend))) {
+  for (const [rest, path] of Object.entries(embeddedUnder(EMBEDDED_ASSET_DIRS.frontend, root))) {
     frontend[`/${rest}`] = path;
   }
   globals.__YAAR_EMBEDDED_FRONTEND = frontend;
@@ -91,7 +132,7 @@ export function installEmbeddedAssetMaps(): void {
   // Library keys are import names without the extension: `uuid`, `solid-js/html` — the
   // shape `prebundle-libs.js` writes the files under and `bundled/plugins.ts` looks up.
   const libs: Record<string, string> = {};
-  for (const [rest, path] of Object.entries(embeddedUnder(EMBEDDED_ASSET_DIRS.bundledLibs))) {
+  for (const [rest, path] of Object.entries(embeddedUnder(EMBEDDED_ASSET_DIRS.bundledLibs, root))) {
     if (!rest.endsWith('.js')) continue;
     libs[rest.slice(0, -'.js'.length)] = path;
   }
@@ -101,5 +142,5 @@ export function installEmbeddedAssetMaps(): void {
   if (Object.keys(libs).length > 0) globals.__YAAR_BUNDLED_LIBS = libs;
 
   // ML keys are bare artifact file names, which is what `/api/ml-runtime/:name` receives.
-  globals.__YAAR_ML_RUNTIME = embeddedUnder(EMBEDDED_ASSET_DIRS.mlRuntime);
+  globals.__YAAR_ML_RUNTIME = embeddedUnder(EMBEDDED_ASSET_DIRS.mlRuntime, root);
 }

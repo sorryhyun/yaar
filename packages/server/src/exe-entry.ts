@@ -160,10 +160,10 @@ function openAppWindow() {
 // main.ts registers SIGINT/SIGTERM handlers for graceful shutdown.
 // lifecycle.ts has a 5-second force-kill timer as a last resort.
 
-try {
-  await ready;
-  openAppWindow();
-} catch (err) {
+// `.then`, not a top-level `await`: this file is the exe's entry and the exe is built
+// with `--bytecode`, which emits CommonJS — where top-level `await` is a syntax error.
+// A throw from `openAppWindow()` still lands in the `catch`, as it did inside the `try`.
+void ready.then(openAppWindow).catch((err: unknown) => {
   console.error('Server failed to start:', err);
   process.exit(1);
-}
+});

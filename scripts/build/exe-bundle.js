@@ -216,6 +216,12 @@ const buildArgs = [
   `--target=${bunTarget}`,
   `--outfile=${relative(rootDir, outfile)}`,
   '--minify',
+  // Bytecode moves parse+compile of the server bundle to build time. Cross-compiling it
+  // needed Bun >= 1.4.1 (before that it broke to/from windows-x64 on macOS and Linux),
+  // and this script cross-compiles all three shipped targets from one machine — hence
+  // the `engines.bun` floor. The cache format is platform-independent as of the same
+  // release, so two builds of one input are byte-identical whatever built them.
+  '--bytecode',
   '--external', 'cpu-features',
   ...assetPaths.flatMap((p) => ['--asset', relative(rootDir, p)]),
   ...defines,

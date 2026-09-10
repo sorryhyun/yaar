@@ -11,6 +11,12 @@
  * directories directly, so the file that survives is this one: checked in, readable, and
  * the same on every build. It is excluded from `tsconfig.build.json` for the same reason
  * the tests are — it belongs to the exe, not to `dist/`.
+ *
+ * The tail is an async IIFE rather than a top-level `await` because the exe is built with
+ * `--bytecode`, which emits CommonJS, where top-level `await` is a syntax error. The
+ * ordering that matters is unchanged: everything above the call is synchronous, so it has
+ * all run by the time `import()` is invoked. What a top-level `await` gave us for free was
+ * a loud crash if boot threw, so the `catch` below restores that explicitly.
  */
 
 // The AST protocol extractor is the exe's only reader of an `app.register()` protocol, and
@@ -27,4 +33,11 @@ import { installEmbeddedAssetMaps } from './exe-assets.js';
 
 installEmbeddedAssetMaps();
 
-await import('./exe-entry.js');
+void (async () => {
+  try {
+    await import('./exe-entry.js');
+  } catch (err) {
+    console.error('[yaar] failed to start:', err);
+    process.exit(1);
+  }
+})();

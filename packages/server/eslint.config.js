@@ -44,6 +44,10 @@ export default tseslint.config(
     //  - lifecycle.ts   — the boot banner, remote-mode box and QR code; the CLI talking to
     //                     its user. Its actual logs do use createLogger('lifecycle').
     //  - main/exe-entry — the same, at the process edges.
+    //  - exe-bundle-entry — the exe's *first* module, whose whole job is to run before any
+    //                     server module loads (see its header). Importing the logger there
+    //                     would load server code ahead of the globals it installs, which is
+    //                     the one thing the file exists to prevent.
     //  - dev-bundle-worker — a worker whose stdout IS its result channel (the parent parses
     //                     the JSON it prints); routing that through a logger breaks it.
     //  - lib/**         — documented as standalone utilities with no server-internal
@@ -55,6 +59,7 @@ export default tseslint.config(
       'src/lifecycle.ts',
       'src/main.ts',
       'src/exe-entry.ts',
+      'src/exe-bundle-entry.ts',
       'src/http/dev-bundle-worker.ts',
       'src/lib/**/*.ts',
       'src/providers/codex/version.ts',
