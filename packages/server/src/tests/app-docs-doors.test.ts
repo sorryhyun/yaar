@@ -187,7 +187,10 @@ describe('the three verbs on …/docs', () => {
 
   test('list is the index: a scent line per runtime topic', async () => {
     const result = await handler().list!(at(`yaar://apps/${APP_ID}/docs`));
-    const links = result.structuredContent?.items as Array<{ uri: string; name: string }>;
+    const links = result.content.filter((b) => b.type === 'resource_link') as Array<{
+      uri: string;
+      name: string;
+    }>;
     expect(links.map((l) => l.name)).toEqual(['solid-gotchas', 'version-history']);
     expect(links[0].uri).toBe(`yaar://apps/${APP_ID}/docs/solid-gotchas`);
   });

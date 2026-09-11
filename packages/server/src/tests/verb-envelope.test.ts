@@ -1,21 +1,22 @@
 /**
- * The `/api/verb` envelope over VerbResults that carry `structuredContent`.
+ * The `/api/verb` envelope over VerbResults, with and without `structuredContent`.
  *
- * `structuredContent` is the lossless, typed copy of a result for programmatic consumers;
- * `content` stays the model-facing channel. These assert the two shapes a caller sees —
- * and that the `{ items }` array wrapper (MCP forbids a bare-array structuredContent) is
- * never confused with an app that genuinely returns an object keyed `items`.
+ * `structuredContent` is the lossless, typed copy of a result for programmatic consumers —
+ * and, when present, what both model clients read instead of the text blocks. These assert
+ * the shapes a caller sees, that a listing carries no such copy (it would reach a Claude
+ * model twice and hide every note), and that an app object keyed `items` is never confused
+ * with an empty listing.
  */
 
 import { describe, expect, test } from 'bun:test';
 import { handleVerbRoutes, toEnvelope } from '../http/routes/verb.js';
-import { formatBatchResults, okJson, okLinks } from '../handlers/utils.js';
+import { formatBatchResults, okJson, okLinks, prependNote } from '../handlers/utils.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
 import type { VerbResult } from '../handlers/uri-registry.js';
 import type { SessionId } from '../session/types.js';
 
 describe('okLinks', () => {
-  test('carries the links as structuredContent.items and as resource_link blocks', () => {
+  test('carries the links as resource_link blocks only, with no structuredContent', () => {
     const result = okLinks([
       { uri: 'yaar://storage/a.txt', name: 'a.txt', mimeType: 'text/plain' },
       { uri: 'yaar://storage/sub', name: 'sub', description: 'directory' },
@@ -23,7 +24,24 @@ describe('okLinks', () => {
 
     expect(result.content).toHaveLength(2);
     expect(result.content[0]).toMatchObject({ type: 'resource_link', uri: 'yaar://storage/a.txt' });
-    expect(result.structuredContent?.items).toEqual(result.content);
+    // With a `structuredContent` beside them, the Claude CLI delivers the list twice and
+    // both clients drop the text blocks — so a prepended note would never be read.
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  test('a prepended note stays in the content a model reads, ahead of the links', () => {
+    const result = prependNote(okLinks([{ uri: 'yaar://storage/a.txt', name: 'a.txt' }]), 'hi');
+
+    expect(result.structuredContent).toBeUndefined();
+    expect(result.content[0]).toEqual({ type: 'text', text: '(hi)' });
+    expect(toEnvelope(result)).toEqual({
+      ok: true,
+      data: [{ uri: 'yaar://storage/a.txt', name: 'a.txt' }],
+    });
+  });
+
+  test('an empty listing with a note is still an empty array', () => {
+    expect(toEnvelope(prependNote(okLinks([]), 'hi'))).toEqual({ ok: true, data: [] });
   });
 
   test('envelope hands apps a flat array of links', () => {
@@ -59,7 +77,14 @@ describe('okJson', () => {
   });
 });
 
-describe('the { items } wrapper', () => {
+describe('empty-listing detection', () => {
+  test('an app returning the "(empty)" string is not mistaken for an empty listing', () => {
+    expect(toEnvelope({ content: [{ type: 'text', text: '(empty)' }] })).toEqual({
+      ok: true,
+      data: '(empty)',
+    });
+  });
+
   test('an app object keyed "items" is not mistaken for an empty listing', () => {
     // What wrapAppValue produces for an app command returning `{ items: [] }`:
     // a serialized text block plus the object itself. It must survive intact.

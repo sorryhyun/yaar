@@ -79,14 +79,16 @@ export interface VerbResult {
    * `notFoundError` in handlers/utils.ts.
    */
   notFound?: boolean;
+  /** An `okLinks([])` result — a listing with no children. See `isEmptyLinkList`. */
+  emptyList?: boolean;
   /**
-   * Optional lossless, typed copy of the result for programmatic consumers
-   * (app→app SDK calls via `POST /api/verb`, non-model MCP clients). `content`
-   * remains the model-facing channel — a JSON *string* the LLM reads — while
-   * `structuredContent` carries the original object/array untruncated so a
-   * downstream reader gets typed data without re-parsing a possibly-truncated
-   * text block. Populated by `wrapAppValue` for app object returns; rides through
-   * to the MCP `CallToolResult` via the tool handler's `{...result}` spread.
+   * Optional lossless, typed copy of the result, for `POST /api/verb` (app→app SDK calls)
+   * and `resolveAppWindow`. Rides through to the MCP `CallToolResult` via the tool
+   * handler's `{...result}` spread — and there it **replaces the text blocks for the
+   * model**: the Claude CLI and Codex both hand the model the serialized
+   * `structuredContent` and drop every text block beside it (the CLI keeps non-text blocks).
+   * Anything a model must read, a note or truncation included, belongs inside this object
+   * when it is set. See `okJson` in handlers/utils.ts.
    *
    * Object-only, matching the MCP `structuredContent` contract (and the SDK's
    * `{[x:string]:unknown}` type). Bare-array returns keep their text-only shape and

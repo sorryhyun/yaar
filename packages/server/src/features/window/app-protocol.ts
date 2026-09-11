@@ -71,12 +71,12 @@ function wrapAppValue(value: unknown): VerbResult {
 
   if (typeof value === 'string') return ok(truncateText(value));
 
-  // Object → a JSON text block for the model/logs PLUS a lossless
-  // `structuredContent` copy for programmatic consumers (app→app SDK calls,
-  // non-model MCP clients). The text block stays truncated for token budget and
-  // log readability; the structured copy is the full, untruncated value so a
-  // truncated preview never costs a downstream reader real data. Trade-off: the
-  // payload rides the wire twice — accepted for the typed-access guarantee.
+  // Object → a JSON text block for logs PLUS a lossless `structuredContent` copy
+  // for programmatic consumers (app→app SDK calls). The text block is truncated;
+  // the structured copy is the full value. Note the model reads the *structured*
+  // copy — both the Claude CLI and Codex prefer it over text blocks (see `okJson`
+  // in handlers/utils.ts) — so MAX_TEXT_BYTES does not bound what reaches the
+  // model context for an object return.
   //
   // `structuredContent` is object-only (MCP contract), so bare arrays get the
   // text-only shape and still round-trip via `toEnvelope`'s tryParseJson.

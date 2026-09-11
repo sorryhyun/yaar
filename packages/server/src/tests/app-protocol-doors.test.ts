@@ -195,7 +195,10 @@ describe('the three verbs on …/protocol', () => {
 
   test('list is the index: one row per entry, summarized to the first sentence', async () => {
     const result = await handler().list!(at(`yaar://apps/${APP_ID}/protocol`));
-    const links = result.structuredContent?.items as Array<{ uri: string; description: string }>;
+    const links = result.content.filter((b) => b.type === 'resource_link') as Array<{
+      uri: string;
+      description: string;
+    }>;
 
     expect(links.map((l) => l.uri)).toEqual([
       `yaar://apps/${APP_ID}/protocol/state/selection`,

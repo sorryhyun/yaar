@@ -81,7 +81,8 @@ export const ok = (text: string) => ({
  * 8 KB, because that is comfortably above every routine result (a window list, a config
  * read, a storage stat) and comfortably below the ones where the gutter is the payload.
  * It is a display choice only: `structuredContent` is unaffected, so every programmatic
- * reader sees exactly the same bytes either way.
+ * reader sees exactly the same bytes either way. Since a model reads `structuredContent`
+ * whenever there is one (see `okJson`), the gutter only reaches a model for a bare array.
  */
 const COMPACT_JSON_THRESHOLD = 8_192;
 
@@ -90,16 +91,19 @@ const COMPACT_JSON_THRESHOLD = 8_192;
  *
  * Indented below {@link COMPACT_JSON_THRESHOLD}, compact above it.
  *
- * The text block stays the model-facing channel; `structuredContent` carries the same value
- * losslessly for programmatic consumers (`POST /api/verb`, non-model MCP clients) so they get
- * typed data without re-parsing the text. `structuredContent` is object-only per the MCP
- * contract, so a bare array is left text-only — same trade-off `wrapAppValue` makes — and
- * still round-trips through `toEnvelope`'s tryParseJson.
+ * **When `structuredContent` is present it is what the model reads, not the text.** Both
+ * clients prefer it: the Claude CLI sends `JSON.stringify(structuredContent)` in place of
+ * every text block (keeping only non-text blocks, rendered, ahead of it), and Codex sends the
+ * serialized `structuredContent` alone. So a text block next to it — the indented copy
+ * here, a `prependNote`, the `[layout]` context — never reaches a model. Put anything a
+ * model must see *inside* the object. (`providers/codex/message-mapper.ts` reading
+ * `content` first is YAAR's own activity display, not the model's view.)
  *
- * Both are sent, and neither is redundant: Codex reads `content` and only falls back to
- * `structuredContent` when it is empty (`providers/codex/message-mapper.ts`), while
- * `POST /api/verb` and `resolveAppWindow` read `structuredContent` and never look at the
- * text. Dropping either copy to save the duplication breaks one of them.
+ * The text block is still what `toEnvelope`'s fallback and the session log read, and what
+ * a client that ignores `structuredContent` would show. `POST /api/verb` and
+ * `resolveAppWindow` read `structuredContent`. It is object-only per the MCP contract, so a
+ * bare array is left text-only — same trade-off `wrapAppValue` makes — and still
+ * round-trips through `toEnvelope`'s tryParseJson.
  */
 export const okJson = (data: object) => {
   const compact = JSON.stringify(data);
@@ -178,10 +182,13 @@ export const EMPTY_LIST_TEXT = '(empty)';
 /**
  * Create a successful result with resource_link blocks for navigable lists.
  *
- * `structuredContent` mirrors the same links as typed data for programmatic consumers.
- * MCP requires it to be an object, so the array rides under `items` — the wrapper a reader
- * must unwrap. `toEnvelope` (routes/verb.ts) keeps handing apps a flat array, reading the
- * resource_link blocks; `items` is what an external MCP client sees.
+ * Deliberately **no** `structuredContent`. Both model clients let it win over `content`
+ * (see `okJson`), so a `{ items }` mirror of the links was what the model read: the Claude
+ * CLI renders the resource_link blocks as text *and* appends the JSON, delivering every
+ * listing twice (a 70-row window list measured 34.6 KB, 19 KB of it the copy), and both
+ * clients drop the text blocks — so every `prependNote` on a listing never reached a model.
+ * Without it, Codex serializes the blocks themselves, extra fields (`size`, `modifiedAt`)
+ * included, and the CLI renders them once. `toEnvelope` (routes/verb.ts) reads the blocks.
  */
 export const okLinks = (
   links: Array<{
@@ -212,24 +219,19 @@ export const okLinks = (
     ...(link.modifiedAt ? { modifiedAt: link.modifiedAt } : {}),
   }));
 
-  return {
-    content: items.length === 0 ? [{ type: 'text', text: EMPTY_LIST_TEXT }] : items,
-    structuredContent: { items },
-  };
+  return items.length === 0
+    ? { content: [{ type: 'text', text: EMPTY_LIST_TEXT }], emptyList: true }
+    : { content: items };
 };
 
 /**
  * True for an `okLinks([])` result — a list that resolved to no children.
  *
- * Identified by the `(empty)` sentinel *and* an empty `items` wrapper together, so it can't
- * be confused with an app command that happens to return `{ items: [] }` (whose text block is
- * the serialized object, not the sentinel).
+ * Read off the `emptyList` flag, never the `(empty)` text: an app command may return that
+ * string, and a `prependNote` puts a second block in front of the sentinel.
  */
 export function isEmptyLinkList(result: VerbResult): boolean {
-  const items = result.structuredContent?.items;
-  if (!Array.isArray(items) || items.length > 0) return false;
-  const [block] = result.content;
-  return result.content.length === 1 && block?.type === 'text' && block.text === EMPTY_LIST_TEXT;
+  return result.emptyList === true;
 }
 
 /** Prepend a note to a VerbResult (for read/list fallback). */
