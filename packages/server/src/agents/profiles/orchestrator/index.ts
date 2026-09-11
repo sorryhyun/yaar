@@ -23,6 +23,7 @@ import http from '../prompts/http.md' with { type: 'text' };
 import mcp from '../prompts/mcp.md' with { type: 'text' };
 import skills from '../prompts/skills.md' with { type: 'text' };
 import userPrompts from '../prompts/user-prompts.md' with { type: 'text' };
+import taskList from '../prompts/task-list.md' with { type: 'text' };
 
 import intro from './prompts/intro.md' with { type: 'text' };
 import builtinTools from './prompts/builtin-tools.md' with { type: 'text' };
@@ -41,6 +42,7 @@ export const ORCHESTRATOR_PROMPT = composePrompt(
   uriNamespaces,
   visibility,
   role,
+  taskList,
   windows,
   storage,
   http,
