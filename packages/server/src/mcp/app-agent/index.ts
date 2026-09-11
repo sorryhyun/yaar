@@ -60,7 +60,15 @@ import {
 } from './storage-override.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
-import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
+import {
+  getActiveSession,
+  getActivePool,
+  ok,
+  okJson,
+  error,
+  prependNote,
+  foldNotes,
+} from '../../handlers/utils.js';
 import { scopedAppStoragePath } from '../../handlers/apps.js';
 
 /**
@@ -222,19 +230,17 @@ export const APP_TOOL_DESCRIPTIONS = {
  * Auto-open is silent otherwise: the tool answers exactly as it would have for an app
  * that was already running, so the model cannot tell the user why a window appeared, and
  * a `background` app's window is invisible besides. Prepended as its own block rather
- * than folded into the app's answer, which is the app's text and not ours to edit.
+ * than edited into the app's text — except that an object answer also carries it as
+ * `_notes`, the only place a model reads beside `structuredContent` (see `foldNotes`).
  */
 function withLaunchNote(result: VerbResult, appId: string, windowId: string): VerbResult {
-  return {
-    ...result,
-    content: [
-      {
-        type: 'text' as const,
-        text: `(No window of "${appId}" was open on this monitor, so one was opened: ${windowId}.)`,
-      },
-      ...result.content,
-    ],
-  };
+  // Folded at once: this tool answers only a model, never `POST /api/verb`.
+  return foldNotes(
+    prependNote(
+      result,
+      `No window of "${appId}" was open on this monitor, so one was opened: ${windowId}.`,
+    ),
+  );
 }
 
 /**
@@ -266,10 +272,7 @@ async function routeStorageOverride(
     params,
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
-  return {
-    ...result,
-    content: [{ type: 'text' as const, text: overrideNote(verb, canonical) }, ...result.content],
-  };
+  return foldNotes(prependNote(result, overrideNote(verb, canonical)));
 }
 
 /**

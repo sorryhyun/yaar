@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
-import { ResourceRegistry, type VerbResult } from './uri-registry.js';
+import { ResourceRegistry, foldNotes, type VerbResult } from './uri-registry.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import { getActiveSession, formatBatchResults } from './utils.js';
 import { expandBraceUri } from '@yaar/shared';
@@ -99,6 +99,12 @@ function appendLayoutContext(result: VerbResult): VerbResult {
       return {
         ...result,
         content: [...result.content, { type: 'text' as const, text: contextText }],
+        // Beside a `structuredContent` the text block never reaches a model (see `okJson`
+        // in utils.ts), so the layout rides inside the object too. MCP-only, so the app's
+        // `POST /api/verb` data never sees the key.
+        ...(result.structuredContent
+          ? { structuredContent: { ...result.structuredContent, _layout: contextText } }
+          : {}),
       };
     }
   } catch {
@@ -124,7 +130,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
     // Normal single-URI path
     recordVerbCall(verb, uri, payload);
     const result = await reg.execute(verb, uri, payload, readOptions);
-    return { ...appendLayoutContext(result) };
+    return { ...appendLayoutContext(foldNotes(result)) };
   }
 
   // Multi-URI: execute all in parallel, format combined result

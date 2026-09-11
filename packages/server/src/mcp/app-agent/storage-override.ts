@@ -78,13 +78,13 @@ export async function findStorageOverride(
 }
 
 /**
- * The parenthetical that opens an overridden call's answer. The answer itself is the
+ * The note (`prependNote` parenthesizes it) that opens an overridden call's answer. The answer itself is the
  * app's; this says why it is not the built-in's, so an agent reading "Saved as .docx"
  * where it expected the built-in's `{ uri, written }` knows which door it went through.
  */
 export function overrideNote(verb: StorageVerb, canonical: string): string {
   const spelled = storageCommandName(verb);
   return canonical === spelled
-    ? `(This app overrides the built-in ${spelled}; the answer below is the app's own.)`
-    : `(This app overrides the built-in ${spelled} with its "${canonical}" command; the answer below is the app's own.)`;
+    ? `This app overrides the built-in ${spelled}; the answer below is the app's own.`
+    : `This app overrides the built-in ${spelled} with its "${canonical}" command; the answer below is the app's own.`;
 }

@@ -82,6 +82,12 @@ export interface VerbResult {
   /** An `okLinks([])` result — a listing with no children. See `isEmptyLinkList`. */
   emptyList?: boolean;
   /**
+   * Notes `prependNote` added to a result carrying `structuredContent`, newest first. Their
+   * text blocks never reach a model beside that object, so `foldNotes` moves them into it at
+   * the MCP boundary. Never set without `structuredContent`.
+   */
+  notes?: string[];
+  /**
    * Optional lossless, typed copy of the result, for `POST /api/verb` (app→app SDK calls)
    * and `resolveAppWindow`. Rides through to the MCP `CallToolResult` via the tool
    * handler's `{...result}` spread — and there it **replaces the text blocks for the
@@ -95,6 +101,38 @@ export interface VerbResult {
    * still round-trip through `toEnvelope`'s `tryParseJson`.
    */
   structuredContent?: Record<string, unknown>;
+}
+
+/**
+ * Prepend a note to a VerbResult, as a `(…)` text block.
+ *
+ * On a result carrying `structuredContent` the text block never reaches a model (see
+ * `okJson` in handlers/utils.ts), so the note is also recorded in `notes` for
+ * {@link foldNotes} to carry into the object at the MCP boundary. It is not folded here:
+ * this result may be headed for `POST /api/verb`, whose `data` is the app's own object and
+ * must not grow our keys.
+ */
+export function prependNote(result: VerbResult, note: string): VerbResult {
+  return {
+    ...result,
+    content: [{ type: 'text', text: `(${note})` }, ...result.content],
+    ...(result.structuredContent ? { notes: [note, ...(result.notes ?? [])] } : {}),
+  };
+}
+
+/**
+ * Carry a result's `notes` into its `structuredContent` as `_notes`, first, where a model
+ * reads them. Call once, where a result leaves for a model — the MCP tool boundary — and
+ * never on a path to `POST /api/verb`.
+ */
+export function foldNotes(result: VerbResult): VerbResult {
+  const { notes, ...rest } = result;
+  if (!notes?.length || !rest.structuredContent) return rest;
+  const { _notes: earlier, ...data } = rest.structuredContent;
+  return {
+    ...rest,
+    structuredContent: { _notes: [...notes, ...(Array.isArray(earlier) ? earlier : [])], ...data },
+  };
 }
 
 export interface DescribeResult {
@@ -409,11 +447,10 @@ export class ResourceRegistry {
             isError: true,
           };
         const result = await handler.list.call(handler, resolved);
-        const note = {
-          type: 'text' as const,
-          text: '(Note: this is a folder/collection — used "list" instead of "read".)',
-        };
-        return { ...result, content: [note, ...result.content] };
+        return prependNote(
+          result,
+          'Note: this is a folder/collection — used "list" instead of "read".',
+        );
       }
       if (verb === 'list' && handler.verbs.includes('read')) {
         return {

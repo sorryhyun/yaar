@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { handleVerbRoutes, toEnvelope } from '../http/routes/verb.js';
-import { formatBatchResults, okJson, okLinks, prependNote } from '../handlers/utils.js';
+import { foldNotes, formatBatchResults, okJson, okLinks, prependNote } from '../handlers/utils.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
 import type { VerbResult } from '../handlers/uri-registry.js';
 import type { SessionId } from '../session/types.js';
@@ -74,6 +74,35 @@ describe('okJson', () => {
 
     expect(result.structuredContent).toBeUndefined();
     expect(toEnvelope(result)).toEqual({ ok: true, data: [1, 2, 3] });
+  });
+});
+
+describe('notes beside structuredContent', () => {
+  // Both model clients read `structuredContent` in place of text blocks, so a note on an
+  // object result has to travel inside it — but only at the MCP boundary, not to apps.
+  test('prependNote records the note but leaves the app-facing data alone', () => {
+    const result = prependNote(okJson({ windowId: 'w1' }), 'opened for you');
+
+    expect(result.content[0]).toEqual({ type: 'text', text: '(opened for you)' });
+    expect(result.notes).toEqual(['opened for you']);
+    expect(toEnvelope(result)).toEqual({ ok: true, data: { windowId: 'w1' } });
+  });
+
+  test('foldNotes carries the notes into the object, first, newest first', () => {
+    const folded = foldNotes(
+      prependNote(prependNote(okJson({ windowId: 'w1' }), 'older'), 'newer'),
+    );
+
+    expect(folded.notes).toBeUndefined();
+    expect(folded.structuredContent).toEqual({ _notes: ['newer', 'older'], windowId: 'w1' });
+    expect(Object.keys(folded.structuredContent!)[0]).toBe('_notes');
+  });
+
+  test('a result without structuredContent records nothing to fold', () => {
+    const result = prependNote(okLinks([{ uri: 'yaar://storage/a.txt', name: 'a.txt' }]), 'hi');
+
+    expect(result.notes).toBeUndefined();
+    expect(foldNotes(result)).toEqual(result);
   });
 });
 

@@ -96,7 +96,8 @@ const COMPACT_JSON_THRESHOLD = 8_192;
  * every text block (keeping only non-text blocks, rendered, ahead of it), and Codex sends the
  * serialized `structuredContent` alone. So a text block next to it — the indented copy
  * here, a `prependNote`, the `[layout]` context — never reaches a model. Put anything a
- * model must see *inside* the object. (`providers/codex/message-mapper.ts` reading
+ * model must see *inside* the object: `prependNote` records its note for `foldNotes` to
+ * carry in as `_notes`, and the verb tools add `_layout`. (`providers/codex/message-mapper.ts` reading
  * `content` first is YAAR's own activity display, not the model's view.)
  *
  * The text block is still what `toEnvelope`'s fallback and the session log read, and what
@@ -234,10 +235,9 @@ export function isEmptyLinkList(result: VerbResult): boolean {
   return result.emptyList === true;
 }
 
-/** Prepend a note to a VerbResult (for read/list fallback). */
-export function prependNote(result: VerbResult, note: string): VerbResult {
-  return { ...result, content: [{ type: 'text', text: `(${note})` }, ...result.content] };
-}
+// Beside `VerbResult` so the registry's own read→list fallback can note without importing
+// this file (which reaches the session hub).
+export { prependNote, foldNotes } from './uri-registry.js';
 
 /** Extract the first path segment after `yaar://{authority}/`. */
 export function extractIdFromUri(uri: string, authority: string): string {
