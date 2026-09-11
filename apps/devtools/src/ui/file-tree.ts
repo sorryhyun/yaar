@@ -1,5 +1,5 @@
 export {};
-import { createSignal, For, Show } from '@bundled/solid-js';
+import { createEffect, createSignal, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { files, openFilePath, activeProject, type FileEntry } from '../core';
 import { openFile } from '../services';
@@ -25,6 +25,18 @@ function parentDir(path: string): string {
 
 export function FileTree() {
   const [collapsedDirs, setCollapsedDirs] = createSignal<Set<string>>(new Set());
+  let tree: HTMLElement | undefined;
+
+  // A file opened from a problem or by the agent can sit below the fold.
+  createEffect(() => {
+    const path = openFilePath();
+    if (!path || !tree) return;
+    queueMicrotask(() =>
+      tree
+        ?.querySelector(`[data-path="${CSS.escape(path)}"]`)
+        ?.scrollIntoView({ block: 'nearest' }),
+    );
+  });
 
   function toggleDir(dirPath: string) {
     setCollapsedDirs((prev) => {
@@ -76,6 +88,7 @@ export function FileTree() {
   return html`
     <div
       class="file-tree y-scroll"
+      ref=${(el: HTMLElement) => (tree = el)}
       onClick=${(e: MouseEvent) => {
         const el = (e.target as HTMLElement).closest('[data-path]') as HTMLElement | null;
         if (!el) return;

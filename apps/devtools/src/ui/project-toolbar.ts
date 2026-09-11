@@ -20,7 +20,8 @@ import {
 // information that is only consulted when switching. The row is gone; the trigger
 // still reports what is open at a glance, and the status bar still carries the rest.
 //
-// Load and Clone remain their own buttons — they open the filtered picker modal,
+// Load and Clone remain their own buttons, hidden in a narrow window where the menu's
+// own entries cover them — they open the filtered picker modal,
 // which the dropdown deliberately does not try to replace (a filter box inside a
 // menu that also closes projects is two interactions fighting over one surface).
 
@@ -150,7 +151,7 @@ function ProjectMenu() {
       <button
         class=${() =>
           `project-menu-trigger${menuOpen() ? ' open' : ''}${activeProject() ? '' : ' empty'}`}
-        title=${() => activeProject()?.name ?? 'No project open'}
+        title="Switch, load or clone a project"
         onClick=${() => setMenuOpen(!menuOpen())}
       >
         <span class="project-menu-name y-truncate"
@@ -300,12 +301,16 @@ export function ProjectToolbar() {
     <div class="y-toolbar y-toolbar-dense">
       <${ProjectMenu} />
 
-      <button class="y-btn y-btn-sm" onClick=${openLoadPicker} title="Open an existing project">
+      <button
+        class="y-btn y-btn-sm toolbar-picker-btn"
+        onClick=${openLoadPicker}
+        title="Open an existing project"
+      >
         Load
       </button>
 
       <button
-        class="y-btn y-btn-sm"
+        class="y-btn y-btn-sm toolbar-picker-btn"
         disabled=${busy}
         onClick=${openClonePicker}
         title="Clone an installed app's source into an editable project"

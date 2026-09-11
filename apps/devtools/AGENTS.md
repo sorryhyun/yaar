@@ -4,9 +4,7 @@ The IDE that builds and deploys every other YAAR app, including itself. Read thi
 
 ## Run the tests
 
-`selfTest` runs the unit suite over `src/lib`, the pure layer. No project, no preview, and fast.
-Run it after touching anything under `src/lib`, `src/core` or `src/test`, and before every deploy.
-A failure names its suite, check and assertion; `{ suite }` re-runs one.
+Run `selfTest` before every deploy; its descriptor says what it covers and when else to run it.
 
 Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file — the
 suites are the regression record. Behaviour that needs a running app is `previewScript`
@@ -42,10 +40,8 @@ cycle through `services/preview.ts`. If a module seems to need one, it is in the
 `src/main.ts` holds the single `defineApp`, spreading one descriptor map per domain from
 `src/protocol/`. Do not write down how many there are — read the manifest.
 
-**Every descriptor must stay statically readable**: a `const` object literal, no factory call
-result, no template-literal description, no map built in a loop. A violation is a build error with
-`file:line:col`, never a silently shrunken manifest. Verify a reshuffle with the `manifest` command
-(needs a compile *and* an open preview); a pure move must not change the diff.
+**Every descriptor must stay statically readable** — the rule and how to verify a reshuffle are the
+`verb-api` topic (`agent/docs/verb-api.md`).
 
 **Command and state `description` strings are the agent-facing documentation**, appended verbatim
 to the prompt of every agent driving this app. Never restate one in `agent/prompt.md`: a fact in
@@ -133,15 +129,10 @@ bug is invisible until a diff runs past the pane.
 
 ## agent/prompt.md
 
-The app agent's base prompt — it **replaces** the generic one, so it documents the tools itself.
-`protocol.json` and the platform's tool-payload rules are appended automatically; never copy a
-command signature into it.
+The app agent's base prompt; what it may and may not carry is the `markdown-files` topic.
 
 Its call examples must match the **flat** tool schema — `{ command, params?, appId?, timeoutMs? }`,
 `appId` and `timeoutMs` as top-level siblings, never nested. Verify against the live tool schema,
 not against the prose already there.
 
-The prompt carries only workflow, judgment and bright lines; reference prose lives in
-`agent/docs/`, one topic per file, pulled with `describe({ topic })`. If a topic exists the prompt
-must not restate it (`prompt-restates-topic` in `scripts/check/apps.ts` warns); grow reference
-material as a new topic, not as a prompt section.
+A prompt restating a topic is flagged by `prompt-restates-topic` in `scripts/check/apps.ts`.

@@ -58,9 +58,8 @@ end. Deploy, then check that.
 **Its `permissions` and `bundles` are read off the sandbox `app.json` too**, so a declared
 grant is in force in the preview — a write to a path under `yaar://storage/` really writes
 there, which is the point of testing it here. Two limits: the preview can never reach past
-**Dev Tools' own** permissions (the `uri-reference` topic — `yaar://config/` and
-`yaar://history/` are out for both of us, and a project declaring one gets it dropped, not
-honoured), and the list is read **when the preview window is created**, so edit `app.json`
+**Dev Tools' own** permissions (the `uri-reference` topic; a project declaring one it lacks
+gets it dropped, not honoured), and the list is read **when the preview window is created**, so edit `app.json`
 first, then re-open the preview.
 
 **The first headless-browser call after a cold start can come back empty** (`postCount: 0`

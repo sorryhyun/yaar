@@ -199,12 +199,9 @@ export const previewCommands = {
       'against the open preview — protocol commands, state-key reads, JS evals and window ' +
       "resizes — record each result (projected through the step's `pick` " +
       "paths), and diff against the script's baseline file — failures come back as " +
-      '{ step, expected, actual } rows. With no baseline yet, the run writes one: capture on ' +
-      'a build you trust, refactor, re-run to compare. A step with `record: false` is setup ' +
-      'and must succeed: its failure aborts the run rather than passing silently. ' +
-      'Requires an open, non-stale preview ' +
-      "on the current compile. A many-step script needs this command's own timeoutMs raised " +
-      'well past the sum of its steps. Script format and workflow: the regression-testing ' +
+      '{ step, expected, actual } rows; with no baseline yet, the run writes one. Requires an ' +
+      "open, non-stale preview on the current compile, and this command's own timeoutMs " +
+      'raised past the sum of its steps. Script format and workflow: the regression-testing ' +
       'doc topic.',
     params: {
       type: 'object',

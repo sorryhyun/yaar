@@ -1,5 +1,6 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
+import { createPersistedSignal } from '@bundled/yaar';
 
 // Shared view state for the workspace panes.
 //
@@ -15,6 +16,7 @@ export type SidebarTab = 'files' | 'changes' | 'worker';
 export type MainView = 'editor' | 'changes';
 export type DiffViewMode = 'side-by-side' | 'unified';
 export type ChangesMode = 'changes' | 'manual';
+export type BottomTab = 'problems' | 'console';
 
 /** Which list the left sidebar shows: the file tree or the change history. */
 export const [sidebarTab, setSidebarTab] = createSignal<SidebarTab>('files');
@@ -26,6 +28,21 @@ export const [diffViewMode, setDiffViewMode] = createSignal<DiffViewMode>('unifi
 
 /** The recorded-history diff, or the paste-two-texts comparison. */
 export const [changesMode, setChangesMode] = createSignal<ChangesMode>('changes');
+
+export const [bottomTab, setBottomTab] = createSignal<BottomTab>('problems');
+
+/** Collapsed leaves only the tab strip, whose badges still report counts. */
+export const [bottomCollapsed, setBottomCollapsed] = createPersistedSignal(
+  'preferences/bottom-panel-collapsed.json',
+  false,
+  { label: 'panel preferences' },
+);
+
+/** Bring a bottom-panel tab forward, expanding the panel if it was collapsed. */
+export function showBottomTab(tab: BottomTab): void {
+  setBottomTab(tab);
+  setBottomCollapsed(false);
+}
 
 /**
  * Show the file tree and the editor.

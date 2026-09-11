@@ -5,6 +5,7 @@ import './sidebar.css';
 import './file-tree.css';
 import './editor.css';
 import './diagnostics.css';
+import './status-bar.css';
 import './diff.css';
 import './dialogs.css';
 import './worker.css';

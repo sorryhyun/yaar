@@ -37,8 +37,18 @@
   white-space: nowrap;
 }
 
-.editor-line-number-toggle {
+/* Wrap and Lines sit together at the right; the first one carries the push. */
+.editor-wrap-toggle {
   margin-left: auto;
+}
+
+.editor-toggle[aria-pressed='true'] {
+  color: var(--yaar-accent);
+}
+
+.editor-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .editor-gutter {
@@ -51,12 +61,14 @@
   user-select: none;
 }
 
+/* Font metrics here, on the highlight and on the textarea must stay identical, or
+   the numbers and the caret drift off the rows they belong to. */
 .editor-line-numbers {
   margin: 0;
-  padding: var(--yaar-sp-2);
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  padding: var(--yaar-sp-2) var(--yaar-sp-2) var(--yaar-sp-2) var(--yaar-sp-3);
+  font-family: var(--yaar-font-mono);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   text-align: right;
   white-space: pre;
   will-change: transform;
@@ -100,15 +112,24 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  padding: var(--yaar-sp-2);
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  font-family: var(--yaar-font-mono);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   tab-size: 2;
   white-space: pre;
   overflow: auto;
   border: none;
   box-sizing: border-box;
+}
+
+/* Both layers wrap at the same width, so the caret still lands on the glyph. Horizontal
+   scroll is off because there is nothing left to scroll to. */
+.editor-content.wrap .editor-highlight,
+.editor-content.wrap .editor-textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
 }
 
 .editor-highlight {

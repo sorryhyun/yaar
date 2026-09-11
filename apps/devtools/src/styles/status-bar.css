@@ -1,0 +1,46 @@
+/* ── Status bar — y-statusbar y-statusbar-dense in markup ── */
+.status-left,
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-3);
+  min-width: 0;
+}
+
+.status-left {
+  gap: 6px;
+}
+
+.status-right {
+  flex-shrink: 0;
+  color: var(--yaar-text-muted);
+}
+
+.status-problems {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  padding: 0 var(--yaar-sp-1);
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: var(--yaar-radius-sm);
+  cursor: pointer;
+}
+
+.status-problems:hover {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+
+.status-err {
+  color: var(--yaar-error);
+}
+
+.status-warn {
+  color: var(--yaar-warning);
+}
+
+.status-project {
+  max-width: 140px;
+}

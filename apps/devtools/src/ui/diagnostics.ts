@@ -1,10 +1,17 @@
 export {};
-import { createSignal, For, Show } from '@bundled/solid-js';
+import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { diagnostics, consoleLogs, type Diagnostic } from '../core';
 import { openFile, clearConsoleLogs } from '../services';
 import { ConsolePanel } from './console-panel';
-import { showFiles } from './panel-state';
+import {
+  bottomTab,
+  bottomCollapsed,
+  setBottomCollapsed,
+  showBottomTab,
+  showFiles,
+  type BottomTab,
+} from './panel-state';
 
 // The bottom panel: Problems and Console, and nothing else.
 //
@@ -13,7 +20,13 @@ import { showFiles } from './panel-state';
 // sized for — which is why the `:has(.changes-panel)` height overrides went with
 // it, and why this panel is back to a plain 200px cap.
 
-const [activeBottomTab, setActiveBottomTab] = createSignal<'problems' | 'console'>('problems');
+/** A click on the tab already showing folds the panel away; any other click opens it. */
+function onTabClick(tab: BottomTab): void {
+  if (bottomTab() === tab && !bottomCollapsed()) setBottomCollapsed(true);
+  else showBottomTab(tab);
+}
+
+const isShowing = (tab: BottomTab) => bottomTab() === tab && !bottomCollapsed();
 
 function ProblemsPanel() {
   return html`
@@ -45,11 +58,11 @@ function ProblemsPanel() {
 
 export function DiagnosticsPanel() {
   return html`
-    <div class="diagnostics">
+    <div class=${() => `diagnostics${bottomCollapsed() ? ' collapsed' : ''}`}>
       <div class="y-tabs bottom-tabs">
         <button
-          class=${() => `y-tab bottom-tab${activeBottomTab() === 'problems' ? ' active' : ''}`}
-          onClick=${() => setActiveBottomTab('problems')}
+          class=${() => `y-tab bottom-tab${isShowing('problems') ? ' active' : ''}`}
+          onClick=${() => onTabClick('problems')}
         >
           Problems
           <${Show} when=${() => diagnostics().length > 0}>
@@ -59,24 +72,33 @@ export function DiagnosticsPanel() {
           <//>
         </button>
         <button
-          class=${() => `y-tab bottom-tab${activeBottomTab() === 'console' ? ' active' : ''}`}
-          onClick=${() => setActiveBottomTab('console')}
+          class=${() => `y-tab bottom-tab${isShowing('console') ? ' active' : ''}`}
+          onClick=${() => onTabClick('console')}
         >
           Console
           <${Show} when=${() => consoleLogs().length > 0}>
             <span class="diagnostics-count y-badge">${() => consoleLogs().length}</span>
           <//>
         </button>
-        <${Show} when=${() => activeBottomTab() === 'console' && consoleLogs().length > 0}>
-          <button class="bottom-tab-action y-text-xs" onClick=${() => clearConsoleLogs()}>
-            Clear
+        <span class="bottom-tab-actions">
+          <${Show} when=${() => isShowing('console') && consoleLogs().length > 0}>
+            <button class="bottom-tab-action y-text-xs" onClick=${() => clearConsoleLogs()}>
+              Clear
+            </button>
+          <//>
+          <button
+            class="bottom-tab-action y-text-xs"
+            title=${() => (bottomCollapsed() ? 'Expand panel' : 'Collapse panel')}
+            onClick=${() => setBottomCollapsed(!bottomCollapsed())}
+          >
+            ${() => (bottomCollapsed() ? '▴' : '▾')}
           </button>
-        <//>
+        </span>
       </div>
-      <${Show} when=${() => activeBottomTab() === 'problems'}>
+      <${Show} when=${() => isShowing('problems')}>
         <${ProblemsPanel} />
       <//>
-      <${Show} when=${() => activeBottomTab() === 'console'}>
+      <${Show} when=${() => isShowing('console')}>
         <${ConsolePanel} />
       <//>
     </div>

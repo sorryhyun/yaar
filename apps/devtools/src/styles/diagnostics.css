@@ -32,8 +32,13 @@
   font-weight: 600;
 }
 
-.bottom-tab-action {
+.bottom-tab-actions {
+  display: flex;
+  align-items: center;
   margin-left: auto;
+}
+
+.bottom-tab-action {
   padding: 2px var(--yaar-sp-2);
   background: none;
   border: none;

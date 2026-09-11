@@ -20,8 +20,8 @@
   font-size: var(--yaar-text-base);
   font-weight: 600;
   color: var(--yaar-text);
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
   border-radius: var(--yaar-radius);
   cursor: pointer;
   user-select: none;
@@ -29,7 +29,7 @@
 
 .project-menu-trigger:hover {
   background: var(--yaar-bg-surface-hover);
-  border-color: var(--yaar-border);
+  border-color: var(--yaar-accent);
 }
 
 .project-menu-trigger.open {
@@ -48,6 +48,7 @@
 }
 
 .project-menu-caret {
+  margin-left: var(--yaar-sp-1);
   font-size: 10px;
   line-height: 1;
   opacity: 0.7;
@@ -148,4 +149,12 @@
    Clone) read as one group and the build actions as another. */
 .toolbar-gap {
   flex: 1;
+}
+
+/* The project menu lists "Load project…" and "Clone installed app…" too, so a
+   narrow window drops the duplicate buttons and gives the space to the name. */
+@media (max-width: 720px) {
+  .toolbar-picker-btn {
+    display: none;
+  }
 }

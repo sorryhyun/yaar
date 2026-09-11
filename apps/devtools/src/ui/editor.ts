@@ -62,7 +62,25 @@ const [showLineNumbers, setShowLineNumbers] = createPersistedSignal(
   true,
   { label: 'editor preferences' },
 );
+const [wordWrap, setWordWrap] = createPersistedSignal('preferences/word-wrap.json', false, {
+  label: 'editor preferences',
+});
 const [editorScrollTop, setEditorScrollTop] = createSignal(0);
+
+/** 1-based caret position in the open file, or null before the textarea is touched. */
+export const [cursorPos, setCursorPos] = createSignal<{ line: number; col: number } | null>(null);
+
+function trackCursor(e: Event) {
+  const ta = e.target as HTMLTextAreaElement;
+  const before = ta.value.slice(0, ta.selectionStart);
+  const lineStart = before.lastIndexOf('\n') + 1;
+  setCursorPos({ line: before.split('\n').length, col: ta.selectionStart - lineStart + 1 });
+}
+
+createEffect(() => {
+  openFilePath();
+  setCursorPos(null);
+});
 const SAVE_DELAY_MS = 1000;
 
 function currentContent(): string {
@@ -147,10 +165,23 @@ export function Editor() {
           <//>
           <${Show} when=${() => !openFileImage()}>
             <button
-              class="editor-line-number-toggle y-btn y-btn-ghost y-btn-sm"
+              class="editor-toggle editor-wrap-toggle y-btn y-btn-ghost y-btn-sm"
               type="button"
-              aria-pressed=${showLineNumbers}
-              title="Toggle line numbers"
+              aria-pressed=${wordWrap}
+              title="Toggle word wrap"
+              onClick=${() => setWordWrap(!wordWrap())}
+            >
+              Wrap
+            </button>
+            <button
+              class="editor-toggle y-btn y-btn-ghost y-btn-sm"
+              type="button"
+              aria-pressed=${() => showLineNumbers() && !wordWrap()}
+              disabled=${wordWrap}
+              title=${() =>
+                wordWrap()
+                  ? 'Line numbers are hidden while wrapping — the status bar shows the caret line'
+                  : 'Toggle line numbers'}
               onClick=${() => setShowLineNumbers(!showLineNumbers())}
             >
               Lines
@@ -170,8 +201,8 @@ export function Editor() {
 /** The code surface: highlighted <pre> under a transparent <textarea>. */
 function TextEditor() {
   return html`
-    <div class="editor-content">
-      <${Show} when=${showLineNumbers}>
+    <div class=${() => `editor-content${wordWrap() ? ' wrap' : ''}`}>
+      <${Show} when=${() => showLineNumbers() && !wordWrap()}>
         <div class="editor-gutter" aria-hidden="true">
           <pre
             class="editor-line-numbers"
@@ -195,8 +226,12 @@ ${lineNumbers}</pre
             const lang = getLanguage(openFilePath());
             setHighlightedHtml(highlight(val, lang));
             scheduleSave();
+            trackCursor(e);
           }}
           onScroll=${syncScroll}
+          onKeyUp=${trackCursor}
+          onClick=${trackCursor}
+          onFocus=${trackCursor}
           onKeyDown=${(e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
               e.preventDefault();

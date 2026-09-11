@@ -285,13 +285,9 @@ export const fileCommands = {
       'imported from storage are re-encoded to WebP unless `recompress: false`, and kept ' +
       'only if that came out smaller; the result carries the import line when the ' +
       'destination is an asset under src/, since the bundler inlines it as a data: URI ' +
-      'instead of fetching it at runtime. That covers 3D models too: a self-contained ' +
-      '.glb imports as `data:model/gltf-binary` and parses with GLTFLoader from ' +
-      '@bundled/three/addons. A .gltf inlines as well, but only carries its geometry when ' +
-      'its buffers are embedded — one that names a sidecar .bin or texture files cannot ' +
-      'resolve those relative URLs against a data: URI, so import the .glb form instead. ' +
-      'Destination directories are created ' +
-      'automatically. Does NOT delete the original — pair with deleteFile to move.',
+      'instead of fetching it at runtime. For 3D models import a self-contained .glb, not a ' +
+      '.gltf with sidecar files (the static-assets topic). Destination directories are ' +
+      'created automatically. Does NOT delete the original — pair with deleteFile to move.',
     params: {
       type: 'object',
       properties: {
