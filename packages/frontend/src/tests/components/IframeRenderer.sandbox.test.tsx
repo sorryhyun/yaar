@@ -15,6 +15,8 @@ import { useDesktopStore } from '@/store';
 import {
   MemoizedIframeRenderer,
   ISOLATED_APP_SANDBOX,
+  APP_FRAME_ALLOW,
+  EXTERNAL_FRAME_ALLOW,
 } from '@/components/window/renderers/IframeRenderer';
 
 /** happy-dom exposes `setURL` off `window.happyDOM`; it isn't in the DOM lib types. */
@@ -82,6 +84,32 @@ describe('IframeRenderer sandbox wiring', () => {
     );
     const iframe = container.querySelector('iframe');
     expect(iframe?.getAttribute('sandbox')).toBeNull();
+  });
+
+  // `microphone` defaults to 'self': without delegation an isolated app's getUserMedia
+  // is refused with no prompt at all.
+  it('delegates the microphone to isolated and same-origin app frames', () => {
+    for (const isolateOrigin of [true, false]) {
+      const { container } = render(
+        <MemoizedIframeRenderer
+          data="/apps/notes/index.html"
+          isolateOrigin={isolateOrigin}
+          iframeToken="tok-1"
+        />,
+      );
+      expect(container.querySelector('iframe')?.getAttribute('allow')).toBe(APP_FRAME_ALLOW);
+      cleanup();
+    }
+    expect(APP_FRAME_ALLOW.split('; ')).toContain('microphone');
+  });
+
+  // A delegated frame's prompt is attributed to the top origin, so an external embed
+  // would ask for the mic in the desktop's name.
+  it('withholds the microphone from an external embed', () => {
+    const { container } = render(<MemoizedIframeRenderer data="https://example.com/" />);
+    const allow = container.querySelector('iframe')?.getAttribute('allow') ?? '';
+    expect(allow).toBe(EXTERNAL_FRAME_ALLOW);
+    expect(allow.split('; ')).not.toContain('microphone');
   });
 });
 

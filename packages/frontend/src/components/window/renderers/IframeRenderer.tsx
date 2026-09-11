@@ -92,6 +92,29 @@ export const ISOLATED_APP_SANDBOX = [
   'allow-storage-access-by-user-activation',
 ].join(' ');
 
+/** Permissions-Policy features delegated to every frame, local or external. */
+const BASE_FRAME_ALLOW = [
+  'accelerometer',
+  'autoplay',
+  'clipboard-write',
+  'encrypted-media',
+  'gyroscope',
+  'picture-in-picture',
+];
+
+/**
+ * The `allow` attribute for a local app frame: the base set plus the microphone.
+ *
+ * `microphone` defaults to `'self'`, so an isolated app — cross-origin to the desktop —
+ * gets a silent `NotAllowedError` from `getUserMedia` unless the desktop delegates it
+ * here. It is withheld from external embeds on purpose: Chrome attributes a delegated
+ * frame's prompt to the *top* origin, so an arbitrary site would ask for the mic
+ * wearing the desktop's name. The grant is likewise stored against the desktop origin,
+ * so allowing it once allows it for every app frame.
+ */
+export const APP_FRAME_ALLOW = [...BASE_FRAME_ALLOW, 'microphone'].join('; ');
+export const EXTERNAL_FRAME_ALLOW = BASE_FRAME_ALLOW.join('; ');
+
 /**
  * The app origin — the `127.0.0.1` loopback alias on the current port — or null
  * when the desktop isn't on `localhost` (a LAN IP / remote tunnel, or already on
@@ -241,6 +264,7 @@ function IframeRenderer({
     ? (customSandbox ?? ISOLATED_APP_SANDBOX)
     : (customSandbox ??
       (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms allow-same-origin'));
+  const allow = appOrigin || isSameOrigin(url) ? APP_FRAME_ALLOW : EXTERNAL_FRAME_ALLOW;
 
   const loadingTarget = loadingHost(resolved);
 
@@ -615,7 +639,7 @@ function IframeRenderer({
         src={url}
         className={styles.iframe}
         {...(sandbox ? { sandbox } : {})}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allow={allow}
         // @ts-expect-error React doesn't recognize lowercase HTML attribute
         allowtransparency="true"
         loading="lazy"
