@@ -32,7 +32,7 @@ import type {
   OSAction,
   WindowCaptureAction,
 } from '@yaar/shared';
-import type { ContentBlock, Verb, VerbResult } from '../../handlers/uri-registry.js';
+import type { ContentBlock, ReadOptions, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { boot, type Harness } from './harness/boot.js';
 import { expectSettlesWithin } from './harness/liveness.js';
 
@@ -112,6 +112,10 @@ function memoApp(): FakeApp {
     state: {
       drafts: [{ id: 'd-1', title: 'half a thought' }],
       memos: [{ id: 'm-1', title: 'buy milk' }],
+      // Undeclared on purpose — `list` answers from the manifest, and these two exist only
+      // for the read-filter tests below: one text value, one object.
+      body: '# Notes\nplain line\n<script>alert(1)</script>\nanother plain line\nembed: x',
+      settings: { theme: 'dark', fontSize: 14 },
     },
     // Only `drafts` computes a doc; `memos` and `pinMemo` fall back to the manifest.
     docs: { 'state/drafts': '1 draft, last touched Tuesday. Shape: { id, title }.' },
@@ -267,11 +271,12 @@ async function bootTwoAppWindows() {
     verb: Verb,
     uri: string,
     payload?: Record<string, unknown> | Record<string, unknown>[],
+    readOptions?: ReadOptions,
   ): Promise<VerbResult> =>
     expectSettlesWithin(
       runWithAgentContext(
         { agentId: 'harness-app-agent', sessionId: h.sessionId, monitorId: '0' },
-        () => registry.execute(verb, uri, payload),
+        () => registry.execute(verb, uri, payload, readOptions),
       ),
       2000,
       `${verb}("${uri}")`,
@@ -877,5 +882,90 @@ describe('S10 — describe answers from the running app', () => {
     // does not fall back to a manifest that (by construction) has nothing to say either.
     expect(missing.isError).toBe(true);
     expect(textOf(missing)).toContain('Unknown state key: nope');
+  });
+});
+
+describe('S10 — a state read honors lines/pattern, or says it did not', () => {
+  it('filters a text state to the matching lines, numbered', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const result = await call('read', 'yaar://windows/memo/state/body', undefined, {
+      pattern: 'embed|<script',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const text = textOf(result);
+    expect(text).toContain('yaar://windows/memo/state/body');
+    expect(text).toContain('2 matching lines');
+    expect(text).toContain('3│<script>alert(1)</script>');
+    expect(text).toContain('5│embed: x');
+    expect(text).not.toContain('plain line');
+  });
+
+  it('filters an object state as indented JSON, and carries no unfiltered copy', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const result = await call('read', 'yaar://windows/memo/state/settings', undefined, {
+      pattern: 'theme',
+    });
+
+    expect(textOf(result)).toContain('"theme": "dark"');
+    expect(textOf(result)).not.toContain('fontSize');
+    // The model reads `structuredContent` over any text beside it — a full copy riding
+    // along would undo the filter for exactly the reader that asked for it.
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it('a line range works on its own', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const text = textOf(
+      await call('read', 'yaar://windows/memo/state/body', undefined, { lines: '2-3' }),
+    );
+
+    expect(text).toContain('2│plain line');
+    expect(text).toContain('3│<script>');
+    expect(text).not.toContain('# Notes');
+  });
+
+  it("filters a markdown window's __content on the content itself", async () => {
+    const { h, call } = await bootTwoAppWindows();
+    seedMarkdownWindow(h, 'notes', 'alpha\nbeta\ngamma');
+
+    const text = textOf(
+      await call('read', 'yaar://windows/notes/state/__content', undefined, { pattern: 'beta' }),
+    );
+
+    expect(text).toContain('2│beta');
+    expect(text).not.toContain('renderer');
+  });
+
+  it('a resource the filter cannot apply to says so instead of dropping it in silence', async () => {
+    const { h, call } = await bootTwoAppWindows();
+    // A markdown window, so the bare read answers without waiting on a capture.
+    seedMarkdownWindow(h, 'notes', 'alpha');
+
+    const result = await call('read', 'yaar://windows/notes', undefined, { pattern: 'x' });
+
+    expect(textOf(result)).toContain('lines/pattern filtering is not supported');
+  });
+
+  it('an unfiltered read is untouched — no note, and an object keeps its structured copy', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const result = await call('read', 'yaar://windows/memo/state/settings');
+
+    expect(textOf(result)).not.toContain('not supported');
+    expect(result.structuredContent).toEqual({ theme: 'dark', fontSize: 14 });
+  });
+});
+
+describe('S10 — a state read pays for no indentation the model would read', () => {
+  it('an array state comes back compact, since its text is what the model reads', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const result = await call('read', 'yaar://windows/memo/state/drafts');
+
+    expect(textOf(result)).toBe(JSON.stringify([{ id: 'd-1', title: 'half a thought' }]));
   });
 });

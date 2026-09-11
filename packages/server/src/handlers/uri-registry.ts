@@ -82,6 +82,12 @@ export interface VerbResult {
   /** An `okLinks([])` result — a listing with no children. See `isEmptyLinkList`. */
   emptyList?: boolean;
   /**
+   * The read's `lines`/`pattern` filter was applied to this result. A read that asked for
+   * one and comes back without this flag had it ignored, and `ResourceRegistry.execute`
+   * says so — see {@link hasLineFilter}. Stripped there; never leaves the registry.
+   */
+  readFiltered?: boolean;
+  /**
    * Notes `prependNote` added to a result carrying `structuredContent`, newest first. Their
    * text blocks never reach a model beside that object, so `foldNotes` moves them into it at
    * the MCP boundary. Never set without `structuredContent`.
@@ -180,6 +186,19 @@ export interface ReadOptions {
    * parent instead.
    */
   missingOk?: boolean;
+}
+
+/**
+ * True when a read asked for line filtering — `context` alone filters nothing.
+ *
+ * The read tool offers `lines`/`pattern` on every URI, but only some resources hold text a
+ * line filter means anything on. A handler that applies it marks the result `readFiltered`;
+ * one that cannot leaves the flag off, and `ResourceRegistry.execute` notes that the filter
+ * was ignored. It used to be dropped in silence: a pattern read of an 80 KB window state
+ * came back whole, indistinguishable from a read where every line matched.
+ */
+export function hasLineFilter(options?: ReadOptions): boolean {
+  return Boolean(options?.lines || options?.pattern);
 }
 
 /**
@@ -496,7 +515,13 @@ export class ResourceRegistry {
       return handler.invoke!.call(handler, resolved, payload);
     }
     if (verb === 'read') {
-      return handler.read!.call(handler, resolved, readOptions);
+      const { readFiltered, ...result } = await handler.read!.call(handler, resolved, readOptions);
+      if (readFiltered || result.isError || !hasLineFilter(readOptions)) return result;
+      return prependNote(
+        result,
+        'Note: lines/pattern filtering is not supported for this resource and was ignored — ' +
+          'this is the full value.',
+      );
     }
     return (method as (resolved: ResolvedUri) => Promise<VerbResult>).call(handler, resolved);
   }

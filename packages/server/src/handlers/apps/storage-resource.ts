@@ -8,7 +8,7 @@
  * On disk: storage/apps/{appId}/{path}
  */
 
-import type { ReadOptions, VerbResult } from '../uri-registry.js';
+import { hasLineFilter, type ReadOptions, type VerbResult } from '../uri-registry.js';
 import type { ResolvedUri } from '../uri-resolve.js';
 import {
   ok,
@@ -20,6 +20,7 @@ import {
   error,
   notFoundError,
   mimeFromPath,
+  applyReadOptions,
 } from '../utils.js';
 import {
   storageRead,
@@ -134,6 +135,15 @@ export async function readStorage(
   // API or fed to the model as garbage. `storageRead` already returns a "Binary file (…) —
   // use /api/storage/… to serve it directly" line, which is the useful answer anyway.
 
+  // Numbered only when a filter asked for it: an unfiltered read is also the SDK's
+  // `appStorage.read`, which wants the stored text back byte for byte.
+  if (hasLineFilter(options)) {
+    const text = applyReadOptions(result.content!, storagePath.path, options);
+    return {
+      ...okResource(resolved.sourceUri, text, mimeFromPath(storagePath.path)),
+      readFiltered: true,
+    };
+  }
   return okResource(resolved.sourceUri, result.content!, mimeFromPath(storagePath.path));
 }
 

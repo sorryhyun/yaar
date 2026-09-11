@@ -166,7 +166,8 @@ export function registerVerbTools(server: McpServer): void {
     {
       description:
         'Read the current value/state of a yaar:// resource. ' +
-        'For text files, optionally filter by line range or regex pattern. ' +
+        'For text files and window state, optionally filter by line range or regex pattern ' +
+        '(elsewhere the filter is ignored, with a note saying so). ' +
         'Reading a PDF returns its metadata plus a hint to open it in a viewer window — it does ' +
         'NOT ingest the content unless you pass pdfText (text layer) or pdfPages (page images). ' +
         'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',

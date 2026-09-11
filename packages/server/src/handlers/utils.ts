@@ -82,14 +82,32 @@ export const ok = (text: string) => ({
  * read, a storage stat) and comfortably below the ones where the gutter is the payload.
  * It is a display choice only: `structuredContent` is unaffected, so every programmatic
  * reader sees exactly the same bytes either way. Since a model reads `structuredContent`
- * whenever there is one (see `okJson`), the gutter only reaches a model for a bare array.
+ * whenever there is one (see `okJson`), the gutter only reaches a model for a bare array —
+ * which is why {@link jsonText} never indents one, whatever its size.
  */
 const COMPACT_JSON_THRESHOLD = 8_192;
 
 /**
+ * The text block of a JSON result: indented below {@link COMPACT_JSON_THRESHOLD}, compact
+ * above it, and compact at any size for a bare array.
+ *
+ * The array is the exception because it is the one shape whose text *is* what the model
+ * reads: `structuredContent` is object-only, so nothing stands in for it. An object's
+ * indented text reaches the session log and nothing else; an array's reaches the context
+ * window, where a 25-slide deck state measured 1.8 KB compact and twice that indented.
+ */
+export function jsonText(data: object): string {
+  const compact = JSON.stringify(data);
+  return Array.isArray(data) || compact.length > COMPACT_JSON_THRESHOLD
+    ? compact
+    : JSON.stringify(data, null, 2);
+}
+
+/**
  * Create a successful JSON result. Only accepts objects/arrays — use ok() for plain text.
  *
- * Indented below {@link COMPACT_JSON_THRESHOLD}, compact above it.
+ * Text per {@link jsonText}: indented below {@link COMPACT_JSON_THRESHOLD}, compact above
+ * it and for a bare array.
  *
  * **When `structuredContent` is present it is what the model reads, not the text.** Both
  * clients prefer it: the Claude CLI sends `JSON.stringify(structuredContent)` in place of
@@ -106,18 +124,10 @@ const COMPACT_JSON_THRESHOLD = 8_192;
  * bare array is left text-only — same trade-off `wrapAppValue` makes — and still
  * round-trips through `toEnvelope`'s tryParseJson.
  */
-export const okJson = (data: object) => {
-  const compact = JSON.stringify(data);
-  return {
-    content: [
-      {
-        type: 'text' as const,
-        text: compact.length > COMPACT_JSON_THRESHOLD ? compact : JSON.stringify(data, null, 2),
-      },
-    ],
-    ...(Array.isArray(data) ? {} : { structuredContent: data as Record<string, unknown> }),
-  };
-};
+export const okJson = (data: object) => ({
+  content: [{ type: 'text' as const, text: jsonText(data) }],
+  ...(Array.isArray(data) ? {} : { structuredContent: data as Record<string, unknown> }),
+});
 
 /** Create an error text result (sets isError: true) */
 export const error = (text: string) => ({
@@ -287,6 +297,22 @@ function parseLineRange(range: string): [start: number, end: number | null] | nu
   const end = parseInt(m[2], 10);
   if (end < start) return null;
   return [start, end];
+}
+
+/**
+ * {@link applyReadOptions} for a value that is not a file — a window's state, say.
+ *
+ * A string is filtered as it is. Anything else is filtered as *indented* JSON whatever its
+ * size, overriding {@link jsonText}: compact JSON is one line, and a line filter over one
+ * line returns all of it or nothing.
+ */
+export function applyReadOptionsToValue(
+  value: unknown,
+  label: string,
+  options?: import('./uri-registry.js').ReadOptions,
+): string {
+  const text = typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? 'null');
+  return applyReadOptions(text, label, options);
 }
 
 /**

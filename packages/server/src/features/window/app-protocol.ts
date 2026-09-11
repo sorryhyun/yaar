@@ -4,11 +4,18 @@
 
 import type { AppManifest, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { isPreviewAppId } from '@yaar/shared';
-import type { ContentBlock, VerbResult } from '../../handlers/uri-registry.js';
-import { isContentBlocks } from '../../handlers/uri-registry.js';
+import type { ContentBlock, ReadOptions, VerbResult } from '../../handlers/uri-registry.js';
+import { hasLineFilter, isContentBlocks } from '../../handlers/uri-registry.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { ok, okJson, error, getActiveSessionId } from '../../handlers/utils.js';
+import {
+  ok,
+  okJson,
+  error,
+  getActiveSessionId,
+  jsonText,
+  applyReadOptionsToValue,
+} from '../../handlers/utils.js';
 import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type PendingOutcome } from '../../session/pending-store.js';
@@ -50,9 +57,20 @@ function truncateText(text: string): string {
  *   [{type:'text', text:'...'}, {type:'image', data:'base64', mimeType:'image/webp'}]
  *
  * Plain values (strings, objects) are auto-wrapped and truncated.
+ *
+ * `read` carries a state read's `lines`/`pattern` filter and the URI it is labelled with.
+ * The filter runs *before* truncation, so a match past the cut is still found, and its
+ * result is text-only: a `structuredContent` copy beside it would be the unfiltered value,
+ * and it is that copy the model would read. Content blocks are the app's own shaping and
+ * are left alone — the registry then notes the filter was not applied.
  */
-function wrapAppValue(value: unknown): VerbResult {
+function wrapAppValue(value: unknown, read?: { label: string; options?: ReadOptions }): VerbResult {
   if (value === undefined || value === null) return ok('Done.');
+
+  if (read && hasLineFilter(read.options) && !isContentBlocks(value)) {
+    const text = applyReadOptionsToValue(value, read.label, read.options);
+    return { content: [{ type: 'text', text: truncateText(text) }], readFiltered: true };
+  }
 
   if (isContentBlocks(value)) {
     // Truncate text/resource blocks, pass image/resource_link blocks as-is
@@ -72,16 +90,16 @@ function wrapAppValue(value: unknown): VerbResult {
   if (typeof value === 'string') return ok(truncateText(value));
 
   // Object → a JSON text block for logs PLUS a lossless `structuredContent` copy
-  // for programmatic consumers (app→app SDK calls). The text block is truncated;
-  // the structured copy is the full value. Note the model reads the *structured*
-  // copy — both the Claude CLI and Codex prefer it over text blocks (see `okJson`
-  // in handlers/utils.ts) — so MAX_TEXT_BYTES does not bound what reaches the
-  // model context for an object return.
+  // for programmatic consumers (app→app SDK calls). The text block is `jsonText`'s
+  // (compact when large, or when an array) and truncated; the structured copy is
+  // the full value. Note the model reads the *structured* copy — both the Claude CLI
+  // and Codex prefer it over text blocks (see `okJson` in handlers/utils.ts) — so
+  // MAX_TEXT_BYTES does not bound what reaches the model context for an object return.
   //
   // `structuredContent` is object-only (MCP contract), so bare arrays get the
   // text-only shape and still round-trip via `toEnvelope`'s tryParseJson.
   if (typeof value === 'object') {
-    const content = [{ type: 'text' as const, text: truncateText(JSON.stringify(value, null, 2)) }];
+    const content = [{ type: 'text' as const, text: truncateText(jsonText(value)) }];
     return Array.isArray(value)
       ? { content }
       : { content, structuredContent: value as Record<string, unknown> };
@@ -221,6 +239,7 @@ export async function handleAppQuery(
   windowState: WindowStateRegistry,
   windowId: string,
   payload: Record<string, unknown>,
+  readOptions?: ReadOptions,
 ): Promise<VerbResult> {
   const win = windowState.getWindow(windowId);
   if (!win) return error(`Window "${windowId}" not found.`);
@@ -240,6 +259,8 @@ export async function handleAppQuery(
     if (readyErr) return readyErr;
   }
 
+  const read = { label: buildWindowResourceUri(windowId, 'state', stateKey), options: readOptions };
+
   if (stateKey === 'manifest') {
     const outcome = await request(key, { kind: 'manifest' }, deadlines.appQueryMs);
     if (!outcome.ok) return error(noAnswer(outcome, 'manifest request'));
@@ -251,7 +272,7 @@ export async function handleAppQuery(
     // `discovery.ts` never saw it: strip persona-audience commands here too, for the
     // same reason — they are described to the sub-agent in character voice at spawn,
     // and an app agent reading that description reads the wrong script.
-    return wrapAppValue(response.manifest ? withoutPersonaCommands(response.manifest) : null);
+    return wrapAppValue(response.manifest ? withoutPersonaCommands(response.manifest) : null, read);
   }
 
   const outcome = await request(key, { kind: 'query', stateKey }, deadlines.appQueryMs);
@@ -259,7 +280,7 @@ export async function handleAppQuery(
   const response = outcome.value;
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
-  return wrapAppValue(response.data);
+  return wrapAppValue(response.data, read);
 }
 
 /**

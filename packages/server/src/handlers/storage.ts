@@ -167,7 +167,10 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
 
       // Apply line range / pattern filtering for text files — return as embedded resource
       const text = applyReadOptions(result.content!, parsed.path, options);
-      return okResource(`yaar://storage/${parsed.path}`, text, mimeFromPath(parsed.path));
+      return {
+        ...okResource(`yaar://storage/${parsed.path}`, text, mimeFromPath(parsed.path)),
+        readFiltered: true,
+      };
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {

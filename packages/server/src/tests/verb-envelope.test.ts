@@ -75,6 +75,18 @@ describe('okJson', () => {
     expect(result.structuredContent).toBeUndefined();
     expect(toEnvelope(result)).toEqual({ ok: true, data: [1, 2, 3] });
   });
+
+  // An object's text reaches only the log; an array's is what the model reads, because
+  // nothing stands in for it. So only the object earns the gutter, and only while small.
+  test('a small object is indented, a large one compact, and an array compact at any size', () => {
+    const small = { a: 1 };
+    const large = { blob: 'x'.repeat(10_000) };
+    const text = (data: object) => (okJson(data).content[0] as { text: string }).text;
+
+    expect(text(small)).toBe(JSON.stringify(small, null, 2));
+    expect(text(large)).toBe(JSON.stringify(large));
+    expect(text([{ a: 1 }])).toBe('[{"a":1}]');
+  });
 });
 
 describe('notes beside structuredContent', () => {

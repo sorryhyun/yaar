@@ -24,7 +24,8 @@
  * with no protocol has to list, and what a bare read of an app window is composed of.
  */
 
-import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
+import type { ResourceRegistry, VerbResult, ResourceHandler, ReadOptions } from './uri-registry.js';
+import { hasLineFilter } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowState, WindowStateRegistry } from '../session/window-state.js';
 import {
@@ -37,6 +38,7 @@ import {
   getActiveSession,
   assertUri,
   requireAction,
+  applyReadOptionsToValue,
 } from './utils.js';
 import { formatWindowFlags } from '../features/window/helpers.js';
 import { handleCreate } from '../features/window/create.js';
@@ -367,6 +369,7 @@ export function registerWindowHandlers(
     windowId: string,
     win: WindowState,
     key: BuiltinStateKey,
+    readOptions?: ReadOptions,
   ): Promise<VerbResult | null> {
     if (!builtinStateFor(win).includes(key)) {
       return error(
@@ -376,7 +379,14 @@ export function registerWindowHandlers(
     }
 
     if (key === '__content') {
-      return okJsonResource(buildWindowResourceUri(windowId, 'state', key), {
+      const uri = buildWindowResourceUri(windowId, 'state', key);
+      // Filtered on the content alone — a markdown window's text, a table's rows — since
+      // the `{ renderer, content }` wrapper is what a line filter would otherwise match.
+      if (hasLineFilter(readOptions)) {
+        const text = applyReadOptionsToValue(win.content.data, uri, readOptions);
+        return { content: [{ type: 'text', text }], readFiltered: true };
+      }
+      return okJsonResource(uri, {
         renderer: win.content.renderer,
         content: win.content.data,
       });
@@ -414,15 +424,16 @@ export function registerWindowHandlers(
   async function queryWindowState(
     windowId: string,
     payload: Record<string, unknown>,
+    readOptions?: ReadOptions,
   ): Promise<VerbResult> {
     const stateKey = typeof payload.stateKey === 'string' ? payload.stateKey : '';
     if (isBuiltinStateKey(stateKey)) {
       const win = getWindowState().getWindow(windowId);
       if (!win) return error(`Window "${windowId}" not found.`);
-      const builtin = await readBuiltinState(windowId, win, stateKey);
+      const builtin = await readBuiltinState(windowId, win, stateKey, readOptions);
       if (builtin) return builtin;
     }
-    return handleAppQuery(getWindowState(), windowId, payload);
+    return handleAppQuery(getWindowState(), windowId, payload, readOptions);
   }
 
   /**
@@ -926,7 +937,7 @@ export function registerWindowHandlers(
       );
     },
 
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
       // Collection-level: yaar://windows/ (bare, no windowId)
       if (isWindowCollection(resolved)) {
         const session = getActiveSession();
@@ -977,7 +988,7 @@ export function registerWindowHandlers(
       }
 
       if (target.kind === 'resource') {
-        return queryWindowState(resolved.windowId, { stateKey: target.key });
+        return queryWindowState(resolved.windowId, { stateKey: target.key }, options);
       }
 
       // Stack position among this monitor's windows, `0` at the bottom. Undefined on a
