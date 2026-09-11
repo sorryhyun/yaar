@@ -2,7 +2,6 @@ export {};
 import { For, Show, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import './styles/index';
-import type { StorageEntry } from './types';
 import {
   state,
   setState,
@@ -11,8 +10,8 @@ import {
   setElMountReadonly,
   setElPreviewBody,
 } from './state';
-import { basename, formatSize, getFileIcon, sanitizeAlias } from './helpers';
-import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
+import { basename, sanitizeAlias } from './helpers';
+import { FileRow, FileTile } from './entries';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
 import {
@@ -21,6 +20,8 @@ import {
   resetPanelWidth,
   reclampPanelWidth,
   maxPanelWidth,
+  viewMode,
+  setViewMode,
   MIN_PANEL_WIDTH,
   DEFAULT_PANEL_WIDTH,
 } from './layout';
@@ -34,7 +35,7 @@ import {
   setNavPin,
   setNavResizing,
 } from './navOverlay';
-import { app, storage, windows, showToast, showConfirm, defineApp } from '@bundled/yaar';
+import { app, storage, showToast, defineApp } from '@bundled/yaar';
 
 let uploadInput: HTMLInputElement;
 
@@ -149,21 +150,37 @@ const App = () => {
       </div>
 
       <div class="nav-panel-controls">
-        <div class="breadcrumb">
-          ${() => {
-            const parts = state.currentPath ? state.currentPath.split('/').filter(Boolean) : [];
-            const crumbs: any[] = [
-              html`<button onClick=${() => navigate('')}>yaar://storage/</button>`,
-            ];
-            let accumulated = '';
-            for (const part of parts) {
-              accumulated += (accumulated ? '/' : '') + part;
-              const p = accumulated;
-              crumbs.push(html`<span class="sep">/</span>`);
-              crumbs.push(html`<button onClick=${() => navigate(p)}>${part}</button>`);
-            }
-            return crumbs;
-          }}
+        <div class="nav-path-row">
+          <div class="breadcrumb">
+            ${() => {
+              const parts = state.currentPath ? state.currentPath.split('/').filter(Boolean) : [];
+              const crumbs: any[] = [
+                html`<button onClick=${() => navigate('')}>yaar://storage/</button>`,
+              ];
+              let accumulated = '';
+              for (const part of parts) {
+                accumulated += (accumulated ? '/' : '') + part;
+                const p = accumulated;
+                crumbs.push(html`<span class="sep">/</span>`);
+                crumbs.push(html`<button onClick=${() => navigate(p)}>${part}</button>`);
+              }
+              return crumbs;
+            }}
+          </div>
+          <div class="y-tgroup view-toggle" role="group" aria-label="View mode">
+            <button
+              class=${() => 'y-tbtn' + (viewMode() === 'list' ? ' y-tbtn-active' : '')}
+              aria-pressed=${() => viewMode() === 'list'}
+              onClick=${() => setViewMode('list')}
+              title="List view"
+            >☰</button>
+            <button
+              class=${() => 'y-tbtn' + (viewMode() === 'grid' ? ' y-tbtn-active' : '')}
+              aria-pressed=${() => viewMode() === 'grid'}
+              onClick=${() => setViewMode('grid')}
+              title="Grid view"
+            >▦</button>
+          </div>
         </div>
         <div class="toolbar-actions">
           <select class="toolbar-select" title="Jump to mounted folder"
@@ -189,62 +206,12 @@ const App = () => {
         </div>
       </div>
 
-      <div class="file-list y-scroll">
+      <div class=${() => `file-list y-scroll${viewMode() === 'grid' ? ' file-grid' : ''}`}>
         ${() => {
-          const list = state.entries;
-          if (list.length === 0) return html`<div class="y-empty empty">This folder is empty</div>`;
-          return html`
-            <${For} each=${() => state.entries}>
-              ${(entry: StorageEntry) => {
-                const name = basename(entry.path);
-                return html`
-                  <div
-                    class=${() => `file-row${state.selectedFile === entry.path ? ' selected' : ''}`}
-                    draggable="true"
-                    onClick=${(e: MouseEvent) => {
-                      if ((e.target as HTMLElement).closest('.file-actions')) return;
-                      if (entry.isDirectory) navigate(entry.path);
-                      else selectFile(entry);
-                    }}
-                    onDblclick=${(e: MouseEvent) => {
-                      if ((e.target as HTMLElement).closest('.file-actions')) return;
-                      if (!entry.isDirectory) requestOpenByAgent(entry);
-                    }}
-                    onDragstart=${(e: DragEvent) => handleDragStart(e, entry)}
-                    onDragend=${(e: DragEvent) => handleDragEnd(e)}
-                  >
-                    <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
-                    <span class=${`file-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
-                    <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
-                    <span class="file-actions">
-                      <${Show} when=${() => !entry.isDirectory}>
-                        <button title="Open in a window" onClick=${(e: MouseEvent) => {
-                          e.stopPropagation();
-                          windows.openUrl(storage.url(entry.path), { title: name });
-                        }}>⇗</button>
-                      <//>
-                      <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
-                        e.stopPropagation();
-                        if (
-                          !(await showConfirm(`Delete "${name}"?`, {
-                            danger: true,
-                            okLabel: 'Delete',
-                          }))
-                        )
-                          return;
-                        try {
-                          await storage.remove(entry.path);
-                          navigate(state.currentPath);
-                        } catch {
-                          setState('statusText', `Failed to delete ${name}`);
-                        }
-                      }}>🗑</button>
-                    </span>
-                  </div>
-                `;
-              }}
-            <//>
-          `;
+          if (state.entries.length === 0)
+            return html`<div class="y-empty empty">This folder is empty</div>`;
+          const render = viewMode() === 'grid' ? FileTile : FileRow;
+          return html`<${For} each=${() => state.entries}>${render}<//>`;
         }}
       </div>
 
@@ -324,6 +291,11 @@ export default defineApp({
     'file-preview': {
       description: 'Text content of the currently previewed file (null if not text)',
       get: () => state.previewContent,
+    },
+    viewMode: {
+      description:
+        'How the directory listing renders: "list" (rows) or "grid" (icon tiles). Persisted.',
+      get: () => viewMode(),
     },
     layout: {
       description:
@@ -413,6 +385,22 @@ export default defineApp({
           setPanelWidth(params.panelWidth);
         }
         return { navOpen: navOpen(), navPinned: navPinned(), panelWidth: panelWidth() };
+      },
+    },
+    setViewMode: {
+      description:
+        'Switch the directory listing between "list" rows and a "grid" of icon tiles; the choice is persisted.',
+      params: {
+        type: 'object',
+        properties: { mode: { type: 'string', enum: ['list', 'grid'] } },
+        required: ['mode'],
+      },
+      run: (params) => {
+        const mode = params.mode;
+        if (mode !== 'list' && mode !== 'grid')
+          return { success: false, error: 'mode must be "list" or "grid"' };
+        setViewMode(mode);
+        return { success: true, viewMode: mode };
       },
     },
     refresh: {

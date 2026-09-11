@@ -10,9 +10,14 @@ export const DEFAULT_PANEL_WIDTH = 340;
 export const MIN_PANEL_WIDTH = 300;
 export const MAX_PANEL_RATIO = 0.7;
 
+export type ViewMode = 'list' | 'grid';
+
 interface LayoutPrefs {
   panelWidth: number;
+  viewMode: ViewMode;
 }
+
+const DEFAULT_PREFS: LayoutPrefs = { panelWidth: DEFAULT_PANEL_WIDTH, viewMode: 'list' };
 
 // The window width is a signal so the clamp below is reactive: a resize re-runs
 // every reader of panelWidth() without writing anything back to storage.
@@ -40,28 +45,31 @@ export function clampPanelWidth(w: number): number {
  * literal `null` — is logged instead of quietly looking like a fresh install.
  */
 function reviveLayout(raw: unknown): LayoutPrefs {
-  const parsed = safeParseOr(
-    LayoutPrefsSchema,
-    raw,
-    { panelWidth: DEFAULT_PANEL_WIDTH },
-    {
-      label: 'storage:layout',
-    },
-  );
-  return { panelWidth: parsed.panelWidth ?? DEFAULT_PANEL_WIDTH };
+  const parsed = safeParseOr(LayoutPrefsSchema, raw, DEFAULT_PREFS, {
+    label: 'storage:layout',
+  });
+  return {
+    panelWidth: parsed.panelWidth ?? DEFAULT_PANEL_WIDTH,
+    viewMode: parsed.viewMode ?? 'list',
+  };
 }
 
-const [layout, setLayout] = createPersistedSignal<LayoutPrefs>(
-  KEY,
-  { panelWidth: DEFAULT_PANEL_WIDTH },
-  { label: 'layout settings', revive: reviveLayout },
-);
+const [layout, setLayout] = createPersistedSignal<LayoutPrefs>(KEY, DEFAULT_PREFS, {
+  label: 'layout settings',
+  revive: reviveLayout,
+});
 
 /** The stored preference, clamped to what the current window can actually show. */
 export const panelWidth = () => clampPanelWidth(layout().panelWidth);
 
 export function setPanelWidth(w: number) {
-  setLayout({ panelWidth: clampPanelWidth(w) });
+  setLayout({ ...layout(), panelWidth: clampPanelWidth(w) });
+}
+
+export const viewMode = () => layout().viewMode;
+
+export function setViewMode(mode: ViewMode) {
+  setLayout({ ...layout(), viewMode: mode });
 }
 
 export function resetPanelWidth() {

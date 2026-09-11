@@ -73,3 +73,82 @@
   font-size: 14px;
   padding: 40px;
 }
+
+/* ── Grid view ── */
+.file-list.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: var(--yaar-sp-1);
+  padding: var(--yaar-sp-2);
+}
+.file-grid .empty {
+  grid-column: 1 / -1;
+}
+.file-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  min-width: 0;
+  padding: var(--yaar-sp-2) var(--yaar-sp-1) 6px;
+  border-radius: var(--yaar-radius);
+  cursor: pointer;
+}
+.file-tile:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+.file-tile.selected {
+  background: var(--yaar-wash-accent-strong);
+  box-shadow: inset 0 0 0 1px var(--yaar-wash-accent-border);
+}
+.file-tile.dragging {
+  opacity: 0.55;
+}
+.file-tile-visual {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.file-tile-icon {
+  font-size: 38px;
+  line-height: 1;
+}
+.file-tile-thumb {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--yaar-radius-sm);
+  box-shadow: var(--yaar-shadow-sm);
+}
+.file-tile-name {
+  width: 100%;
+  text-align: center;
+  font-size: var(--yaar-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-tile-name.dir {
+  color: var(--yaar-accent);
+}
+.file-tile .file-actions {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  gap: 0;
+  background: var(--yaar-bg-surface);
+  border-radius: var(--yaar-radius-sm);
+  box-shadow: var(--yaar-shadow-sm);
+}
+.file-tile .file-actions button {
+  font-size: var(--yaar-text-xs);
+  padding: 1px 3px;
+}
+.file-tile:hover .file-actions {
+  opacity: 1;
+}

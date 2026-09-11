@@ -8,7 +8,7 @@
 //
 // Loose so an additive layout field written by a newer build does not fail an
 // older build's *read* — not so it survives the round-trip: `reviveLayout`
-// returns an explicit `{ panelWidth }`, and that is what the signal re-persists
+// returns an explicit `{ panelWidth, viewMode }`, and that is what the signal re-persists
 // on the next write, so the unknown field is dropped there.
 //
 // `panelWidth` is checked for finiteness here rather than in a hand-rolled
@@ -25,4 +25,5 @@ export const LayoutPrefsSchema = z.looseObject({
   // which is exactly the guarantee the old hand-rolled `Number.isFinite` check
   // was there to provide — a non-finite width would poison every later clamp.
   panelWidth: z.optional(z.number()),
+  viewMode: z.optional(z.enum(['list', 'grid'])),
 });
