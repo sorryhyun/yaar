@@ -98,7 +98,8 @@
   "window": {
     "lockedBy": "Bloqueado por: {{agent}}",
     "poolAgent": "Agente del grupo: {{agentId}} ({{status}})",
-    "export": "Exportar contenido"
+    "export": "Exportar contenido",
+    "changed": "Actualizado"
   },
   "recentActions": {
     "title": "Acciones recientes ({{count}})",

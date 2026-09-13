@@ -68,6 +68,8 @@ export interface WindowsSliceActions {
   userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
   handleWindowAction: (action: WindowAction) => void;
   queueBoundsUpdate: (windowId: string, action?: 'window.move' | 'window.resize') => void;
+  /** Flag an agent-driven change the store can't see itself (an App Protocol command). */
+  markWindowChanged: (windowId: string) => void;
   /** Swap a window's iframe token, but only if it still carries the one we expected. */
   replaceIframeToken: (windowId: string, expected: string, token: string) => void;
 }

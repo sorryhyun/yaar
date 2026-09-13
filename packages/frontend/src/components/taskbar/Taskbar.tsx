@@ -60,6 +60,7 @@ export function Taskbar() {
                   {rendererIcons[win.content.renderer] ?? '\u{1F4C4}'}
                 </span>
                 <span className={styles.tabTitle}>{win.title}</span>
+                {win.unseenChange && <span className={styles.tabChanged} aria-hidden />}
                 <span
                   className={styles.tabClose}
                   role="button"

@@ -98,7 +98,8 @@
   "window": {
     "lockedBy": "Verrouillé par : {{agent}}",
     "poolAgent": "Agent du pool : {{agentId}} ({{status}})",
-    "export": "Exporter le contenu"
+    "export": "Exporter le contenu",
+    "changed": "Mis à jour"
   },
   "recentActions": {
     "title": "Actions récentes ({{count}})",

@@ -99,7 +99,8 @@
   "window": {
     "lockedBy": "Locked by: {{agent}}",
     "poolAgent": "Pool agent: {{agentId}} ({{status}})",
-    "export": "Export content"
+    "export": "Export content",
+    "changed": "Updated"
   },
   "recentActions": {
     "title": "Recent Actions ({{count}})",

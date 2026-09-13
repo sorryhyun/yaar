@@ -76,6 +76,21 @@ function rejectIfLocked(
 }
 
 /**
+ * Records an agent-driven change. "Seen" means focused and on screen: a change landing in
+ * the window the user is already in still glows, but only one they were not looking at
+ * earns the badge that waits for them to come back.
+ */
+export function markWindowChanged(
+  state: Pick<DesktopStore, 'windows' | 'focusedWindowId'>,
+  key: string,
+): void {
+  const win = state.windows[key];
+  if (!win) return;
+  win.changeNonce = (win.changeNonce ?? 0) + 1;
+  if (state.focusedWindowId !== key || win.minimized) win.unseenChange = true;
+}
+
+/**
  * Pure mutation function that applies a window action to an Immer draft.
  * Can be called standalone inside a batched set() or via handleWindowAction.
  */
@@ -186,6 +201,7 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
         insertIntoZOrder(state, key, win.variant);
         state.focusedWindowId = key;
         win.minimized = false;
+        win.unseenChange = false;
       }
       break;
     }
@@ -264,6 +280,7 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
       if (rejectIfLocked(state, win, actionAgentId, reqId, key)) break;
       if (win) {
         win.content = { ...action.content };
+        markWindowChanged(state, key);
       }
       break;
     }
@@ -339,6 +356,7 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
         if (action.renderer && isWindowContentData(targetRenderer, win.content.data)) {
           win.content.renderer = targetRenderer;
         }
+        markWindowChanged(state, key);
         if (reqId && win.locked) {
           state.pendingFeedback.push({
             requestId: reqId,
@@ -397,6 +415,11 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
 
   // Guarded on `expected` so a token that the reconnect snapshot already refreshed is not
   // clobbered by a re-mint that was in flight for the dead one.
+  markWindowChanged: (windowId) =>
+    set((state) => {
+      markWindowChanged(state as DesktopStore, windowId);
+    }),
+
   replaceIframeToken: (windowId, expected, token) =>
     set((state) => {
       const win = state.windows[windowId];
@@ -411,6 +434,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
         insertIntoZOrder(state, windowId, win.variant);
         state.focusedWindowId = windowId;
         win.minimized = false;
+        win.unseenChange = false;
         if (!alreadyFocused) {
           (state as DesktopStore).pendingInteractions.push({
             type: 'window.focus',

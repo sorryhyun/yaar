@@ -94,6 +94,11 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
     text: string;
   } | null>(null);
 
+  // The nonce a window mounts with is history, not news: a window remounted by a monitor
+  // switch must not replay a glow for a change the user already saw.
+  const mountChangeNonceRef = useRef(window.changeNonce ?? 0);
+  const changeNonce = window.changeNonce ?? 0;
+
   const frameRef = useRef<HTMLDivElement>(null);
   const titleBarMouseDownRef = useRef<{ x: number; y: number } | null>(null);
   const lastTitleBarClickRef = useRef<number | null>(null);
@@ -290,6 +295,9 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
         >
           <div className={styles.titleSection}>
             <div className={styles.title}>{window.title}</div>
+            {window.unseenChange && (
+              <span className={styles.changedBadge}>{t('window.changed')}</span>
+            )}
             {window.locked && (
               <div
                 className={styles.lockBadge}
@@ -425,6 +433,11 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             <div className={styles.resizeSE} onMouseDown={(e) => handleResizeStart('se', e)} />
           </>
         ))}
+
+      {/* Keyed on the nonce so each change remounts it and replays the one-shot animation. */}
+      {changeNonce !== mountChangeNonceRef.current && (
+        <div key={changeNonce} className={styles.changeGlow} />
+      )}
 
       <SnapPreview bounds={snapPreviewBounds} />
     </div>

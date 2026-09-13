@@ -98,7 +98,8 @@
   "window": {
     "lockedBy": "锁定者：{{agent}}",
     "poolAgent": "池代理：{{agentId}} ({{status}})",
-    "export": "导出内容"
+    "export": "导出内容",
+    "changed": "已更新"
   },
   "recentActions": {
     "title": "最近操作 ({{count}})",

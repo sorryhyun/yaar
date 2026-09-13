@@ -98,7 +98,8 @@
   "window": {
     "lockedBy": "ロック中: {{agent}}",
     "poolAgent": "プールエージェント: {{agentId}} ({{status}})",
-    "export": "コンテンツをエクスポート"
+    "export": "コンテンツをエクスポート",
+    "changed": "更新あり"
   },
   "recentActions": {
     "title": "最近のアクション ({{count}})",

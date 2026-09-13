@@ -304,6 +304,12 @@ export function handleAppProtocolRequest(
     return;
   }
 
+  // A command is the agent changing the app, so it earns the same change marker a content
+  // update does. Queries, evals and describes are reads and leave the window alone.
+  if (request.kind === 'command') {
+    getDesktopState().markWindowChanged(resolveTargetKey(windowId));
+  }
+
   // Build postMessage based on request kind
   let msg: Record<string, unknown>;
   if (request.kind === 'manifest') {

@@ -156,6 +156,15 @@
   text-overflow: ellipsis;
 }
 
+/* A minimized window can't glow, so its tab carries the "changed while away" mark. */
+.tabChanged {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
 .tabClose {
   flex-shrink: 0;
   display: flex;

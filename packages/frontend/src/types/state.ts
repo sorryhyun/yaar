@@ -30,6 +30,14 @@ export interface WindowModel {
    * as no change at all.
    */
   reloadNonce?: number;
+  /**
+   * Bumped whenever an agent changes what the window shows — `setContent`, `updateContent`,
+   * or an App Protocol command. The frame keys a one-shot glow on it, so a counter for the
+   * same reason as `reloadNonce`: every change has to replay the animation.
+   */
+  changeNonce?: number;
+  /** An agent changed this window while the user wasn't looking at it. Cleared on focus. */
+  unseenChange?: boolean;
 }
 
 export interface CliEntry {
