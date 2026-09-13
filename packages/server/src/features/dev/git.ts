@@ -93,13 +93,26 @@ interface GitResult {
  * turn an innocuous `git status` into arbitrary command execution on the user's
  * machine. A fresh `git init` ships only non-executable sample hooks, and
  * `core.hooksPath=/dev/null` keeps it that way.
+ *
+ * Auto-maintenance is off too: `git commit` otherwise spawns a *detached*
+ * `git maintenance run --auto` that outlives this process and keeps writing into
+ * the shadow repo — racing a restore's `read-tree`, or a delete of the repo that
+ * then leaves a half-removed directory behind.
  */
 async function runGit(
   args: string[],
   env: Record<string, string>,
   cwd: string,
 ): Promise<GitResult> {
-  const proc = Bun.spawn(['git', '-c', 'core.hooksPath=/dev/null', ...args], {
+  const config = [
+    '-c',
+    'core.hooksPath=/dev/null',
+    '-c',
+    'maintenance.auto=false',
+    '-c',
+    'gc.auto=0',
+  ];
+  const proc = Bun.spawn(['git', ...config, ...args], {
     // git resolves relative pathspecs against the *cwd*, not the work tree, so
     // this must be the work tree or a pathspec like `apps/foo` silently matches
     // nothing.
@@ -154,7 +167,9 @@ function appDirOrError(appId: string): { path: string } | GitFailure {
  */
 async function ensureRepo(appId: string, appPath: string): Promise<GitFailure | null> {
   const gitDir = gitDirFor(appId);
-  if (existsSync(gitDir)) return null;
+  // `HEAD`, not the directory: a partially deleted repo still exists but is not a
+  // repository, and re-running `git init` over it is safe.
+  if (existsSync(join(gitDir, 'HEAD'))) return null;
 
   await mkdir(appGitRoot(), { recursive: true });
 
