@@ -18,6 +18,7 @@ import {
 } from '../../config.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
 import { createEscapeRepairHook } from './escape-hook.js';
+import { subordinateModel } from '../../agents/profiles/model-tiers.js';
 
 /** Inputs to the SDK options builder for one turn. */
 export interface SDKOptionsRequest {
@@ -100,8 +101,9 @@ export function buildSDKOptions({
     ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
     systemPrompt: systemPrompt ?? defaultSystemPrompt,
     // `||`, not `??`: an empty model string falls back to the default, as it
-    // did when callers patched the model in with `if (options.model)`.
-    model: options.model || 'claude-sonnet-5',
+    // did when callers patched the model in with `if (options.model)`. A turn with
+    // no model is never the monitor's, so fable mode lifts the default to Opus.
+    model: options.model || subordinateModel('claude-sonnet-5'),
     resume: resumeSession,
     cwd: getStorageDir(),
     tools: builtinTools,

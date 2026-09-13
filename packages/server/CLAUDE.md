@@ -29,6 +29,7 @@ before changing a default or adding a knob.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PROVIDER` | auto-detect | Force `claude` or `codex` |
+| `FABLE` | off | `=1`: monitor agent on Fable, every other agent on Opus |
 | `PORT` / `MAX_AGENTS` | `8000` / `10` | Server port; global agent limit |
 | `MCP_SKIP_AUTH` / `REMOTE` | off | Skip MCP auth (local dev); enable remote mode |
 | `YAAR_REMOTE_TOKEN` | — | Adopt this remote token instead of minting one (ignored under 32 chars) |

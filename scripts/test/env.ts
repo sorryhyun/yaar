@@ -48,6 +48,7 @@ const SCRUBBED = [
   'REMOTE',
   'PORT',
   'PROVIDER',
+  'FABLE',
   'MAX_AGENTS',
   'MCP_SKIP_AUTH',
   'MONITOR_MAX_CONCURRENT',

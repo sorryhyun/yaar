@@ -32,6 +32,7 @@
  */
 
 import type { AgentProfile } from './types.js';
+import { subordinateModel } from './model-tiers.js';
 import { SUB_AGENT_ROLE_PREFIX } from '@yaar/shared';
 
 /** Max characters of caller-supplied prompt accepted. Generous; a guard, not a budget. */
@@ -260,11 +261,12 @@ export interface SubAgentSpec {
  * from the call site.
  */
 export function buildSubAgentProfile(spec: SubAgentSpec): AgentProfile {
+  const model = subordinateModel(spec.model);
   return {
     id: `subagent-${spec.appId}-${spec.subId}`,
     description: `Sub-agent "${spec.subId}" of app ${spec.appId}`,
     systemPrompt: spec.systemPrompt,
     allowedTools: (spec.tools ?? []).map((t) => subAgentToolName(t.name)),
-    ...(spec.model ? { model: spec.model } : {}),
+    ...(model ? { model } : {}),
   };
 }

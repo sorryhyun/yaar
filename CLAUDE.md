@@ -56,6 +56,7 @@ happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 ## Environment Variables
 
 - `PROVIDER` - Force a specific AI provider (`claude` or `codex`). Auto-detected if not set.
+- `FABLE` - `1` enables fable mode: the monitor agent runs on Fable, every agent below it (session, app, sub-agent) on Opus. See `docs/reference/server_env.md`.
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
 - `APP_AGENT_IDLE_MINUTES` - Idle minutes before an app agent is reclaimed (default: 15, `0` disables). See `packages/server/CLAUDE.md`.

@@ -3,8 +3,9 @@
  */
 
 import type { AgentProfile } from './types.js';
-import { claudeModelToCodex } from './model-tiers.js';
+import { claudeModelToCodex, FABLE_MODEL } from './model-tiers.js';
 import { DEVELOPER_PROFILE } from './developer.js';
+import { isFableMode } from '../../config/env.js';
 
 export interface TurnOptions {
   model?: string;
@@ -41,7 +42,11 @@ export function turnOptionsFor(profile: AgentProfile, providerType: string): Tur
  * Monitor-agent turn options. Single source for the turn runner
  * (monitor-task-processor) and prewarm (context-pool) so the prewarmed provider
  * stream matches the first real turn exactly.
+ *
+ * Fable mode swaps the model here rather than in `DEVELOPER_PROFILE`, so the flag is
+ * read per turn and not frozen at import.
  */
 export function getMonitorTurnOptions(providerType: string): TurnOptions {
-  return turnOptionsFor(DEVELOPER_PROFILE, providerType);
+  const profile = isFableMode() ? { ...DEVELOPER_PROFILE, model: FABLE_MODEL } : DEVELOPER_PROFILE;
+  return turnOptionsFor(profile, providerType);
 }

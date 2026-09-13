@@ -19,10 +19,24 @@ passes in review.
 | Variable | Default | Meaning |
 |---|---|---|
 | `PROVIDER` | auto-detect | Force `claude` or `codex` |
+| `FABLE` | off | `=1`: monitor agent on Fable, every other agent on Opus |
 | `PORT` | `8000` | Server port |
 | `MAX_AGENTS` | `10` | Global agent limit (process-wide) |
 | `CODEX_WS_PORT` | `4510` | Codex app-server WebSocket listener |
 | `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
+
+### `FABLE`
+
+`FABLE=1 make claude` puts the monitor agent — the one the user talks to — on Fable
+(`FABLE_MODEL`), and pins every agent below it to Opus: the session agent, every app agent
+whatever its `agentType`, and every sub-agent, including one spawned with an explicit `model`.
+Off, the usual tiers apply (monitor and session agent Opus, apps Sonnet unless declared).
+
+The flag is read per turn (`isFableMode()`), so the prewarmed monitor stream and the first real
+turn agree. Fable and Opus both map to `gpt-5.6-sol` on Codex, so under `PROVIDER=codex` the
+only visible effect is app and sub-agents moving from Terra to Sol.
+
+**Source:** `packages/server/src/agents/profiles/model-tiers.ts`, `packages/server/src/agents/profiles/turn-options.ts`
 
 ### `CODEX_HOME`
 
