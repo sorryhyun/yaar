@@ -155,7 +155,7 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
         : undefined;
       const resolved = await resolveAppWindowOnMonitor(session, senderMonitorId, targetAppId, {
         launch: privileged || !!control,
-        background: control?.background,
+        minimized: control?.minimized,
       });
       if (!resolved.found) {
         return {

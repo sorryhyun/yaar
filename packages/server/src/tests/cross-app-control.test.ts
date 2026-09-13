@@ -62,7 +62,7 @@ function withActiveAppWindow(session: LiveSession, answer: (appId: string) => st
 function resolveOn(
   session: LiveSession,
   monitorId: string,
-  opts: { launch: boolean; background?: boolean } = { launch: true },
+  opts: { launch: boolean; minimized?: boolean } = { launch: true },
 ) {
   return runWithAgentContext({ agentId: 'app-agent-devtools', sessionId: SESSION, monitorId }, () =>
     resolveAppWindowOnMonitor(session, monitorId, TARGET_APP, opts),
@@ -156,7 +156,7 @@ describe('resolving the window a controlled app is driven through', () => {
     expect(resolved).toEqual({ found: true, windowId: TARGET_APP, launched: true });
   });
 
-  it('opens it minimized when the control entry says background', async () => {
+  it('opens it minimized when the control entry says minimized', async () => {
     const session = sessionWith([]);
     const emitted: ActionEvent[] = [];
     const off = actionEmitter.onAction((e) => {
@@ -164,7 +164,7 @@ describe('resolving the window a controlled app is driven through', () => {
     });
     const answering = answerRenderFeedback();
 
-    await resolveOn(session, '0', { launch: true, background: true });
+    await resolveOn(session, '0', { launch: true, minimized: true });
     off();
     answering();
 

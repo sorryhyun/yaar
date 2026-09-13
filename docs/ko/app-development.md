@@ -511,7 +511,7 @@ apps/my-app/
 | `agent` | `{ prompt?, hint?, skill? }` | 이 앱의 에이전트 문서 기본 경로 오버라이드 |
 | `links` | `{ base }` | 이 앱이 렌더링하는 콘텐츠의 상대 href가 속한 사이트 — 링크 가드가 이를 기준으로 앵커를 해석합니다. [`apps/CLAUDE.md`](../../apps/CLAUDE.md#links-out-of-an-app) 참조 |
 | `messaging` | `"all"` | 앱 에이전트가 모니터/사용자뿐 아니라 다른 앱/윈도우에도 `direct_message`할 수 있게 함 |
-| `controls` | `(string \| { appId, commands?, background? })[]` | 이 앱이 조작할 수 있는 다른 앱. 호출자의 모니터에 대상 앱 윈도우가 없으면 하나를 열어 줍니다. `background: true`면 최소화 상태로 엽니다. **번들 앱 전용** |
+| `controls` | `(string \| { appId, commands?, minimized? })[]` | 이 앱이 조작할 수 있는 다른 앱. 호출자의 모니터에 대상 앱 윈도우가 없으면 하나를 열어 줍니다. `minimized: true`면 최소화 상태로 엽니다. **번들 앱 전용** |
 | `streams` | `string[]` | 이 앱이 구독할 수 있는 스트림 소스(`"agents"`). **설치 시 승인 필요** |
 | `subagents` | `{ max: number }` | 모니터당 이 앱이 띄울 수 있는 서브에이전트 상한. 16으로 클램프되며, 정수가 아니거나 `≤ 0`이면 "없음". **설치 시 승인 필요** |
 | `variant` | `"widget" \| "panel"` | 윈도우 변형 |

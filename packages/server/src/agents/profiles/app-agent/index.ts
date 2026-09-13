@@ -302,8 +302,8 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
       'You may drive these apps by passing their id as `appId` to describe/query/command:\n';
     for (const c of controls) {
       const cmds = c.commands?.length ? ` (commands: ${c.commands.join(', ')})` : '';
-      const bg = c.background ? ' (opens minimized)' : '';
-      systemPrompt += `- \`${c.appId}\`${cmds}${bg}\n`;
+      const min = c.minimized ? ' (opens minimized)' : '';
+      systemPrompt += `- \`${c.appId}\`${cmds}${min}\n`;
     }
     systemPrompt +=
       "\nCall `describe(appId)` first to learn an app's protocol, then `command(appId, ...)` to drive it. " +

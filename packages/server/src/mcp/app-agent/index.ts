@@ -229,7 +229,7 @@ export const APP_TOOL_DESCRIPTIONS = {
  *
  * Auto-open is silent otherwise: the tool answers exactly as it would have for an app
  * that was already running, so the model cannot tell the user why a window appeared, and
- * a `background` app's window is invisible besides. Prepended as its own block rather
+ * a `minimized` app's window is invisible besides. Prepended as its own block rather
  * than edited into the app's text — except that an object answer also carries it as
  * `_notes`, the only place a model reads beside `structuredContent` (see `foldNotes`).
  */
@@ -446,7 +446,7 @@ export function registerAppAgentTools(server: McpServer): void {
     }
     const resolved = await resolveAppWindowOnMonitor(session, monitorId, targetAppId, {
       launch: true,
-      background: entry.background,
+      minimized: entry.minimized,
     });
     if (!resolved.found) {
       return { ok: false, error: `app "${targetAppId}" could not be opened to control.` };

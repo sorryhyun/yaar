@@ -101,7 +101,7 @@ export interface ControlEntry {
    * minimized, so the app is fully drivable; it just sits in the taskbar. Ignored when
    * the app already has a window: control never minimizes something the user opened.
    */
-  background?: boolean;
+  minimized?: boolean;
 }
 
 /**
@@ -223,12 +223,12 @@ function parseControls(raw: unknown[]): ControlEntry[] {
       'appId' in entry &&
       typeof (entry as { appId: unknown }).appId === 'string'
     ) {
-      const obj = entry as { appId: string; commands?: unknown; background?: unknown };
+      const obj = entry as { appId: string; commands?: unknown; minimized?: unknown };
       const parsed: ControlEntry = { appId: obj.appId };
       if (Array.isArray(obj.commands) && obj.commands.every((c) => typeof c === 'string')) {
         parsed.commands = obj.commands as string[];
       }
-      if (obj.background === true) parsed.background = true;
+      if (obj.minimized === true) parsed.minimized = true;
       result.push(parsed);
     }
   }

@@ -6,7 +6,12 @@ Create windows by invoking the windows URI. The windowId is auto-derived from th
 invoke('yaar://windows/', { action: "create", title: "My Window", renderer: "markdown", content: "# Hello" })
 invoke('yaar://windows/', { action: "create", title: "Dashboard", renderer: "component", content: { components: [...] } })
 invoke('yaar://windows/', { action: "create", title: "My App", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
+invoke('yaar://windows/', { action: "create", title: "Lab", appId: "lab", renderer: "iframe", content: "yaar://apps/lab", minimized: true })
 ```
+
+**Two ways to open a window:**
+- **Foreground** (default) — shown on top and focused. Use it when the user should see or interact with the window.
+- **Minimized** — `minimized: true`. The window sits in the taskbar without taking focus or covering the user's work, but it is fully live: the iframe loads, and `app_command`, `app_query` and state reads all work. Use it for work the user doesn't need to watch (a Lab computation, a transcription job, a GitHub query), and close it when done. It is still a window in the user's tab, not a server-side job. There is no `background` flag — `minimized` is the only one.
 
 Update, manage, and close windows using the window URI:
 ```

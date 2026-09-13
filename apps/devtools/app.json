@@ -19,7 +19,7 @@
     "search",
     {
       "appId": "lab",
-      "background": true
+      "minimized": true
     }
   ],
   "permissions": [

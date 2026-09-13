@@ -43,11 +43,11 @@ export type AppWindowResolution =
  * `could not be opened to control`, for a target that was not open at all.
  *
  * Returns the id the create actually minted, which for that reason is not knowable up
- * front. `background` opens it minimized — the iframe still mounts and loads (the
+ * front. `minimized` opens it minimized — the iframe still mounts and loads (the
  * frontend hides minimized windows rather than unmounting them), so an app driven purely
  * for compute need not take the user's screen.
  */
-async function launchAppWindow(appId: string, background?: boolean): Promise<string | undefined> {
+async function launchAppWindow(appId: string, minimized?: boolean): Promise<string | undefined> {
   const app = (await listApps()).find((a) => a.id === appId);
   if (!app) return undefined;
   const result = await handleCreate('', {
@@ -55,7 +55,7 @@ async function launchAppWindow(appId: string, background?: boolean): Promise<str
     renderer: 'iframe',
     content: `yaar://apps/${appId}`,
     appId,
-    ...(background ? { minimized: true } : {}),
+    ...(minimized ? { minimized: true } : {}),
   });
   if (result.isError) return undefined;
   const minted = result.structuredContent?.windowId;
@@ -71,7 +71,7 @@ export async function resolveAppWindowOnMonitor(
   session: LiveSession,
   monitorId: string,
   appId: string,
-  opts: { launch: boolean; background?: boolean },
+  opts: { launch: boolean; minimized?: boolean },
 ): Promise<AppWindowResolution> {
   const existing =
     session.getPool()?.getActiveAppWindow(monitorId, appId) ??
@@ -83,7 +83,7 @@ export async function resolveAppWindowOnMonitor(
 
   if (!opts.launch) return { found: false, attemptedLaunch: false };
 
-  const windowId = await launchAppWindow(appId, opts.background);
+  const windowId = await launchAppWindow(appId, opts.minimized);
   return windowId
     ? { found: true, windowId, launched: true }
     : { found: false, attemptedLaunch: true };
