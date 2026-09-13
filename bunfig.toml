@@ -32,5 +32,7 @@ preload = [
 # package scripts scope collection by hand (`bun test src/tests`); ignoring the
 # build output instead makes the unscoped form correct too, so
 # `bun test packages/compiler` from here now matches `bun run test` exactly:
-# 14 files, not 28.
+# 14 files, not 28. The pattern is written per-tree rather than per-package on
+# purpose — it covers every `tsc`-built package (shared, lib, compiler) and any
+# future one without being edited.
 pathIgnorePatterns = ["**/dist/**", "**/node_modules/**"]

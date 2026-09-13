@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  // `src/tests` and `**/*.test.ts` both, mirroring packages/server/tsconfig.build.json: the
+  // directory covers the fixtures and helpers that sit beside the tests and are not
+  // themselves `.test.ts`, the glob covers a test written next to the module it exercises.
+  // Without this, `tsc` emits `dist/**/*.test.js` — which `bunfig.toml`'s
+  // `pathIgnorePatterns` then has to hide from the runner, and which ships in a build that
+  // has no business containing tests.
+  //
+  // `typecheck` deliberately uses `tsconfig.json` instead, so the tests are still checked.
+  "exclude": ["node_modules", "dist", "src/tests", "**/*.test.ts"]
+}

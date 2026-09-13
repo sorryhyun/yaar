@@ -8,7 +8,7 @@
  * files, which carry quadratic outlines in `glyf` addressed through `loca`.
  *
  * Which of the two a face uses is not a detail a caller should have to know, so
- * `outlines` names it once and `lib/fonts/index.ts` branches on that alone.
+ * `outlines` names it once and `fonts/index.ts` branches on that alone.
  *
  * Reading is done over a `DataView` rather than by expanding tables into maps:
  * a Korean face maps tens of thousands of code points and a subset request

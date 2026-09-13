@@ -48,7 +48,7 @@ import {
 } from '../../agents/profiles/sub-agent.js';
 import type { AgentPool } from '../../agents/agent-pool.js';
 import type { SubAgent } from '../../agents/sub-agent-registry.js';
-import { genId } from '../../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('subagents');

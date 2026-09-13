@@ -28,7 +28,7 @@ import { z } from 'zod';
 import { requireMonitorId, getWindowId, getAgentRole } from '../../agents/agent-context.js';
 import { getActiveSession, ok, error } from '../../handlers/utils.js';
 import type { LiveSession } from '../../session/live-session.js';
-import { genId } from '../../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { getAppMeta } from '../../features/apps/discovery.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { showNotification } from '../../features/user/notifications.js';

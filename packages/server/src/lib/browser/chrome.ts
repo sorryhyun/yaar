@@ -11,7 +11,7 @@ import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
-import { getFreeDpiProxyUrl } from '../freedpi/active.js';
+import { getFreeDpiProxyUrl } from '@yaar/lib/freedpi';
 import type { Subprocess } from 'bun';
 
 import { createServer } from 'net';

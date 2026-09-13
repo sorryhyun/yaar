@@ -56,7 +56,7 @@ import type { AITransport, ProviderType } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';

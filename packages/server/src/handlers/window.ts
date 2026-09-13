@@ -70,7 +70,7 @@ import {
 } from '../features/window/subscribe.js';
 import { getMonitorId, requireMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { valueOf } from '../session/pending-store.js';
 import { defineActions } from './define-actions.js';
 import { createLogger } from '../observability/log.js';

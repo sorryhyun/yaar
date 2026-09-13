@@ -44,8 +44,16 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # The three packages other packages consume as `dist/`, in dependency order:
+      # `lib` and `compiler` each build against shared's output, and nothing else here
+      # builds them for us. Every check below (`typecheck`, `test`, `lint`) is
+      # `--filter '*'` or a glob over `packages/*/src`, so a new package joins those
+      # tiers on its own — but its `dist/` still has to exist first.
       - name: Build shared
         run: bun run --filter @yaar/shared build
+
+      - name: Build lib
+        run: bun run --filter @yaar/lib build
 
       - name: Build compiler
         run: bun run --filter @yaar/compiler build

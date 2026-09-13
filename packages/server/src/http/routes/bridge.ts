@@ -10,7 +10,7 @@
  * control of the user's real browser is deliberately app-mediated. See `features/browser/bridge-actions.ts`.
  */
 
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp } from '../access.js';
 import { getSessionId } from '../../agents/agent-context.js';

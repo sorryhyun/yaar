@@ -9,7 +9,7 @@
 import { existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { openUrl } from '../../lib/open-url.js';
+import { openUrl } from '@yaar/lib/open-url';
 import type { AppServer } from './app-server.js';
 import type { AccountLoginCompletedNotification } from './types.js';
 import { createLogger } from '../../observability/log.js';

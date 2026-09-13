@@ -30,9 +30,9 @@ import {
   YtDlpError,
   type DownloadAudioResult,
   type YtDlpMediaInfo,
-} from '../../lib/ytdlp/index.js';
+} from '@yaar/lib/ytdlp';
 import { storageWriteStream } from '../../storage/storage-manager.js';
-import { genId } from '../../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('YtDlpJobs');

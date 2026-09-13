@@ -12,28 +12,24 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { loadTunnelConfig } from '../lib/tunnel/config.js';
-import type { TunnelConfig } from '../lib/tunnel/types.js';
+import { loadTunnelConfig } from '../tunnel/config.js';
+import type { TunnelConfig } from '../tunnel/types.js';
 
 /**
- * Point the config dir at `dir`, load, and put everything back.
+ * Load from `dir`, capturing the warnings.
  *
- * Every mutation and its restore sit in one synchronous block with no `await` between
- * them, so a concurrently-running test file can never observe the swapped env or the
- * stubbed `console.warn` — the unit suite shares a process.
+ * The config dir is an argument to `loadTunnelConfig`, so there is no environment to
+ * swap — only `console.warn`, whose stub and restore sit in one synchronous block with
+ * no `await` between them so a concurrently-running test file can never observe it.
  */
 function loadFrom(dir: string): { config: TunnelConfig | null; warnings: string[] } {
-  const prevConfig = process.env.YAAR_CONFIG;
   const prevWarn = console.warn;
   const warnings: string[] = [];
-  process.env.YAAR_CONFIG = dir;
   console.warn = (...args: unknown[]) => void warnings.push(args.join(' '));
   try {
-    return { config: loadTunnelConfig(), warnings };
+    return { config: loadTunnelConfig(dir), warnings };
   } finally {
     console.warn = prevWarn;
-    if (prevConfig === undefined) delete process.env.YAAR_CONFIG;
-    else process.env.YAAR_CONFIG = prevConfig;
   }
 }
 

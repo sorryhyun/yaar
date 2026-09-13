@@ -2,7 +2,7 @@
  * yt-dlp wrapper — media resolution and audio-only download via the yt-dlp CLI.
  *
  * yt-dlp is an OPTIONAL dependency, discovered rather than bundled (same stance as
- * Chrome in lib/browser): when the binary is absent every entry point reports
+ * Chrome in the server's lib/browser): when the binary is absent every entry point reports
  * unavailability and nothing else in the server changes. Do not add it to the
  * release executables — its value is that its maintainers ship extractor fixes
  * within days of YouTube breakage, which a pinned bundled copy would forfeit.

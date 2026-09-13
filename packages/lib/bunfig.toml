@@ -1,0 +1,17 @@
+# Shared preload: a test run describes the code, not the developer's machine. See
+# scripts/test/env.ts. Nothing in this package reads YAAR's config — that is the boundary
+# the package exists to enforce — but the pinned environment is wired anyway so every
+# package's `bun test` starts from the same place.
+#
+# `partition-guard.ts` is here for the cross-package case: this package is a single
+# partition (scripts/test/partitions.ts gives every non-server package one), so the guard
+# has nothing to catch *within* it, and everything to catch when a run from somewhere else
+# drags these files in alongside another package's.
+[test]
+preload = ["../../scripts/test/env.ts", "../../scripts/test/partition-guard.ts"]
+
+# Build output is not a test suite: `tsc` would emit compiled `.test.js` copies under
+# `dist/` if it ever saw them, and a stale one is worse than no test at all.
+# `tsconfig.build.json` already excludes them; this makes a bare `bun test` here agree
+# rather than quietly disagree.
+pathIgnorePatterns = ["**/dist/**"]

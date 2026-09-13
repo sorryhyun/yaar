@@ -27,9 +27,9 @@ import {
   storageUriFor,
   type Principal,
 } from '../access.js';
-import { validateUrl, safeFetch } from '../../lib/ssrf.js';
-import { errMessage } from '../../lib/errors.js';
-import { downloadToFile } from '../../lib/download/chunked.js';
+import { validateUrl, safeFetch } from '@yaar/lib/ssrf';
+import { errMessage } from '@yaar/lib/errors';
+import { downloadToFile } from '@yaar/lib/download';
 import { ensureDomainAllowed } from '../../features/http/domain-gate.js';
 import { extractDomain } from '../../features/config/domains.js';
 import { resolvePath } from '../../storage/storage-manager.js';

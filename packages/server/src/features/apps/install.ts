@@ -22,7 +22,7 @@ import {
   isEmpty,
 } from './capabilities.js';
 import { getStorageDir, MARKET_URL } from '../../config.js';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { readSettings } from '../../storage/settings.js';

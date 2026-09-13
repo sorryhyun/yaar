@@ -85,6 +85,11 @@ export function toRepoRelative(absPath: string, repoRoot: string): string | null
  * scan went away, which is why `run-tests.ts` no longer reads all 143 files to schedule them.
  * Returns `null` for a path outside `packages/` — there are none today, and inventing a rule
  * for a file we cannot see is how a guard starts lying.
+ *
+ * Only `server` gets named sub-partitions. Every other package is one partition derived from
+ * its directory name, so a new workspace package — `@yaar/lib` was the last one — is covered
+ * the moment it has a test file, with no edit here. Add a branch only for a package that
+ * genuinely cannot run its own files in one process.
  */
 export function partitionOf(repoRel: string): Partition | null {
   const pkg = /^packages\/([^/]+)\//.exec(repoRel)?.[1];

@@ -54,9 +54,12 @@ if [ -n "$REMOTE" ] && [ "$REMOTE" != "0" ] && [ -z "${YAAR_REMOTE_TOKEN:-}" ]; 
   export YAAR_REMOTE_TOKEN
 fi
 
-# Build shared and compiler packages first (needed by other packages)
+# Build shared, lib and compiler packages first (needed by other packages).
+# Order is the dependency order: lib and compiler both consume shared's dist/.
 echo "Building shared package..."
 bun run --filter @yaar/shared build
+echo "Building lib package..."
+bun run --filter @yaar/lib build
 echo "Building compiler package..."
 bun run --filter @yaar/compiler build
 

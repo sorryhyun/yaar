@@ -26,7 +26,7 @@ import {
   startAudioDownload,
   YtDlpRequestError,
 } from '../features/ytdlp/jobs.js';
-import { YtDlpError } from '../lib/ytdlp/index.js';
+import { YtDlpError } from '@yaar/lib/ytdlp';
 
 type Payload = { url?: unknown; jobId?: unknown };
 

@@ -52,6 +52,7 @@ export {
   getSessionLogsDir,
   getFrontendDist,
   FRONTEND_DIST,
+  getPopplerBinDir,
 } from './config/paths.js';
 
 export {

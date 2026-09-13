@@ -18,7 +18,7 @@ import { getAuthStatus, getIdToken } from '../market/google-auth.js';
 import { termsGateError } from './publisher-terms.js';
 import { appIdRefusal, resolveAppDir } from './roots.js';
 import { notePublishedVersion, readAppVersion, versionPublishError } from './version.js';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 
 /** Upstream hiccups, not a rejection of this publish — worth another shot. */
 const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);

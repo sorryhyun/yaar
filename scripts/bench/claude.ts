@@ -310,8 +310,12 @@ async function main() {
   }
 
   if (!NO_BUILD) {
-    log('building @yaar/shared + @yaar/compiler (needed by server)…');
+    // The server consumes all three as `dist/`, and this launches it with `bun src/main.ts`
+    // rather than through a script with a `pretest`/`prebuild` hook — so nothing else builds
+    // them for us. shared first: lib and compiler both compile against its output.
+    log('building @yaar/shared + @yaar/lib + @yaar/compiler (needed by server)…');
     await sh(['bun', 'run', '--filter', '@yaar/shared', 'build'], { cwd: REPO });
+    await sh(['bun', 'run', '--filter', '@yaar/lib', 'build'], { cwd: REPO });
     await sh(['bun', 'run', '--filter', '@yaar/compiler', 'build'], { cwd: REPO });
   }
 

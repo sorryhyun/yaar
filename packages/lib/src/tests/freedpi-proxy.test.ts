@@ -16,8 +16,8 @@
 
 import { describe, it, expect, afterEach } from 'bun:test';
 import { connect } from 'bun';
-import { createFreeDpiProxy, parseConnect } from '../lib/freedpi/proxy.js';
-import type { FreeDpiProxy } from '../lib/freedpi/types.js';
+import { createFreeDpiProxy, parseConnect } from '../freedpi/proxy.js';
+import type { FreeDpiProxy } from '../freedpi/types.js';
 
 const running: FreeDpiProxy[] = [];
 

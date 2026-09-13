@@ -15,7 +15,7 @@
  */
 
 import type { FontSubsetFace, FontSubsetRequest, FontSubsetResult } from '@yaar/shared';
-import { subsetFace } from '../../lib/fonts/index.js';
+import { subsetFace } from '@yaar/lib/fonts';
 import { listFaces, listFamilies, loadFace, matchWeight, type ServedFace } from './catalog.js';
 
 export { listFaces, listFamilies, matchWeight, resetFontCatalogForTest } from './catalog.js';

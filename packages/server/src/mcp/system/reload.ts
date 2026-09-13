@@ -8,7 +8,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ok } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import type { ReloadCache } from '../../reload/cache.js';

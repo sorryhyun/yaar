@@ -191,7 +191,7 @@ describe('invoke yaar://http — the saveTo gate', () => {
 /**
  * The whole path, over a real socket.
  *
- * Loopback is deliberately allowed through SSRF (`isLoopback` in lib/ssrf.ts), so the
+ * Loopback is deliberately allowed through SSRF (`isLoopback` in @yaar/lib/ssrf), so the
  * fetch, the sniff, the shaping and the storage write can all be exercised for real
  * rather than around a mocked `performFetch` — which is the only way to catch the two
  * callers diverging, since it is the *same* `invoke` serving both.

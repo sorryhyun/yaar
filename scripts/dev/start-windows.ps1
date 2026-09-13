@@ -17,6 +17,8 @@ Write-Host "Using provider: $Provider"
 # Build prerequisite packages
 Write-Host "Building shared package..."
 bun run --filter @yaar/shared build
+Write-Host "Building lib package..."
+bun run --filter @yaar/lib build
 Write-Host "Building compiler package..."
 bun run --filter @yaar/compiler build
 Write-Host "Building frontend..."

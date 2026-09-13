@@ -66,3 +66,21 @@ export function getFrontendDist(): string {
 }
 
 export const FRONTEND_DIST = getFrontendDist();
+
+/**
+ * Where this installation's poppler binaries live, or `undefined` to let node-poppler
+ * find them on PATH.
+ *
+ * - Bundled exe: `./poppler/` alongside the executable
+ * - Development: `undefined`
+ *
+ * `@yaar/lib/pdf` takes this as a parameter because it cannot tell a source checkout
+ * from a bundled exe — that distinction is `IS_BUNDLED_EXE`, and it is ours. Callers
+ * go through `features/pdf.ts`, which binds it once.
+ */
+export function getPopplerBinDir(): string | undefined {
+  if (IS_BUNDLED_EXE) {
+    return join(dirname(process.execPath), 'poppler');
+  }
+  return undefined;
+}

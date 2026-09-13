@@ -3,7 +3,7 @@
  */
 
 import type { SessionId } from '@yaar/shared';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 
 // Re-export from shared for backward compatibility
 export type { SessionId } from '@yaar/shared';

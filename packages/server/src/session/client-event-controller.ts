@@ -32,7 +32,7 @@ import type { SurfaceRegistry } from './surface-state.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { actionEmitter } from './action-emitter.js';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import type { SessionId } from './types.js';

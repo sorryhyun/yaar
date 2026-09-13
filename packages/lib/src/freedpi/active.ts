@@ -2,10 +2,10 @@
  * The running bypass proxy, published for the two things that route through it.
  *
  * A module-level holder rather than a parameter threaded down, because the consumers
- * are leaves that nothing hands a lifecycle to: `lib/browser/chrome.ts` builds Chrome's
- * argv, and `lib/ssrf.ts` is a standalone utility. Importing the lifecycle from either
- * would invert the dependency and, in `ssrf.ts`'s case, drag the whole server graph into
- * a module that deliberately has almost none.
+ * are leaves that nothing hands a lifecycle to: the server's `lib/browser/chrome.ts`
+ * builds Chrome's argv, and `ssrf.ts` is a standalone utility. Importing the lifecycle
+ * from either would invert the dependency and, in `ssrf.ts`'s case, drag the whole
+ * server graph into a module that deliberately has almost none.
  *
  * Null whenever `YAAR_FREEDPI=0` turned the proxy off or it failed to bind, and every
  * reader treats null as "route normally" — so a bypass that will not start is the same

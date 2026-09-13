@@ -1,0 +1,91 @@
+{
+  "name": "@yaar/lib",
+  "version": "0.19.1",
+  "private": true,
+  "type": "module",
+  "description": "Bytes-in/bytes-out and process-shaped utilities with no YAAR domain knowledge",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./fonts": {
+      "types": "./dist/fonts/index.d.ts",
+      "import": "./dist/fonts/index.js"
+    },
+    "./freedpi": {
+      "types": "./dist/freedpi/index.d.ts",
+      "import": "./dist/freedpi/index.js"
+    },
+    "./ytdlp": {
+      "types": "./dist/ytdlp/index.d.ts",
+      "import": "./dist/ytdlp/index.js"
+    },
+    "./pdf": {
+      "types": "./dist/pdf/index.d.ts",
+      "import": "./dist/pdf/index.js"
+    },
+    "./tunnel": {
+      "types": "./dist/tunnel/index.d.ts",
+      "import": "./dist/tunnel/index.js"
+    },
+    "./download": {
+      "types": "./dist/download/index.d.ts",
+      "import": "./dist/download/index.js"
+    },
+    "./ssrf": {
+      "types": "./dist/ssrf.d.ts",
+      "import": "./dist/ssrf.js"
+    },
+    "./image": {
+      "types": "./dist/image.d.ts",
+      "import": "./dist/image.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./ids": {
+      "types": "./dist/ids.d.ts",
+      "import": "./dist/ids.js"
+    },
+    "./open-url": {
+      "types": "./dist/open-url.d.ts",
+      "import": "./dist/open-url.js"
+    },
+    "./pick-directory": {
+      "types": "./dist/pick-directory.d.ts",
+      "import": "./dist/pick-directory.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prebuild": "bun run ../../scripts/build/ensure-deps-built.ts shared",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared",
+    "test": "bun test src",
+    "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "dev": "tsc -p tsconfig.build.json --watch"
+  },
+  "dependencies": {
+    "@yaar/shared": "workspace:*",
+    "node-poppler": "^9.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "bun-types": "catalog:",
+    "eslint": "catalog:",
+    "globals": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  }
+}

@@ -12,7 +12,7 @@
 import type { VerbResult } from '../uri-registry.js';
 import type { ResolvedUri } from '../uri-resolve.js';
 import { okJson, okLinks, error } from '../utils.js';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { getAppDatabase, type DbFilter, type DbFindOptions } from '../../db/index.js';
 import { parseAppDbPath } from './paths.js';

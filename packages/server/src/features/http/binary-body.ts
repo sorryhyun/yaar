@@ -18,7 +18,7 @@
  * always done for the same bytes), and are they small enough to be worth inlining at all.
  */
 
-import { toWebPForModel } from '../../lib/image.js';
+import { toWebPForModel } from '@yaar/lib/image';
 import { isTextContentType } from './fetch.js';
 
 /**

@@ -21,7 +21,7 @@ import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
 import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator/index.js';
-import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
+import { type ImageMediaType, parseDataUrl } from '@yaar/lib/image';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('ClaudeSessionProvider');

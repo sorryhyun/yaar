@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { HostPolicy, canReplay, escalate, type ReplayState } from '../lib/freedpi/policy.js';
+import { HostPolicy, canReplay, escalate, type ReplayState } from '../freedpi/policy.js';
 
 /** A controllable clock, so TTL behaviour is asserted rather than waited for. */
 function clock(start = 1_000) {

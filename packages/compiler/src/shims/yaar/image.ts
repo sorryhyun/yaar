@@ -11,7 +11,7 @@
  * the next app that publishes a render or uploads a photo. This is those lines, once.
  *
  * Deliberately NOT the same thing as the server-side re-encode in
- * `packages/server/src/lib/image.ts`: that one runs on bytes already on their way into
+ * `packages/lib/src/image.ts`: that one runs on bytes already on their way into
  * a model context and is not something an app can call. This one is for an app holding
  * pixels it is about to store, send, or show.
  */

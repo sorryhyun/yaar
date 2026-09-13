@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench claude-bench codex-types design design-preview
+.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench codex-types design design-preview
 
 # GNU make on Windows runs recipes with cmd.exe by default, which can't parse
 # the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
@@ -79,6 +79,10 @@ test-server:
 # Run shared tests
 test-shared:
 	bun run --filter @yaar/shared test
+
+# Run lib tests (packages/lib/ — the bytes-in/bytes-out utilities)
+test-lib:
+	bun run --filter @yaar/lib test
 
 # Run integration/security tests (packages/tests/)
 test-integration:

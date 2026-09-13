@@ -12,8 +12,8 @@
  *
  * The root bunfig fixes the environment half by preloading `test/env.ts` first
  * (order there is load-bearing — it has to win before `config/env.ts` freezes
- * `IS_REMOTE`). This file covers the rest: two packages need setup beyond the
- * environment, and neither can be loaded unconditionally.
+ * `IS_REMOTE`). This file covers the rest: two of the six packages need setup
+ * beyond the environment, and neither can be loaded unconditionally.
  *
  *   - **frontend** installs happy-dom's globals. Loading that for every root run
  *     would change what the *compiler* tests see: `shims/yaar/define-app.ts`
@@ -46,7 +46,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Setup a package needs beyond the pinned environment, keyed by package dir name. */
+/**
+ * Setup a package needs beyond the pinned environment, keyed by package dir name.
+ *
+ * Absence is the normal case and means "the pinned environment is enough": `shared`,
+ * `compiler`, `lib` and `tests` are plain units — no DOM, no generated fixtures — so
+ * they are deliberately not listed rather than listed with a no-op. Add a package here
+ * only when its tests need something a preload can install, and say why.
+ */
 const PACKAGE_SETUP: Record<string, () => Promise<unknown>> = {
   // Relative specifiers, not a path joined at runtime: they resolve against this
   // module's URL on every platform, and stay greppable from the files they name.
@@ -66,11 +73,12 @@ if (pkg) {
  * Run the anchored package's own `pretest` script, which `bun test` skips.
  *
  * `bun run test` executes npm lifecycle hooks; `bun test` is the runner itself and
- * executes none. Four of the five packages declare `pretest: ensure-deps-built.ts
- * shared [compiler]`, because `@yaar/shared` and `@yaar/compiler` are consumed as
- * `dist/` — so without this a root `bun test` silently tests whatever build happened
- * to be lying around, or fails with `Cannot find module` in a fresh clone. Stale
- * dependencies are the same silent-wrongness this preload exists to rule out.
+ * executes none. Five of the six packages declare `pretest: ensure-deps-built.ts
+ * shared [lib] [compiler]`, because `@yaar/shared`, `@yaar/lib` and `@yaar/compiler`
+ * are consumed as `dist/` — so without this a root `bun test` silently tests whatever
+ * build happened to be lying around, or fails with `Cannot find module` in a fresh
+ * clone. Stale dependencies are the same silent-wrongness this preload exists to rule
+ * out.
  *
  * Invoked by *script name* rather than by reimplementing the command, so a package
  * that changes its pretest gets that change here for free. `build/ensure-deps-built.ts`

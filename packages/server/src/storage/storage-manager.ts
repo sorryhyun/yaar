@@ -7,8 +7,8 @@
 import { mkdir, readdir, unlink, rename, rm, stat, realpath } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { join, normalize, relative, dirname, extname } from 'path';
-import { pdfToImages, pdfToText, getPdfPageCount } from '../lib/pdf/index.js';
-import { toWebPForModel } from '../lib/image.js';
+import { pdfToImages, pdfToText, getPdfPageCount } from '../features/pdf.js';
+import { toWebPForModel } from '@yaar/lib/image';
 import {
   STORAGE_DIR,
   getConfigDir,

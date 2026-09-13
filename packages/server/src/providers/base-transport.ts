@@ -14,7 +14,7 @@ import type {
   TransportOptions,
   ProviderType,
 } from './types.js';
-import { errMessage } from '../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 
 /**
  * Successful CLI probes, keyed by command line. A binary that answered

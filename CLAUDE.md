@@ -39,7 +39,7 @@ bun run build:apps [appId...] [--typecheck]  # Compile stale apps, or the named 
 bun run check:apps                           # App guardrail lint (no localStorage, etc.)
 
 # Testing (details: the yaar-testing skill)
-bun run --filter @yaar/<pkg> test    # Per-package: frontend, server, shared, compiler, tests
+bun run --filter @yaar/<pkg> test    # Per-package: frontend, server, shared, lib, compiler, tests
 bun run test                         # Everything (what CI runs)
 
 # Standalone executable (requires Bun)
@@ -102,6 +102,7 @@ yaar/
 ├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events, Component DSL)
+│   ├── lib/           # Generic utilities with no YAAR domain knowledge (fonts, pdf, ssrf, freedpi, tunnel, ytdlp)
 │   ├── compiler/      # App compiler (@bundled/* resolution, Bun.build, typecheck)
 │   ├── server/        # TypeScript WebSocket server
 │   └── frontend/      # React frontend
@@ -114,8 +115,15 @@ yaar/
 @yaar/frontend ──────┐
                       ├──> @yaar/shared (Zod v4 schemas, types)
 @yaar/server ──┬─────┘
-               └──> @yaar/compiler ──> @yaar/shared
+               ├──> @yaar/compiler ──> @yaar/shared
+               └──> @yaar/lib ──────> @yaar/shared
 ```
+
+`@yaar/lib` is the utilities that are **not about YAAR** — a font subsetter, a PDF rasterizer,
+an SSRF guard, a DPI-bypassing proxy, a tunnel driver. The arrow only points one way: nothing
+in `@yaar/lib` may import from the server, which is what stops "standalone utility" from being
+a claim in a comment. See `packages/lib/CLAUDE.md` for the rule and how a module that reads
+`config/` gets inverted to fit.
 
 ## Architecture
 
@@ -149,15 +157,19 @@ See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture
 
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
-- **`lib/`** — Standalone utilities with no server internal dependencies:
-  - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability). Sessions are named and process-shaped: a persisted profile, a record that outlives the socket (`session-store.ts`), an idle sweep that spares a watched tab, and crash-restart with URL replay. Listed and killable at `yaar://system/browsers`
-  - `pdf/` — PDF rendering via poppler
-  - `ytdlp/` — optional yt-dlp binary wrapper (discovered on PATH/`~/.local/bin`/`YTDLP_PATH`, never bundled) behind `yaar://system/ytdlp`: YouTube audio download into the storage commons, with async jobs in `features/ytdlp/`
-  - `tunnel/` — Tailscale Serve tunnel setup for remote mode
-  - `download/` — chunked file download handling
-  - `ssrf.ts` — SSRF protection (URL validation, safe fetch with redirect following)
-  - `image.ts` — data-URL image parsing, plus `toWebPForModel()` — the WebP re-encode storage image reads and PDF rasterization apply on the way into a model context
-  - plus single-file utilities: `ids.ts`, `open-url.ts`, `pick-directory.ts`, `format-interaction.ts`, `format-verb-log.ts`, `yaar-uri-server.ts`
+- **`lib/`** — What is left after the generic half moved to `@yaar/lib`: utilities that need server internals and so cannot leave.
+  - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability). Sessions are named and process-shaped: a persisted profile, a record that outlives the socket (`session-store.ts`), an idle sweep that spares a watched tab, and crash-restart with URL replay. Listed and killable at `yaar://system/browsers`. Stays here because it reads `config.js` for the debug port, the profile dir and the idle sweep — a YAAR subsystem that speaks CDP, not a CDP library
+  - `yaar-uri-server.ts`, `schema-refs.ts`, `command-signature.ts`, `protocol-index.ts`, `format-interaction.ts`, `format-verb-log.ts` — all of them about YAAR's own URIs, protocols and logs
+- **`@yaar/lib`** (`packages/lib/`, a separate package) — the generic half, imported by subpath:
+  - `@yaar/lib/pdf` — PDF rendering via poppler. Takes `binDir`; the server binds it once in `features/pdf.ts`, which is where server code imports PDF from
+  - `@yaar/lib/ytdlp` — optional yt-dlp binary wrapper (discovered on PATH/`~/.local/bin`/`YTDLP_PATH`, never bundled) behind `yaar://system/ytdlp`: YouTube audio download into the storage commons, with async jobs in the server's `features/ytdlp/`
+  - `@yaar/lib/tunnel` — Tailscale Serve tunnel setup for remote mode. `loadTunnelConfig(configDir)` takes the directory; `lifecycle.ts` passes `getConfigDir()`
+  - `@yaar/lib/freedpi` — the fragmenting CONNECT proxy behind `YAAR_FREEDPI`
+  - `@yaar/lib/fonts` — OpenType reader plus CFF and glyf subsetters; the served-face catalog is the server's `features/fonts/`
+  - `@yaar/lib/download` — chunked file download handling
+  - `@yaar/lib/ssrf` — SSRF protection (URL validation, safe fetch with redirect following)
+  - `@yaar/lib/image` — data-URL image parsing, plus `toWebPForModel()` — the WebP re-encode storage image reads and PDF rasterization apply on the way into a model context
+  - plus `@yaar/lib/ids`, `@yaar/lib/errors`, `@yaar/lib/open-url`, `@yaar/lib/pick-directory`
 - **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`. Each launch mints one eagerly, so each launch also prunes the ones that recorded nothing first (`logging/prune.ts`, `YAAR_KEEP_EMPTY_SESSIONS=1` to keep them)
 
 ### Connection Lifecycle

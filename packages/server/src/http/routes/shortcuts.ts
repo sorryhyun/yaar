@@ -15,7 +15,7 @@ import {
 } from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
 import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
-import { genId } from '../../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { requirePermission, resolvePrincipal } from '../access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 

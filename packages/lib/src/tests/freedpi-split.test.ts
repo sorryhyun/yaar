@@ -19,7 +19,7 @@ import {
   planSplit,
   recordsFor,
   segmentsFor,
-} from '../lib/freedpi/split.js';
+} from '../freedpi/split.js';
 
 /** A synthetic ClientHello: real framing, the hostname where SNI would put it. */
 function clientHello(host: string): Uint8Array {

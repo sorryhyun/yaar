@@ -17,7 +17,7 @@ import { ServerEventType, type BrowserTabSummary, type OSAction } from '@yaar/sh
 import { handleCreate as handleWindowCreate } from '../window/create.js';
 import { storageWriteStream } from '../../storage/storage-manager.js';
 import { rm } from 'node:fs/promises';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { extname } from 'node:path';
 
 type Payload = Record<string, unknown>;

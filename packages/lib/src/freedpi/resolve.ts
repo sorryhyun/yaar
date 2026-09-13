@@ -15,7 +15,7 @@
  * the caller sees the failure it would have seen anyway — whereas refusing to answer
  * turns a working direct path into a 502.
  *
- * That independence is exactly why the guard has to live here. `lib/ssrf.ts`'s
+ * That independence is exactly why the guard has to live here. `ssrf.ts`'s
  * `validateUrl` inspects the hostname a *caller* passed; once traffic is tunnelled, the
  * address actually dialed is the one this module resolved, and nothing upstream has
  * seen it. Re-checking here is what stops `CONNECT internal.corp:443` — or a public
@@ -33,7 +33,7 @@ export const DEFAULT_DOH_URL = 'https://cloudflare-dns.com/dns-query';
 const TYPE_A = 1;
 
 /**
- * Internal IPv6 space, which `lib/ssrf.ts` does not enumerate because until the system
+ * Internal IPv6 space, which `ssrf.ts` does not enumerate because until the system
  * fallback existed nothing here could produce a v6 address — DoH is asked for `A` only.
  *
  *   - `fc00::/7` — unique-local, the v6 equivalent of `10.0.0.0/8`.
@@ -60,7 +60,7 @@ function unwrapV4Mapped(address: string): string {
  * the port inherits its reach. It exists to carry traffic to censored *public* hosts,
  * and nothing it legitimately carries is on this machine.
  *
- * The v6 rules are here rather than in `lib/ssrf.ts` because this is the only caller
+ * The v6 rules are here rather than in `ssrf.ts` because this is the only caller
  * that can see a v6 address: DoH answers `A` records, so a v6 target can only arrive
  * from the system-resolver fallback below.
  */

@@ -69,7 +69,7 @@ export async function describeStoragePath(uri: string, path: string): Promise<Ve
   // A PDF is the one file type whose read has options worth naming up front: reading
   // it plain returns metadata and a "open it in a window" steer, and an agent that
   // wants the content has to know which of the two opt-ins it needs.
-  const { getPdfPageCount } = await import('../lib/pdf/index.js');
+  const { getPdfPageCount } = await import('../features/pdf.js');
   let pages: number | undefined;
   try {
     pages = await getPdfPageCount(resolved.absolutePath);

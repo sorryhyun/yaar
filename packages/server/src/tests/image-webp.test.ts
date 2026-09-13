@@ -10,7 +10,7 @@ import { describe, it, expect, afterAll } from 'bun:test';
 import { deflateSync } from 'zlib';
 import { rm, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { toWebPForModel } from '../lib/image.js';
+import { toWebPForModel } from '@yaar/lib/image';
 import { STORAGE_DIR } from '../config.js';
 import { ensureStorageDir, storageRead } from '../storage/storage-manager.js';
 

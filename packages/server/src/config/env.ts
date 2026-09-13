@@ -226,7 +226,7 @@ export function setPort(p: number): void {
 export const IS_REMOTE = process.env.REMOTE === '1';
 
 /**
- * DPI bypass — route TLS through a local fragmenting CONNECT proxy (`lib/freedpi/`).
+ * DPI bypass — route TLS through a local fragmenting CONNECT proxy (`@yaar/lib/freedpi`).
  *
  * **Default on.** `YAAR_FREEDPI=0` forces it off.
  *
@@ -237,7 +237,7 @@ export const IS_REMOTE = process.env.REMOTE === '1';
  *
  * Defaulting on is affordable because the bypass costs nothing until it is used. Every
  * host starts on the direct path and only an injected-looking reset moves it off
- * (`lib/freedpi/policy.ts`), so an unblocked network pays one extra loopback hop and
+ * (`@yaar/lib/freedpi`'s policy), so an unblocked network pays one extra loopback hop and
  * keeps its latency. What the flag being on does change unconditionally is name
  * resolution — DoH rather than the system resolver — which is why `resolve.ts` falls
  * back to the system resolver instead of failing the connection when DoH cannot answer.

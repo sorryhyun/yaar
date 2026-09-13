@@ -132,6 +132,7 @@ src/
 │   ├── http/             # fetch.ts — proxied HTTP fetch; binary-body.ts — what a *model* gets
 │   │                     #   when the response is bytes (an app still gets the base64 envelope)
 │   ├── market/ session/ skills/ user/   # Marketplace, session ops, skills, clipboard + secret-scan
+│   ├── pdf.ts            # @yaar/lib/pdf bound to this install's poppler — the PDF import site
 │   ├── update/           # Self-update: semver.ts, release.ts, installer.ts, updater.ts
 │   └── window/           # Window create/update/manage, app protocol, app query/command, delegated-grants, subscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
@@ -139,20 +140,32 @@ src/
 ├── observability/        # log.ts — structured logging; the ONLY sanctioned console.* in the server
 ├── logging/              # Session logging (JSONL), reading, context/window restore, empty-log prune
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts, app-grants.ts
-└── lib/                  # Standalone utilities (no server internal imports)
-    ├── browser/ pdf/ tunnel/ download/
-    ├── ytdlp/                 # Optional yt-dlp binary wrapper (discovered, never bundled) —
-    │                          #   resolve + audio download; jobs/policy live in features/ytdlp/
-    ├── fonts/                 # OpenType reader + CFF and glyf subsetters — bytes in, bytes out
-    │                          #   (the catalog and loading are features/fonts/)
-    ├── ssrf.ts               # URL validation, safe fetch with redirect following
-    ├── image.ts              # data-URL parsing + toWebPForModel()
+└── lib/                  # Utilities that need server internals (the generic half is @yaar/lib, see below)
+    ├── browser/              # CDP browser automation — Chrome discovery, sessions, pool, downloads
     ├── schema-refs.ts        # resolveRef/selfContained — following a protocol schema's `$defs` pointers
     ├── command-signature.ts  # Rendered call signatures for protocol commands
     ├── protocol-index.ts     # First-sentence summarization for command indexes
-    ├── format-interaction.ts / format-verb-log.ts / ids.ts / errors.ts / open-url.ts / pick-directory.ts
+    ├── format-interaction.ts / format-verb-log.ts
     └── yaar-uri-server.ts    # Server-only URI parsers (content path, window resource, config, session)
 ```
+
+**The rest of `lib/` is now `@yaar/lib`** (`packages/lib/`, its own CLAUDE.md). Anything that
+could be described without the word "YAAR" moved there so that the boundary this directory's
+header claims — "no server internal imports" — is enforced by the module graph rather than by
+reviewers remembering it: `fonts/`, `pdf/`, `tunnel/`, `download/`, `ytdlp/`, `freedpi/`,
+`ssrf.ts`, `image.ts`, `ids.ts`, `errors.ts`, `open-url.ts`, `pick-directory.ts`. Import them
+by subpath (`@yaar/lib/ssrf`, `@yaar/lib/fonts`, …).
+
+Two of them take as a parameter what they used to read from `config.js`, which is the shape
+every future extraction takes:
+
+| Moved module | Was | Now | Server side |
+| --- | --- | --- | --- |
+| `@yaar/lib/pdf` | `IS_BUNDLED_EXE` | `binDir` option | `features/pdf.ts` binds `getPopplerBinDir()` once — **import PDF from there**, not from `@yaar/lib/pdf` |
+| `@yaar/lib/tunnel` | `getConfigDir()` | `loadTunnelConfig(configDir)` | `lifecycle.ts` passes `getConfigDir()` |
+
+`browser/` stays because it reads `config.js` for the debug port, the profile directory and
+the idle sweep — it is a YAAR subsystem that happens to speak CDP, not a CDP library.
 
 ## Architecture
 

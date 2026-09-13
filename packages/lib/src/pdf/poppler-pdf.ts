@@ -6,32 +6,36 @@
  */
 
 import { Poppler } from 'node-poppler';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { tmpdir } from 'os';
 import { readdir, rm, mkdir } from 'fs/promises';
-import { IS_BUNDLED_EXE } from '../../config.js';
 import { toWebPForModel } from '../image.js';
 
 /**
- * Get the path to poppler binaries.
- * - Bundled exe: ./poppler/ alongside the executable
- * - Development: undefined (uses node-poppler's auto-detection)
+ * Where this installation keeps its `pdftocairo`/`pdftotext`/`pdfinfo` binaries.
+ *
+ * Omit it and node-poppler auto-detects from PATH, which is what a source checkout
+ * wants. A build that ships its own copy of poppler has to say so — and only the host
+ * application knows whether it is such a build, which is why this is a parameter
+ * rather than something this module works out for itself.
  */
-function getPopplerPath(): string | undefined {
-  if (IS_BUNDLED_EXE) {
-    return join(dirname(process.execPath), 'poppler');
-  }
-  return undefined;
+export interface PopplerOptions {
+  binDir?: string;
 }
 
-// Lazy-initialized poppler instance
-let popplerInstance: Poppler | null = null;
+// Lazy-initialized poppler instances, one per bin directory. Keyed rather than a single
+// singleton so that two callers disagreeing about `binDir` get two Popplers instead of
+// whichever one asked first winning for the life of the process.
+const popplerInstances = new Map<string, Poppler>();
 
-function getPoppler(): Poppler {
-  if (!popplerInstance) {
-    popplerInstance = new Poppler(getPopplerPath());
+function getPoppler(binDir?: string): Poppler {
+  const key = binDir ?? '';
+  let instance = popplerInstances.get(key);
+  if (!instance) {
+    instance = new Poppler(binDir);
+    popplerInstances.set(key, instance);
   }
-  return popplerInstance;
+  return instance;
 }
 
 /**
@@ -66,9 +70,9 @@ export async function pdfToImages(
   pdfPath: string,
   scale: number = 1.5,
   range?: PdfPageRange,
-  opts?: { raw?: boolean },
+  opts?: PopplerOptions & { raw?: boolean },
 ): Promise<PdfPageImage[]> {
-  const poppler = getPoppler();
+  const poppler = getPoppler(opts?.binDir);
   const images: PdfPageImage[] = [];
 
   const tempDir = join(tmpdir(), `yaar-pdf-${crypto.randomUUID()}`);
@@ -125,8 +129,9 @@ export async function renderPdfPage(
   pdfPath: string,
   pageNumber: number,
   scale: number = 1.5,
+  opts?: PopplerOptions,
 ): Promise<Buffer> {
-  const poppler = getPoppler();
+  const poppler = getPoppler(opts?.binDir);
 
   const tempDir = join(tmpdir(), `yaar-pdf-${crypto.randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
@@ -162,8 +167,12 @@ export async function renderPdfPage(
  * Extract the text layer of a PDF (via pdftotext). Without a range, extracts the whole document.
  * Returns an empty string for scanned/image-only PDFs that carry no text layer.
  */
-export async function pdfToText(pdfPath: string, range?: PdfPageRange): Promise<string> {
-  const poppler = getPoppler();
+export async function pdfToText(
+  pdfPath: string,
+  range?: PdfPageRange,
+  opts?: PopplerOptions,
+): Promise<string> {
+  const poppler = getPoppler(opts?.binDir);
   const options: Record<string, unknown> = {};
   if (range?.firstPage !== undefined) options.firstPageToConvert = range.firstPage;
   if (range?.lastPage !== undefined) options.lastPageToConvert = range.lastPage;
@@ -175,8 +184,8 @@ export async function pdfToText(pdfPath: string, range?: PdfPageRange): Promise<
 /**
  * Get the number of pages in a PDF.
  */
-export async function getPdfPageCount(pdfPath: string): Promise<number> {
-  const poppler = getPoppler();
+export async function getPdfPageCount(pdfPath: string, opts?: PopplerOptions): Promise<number> {
+  const poppler = getPoppler(opts?.binDir);
 
   try {
     const info = await poppler.pdfInfo(pdfPath);

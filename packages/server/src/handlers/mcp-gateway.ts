@@ -14,7 +14,7 @@ import { ok, okJson, error } from './utils.js';
 import { getMcpClientManager } from '../mcp/external/index.js';
 import type { McpServerConfig } from '../mcp/external/types.js';
 import { storageWrite } from '../storage/index.js';
-import { genStamp } from '../lib/ids.js';
+import { genStamp } from '@yaar/lib/ids';
 
 /** File extension for a persisted image, derived from its MIME type. */
 const IMAGE_EXT: Record<string, string> = {

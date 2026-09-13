@@ -4,8 +4,8 @@
  *
  * Screenshots are already WebP by the time they get here — captured that way on the
  * frontend (`iframe-scripts/capture.ts`) and requested that way over CDP
- * (`lib/browser/session.ts`). The two paths that were not are files read off disk
- * and PDF pages rasterized by poppler, and both feed a *vision model*, not a
+ * (the server's `lib/browser/session.ts`). The two paths that were not are files
+ * read off disk and PDF pages rasterized by poppler, and both feed a *vision model*, not a
  * pixel-diff: a lossless PNG spends context tokens, upload latency and API cost on
  * fidelity nothing downstream can use.
  */
@@ -29,8 +29,8 @@ export function parseDataUrl(dataUrl: string): { mediaType: ImageMediaType; data
  *
  * High enough that rasterized PDF text and UI screenshots stay legible, low enough
  * that the saving over PNG is the 60–80% that motivates doing this at all. Deliberately
- * below `SCREENSHOT_QUALITY` (95) in `lib/browser/session.ts`: that one re-encodes an
- * image that is *already* WebP, where the only question is downscaling loss.
+ * below `SCREENSHOT_QUALITY` (95) in the server's `lib/browser/session.ts`: that one
+ * re-encodes an image that is *already* WebP, where the only question is downscaling loss.
  */
 const MODEL_WEBP_QUALITY = 85;
 

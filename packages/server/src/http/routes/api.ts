@@ -9,7 +9,7 @@ import { listApps } from '../../features/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { readSettings } from '../../storage/settings.js';
-import { pickDirectory } from '../../lib/pick-directory.js';
+import { pickDirectory } from '@yaar/lib/pick-directory';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
 import { checkEmbeddable } from '../../features/http/embeddable.js';

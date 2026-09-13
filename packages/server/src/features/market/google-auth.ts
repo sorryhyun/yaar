@@ -30,7 +30,7 @@
 import { join, dirname } from 'path';
 import { mkdir, readFile, writeFile, unlink, chmod } from 'fs/promises';
 import { getConfigDir, getPort, GOOGLE_CLIENT_ID, MARKET_URL } from '../../config.js';
-import { openUrl } from '../../lib/open-url.js';
+import { openUrl } from '@yaar/lib/open-url';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('market');

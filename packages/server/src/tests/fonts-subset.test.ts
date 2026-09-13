@@ -3,7 +3,7 @@ import { join } from 'path';
 import { PROJECT_ROOT } from '../config/env.js';
 import { permissionsAllow } from '../http/access.js';
 import { initRegistry } from '../handlers/index.js';
-import { parseOpenType, inspectCff, subsetGlyf } from '../lib/fonts/index.js';
+import { parseOpenType, inspectCff, subsetGlyf } from '@yaar/lib/fonts';
 import {
   listFaces,
   listFamilies,
@@ -248,7 +248,7 @@ describe('the yaar://system/fonts door', () => {
 
 describe('subsetting the monospace face', () => {
   /**
-   * D2Coding is TrueType, NanumSquareNeo is CFF — which is why `lib/fonts/`
+   * D2Coding is TrueType, NanumSquareNeo is CFF — which is why `@yaar/lib/fonts`
    * carries a subsetter for each. This is the only coverage the `glyf` path gets
    * against a real 26,000-glyph font rather than the fixture below.
    */

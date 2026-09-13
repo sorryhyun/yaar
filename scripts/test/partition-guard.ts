@@ -46,8 +46,10 @@
  *
  * Wired from the root `bunfig.toml` (which is where the cross-package and whole-package mixes
  * come from) and from `packages/server/bunfig.toml` (where `bun test src/tests` mixes the
- * server's own suites). The other packages are each a single partition, so there is nothing
- * there for this to catch.
+ * server's own suites). Every other package is a single partition, so a run confined to one
+ * of them has nothing here to catch — `packages/lib/bunfig.toml` still preloads it, cheaply
+ * and on purpose: the guard is what turns a *cross*-package run that drags those files in
+ * into an error rather than an answer, wherever that run was launched from.
  */
 
 import { readFileSync, writeSync } from 'node:fs';

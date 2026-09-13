@@ -2,7 +2,7 @@
  * The guard that keeps the bypass proxy from widening SSRF, and the DoH resolver.
  *
  * Worth its own file because the hole it closes is invisible from the call sites.
- * `lib/ssrf.ts` validates the hostname a caller passed; a tunnelled request is dialed
+ * `@yaar/lib/ssrf` validates the hostname a caller passed; a tunnelled request is dialed
  * at an address *this* subsystem resolved, which no earlier check has seen. So the
  * interesting case is not `CONNECT 10.0.0.1:443` — it is a perfectly public name whose
  * A record points into private space, which `validateUrl` would wave through because
@@ -19,12 +19,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { IS_FREEDPI } from '../config.js';
-import {
-  DohResolver,
-  isIpLiteral,
-  refusalForAddress,
-  DEFAULT_DOH_URL,
-} from '../lib/freedpi/resolve.js';
+import { DohResolver, isIpLiteral, refusalForAddress, DEFAULT_DOH_URL } from '@yaar/lib/freedpi';
 
 /** A `fetch` that fails the way an unreachable DoH endpoint does. */
 function deadDoh(calls = { n: 0 }) {

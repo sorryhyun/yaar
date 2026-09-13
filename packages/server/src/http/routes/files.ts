@@ -3,7 +3,7 @@
  */
 
 import { extname } from 'path';
-import { renderPdfPage } from '../../lib/pdf/index.js';
+import { renderPdfPage } from '../../features/pdf.js';
 import { MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';

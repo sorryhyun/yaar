@@ -37,7 +37,7 @@ import {
 import { fetchMe } from '../../features/market/marketplace.js';
 import { resolvePrincipal } from '../access.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {

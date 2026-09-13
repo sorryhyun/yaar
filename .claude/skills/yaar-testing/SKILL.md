@@ -11,7 +11,7 @@ paths:
 ## Commands
 
 - Per-package: `bun run --filter @yaar/<pkg> test` — `<pkg>` is `frontend`, `server`, `shared`,
-  `compiler`, or `tests` (the integration/security package). Each has its own `test` script in
+  `lib`, `compiler`, or `tests` (the integration/security package). Each has its own `test` script in
   its `package.json`.
 - Single path from repo root: `bun test <path>`. Works for any path that is *one* partition
   (see below); a mixed path is refused.

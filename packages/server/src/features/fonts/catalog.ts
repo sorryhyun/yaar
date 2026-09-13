@@ -9,7 +9,7 @@
  * `data:` URL `@font-face` is honoured. A whole face is ~1.6 MB, so inlining one
  * is only practical subsetted, and subsetting needs the bytes.
  *
- * So this module is the catalog and the loader; `lib/fonts/` is the subsetter it
+ * So this module is the catalog and the loader; `@yaar/lib/fonts` is the subsetter it
  * feeds; `handlers/fonts.ts` is the door.
  *
  * ## A face nobody shipped is simply absent
@@ -24,7 +24,7 @@
 import { getFrontendAsset } from '../../config.js';
 import { createLogger } from '../../observability/log.js';
 import type { FontFamilySummary, ServedFontFace } from '@yaar/shared';
-import { parseOpenType, type OpenTypeFont } from '../../lib/fonts/index.js';
+import { parseOpenType, type OpenTypeFont } from '@yaar/lib/fonts';
 
 const log = createLogger('Fonts');
 
@@ -37,7 +37,7 @@ export type ServedFace = ServedFontFace;
  * Order matters only for readability; matching is by family and weight.
  *
  * NanumSquareNeo is CFF-flavoured (`OTTO`) and D2Coding is TrueType, which is
- * not an accident of packaging — it is why `lib/fonts/` carries a subsetter for
+ * not an accident of packaging — it is why `@yaar/lib/fonts` carries a subsetter for
  * each. Both are the upstream releases, unconverted: a `.woff2` would have
  * needed a Brotli decompressor before a single byte could be read.
  *

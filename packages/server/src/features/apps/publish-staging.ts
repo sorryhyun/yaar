@@ -31,7 +31,7 @@ import { join } from 'path';
 import { mkdir, rm, readFile } from 'fs/promises';
 import { computeSourceHash, computeAppJsonHash } from '@yaar/compiler';
 import { getStorageDir } from '../../config.js';
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { appIdRefusal, resolveAppDir } from './roots.js';
 import { notePublishedVersion, readAppVersion, versionPublishError } from './version.js';
 import { packageAppTarball, uploadTarball, type PublishResult } from './publish.js';

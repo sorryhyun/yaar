@@ -205,7 +205,7 @@ loopback `CONNECT` proxy and points its two outbound paths at it: Chrome gets
 `--proxy-server`, and `safeFetch` gets `fetch`'s `proxy` option.
 
 The countermeasures are a ladder, tried cheapest first, and every host climbs only as far
-as it has to (`Route` in `lib/freedpi/types.ts`):
+as it has to (`Route` in `packages/lib/src/freedpi/types.ts`):
 
 1. **`tlsrec`** — rewrite the ClientHello as two TLS *records*, cut inside the hostname.
    A middlebox that reassembles TCP still gets the whole stream, but a parser that reads
@@ -241,7 +241,7 @@ that resets on SNI usually poisons DNS on the same path; a system answer would b
 block page's address and no amount of fragmentation would help.
 
 Being the default changes what a DoH *failure* has to mean. Every outbound connection the
-server makes is now resolved in `lib/freedpi/resolve.ts`, so a DoH endpoint that is
+server makes is now resolved in `packages/lib/src/freedpi/resolve.ts`, so a DoH endpoint that is
 unreachable — captive portal, a network that blocks `1.1.1.1`, plain offline — would take
 all of them down, and a name with only an `AAAA` record would never resolve at all
 (`type=A` is what is asked for). So a DoH failure falls back to the system resolver
@@ -251,7 +251,7 @@ The fallback cannot leave you worse off than not having the proxy: a poisoned sy
 answer resets the connection and the caller sees the failure it would have seen anyway,
 whereas refusing to answer turns a working direct path into a 502. Because the fallback
 can return a v6 address where DoH never could, `refusalForAddress` carries the v6 rules
-`lib/ssrf.ts` does not — `fc00::/7`, `::`, and `::ffff:` v4-mapped addresses, which it
+`packages/lib/src/ssrf.ts` does not — `fc00::/7`, `::`, and `::ffff:` v4-mapped addresses, which it
 unwraps so they are refused by the same rule as the bare v4 form.
 
 ### The stall is a measurement, not a constant
@@ -298,7 +298,7 @@ therefore re-applies the same rules to the resolved address, and refuses loopbac
 which `safeFetch` deliberately allows: an open `CONNECT` listener lives for the whole server
 run, and anything local that finds the port inherits its reach.
 
-**Source:** `packages/server/src/lib/freedpi/`, `packages/server/src/lib/ssrf.ts`,
+**Source:** `packages/lib/src/freedpi/`, `packages/lib/src/ssrf.ts`,
 `packages/server/src/lib/browser/chrome.ts`, `packages/server/src/lifecycle.ts`
 
 ### Why the download ceiling is separate from the inline one

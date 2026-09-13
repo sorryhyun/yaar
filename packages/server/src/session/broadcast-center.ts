@@ -11,7 +11,7 @@
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from './types.js';
 import { type YaarWebSocket, WS_OPEN } from './types.js';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('BroadcastCenter');

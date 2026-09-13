@@ -2,13 +2,13 @@
 /**
  * Build the workspace packages that other packages consume as compiled output.
  *
- * `@yaar/shared` and `@yaar/compiler` publish `main: dist/index.js`, so in a fresh clone
- * every test and typecheck that imports them fails with `Cannot find module`. Only CI's
- * explicit build steps used to cover this. Wired as `pretest`/`pretypecheck` so the
- * commands that need `dist/` build it themselves. Rebuilds only when `dist/` is missing
+ * `@yaar/shared`, `@yaar/lib` and `@yaar/compiler` publish `main: dist/index.js`, so in a
+ * fresh clone every test and typecheck that imports them fails with `Cannot find module`.
+ * Only CI's explicit build steps used to cover this. Wired as `pretest`/`pretypecheck` so
+ * the commands that need `dist/` build it themselves. Rebuilds only when `dist/` is missing
  * or older than the newest source file.
  *
- * Usage: bun run scripts/build/ensure-deps-built.ts shared compiler
+ * Usage: bun run scripts/build/ensure-deps-built.ts shared lib compiler
  */
 
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs';
@@ -19,6 +19,7 @@ const ROOT = join(import.meta.dir, '..', '..');
 /** Packages this script knows how to build, and the artifact that proves it ran. */
 const TARGETS: Record<string, { dir: string; artifact: string }> = {
   shared: { dir: 'packages/shared', artifact: 'dist/index.js' },
+  lib: { dir: 'packages/lib', artifact: 'dist/index.js' },
   compiler: { dir: 'packages/compiler', artifact: 'dist/index.js' },
 };
 
@@ -121,6 +122,6 @@ if (names.length === 0) {
   console.error('[ensure-deps-built] Usage: ensure-deps-built.ts <package…>');
   process.exit(1);
 }
-// Sequential on purpose: compiler depends on shared, and the argument order is the
-// dependency order.
+// Sequential on purpose: both `lib` and `compiler` depend on `shared` (they do not depend
+// on each other), and the argument order is the dependency order.
 for (const name of names) ensure(name);

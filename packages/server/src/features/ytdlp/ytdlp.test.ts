@@ -18,7 +18,7 @@ import {
   YtDlpRequestError,
   type YtDlpJob,
 } from './jobs.js';
-import { YtDlpError, type DownloadAudioResult } from '../../lib/ytdlp/index.js';
+import { YtDlpError, type DownloadAudioResult } from '@yaar/lib/ytdlp';
 import { ResourceRegistry } from '../../handlers/uri-registry.js';
 import { registerYtDlpHandlers } from '../../handlers/ytdlp.js';
 
@@ -33,7 +33,7 @@ function available(): void {
 }
 
 /** A downloadAudio fake that writes a real tmp file, as the binary would. */
-function fakeDownload(id = 'vid01'): typeof import('../../lib/ytdlp/index.js').downloadAudio {
+function fakeDownload(id = 'vid01'): typeof import('@yaar/lib/ytdlp').downloadAudio {
   return async (_url, destDir): Promise<DownloadAudioResult> => {
     const filePath = join(destDir, `${id}.m4a`);
     await Bun.write(filePath, 'audio-bytes');

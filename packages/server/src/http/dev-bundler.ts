@@ -8,7 +8,7 @@
 import { join } from 'path';
 import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
-import { errMessage } from '../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { registerDevReloadHandler } from './server.js';
 import { createLogger } from '../observability/log.js';
 

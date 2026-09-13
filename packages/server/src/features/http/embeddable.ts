@@ -20,7 +20,7 @@
  * worse outcome than the status quo, which framed everything.
  */
 
-import { safeFetch, validateUrl } from '../../lib/ssrf.js';
+import { safeFetch, validateUrl } from '@yaar/lib/ssrf';
 
 export interface EmbedVerdict {
   embeddable: boolean;

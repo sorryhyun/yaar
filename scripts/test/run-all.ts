@@ -4,10 +4,10 @@
  *
  * This replaces `bun run --filter '*' test` as the definition of `bun run test`. The
  * filter runner is fine at *running* things and useless at reporting them: it interleaves
- * five packages' output line by line behind `@yaar/x test:` prefixes, and it ends wherever
+ * every package's output line by line behind `@yaar/x test:` prefixes, and it ends wherever
  * the slowest package happened to end. So `bun run test | tail` showed a stray log line
  * from whichever suite finished last, and answering "did it pass" meant scrolling past
- * ~2000 lines to find five separate verdicts.
+ * ~2000 lines to find one verdict per package.
  *
  * Two changes, both about the reader:
  *
@@ -72,8 +72,8 @@ async function discover(): Promise<Pkg[]> {
 async function run(pkg: Pkg): Promise<Outcome> {
   const startedAt = Date.now();
   // `bun run test` rather than `bun test`: the packages' `pretest` hooks build the
-  // `dist/` that shared and compiler publish, and several of them ask for the same build
-  // at once — which is why `ensure-deps-built.ts` holds a lock.
+  // `dist/` that shared, lib and compiler publish, and several of them ask for the same
+  // build at once — which is why `ensure-deps-built.ts` holds a lock.
   const proc = Bun.spawn(['bun', 'run', 'test'], {
     cwd: pkg.dir,
     stdout: 'pipe',

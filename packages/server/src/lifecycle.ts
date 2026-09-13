@@ -47,8 +47,8 @@ import {
   DEFAULT_TUNNEL,
   type TunnelConfig,
   type TunnelProvider,
-} from './lib/tunnel/index.js';
-import { createFreeDpiProxy, setActiveFreeDpi, type FreeDpiProxy } from './lib/freedpi/index.js';
+} from '@yaar/lib/tunnel';
+import { createFreeDpiProxy, setActiveFreeDpi, type FreeDpiProxy } from '@yaar/lib/freedpi';
 
 const log = createLogger('lifecycle');
 /** The banner points at "[Tunnel] warnings above", so the tunnel keeps its own name. */
@@ -143,7 +143,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   // sockets exist.
   if (IS_REMOTE) {
     generateRemoteToken();
-    plannedTunnel = loadTunnelConfig() ?? DEFAULT_TUNNEL;
+    plannedTunnel = loadTunnelConfig(getConfigDir()) ?? DEFAULT_TUNNEL;
   }
 
   // Never fatal. A bypass that will not bind leaves every consumer on the direct path,

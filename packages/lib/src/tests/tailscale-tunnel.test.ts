@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { TailscaleTunnel, type CommandResult } from '../lib/tunnel/tailscale-tunnel.js';
+import { TailscaleTunnel, type CommandResult } from '../tunnel/tailscale-tunnel.js';
 
 const ok = (stdout: string): CommandResult => ({ code: 0, stdout, stderr: '' });
 const fail = (stderr: string): CommandResult => ({ code: 1, stdout: '', stderr });

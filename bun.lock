@@ -110,6 +110,24 @@
         "typescript-eslint": "catalog:",
       },
     },
+    "packages/lib": {
+      "name": "@yaar/lib",
+      "version": "0.19.1",
+      "dependencies": {
+        "@yaar/shared": "workspace:*",
+        "node-poppler": "^9.1.1",
+      },
+      "devDependencies": {
+        "@eslint/js": "catalog:",
+        "@typescript-eslint/eslint-plugin": "catalog:",
+        "@typescript-eslint/parser": "catalog:",
+        "bun-types": "catalog:",
+        "eslint": "catalog:",
+        "globals": "catalog:",
+        "typescript": "catalog:",
+        "typescript-eslint": "catalog:",
+      },
+    },
     "packages/server": {
       "name": "@yaar/server",
       "version": "0.19.1",
@@ -118,8 +136,8 @@
         "@modelcontextprotocol/client": "2.0.0",
         "@modelcontextprotocol/server": "2.0.0",
         "@yaar/compiler": "workspace:*",
+        "@yaar/lib": "workspace:*",
         "@yaar/shared": "workspace:*",
-        "node-poppler": "^9.1.1",
         "onnxruntime-web": "catalog:",
         "qrcode-terminal": "^0.12.0",
         "ws": "^8.21.3",
@@ -517,6 +535,8 @@
     "@yaar/compiler": ["@yaar/compiler@workspace:packages/compiler"],
 
     "@yaar/frontend": ["@yaar/frontend@workspace:packages/frontend"],
+
+    "@yaar/lib": ["@yaar/lib@workspace:packages/lib"],
 
     "@yaar/server": ["@yaar/server@workspace:packages/server"],
 

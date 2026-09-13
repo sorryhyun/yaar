@@ -53,6 +53,7 @@
     "lint": "bun run --filter '*' lint",
     "test": "bun run scripts/test/run-all.ts",
     "test:frontend": "bun run --filter @yaar/frontend test",
+    "test:lib": "bun run --filter @yaar/lib test",
     "test:server": "bun run --filter @yaar/server test",
     "test:shared": "bun run --filter @yaar/shared test",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
@@ -100,6 +101,10 @@
     ],
     "packages/compiler/src/**/*.{ts,js}": [
       "prettier --write"
+    ],
+    "packages/lib/src/**/*.{ts,js}": [
+      "prettier --write",
+      "eslint --fix"
     ],
     "*.{json,yaml,yml,css}": [
       "prettier --write"

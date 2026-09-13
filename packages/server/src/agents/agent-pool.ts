@@ -44,7 +44,7 @@ import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { revokeAgentToken } from '../mcp/agent-tokens.js';
 import {
   buildAgentTree,

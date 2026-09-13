@@ -5,7 +5,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { getConfigDir } from '../../config.js';
 import type { TunnelConfig } from './types.js';
 
 export function resolvePath(p: string): string {
@@ -28,7 +27,12 @@ const SSH_ONLY_KEYS = [
 ];
 
 /**
- * Load tunnel config from config/tunnel.json.
+ * Load tunnel config from `<configDir>/tunnel.json`.
+ *
+ * `configDir` is a parameter rather than something this module looks up because where
+ * YAAR keeps its config is YAAR's question, not the tunnel parser's — the server passes
+ * `getConfigDir()`, and a test passes a throwaway directory without touching the
+ * environment to do it.
  *
  * Returns null when the file is missing or says nothing usable — the caller then
  * applies the default transport (Tailscale Serve).
@@ -38,8 +42,8 @@ const SSH_ONLY_KEYS = [
  * default: those asked for a *public* or LAN URL, so swapping in a tailnet-only one
  * without a word would change the user's posture behind their back.
  */
-export function loadTunnelConfig(): TunnelConfig | null {
-  const configPath = join(getConfigDir(), 'tunnel.json');
+export function loadTunnelConfig(configDir: string): TunnelConfig | null {
+  const configPath = join(configDir, 'tunnel.json');
   let raw: string;
   try {
     raw = readFileSync(configPath, 'utf-8');

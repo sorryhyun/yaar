@@ -5,7 +5,7 @@
  */
 
 import type { ContextPool } from '../../agents/context-pool.js';
-import { genId } from '../../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('relay_to_main');

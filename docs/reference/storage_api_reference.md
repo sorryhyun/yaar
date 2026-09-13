@@ -373,7 +373,7 @@ All operations resolve paths in order:
 | Other binary | Return explanation message, point to REST API |
 
 A read is a **presentation** read: its consumer is a vision model, so PNG and JPEG bytes
-are re-encoded to WebP on the way out (`lib/image.ts`, `toWebPForModel`) — typically 60–80%
+are re-encoded to WebP on the way out (`packages/lib/src/image.ts`, `toWebPForModel`) — typically 60–80%
 smaller at a quality the model cannot tell apart. The file on disk is never rewritten, and
 the content block reports the MIME type the bytes actually are, so read it rather than
 assuming the extension. Three cases pass through untouched: WebP (already the target), GIF

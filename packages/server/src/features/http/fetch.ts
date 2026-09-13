@@ -5,7 +5,7 @@
  * and returns a structured result.
  */
 
-import { validateUrl, safeFetch } from '../../lib/ssrf.js';
+import { validateUrl, safeFetch } from '@yaar/lib/ssrf';
 import { getEnvInt } from '../../config.js';
 import { ensureDomainAllowed } from './domain-gate.js';
 import { getCookieHeader, captureResponseCookies } from './cookie-jar.js';

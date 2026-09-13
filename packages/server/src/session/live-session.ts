@@ -55,7 +55,7 @@ import {
   type WindowHandleResolver,
 } from './window-handle-stamp.js';
 import { getConfigDir } from '../storage/storage-manager.js';
-import { genId } from '../lib/ids.js';
+import { genId } from '@yaar/lib/ids';
 import { getWarmPool } from '../providers/warm-pool.js';
 import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';

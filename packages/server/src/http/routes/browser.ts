@@ -8,7 +8,7 @@
  * All routes require iframe token auth (X-Iframe-Token header).
  */
 
-import { errMessage } from '../../lib/errors.js';
+import { errMessage } from '@yaar/lib/errors';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp, type AppPrincipal } from '../access.js';
 import { getHeadlessBrowser } from '../../lib/browser/index.js';
