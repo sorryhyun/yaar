@@ -4,6 +4,7 @@ import { appStorage, blobToDataUrl, errMsg } from '@bundled/yaar';
 import {
   activeProject,
   setActiveProject,
+  files,
   setFiles,
   type FileEntry,
   openFilePath,
@@ -13,7 +14,16 @@ import {
   setStatusText,
   setTypecheckState,
 } from '../core';
-import { projectPath, isImagePath, isBinaryPath, relativizeProjectPaths } from '../lib/paths';
+import {
+  projectPath,
+  isImagePath,
+  isBinaryPath,
+  isGeneratedPath,
+  relativizeProjectPaths,
+  normalizeProjectPath,
+  nearbyPaths,
+  globToRegExp,
+} from '../lib/paths';
 import { applyEdits, formatRemoved, type EditSpec } from '../lib/edits';
 import { listAllFiles } from './fs-walk';
 import { recordChange } from './changes';
@@ -28,32 +38,140 @@ export async function refreshFiles(projectId?: string): Promise<void> {
   const basePath = projectPath(id);
   try {
     const mapped = pruneEmptyDirectories(await listAllFiles(basePath, basePath));
-    // Sizes and timestamps come from the listing itself. Line counts do not — those
-    // need the text — so the `project` state can still answer "how big is this file"
-    // without a read per file (agents used to read line 1 just to see the "(N lines)"
-    // header). Projects are a handful of source files, so reading them in parallel
-    // here is cheap; a file that cannot be read stays uncounted.
-    await Promise.all(
-      mapped.map(async (entry) => {
-        if (entry.isDirectory || isBinaryPath(entry.path)) return;
-        try {
-          const raw = await appStorage.read(projectPath(id, entry.path));
-          const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-          entry.lines = text.split('\n').length;
-          // Recomputed from the text: a JSON file read back parsed and re-serialized
-          // is not byte-identical to what is on disk, and the count must match the
-          // string this app would edit.
-          entry.bytes = new TextEncoder().encode(text).length;
-        } catch {
-          /* unreadable — leave the listing's own size standing */
-        }
-      }),
-    );
+    await countLines(id, mapped);
     setFiles(mapped);
     touchProjectModified(id, mapped);
   } catch {
     setFiles([]);
   }
+}
+
+/**
+ * Fill in `lines` (and a text-accurate `bytes`) on each text entry, in place.
+ *
+ * Sizes and timestamps come from the listing itself. Line counts do not — those need
+ * the text — so a listing can still answer "how big is this file" without a read per
+ * file (agents used to read line 1 just to see the "(N lines)" header). Projects are a
+ * handful of source files, so reading them in parallel is cheap; a file that cannot be
+ * read stays uncounted.
+ */
+async function countLines(projectId: string, entries: FileEntry[]): Promise<void> {
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.isDirectory || isBinaryPath(entry.path)) return;
+      try {
+        const raw = await appStorage.read(projectPath(projectId, entry.path));
+        const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+        entry.lines = text.split('\n').length;
+        // Recomputed from the text: a JSON file read back parsed and re-serialized
+        // is not byte-identical to what is on disk, and the count must match the
+        // string this app would edit.
+        entry.bytes = new TextEncoder().encode(text).length;
+      } catch {
+        /* unreadable — leave the listing's own size standing */
+      }
+    }),
+  );
+}
+
+/** A directory entry is generated when anything inside it would be. */
+const isGeneratedEntry = (entry: FileEntry): boolean =>
+  isGeneratedPath(entry.isDirectory ? `${entry.path}/-` : entry.path);
+
+export interface ListedFile {
+  path: string;
+  isDirectory: boolean;
+  lines?: number;
+  bytes?: number;
+}
+
+/**
+ * The project tree, narrowed to a directory and a glob, with generated output left out
+ * unless asked for — the same rule `grep` applies, so the two agree on what "source" is.
+ *
+ * Walked fresh rather than read from the `files` signal, which never holds dist/ at
+ * all: `excluded` has to count what was really skipped, not what was never seen.
+ */
+export async function listProjectFiles(opts: {
+  dir?: string;
+  glob?: string;
+  includeBuilt?: boolean;
+}): Promise<{ dir: string; files: ListedFile[]; excluded: number }> {
+  const proj = activeProject();
+  if (!proj) throw new Error('No active project. Open or create one first.');
+  const dir = opts.dir === undefined ? '' : normalizeProjectPath(opts.dir);
+  if (dir === null) throw new Error(`refused: path escapes the project: ${opts.dir}`);
+  const matcher = opts.glob ? globToRegExp(opts.glob) : null;
+
+  const base = projectPath(proj.id);
+  const all = pruneEmptyDirectories(await listAllFiles(base, base, { includeGenerated: true }));
+  if (dir) {
+    const target = all.find((e) => e.path === dir);
+    if (target && !target.isDirectory)
+      throw new Error(`${dir} is a file, not a directory — readFile reads it`);
+    if (!target) {
+      const dirs = all.filter((e) => e.isDirectory).map((e) => e.path);
+      const near = nearbyPaths(dir, dirs);
+      throw new Error(
+        `directory not found: ${dir}` + (near.length ? ` — nearby: ${near.join(', ')}` : ''),
+      );
+    }
+  }
+
+  const inScope = all.filter(
+    (e) => (!dir || e.path.startsWith(`${dir}/`)) && (!matcher || matcher.test(e.path)),
+  );
+  const kept = opts.includeBuilt ? inScope : inScope.filter((e) => !isGeneratedEntry(e));
+  await countLines(proj.id, kept);
+  return {
+    dir: dir || '.',
+    files: kept.map((e) => ({
+      path: e.path,
+      isDirectory: e.isDirectory,
+      ...(e.lines !== undefined ? { lines: e.lines } : {}),
+      ...(e.bytes !== undefined ? { bytes: e.bytes } : {}),
+    })),
+    excluded: inScope.length - kept.length,
+  };
+}
+
+/**
+ * A caller's path resolved inside the active project, or a refusal.
+ *
+ * Refusal and absence are separate errors on purpose: both used to come back as the
+ * same `// Could not read` body, so a read that was refused looked like a missing file.
+ */
+export function resolveProjectPath(raw: string): string {
+  const path = normalizeProjectPath(raw);
+  if (path === null) throw new Error(`refused: path escapes the project: ${raw}`);
+  if (path === '') throw new Error('path is empty — name a file inside the project');
+  return path;
+}
+
+function missingFileError(path: string): Error {
+  const near = nearbyPaths(
+    path,
+    files()
+      .filter((f) => !f.isDirectory)
+      .map((f) => f.path),
+  );
+  return new Error(
+    `file not found: ${path}` + (near.length ? ` — nearby: ${near.join(', ')}` : ''),
+  );
+}
+
+/**
+ * Why a read threw, judged against the listing: a path the listing has never seen is
+ * missing, a directory is named as one, and only a listed file keeps the server's
+ * reason (with the host path it names stripped).
+ */
+function readFailure(projectId: string, path: string, err: unknown): Error {
+  const entry = files().find((f) => f.path === path);
+  if (!entry) return missingFileError(path);
+  if (entry.isDirectory)
+    return new Error(`${path} is a directory, not a file — listFiles lists what is in it`);
+  const message = `could not read ${path}: ${errMsg(err)}`;
+  return new Error(relativizeProjectPaths([message], projectId)[0] ?? message);
 }
 
 /**
@@ -395,12 +513,13 @@ export async function readFileContent(
   opts?: { startLine?: number; endLine?: number; lineNum?: boolean },
 ): Promise<ReadFileResult> {
   const proj = activeProject();
-  if (!proj)
-    return { path, content: '// No active project', totalLines: 0, startLine: 1, endLine: 0 };
+  if (!proj) throw new Error('No active project. Open or create one first.');
+  path = resolveProjectPath(path);
   // Bytes that are not text decode to mojibake, which reads like a corrupt file
   // rather than the wrong tool. Say what the file is; the caller turns an image
   // into an image block, and there is nothing to line-number either way.
   if (isBinaryPath(path)) {
+    if (!files().some((f) => f.path === path && !f.isDirectory)) throw missingFileError(path);
     const kind = isImagePath(path) ? 'an image' : 'a binary file';
     return {
       path,
@@ -410,35 +529,36 @@ export async function readFileContent(
       endLine: 0,
     };
   }
+  let raw: unknown;
   try {
-    const raw = await appStorage.read(projectPath(proj.id, path));
-    const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-    const allLines = text.split('\n');
-    const totalLines = allLines.length;
-    const start = opts?.startLine ? Math.max(1, opts.startLine) : 1;
-    const end = opts?.endLine ? Math.min(totalLines, opts.endLine) : totalLines;
-    // A range past the end of the file produced a header reading `[86-26]` and no
-    // body — no error, no warning, nothing to distinguish it from an empty file. One
-    // range applies to every path in a multi-path read, so files of different lengths
-    // make this the ordinary case, not an edge one.
-    if (start > totalLines) {
-      const content =
-        `── ${path} (${totalLines} lines) ──\n` +
-        `(requested lines ${opts?.startLine ?? 1}-${opts?.endLine ?? totalLines}, but the ` +
-        `file ends at line ${totalLines} — nothing to show. Omit the range, or read a ` +
-        `range within it.)`;
-      return { path, content, totalLines, startLine: start, endLine: totalLines };
-    }
-    const sliced = allLines.slice(start - 1, end);
-    const body = opts?.lineNum
-      ? sliced
-          .map((line, i) => `${String(start + i).padStart(String(totalLines).length)}\t│${line}`)
-          .join('\n')
-      : sliced.join('\n');
-    const rangeTag = opts?.startLine || opts?.endLine ? ` [${start}-${end}]` : '';
-    const header = `── ${path} (${totalLines} lines)${rangeTag} ──\n`;
-    return { path, content: header + body, totalLines, startLine: start, endLine: end };
-  } catch {
-    return { path, content: `// Could not read ${path}`, totalLines: 0, startLine: 1, endLine: 0 };
+    raw = await appStorage.read(projectPath(proj.id, path));
+  } catch (err) {
+    throw readFailure(proj.id, path, err);
   }
+  const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+  const allLines = text.split('\n');
+  const totalLines = allLines.length;
+  const start = opts?.startLine ? Math.max(1, opts.startLine) : 1;
+  const end = opts?.endLine ? Math.min(totalLines, opts.endLine) : totalLines;
+  // A range past the end of the file produced a header reading `[86-26]` and no
+  // body — no error, no warning, nothing to distinguish it from an empty file. One
+  // range applies to every path in a multi-path read, so files of different lengths
+  // make this the ordinary case, not an edge one.
+  if (start > totalLines) {
+    const content =
+      `── ${path} (${totalLines} lines) ──\n` +
+      `(requested lines ${opts?.startLine ?? 1}-${opts?.endLine ?? totalLines}, but the ` +
+      `file ends at line ${totalLines} — nothing to show. Omit the range, or read a ` +
+      `range within it.)`;
+    return { path, content, totalLines, startLine: start, endLine: totalLines };
+  }
+  const sliced = allLines.slice(start - 1, end);
+  const body = opts?.lineNum
+    ? sliced
+        .map((line, i) => `${String(start + i).padStart(String(totalLines).length)}\t│${line}`)
+        .join('\n')
+    : sliced.join('\n');
+  const rangeTag = opts?.startLine || opts?.endLine ? ` [${start}-${end}]` : '';
+  const header = `── ${path} (${totalLines} lines)${rangeTag} ──\n`;
+  return { path, content: header + body, totalLines, startLine: start, endLine: end };
 }

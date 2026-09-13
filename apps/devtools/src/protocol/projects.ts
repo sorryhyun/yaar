@@ -7,7 +7,8 @@ export const projectCommands = {
     description:
       'Create a new project and open it. Scaffolds a working app — one `export default ' +
       'defineApp({...})` with a state key and a Zod-validated command — plus styles.css and ' +
-      'an app.json whose `appId` is derived from the name and is legal to deploy under.',
+      'an app.json whose `appId` is derived from the name and is legal to deploy under. ' +
+      'Returns { projectId, appId, project, files } — `files` being the new file paths.',
     params: {
       type: 'object',
       properties: {
@@ -16,8 +17,14 @@ export const projectCommands = {
       required: ['name'],
     },
     run: async (p) => {
-      const id = await createProject(String(p.name));
-      return { projectId: id };
+      const { id, appId } = await createProject(String(p.name));
+      const proj = activeProject();
+      return {
+        projectId: id,
+        appId,
+        project: proj ? { id: proj.id, name: proj.name } : undefined,
+        files: files().map((f) => f.path),
+      };
     },
   }),
   openProject: defineAppCommand({
@@ -51,8 +58,9 @@ export const projectCommands = {
   cloneApp: defineAppCommand({
     description:
       'Clone an installed app source into a new project and open it. The copy is a sandbox: ' +
-      'editing it changes nothing about the live app until you deploy. Returns `agentsMd` with ' +
-      'the cloned root AGENTS.md contents, or null when the app has no AGENTS.md.',
+      'editing it changes nothing about the live app until you deploy. Returns `appId` (from ' +
+      'the cloned app.json — the id deploy expects), `files` (the cloned paths), and ' +
+      '`agentsMd` with the cloned root AGENTS.md contents, or null when the app has no AGENTS.md.',
     params: {
       type: 'object',
       properties: {
@@ -61,10 +69,11 @@ export const projectCommands = {
       required: ['appId'],
     },
     run: async (p) => {
-      const { id: projectId, agentsMd } = await cloneApp(String(p.appId));
+      const { id: projectId, appId, agentsMd } = await cloneApp(String(p.appId));
       const proj = activeProject();
       return {
         projectId,
+        appId,
         project: proj ? { id: proj.id, name: proj.name } : undefined,
         files: files().map((f) => f.path),
         agentsMd,

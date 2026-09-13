@@ -498,12 +498,16 @@ export const workerCommands = {
       const path = String(p.path);
       noteWorkerToolCall(`read_file ${path}`);
       if (!activeProject()) return NO_PROJECT;
-      const result = await readFileContent(path, {
-        startLine: p.start_line != null ? Number(p.start_line) : undefined,
-        endLine: p.end_line != null ? Number(p.end_line) : undefined,
-        lineNum: true,
-      });
-      return result.content;
+      try {
+        const result = await readFileContent(path, {
+          startLine: p.start_line != null ? Number(p.start_line) : undefined,
+          endLine: p.end_line != null ? Number(p.end_line) : undefined,
+          lineNum: true,
+        });
+        return result.content;
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`;
+      }
     },
   }),
   'persona:report': defineAppCommand({

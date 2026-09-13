@@ -187,7 +187,7 @@ export async function loadProjects(): Promise<void> {
   }
 }
 
-export async function createProject(name: string): Promise<string> {
+export async function createProject(name: string): Promise<{ id: string; appId: string }> {
   const id = Date.now().toString();
   const appId = appIdFromName(name, id);
   await appStorage.save(projectPath(id, 'src/main.ts'), scaffoldMain(name, appId));
@@ -204,7 +204,7 @@ export async function createProject(name: string): Promise<string> {
   await loadProjects();
   await openProject(id);
   setStatusText(`Created project "${name}"`);
-  return id;
+  return { id, appId };
 }
 
 export interface InstalledApp {
@@ -249,6 +249,8 @@ export async function listInstalledApps(): Promise<InstalledApp[]> {
 
 export interface CloneAppResult {
   id: string;
+  /** The `appId` the cloned app.json carries — the id `deploy` expects. */
+  appId: string;
   /** Root AGENTS.md content, or null when the cloned app does not provide one. */
   agentsMd: string | null;
 }
@@ -291,7 +293,7 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
   await loadProjects();
   await openProject(id);
   setStatusText(`Cloned "${name}"`);
-  return { id, agentsMd };
+  return { id, appId: typeof meta.appId === 'string' ? meta.appId : appId, agentsMd };
 }
 
 export async function openProject(id: string): Promise<void> {

@@ -11,7 +11,11 @@ import type { FileEntry } from '../core/types';
 // exists to show.
 const GENERATED_DIRS = new Set(['dist']);
 
-export async function listAllFiles(storagePath: string, prefix: string): Promise<FileEntry[]> {
+export async function listAllFiles(
+  storagePath: string,
+  prefix: string,
+  opts: { includeGenerated?: boolean } = {},
+): Promise<FileEntry[]> {
   let entries: Awaited<ReturnType<typeof appStorage.list>>;
   try {
     entries = await appStorage.list(storagePath);
@@ -29,7 +33,7 @@ export async function listAllFiles(storagePath: string, prefix: string): Promise
 
     const cleanPath = relativePath.replace(/\/$/, '');
 
-    if (entry.isDirectory && GENERATED_DIRS.has(cleanPath)) continue;
+    if (entry.isDirectory && !opts.includeGenerated && GENERATED_DIRS.has(cleanPath)) continue;
 
     result.push({
       path: cleanPath,
@@ -43,7 +47,7 @@ export async function listAllFiles(storagePath: string, prefix: string): Promise
 
     if (entry.isDirectory) {
       const subPath = entry.path.replace(/\/$/, '');
-      const children = await listAllFiles(subPath, prefix);
+      const children = await listAllFiles(subPath, prefix, opts);
       result.push(...children);
     }
   }

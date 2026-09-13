@@ -10,6 +10,8 @@ import {
   grep,
   readFileContent,
   readImageFile,
+  listProjectFiles,
+  resolveProjectPath,
   copyFromStorage,
   exportToStorage,
   defaultAssetPath,
@@ -77,7 +79,13 @@ const projectDestination = (raw: string): string => projectRelative(raw);
 export const fileCommands = {
   readFile: defineAppCommand({
     description:
-      'Read one or more files. Does not change editor open state unless openInEditor is set. ' +
+      'Read one or more files. A missing file throws `file not found: {path}` with nearby ' +
+      'paths; a path that climbs out of the project throws `refused: path escapes the ' +
+      'project`. Paths are normalized (`src/../app.json` is `app.json`), and results are ' +
+      'labelled with the normalized path. With an array, a refused path fails the whole call ' +
+      'before anything is read; a file that cannot be read becomes its own text block ' +
+      'beginning `[readFile error]`, beside the files that could, and the call throws only ' +
+      'when none could. Does not change editor open state unless openInEditor is set. ' +
       'Image files come back as a viewable image block, not text.',
     params: {
       type: 'object',
@@ -99,8 +107,15 @@ export const fileCommands = {
       required: ['path'],
     },
     run: async (p) => {
-      const rawPath = p.path;
-      const paths: string[] = Array.isArray(rawPath) ? rawPath.map(String) : [String(rawPath)];
+      const rawPaths = Array.isArray(p.path) ? p.path.map(String) : [String(p.path)];
+      if (!activeProject())
+        throw new AppCommandError('No active project. Open or create one first.');
+      let paths: string[];
+      try {
+        paths = rawPaths.map(resolveProjectPath);
+      } catch (err) {
+        throw new AppCommandError(errMsg(err));
+      }
       const opts = {
         startLine: p.startLine != null ? Number(p.startLine) : undefined,
         endLine: p.endLine != null ? Number(p.endLine) : undefined,
@@ -114,26 +129,39 @@ export const fileCommands = {
       const uriFor = (fp: string) => `yaar://storage/apps/devtools/projects/${projectId}/${fp}`;
 
       const perFile = await Promise.all(
-        paths.map(async (fp): Promise<ReadBlock[]> => {
-          // An image is answered with the picture. Decoding it as text produced
-          // mojibake, and handing back base64 would be a wall of characters that
-          // says nothing — an image block is the only form that can be read.
-          if (isImagePath(fp)) {
-            const image = await readImageFile(fp);
-            if (image) return imageBlocks(fp, [image]);
-            // Unreadable as bytes — fall through to the text path, which reports it.
+        paths.map(async (fp): Promise<{ blocks: ReadBlock[] } | { error: string }> => {
+          try {
+            // An image is answered with the picture. Decoding it as text produced
+            // mojibake, and handing back base64 would be a wall of characters that
+            // says nothing — an image block is the only form that can be read.
+            if (isImagePath(fp)) {
+              const image = await readImageFile(fp);
+              if (image) return { blocks: imageBlocks(fp, [image]) };
+              // Unreadable as bytes — fall through to the text path, which reports it.
+            }
+            const r = await readFileContent(fp, opts);
+            // Embedded resource block — gives Claude URI + MIME metadata per file
+            const uri = uriFor(r.path);
+            return {
+              blocks: [
+                {
+                  type: 'resource',
+                  resource: { uri, text: r.content, mimeType: getMimeType(r.path) },
+                },
+              ],
+            };
+          } catch (err) {
+            return { error: errMsg(err) };
           }
-          const r = await readFileContent(fp, opts);
-          // Embedded resource block — gives Claude URI + MIME metadata per file
-          return [
-            {
-              type: 'resource',
-              resource: { uri: uriFor(r.path), text: r.content, mimeType: getMimeType(r.path) },
-            },
-          ];
         }),
       );
-      return perFile.flat();
+      const errors = perFile.flatMap((r) => ('error' in r ? [r.error] : []));
+      if (errors.length === perFile.length) throw new AppCommandError(errors.join('\n'));
+      // A plain text block, never a resource: a failure dressed as file content is
+      // exactly what made a missing file read like a file holding one comment.
+      return perFile.flatMap((r): ReadBlock[] =>
+        'error' in r ? [{ type: 'text', text: `[readFile error] ${r.error}` }] : r.blocks,
+      );
     },
   }),
   writeFile: defineAppCommand({
@@ -404,6 +432,58 @@ export const fileCommands = {
       }
     },
   }),
+  listFiles: defineAppCommand({
+    description:
+      "List the active project's files as { path, isDirectory, lines?, bytes? } — `lines` " +
+      'for text, `bytes` for every file, neither for a directory. Generated output is ' +
+      'skipped the way grep skips it (dist/, build/, out/, node_modules/, coverage/, .git/, ' +
+      '.min.js/.map) unless includeBuilt, and `excluded` counts what was skipped. Throws with ' +
+      'no active project, or when `dir` names no directory.',
+    params: {
+      type: 'object',
+      properties: {
+        dir: {
+          type: 'string',
+          description:
+            'Only entries under this project-relative directory ("src/ui"). Default: the ' +
+            'whole project.',
+        },
+        glob: {
+          type: 'string',
+          description:
+            'Filter on the whole project-relative path. `*` stops at "/", so "*.ts" is ' +
+            'root files only; "**/*.ts" is any depth, root included; "src/**/*.{ts,css}" ' +
+            'alternates.',
+        },
+        includeBuilt: {
+          type: 'boolean',
+          description: 'List generated output too (default false).',
+        },
+      },
+    },
+    run: async (p) => {
+      try {
+        const result = await listProjectFiles({
+          ...(p.dir !== undefined ? { dir: String(p.dir) } : {}),
+          ...(p.glob ? { glob: String(p.glob) } : {}),
+          includeBuilt: p.includeBuilt === true,
+        });
+        return {
+          dir: result.dir,
+          count: result.files.length,
+          files: result.files,
+          ...(result.excluded
+            ? {
+                excluded: result.excluded,
+                note: `${result.excluded} generated entr${result.excluded === 1 ? 'y' : 'ies'} skipped — pass includeBuilt to list them`,
+              }
+            : {}),
+        };
+      } catch (err) {
+        throw new AppCommandError(errMsg(err));
+      }
+    },
+  }),
   grep: defineAppCommand({
     description:
       'Search file contents with regex across the project, source only: generated output ' +
@@ -464,7 +544,9 @@ export const fileCommands = {
       const notes = [
         ...(result.truncated ? ['results truncated'] : []),
         ...(result.excluded
-          ? [`${result.excluded} match(es) in generated output skipped — pass includeBuilt for those`]
+          ? [
+              `${result.excluded} match(es) in generated output skipped — pass includeBuilt for those`,
+            ]
           : []),
       ];
       if (notes.length > 0) {

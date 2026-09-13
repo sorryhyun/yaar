@@ -59,6 +59,10 @@ import { defineApp } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import './styles.css';
 
+// Zod Mini ships without message text, so a wrong type reads only "Invalid input".
+// Loading the English locale makes it "expected number, received string".
+z.config(z.locales.en());
+
 const [count, setCount] = createSignal(0);
 
 function App() {

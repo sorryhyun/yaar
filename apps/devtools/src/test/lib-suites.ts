@@ -7,6 +7,9 @@ import {
   isImagePath,
   isBinaryPath,
   isGeneratedPath,
+  normalizeProjectPath,
+  nearbyPaths,
+  globToRegExp,
   assetImportLine,
   appIdFromName,
   scaffoldMain,
@@ -110,6 +113,42 @@ const paths = suite('paths', {
   },
 });
 
+const projectPaths = suite('project-paths', {
+  'inner dots resolve; a path is left as the file it plainly names'() {
+    eq(normalizeProjectPath('src/main.ts'), 'src/main.ts');
+    eq(normalizeProjectPath('/src//./ui/../main.ts'), 'src/main.ts');
+    eq(normalizeProjectPath('src/../app.json'), 'app.json');
+  },
+
+  // Refusal must be distinguishable from absence, so escaping is null, never a path.
+  'climbing past the root is null, however it is spelled'() {
+    eq(normalizeProjectPath('../../../../config/settings.json'), null);
+    eq(normalizeProjectPath('src/../../x'), null);
+    eq(normalizeProjectPath('..'), null);
+  },
+
+  'nearby paths rank a same-named file above mere siblings'() {
+    const existing = ['src/main.ts', 'src/ui/editor.ts', 'src/services/files.ts', 'app.json'];
+    eq(nearbyPaths('src/files.ts', existing)[0], 'src/services/files.ts');
+    eq(nearbyPaths('src/Main.ts', existing)[0], 'src/main.ts', 'case-only difference first');
+    ok(nearbyPaths('src/nope.ts', existing).includes('src/main.ts'), 'siblings still offered');
+    eq(nearbyPaths('zzz/q.md', existing), [], 'nothing plausible is nothing');
+  },
+
+  'glob stars stop at slashes; double stars cross them, root included'() {
+    const m = (glob: string, path: string) => globToRegExp(glob).test(path);
+    eq(m('*.ts', 'main.ts'), true);
+    eq(m('*.ts', 'src/main.ts'), false, '* is one level');
+    eq(m('**/*.ts', 'main.ts'), true, '**/ matches zero directories');
+    eq(m('**/*.ts', 'src/ui/editor.ts'), true);
+    eq(m('src/**', 'src/ui/editor.ts'), true);
+    eq(m('src/*.{ts,css}', 'src/styles.css'), true);
+    eq(m('src/*.{ts,css}', 'src/app.json'), false);
+    eq(m('a.b', 'aXb'), false, 'regex metacharacters are literal');
+    throwsWith(() => globToRegExp('src/{a,b'), 'unclosed');
+  },
+});
+
 const scaffold = suite('scaffold', {
   'a name slugifies to a deployable id'() {
     eq(appIdFromName('My App', '1'), 'my-app');
@@ -136,6 +175,11 @@ const scaffold = suite('scaffold', {
     ok(src.includes('export default defineApp({'), 'one default defineApp export');
     ok(src.includes("id: 'demo',"), 'the id the compiler compares against app.json');
     ok(!src.includes('document.getElementById'), 'never looks up its own mount point');
+  },
+
+  // Without a locale Zod Mini reports a wrong type as a bare "Invalid input".
+  'the scaffold loads Zod Mini’s English messages'() {
+    ok(scaffoldMain('Demo', 'demo').includes('z.config(z.locales.en());'));
   },
 
   // A Zod params schema makes the compiler import the app in a worker with a stubbed DOM.
@@ -418,6 +462,7 @@ const compileStatus = suite('compile-status', {
 
 export const libSuites: Suite[] = [
   paths,
+  projectPaths,
   scaffold,
   diagnosticsSuite,
   edits,

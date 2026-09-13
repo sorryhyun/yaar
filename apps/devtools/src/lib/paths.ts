@@ -99,6 +99,89 @@ export function isBinaryPath(path: string): boolean {
   return BINARY_EXT.test(path);
 }
 
+/**
+ * A caller-supplied path resolved inside the project root, or null when it climbs out.
+ *
+ * `.` and an inner `..` are resolved rather than refused, so `src/../app.json` names the
+ * file it plainly means; only a `..` past the root is null. Callers turn null into a
+ * refusal worded differently from "not found" — the two once shared one message, so a
+ * refused read could not be told from a missing file. Leading and doubled slashes are
+ * dropped, since a path pasted from a listing tends to bring one.
+ */
+export function normalizeProjectPath(raw: string): string | null {
+  const out: string[] = [];
+  for (const segment of raw.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment !== '..') {
+      out.push(segment);
+      continue;
+    }
+    if (out.length === 0) return null;
+    out.pop();
+  }
+  return out.join('/');
+}
+
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+const dirName = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')));
+
+/**
+ * Up to `limit` of the `existing` paths a missing `target` was plausibly meant to be, best
+ * first: a case-only difference, the same file name in another directory, the same stem
+ * with another extension, then whatever sits in the directory the target named.
+ */
+export function nearbyPaths(target: string, existing: readonly string[], limit = 5): string[] {
+  const name = baseName(target);
+  const stem = name.replace(/\.[^.]+$/, '').toLowerCase();
+  const dir = dirName(target);
+  const groups = [
+    existing.filter((p) => p.toLowerCase() === target.toLowerCase()),
+    existing.filter((p) => baseName(p) === name),
+    existing.filter(
+      (p) =>
+        baseName(p)
+          .replace(/\.[^.]+$/, '')
+          .toLowerCase() === stem,
+    ),
+    existing.filter((p) => dirName(p) === dir),
+  ];
+  const out: string[] = [];
+  for (const group of groups)
+    for (const p of group) if (p !== target && !out.includes(p)) out.push(p);
+  return out.slice(0, limit);
+}
+
+/**
+ * A glob as an anchored RegExp over a whole project-relative path.
+ *
+ * `*` and `?` stop at `/`; `**` crosses directories, and `**` + `/` also matches zero of
+ * them, so `**` + `/*.ts` includes root files while `*.ts` is the root only. `{a,b}` is
+ * alternation. Throws on an unclosed `{`.
+ */
+export function globToRegExp(glob: string): RegExp {
+  let re = '';
+  let depth = 0;
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*' && glob[i + 1] === '*') {
+      const slash = glob[i + 2] === '/';
+      re += slash ? '(?:.*/)?' : '.*';
+      i += slash ? 2 : 1;
+    } else if (c === '*') re += '[^/]*';
+    else if (c === '?') re += '[^/]';
+    else if (c === '{') {
+      depth++;
+      re += '(?:';
+    } else if (c === '}' && depth > 0) {
+      depth--;
+      re += ')';
+    } else if (c === ',' && depth > 0) re += '|';
+    else re += c.replace(/[.+^$()|[\]\\{}]/g, '\\$&');
+  }
+  if (depth > 0) throw new Error(`unclosed "{" in glob: ${glob}`);
+  return new RegExp(`^${re}$`);
+}
+
 // What an import turns into a data: URI. Broader than BINARY_EXT because SVG and glTF
 // JSON belong here and not there: text the editor should let you edit, and still assets.
 //
