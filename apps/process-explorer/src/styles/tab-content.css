@@ -7,9 +7,3 @@
   flex-direction: column;
   gap: 2px;
 }
-
-/* Base scrollbar styling comes from the shared .y-scroll utility (co-applied
- * in markup); only the hover delta this app wants stays local. */
-.tab-content::-webkit-scrollbar-thumb:hover {
-  background: var(--pe-border-hover);
-}

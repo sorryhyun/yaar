@@ -174,19 +174,6 @@
   scroll-behavior: smooth;
 }
 
-.cliBody::-webkit-scrollbar {
-  width: 6px;
-}
-
-.cliBody::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.cliBody::-webkit-scrollbar-thumb {
-  background: var(--color-overlay);
-  border-radius: var(--radius-xs);
-}
-
 /* ---- Entries ---- */
 
 .entry {

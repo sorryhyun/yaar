@@ -20,6 +20,8 @@ import {
   PRISM_PALETTE as P,
   OVERLAYS as O,
   FONT_FACE_CSS,
+  SCROLLBAR_THUMB,
+  scrollbarCss,
 } from './tokens.js';
 
 /**
@@ -87,6 +89,10 @@ const WASH_DECLS = [
   `--yaar-wash-error-strong: ${wash('error', WASH.strong)};`,
   `--yaar-wash-warning: ${wash('warning', WASH.base)};`,
   `--yaar-wash-warning-strong: ${wash('warning', WASH.strong)};`,
+  // Not washes, but derived from a color var the same way, so `.y-light` must
+  // re-declare them for the same reason.
+  `--yaar-scrollbar-thumb: ${wash('text-dim', SCROLLBAR_THUMB.base)};`,
+  `--yaar-scrollbar-thumb-hover: ${wash('text-dim', SCROLLBAR_THUMB.hover)};`,
 ];
 
 const washDecls = () => WASH_DECLS.map((d) => `  ${d}`).join('\n');
@@ -136,6 +142,7 @@ ${washDecls()}
   --yaar-ease: 150ms ease;
 }
 button,input,select,textarea{font-family:inherit}
+${scrollbarCss('--yaar-scrollbar-thumb', '--yaar-scrollbar-thumb-hover')}
 .y-app{display:flex;flex-direction:column;height:100%;color:var(--yaar-text);background:var(--yaar-bg);font-family:var(--yaar-font);font-size:var(--yaar-text-base);line-height:1.5}
 .y-flex{display:flex}.y-flex-col{display:flex;flex-direction:column}.y-flex-center{display:flex;align-items:center;justify-content:center}.y-flex-between{display:flex;align-items:center;justify-content:space-between}.y-flex-1{flex:1;min-width:0;min-height:0}
 .y-gap-1{gap:var(--yaar-sp-1)}.y-gap-2{gap:var(--yaar-sp-2)}.y-gap-3{gap:var(--yaar-sp-3)}.y-gap-4{gap:var(--yaar-sp-4)}
@@ -165,8 +172,7 @@ button,input,select,textarea{font-family:inherit}
 @keyframes y-spin{to{transform:rotate(360deg)}}
 .y-spinner{width:16px;height:16px;border:2px solid var(--yaar-border);border-top-color:var(--yaar-accent);border-radius:50%;animation:y-spin .6s linear infinite}
 .y-spinner-lg{width:24px;height:24px}
-.y-scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--yaar-border) transparent}
-.y-scroll::-webkit-scrollbar{width:6px}.y-scroll::-webkit-scrollbar-track{background:transparent}.y-scroll::-webkit-scrollbar-thumb{background:var(--yaar-border);border-radius:3px}
+.y-scroll{overflow-y:auto}
 .y-toast{position:fixed;bottom:var(--yaar-sp-4);left:50%;transform:translateX(-50%) translateY(20px);padding:var(--yaar-sp-2) var(--yaar-sp-4);border-radius:var(--yaar-radius);font-size:var(--yaar-text-sm);color:var(--yaar-text);background:var(--yaar-bg-surface);border:1px solid var(--yaar-border);box-shadow:var(--yaar-shadow-lg);opacity:0;transition:opacity var(--yaar-ease),transform var(--yaar-ease);pointer-events:none;z-index:9999}
 .y-toast-visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
 .y-toast-info{border-color:var(--yaar-accent)}.y-toast-success{border-color:var(--yaar-success)}.y-toast-error{border-color:var(--yaar-error)}

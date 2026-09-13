@@ -276,6 +276,31 @@ export const FONT_FACE_CSS = [
   )
   .join('\n');
 
+/**
+ * The document-wide scrollbar, emitted by both generators over their own color vars.
+ *
+ * A pill inset in a transparent 10px gutter: the 3px transparent border is clipped
+ * out of the thumb's background, so it reads as a 4px line at rest while the hit
+ * target stays 10px, and thickens to 6px on hover. No track, no arrow buttons.
+ *
+ * Chromium only styles the `::-webkit-scrollbar` pseudo-elements on an element that
+ * has neither `scrollbar-width` nor `scrollbar-color` computed — and both inherit. So
+ * the standard properties are set only where the pseudo-elements do not exist
+ * (Firefox); setting them on `*` here would silently switch this whole rule off.
+ * The same holds for any element below: `scrollbar-width: none` to hide is fine,
+ * a `scrollbar-color` opts that subtree back out to the native bar.
+ */
+export function scrollbarCss(thumb: string, thumbHover: string): string {
+  return `::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background-color:var(${thumb});background-clip:padding-box;border:3px solid transparent;border-radius:${RADIUS.full}px;min-height:32px;min-width:32px}
+::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background-color:var(${thumbHover});border-width:2px}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:var(${thumb}) transparent}}`;
+}
+
+/** Scrollbar thumb strengths, as a percentage of the dim text color over transparent. */
+export const SCROLLBAR_THUMB = { base: 35, hover: 60 } as const;
+
 /** `#rrggbb` + alpha → `rgba(r,g,b,a)`. For token-derived tints in generated CSS. */
 export function alpha(hex: string, a: number): string {
   const r = parseInt(hex.slice(1, 3), 16);

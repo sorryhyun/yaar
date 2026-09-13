@@ -172,25 +172,3 @@
   padding: var(--space-2);
   border-radius: var(--radius-sm);
 }
-
-/* Scrollbar styling */
-.content::-webkit-scrollbar,
-.data::-webkit-scrollbar {
-  width: 6px;
-}
-
-.content::-webkit-scrollbar-track,
-.data::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.content::-webkit-scrollbar-thumb,
-.data::-webkit-scrollbar-thumb {
-  background: var(--color-surface-hover);
-  border-radius: var(--radius-xs);
-}
-
-.content::-webkit-scrollbar-thumb:hover,
-.data::-webkit-scrollbar-thumb:hover {
-  background: var(--color-overlay);
-}

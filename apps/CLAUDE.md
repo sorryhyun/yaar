@@ -162,6 +162,7 @@ All compiled apps get YAAR CSS custom properties and utility classes injected au
 - **Components**: `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-btn-warning`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item` (interactive row with hover/`.active` states)
 - **Status**: `y-wash-*` (tinted fill), `y-dot` + `y-dot-ok`/`-warn`/`-err`/`-accent`/`-pulse`, `y-progress` + `y-progress-fill` (add `y-progress-indeterminate` to the track for a sliding bar)
 - **Typography**: `y-label` (uppercase muted section header), `y-truncate` (single-line), `y-clamp-2`, `y-clamp-3` (multi-line truncation)
+- **Scrollbars**: every scrollbar in the app is already styled (the same thin pill the shell uses) — don't hand-roll `::-webkit-scrollbar` rules. `y-scroll` is just `overflow-y: auto`. Retint with `--yaar-scrollbar-thumb` / `--yaar-scrollbar-thumb-hover`; hide one with `scrollbar-width: none`. **Never set `scrollbar-color`** (or a non-`none` `scrollbar-width`): in Chromium either one, inherited, switches the whole subtree back to the native bar.
 
 Always use `var(--yaar-*)` for colors — never hardcode. Use `y-*` utility classes for common patterns.
 

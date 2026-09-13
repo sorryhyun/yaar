@@ -134,8 +134,13 @@ import { join, basename } from 'path';
  * to double for its STFT — failed session creation with "Could not find an
  * implementation for Cast(13)". The routing lives in the compiled-in shim, so every
  * yaar-ml app carries the broken copy until rebuilt.
+ *
+ * '31': the injected stylesheet styles every scrollbar in the document, and `.y-scroll`
+ * dropped the `scrollbar-color` that was switching Chromium's pseudo-element styling off
+ * for it. The stylesheet is inlined into `dist/`, so without a bump only apps that
+ * happened to go stale would pick up the new scrollbar.
  */
-export const COMPILER_VERSION = '30';
+export const COMPILER_VERSION = '31';
 
 export interface BuildManifest {
   sourceHash: string;

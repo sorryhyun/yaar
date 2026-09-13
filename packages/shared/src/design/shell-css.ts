@@ -27,6 +27,8 @@ import {
   Z_INDEX,
   OVERLAYS,
   FONT_FACE_CSS,
+  SCROLLBAR_THUMB,
+  scrollbarCss,
   alpha,
 } from './tokens.js';
 
@@ -181,6 +183,11 @@ ${Object.entries(SPACING)
   --bg-glass-strong: ${alpha(D.bg, 0.95)};
   --bg-glass-inset: ${alpha(D.bgInset, 0.92)};
 
+  /* Scrollbar thumb — mixed over --color-muted on this same element, so the light
+     block below changes it without re-declaring these. */
+  --scrollbar-thumb: color-mix(in srgb, var(--color-muted) ${SCROLLBAR_THUMB.base}%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--color-muted) ${SCROLLBAR_THUMB.hover}%, transparent);
+
   color-scheme: dark;
 }
 
@@ -239,5 +246,8 @@ ${tiers(AGENT_TIERS_LIGHT)}
 
   color-scheme: light;
 }
+
+/* Scrollbars — the same generator styles app iframes. See scrollbarCss in tokens.ts. */
+${scrollbarCss('--scrollbar-thumb', '--scrollbar-thumb-hover')}
 `;
 }

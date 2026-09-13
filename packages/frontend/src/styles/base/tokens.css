@@ -150,6 +150,11 @@
   --bg-glass-strong: rgba(22,27,34,0.95);
   --bg-glass-inset: rgba(13,17,23,0.92);
 
+  /* Scrollbar thumb — mixed over --color-muted on this same element, so the light
+     block below changes it without re-declaring these. */
+  --scrollbar-thumb: color-mix(in srgb, var(--color-muted) 35%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--color-muted) 60%, transparent);
+
   color-scheme: dark;
 }
 
@@ -212,3 +217,10 @@
 
   color-scheme: light;
 }
+
+/* Scrollbars — the same generator styles app iframes. See scrollbarCss in tokens.ts. */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background-color:var(--scrollbar-thumb);background-clip:padding-box;border:3px solid transparent;border-radius:9999px;min-height:32px;min-width:32px}
+::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background-color:var(--scrollbar-thumb-hover);border-width:2px}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) transparent}}
