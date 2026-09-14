@@ -72,11 +72,13 @@ type RoutedMessageKey =
   | 'arrowDragEnd'
   | 'cursorMove'
   | 'keydown'
+  | 'fileDrop'
   // IFRAME_APP_PROTOCOL_SCRIPT — the fire-and-forget iframe → parent messages.
   | 'ready'
   | 'interaction'
   | 'event'
-  | 'openUrl';
+  | 'openUrl'
+  | 'dropAccept';
 
 export type YaarMessageType = (typeof APP_MSG)[RoutedMessageKey];
 

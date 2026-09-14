@@ -1,10 +1,19 @@
 /**
  * Hook for handling drag-over and drop events on a window frame.
- * Supports app icon drops, iframe text drags, and external image file drops.
+ * Supports app icon drops, iframe text drags, and external file drops.
+ *
+ * Text and file drops are handed to `iframe-bridge/drop.ts`, which gives them to the
+ * window's app when it claimed them with `app.onDrop`, and to the agent otherwise.
  */
 import { useCallback, useState } from 'react';
-import { useDesktopStore, getIframeDragSource, consumeIframeDragSource } from '@/store';
-import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/uploadImage';
+import {
+  useDesktopStore,
+  getIframeDragSource,
+  consumeIframeDragSource,
+  dropFilesOnWindow,
+  dropTextOnWindow,
+} from '@/store';
+import { isExternalFileDrag } from '@/lib/uploadImage';
 
 interface UseWindowDropOptions {
   windowId: string;
@@ -64,11 +73,10 @@ export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
       const appId = e.dataTransfer.getData('application/x-yaar-app');
       if (appId) {
         e.preventDefault();
-        const rawId = windowId;
         useDesktopStore
           .getState()
           .queueGestureMessage(
-            `<ui:drag>app "${appId}" dragged onto window "${windowTitle}" (id: ${rawId})</ui:drag>`,
+            `<ui:drag>app "${appId}" dragged onto window "${windowTitle}" (id: ${windowId})</ui:drag>`,
           );
         return;
       }
@@ -77,35 +85,17 @@ export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
       const dragSource = consumeIframeDragSource();
       if (dragSource) {
         e.preventDefault();
-        const store = useDesktopStore.getState();
-        const sourceWin = store.windows[dragSource.windowId];
-        const sourceTitle = sourceWin?.title ?? dragSource.windowId;
-        const sourceRawId = dragSource.windowId;
-        const targetRawId = windowId;
-        store.queueGestureMessage(
-          `<ui:select>\n  selected_text: "${dragSource.text.slice(0, 1000)}"\n  source: window "${sourceTitle}" (id: ${sourceRawId})\n</ui:select>\n<ui:drag>\n  target: window "${windowTitle}" (id: ${targetRawId})\n</ui:drag>`,
-        );
+        dropTextOnWindow(windowId, dragSource.text, dragSource.windowId);
         return;
       }
 
-      // Image file drop (only external drags from file manager, not in-page img drags)
+      // File drop (only external drags from the file manager, not in-page img drags).
+      // Stopped here so the desktop surface beneath does not take it as a drop on the
+      // background, which is what a non-image file dropped on a window used to become.
       if (isExternalFileDrag() && e.dataTransfer.files.length > 0) {
-        const imageFiles = filterImageFiles(e.dataTransfer.files);
-        if (imageFiles.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          const rawId = windowId;
-          uploadImages(imageFiles).then((paths) => {
-            if (paths.length > 0) {
-              const imageLines = paths.map((p) => `  image: ${p}`).join('\n');
-              useDesktopStore
-                .getState()
-                .queueGestureMessage(
-                  `<ui:image_drop>\n${imageLines}\n  source: window "${windowTitle}" (id: ${rawId})\n</ui:image_drop>`,
-                );
-            }
-          });
-        }
+        e.preventDefault();
+        e.stopPropagation();
+        dropFilesOnWindow(windowId, Array.from(e.dataTransfer.files));
       }
     },
     [windowId, windowTitle],

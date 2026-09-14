@@ -6,6 +6,7 @@ import type { AppProtocolPostMessage, AppProtocolRequest, AppProtocolResponse } 
 import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
 import { getDesktopState } from './store-access';
+import { forgetWindowDropClaims } from './drop';
 import {
   explainMissingWindow,
   findIframeIn,
@@ -145,6 +146,7 @@ export function resendAppProtocolReady() {
  */
 export function notifyIframeClose(windowId: string) {
   registeredAppWindows.delete(windowId);
+  forgetWindowDropClaims(windowId);
   // Raw id, not a store-resolved key — the caller is the store itself, mid-close. See
   // `resolveTargetKey`.
   const el = findWindowElement(windowId);

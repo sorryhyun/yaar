@@ -9,6 +9,8 @@
  * 4. Left click — posts `yaar:click` so parent can dismiss overlays
  * 5. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
  * 6. Reserved shortcuts — posts `yaar:keydown` for the combos the shell owns
+ * 7. File drops — posts `yaar:file-drop` for OS files dropped on content the app did
+ *    not handle itself, instead of letting the browser open the file
  *
  * Reaches the frame two ways, and needs both. `IframeRenderer` injects it on load,
  * which only works **same-origin** — an origin-isolated app (`source: 'user'`, the
@@ -170,6 +172,49 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       type: '${APP_MSG.dragStart}',
       text: text
     }, '*');
+  });
+
+  // OS files dropped on the frame's content. The shell's drop handling sits on the
+  // window frame and never sees a drag over the iframe, and a frame nobody prepared
+  // lets the browser open the dropped file itself. So a drop no handler of the app's
+  // own took is handed to the desktop, which gives it to the app's \`app.onDrop\` hook
+  // or to the agent — one decision for frame and content alike (iframe-bridge/drop.ts).
+  //
+  // Bubble phase on \`window\`, after every app handler: an app that handles a drop
+  // itself (preventDefault on dragover/drop) keeps it. Files only — text dropped into
+  // an input is the browser's to insert.
+  var localDrag = false;
+  document.addEventListener('dragstart', function() { localDrag = true; }, true);
+  document.addEventListener('dragend', function() { localDrag = false; }, true);
+
+  function claimableFileDrop(e) {
+    // A drag that started in this document is the app's own, not a drop from the OS.
+    if (e.defaultPrevented || localDrag) return false;
+    var types = e.dataTransfer && e.dataTransfer.types;
+    if (!types) return false;
+    var hasFiles = false;
+    for (var i = 0; i < types.length; i++) {
+      if (types[i] === 'Files') hasFiles = true;
+    }
+    if (!hasFiles) return false;
+    // A file input takes a dropped file natively — that is its whole job.
+    var t = e.target;
+    if (t && t.tagName === 'INPUT' && String(t.type).toLowerCase() === 'file') return false;
+    return true;
+  }
+
+  window.addEventListener('dragover', function(e) {
+    if (!claimableFileDrop(e)) return;
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'copy'; } catch(ex) {}
+  });
+
+  window.addEventListener('drop', function(e) {
+    if (!claimableFileDrop(e)) return;
+    e.preventDefault();
+    var files = Array.prototype.slice.call(e.dataTransfer.files || []);
+    if (!files.length) return;
+    window.parent.postMessage({ type: '${APP_MSG.fileDrop}', files: files }, '*');
   });
 })();
 `;

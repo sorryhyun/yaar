@@ -1,6 +1,6 @@
 /**
  * Inbound iframe messages — everything an app pushes at the desktop unprompted:
- * readiness, agent interactions, app events, and text drags.
+ * readiness, agent interactions, app events, text drags, and file drops.
  */
 import { ClientEventType } from '@/types';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
@@ -8,6 +8,7 @@ import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-man
 import { getDesktopState } from './store-access';
 import { markAppWindowRegistered } from './app-protocol-relay';
 import { openExternalUrl } from './open-url';
+import { dropFilesOnWindow, setWindowDropClaims } from './drop';
 
 /** Tracks in-flight text drag from an iframe. */
 let _iframeDragSource: { windowId: string; text: string } | null = null;
@@ -94,6 +95,22 @@ export function initIframeMessageHandlers() {
     // Fire-and-forget: the sender is an app frame with nothing to wait for, and the
     // window may take a round trip to place.
     void openExternalUrl(raw, title, ctx.source?.windowId);
+  });
+
+  // Which drops a frame's app takes over (`app.onDrop`), and OS files dropped on a frame's
+  // content that the app did not handle itself. Both feed `drop.ts`, which decides between
+  // the app and the agent for every drop on a window, frame or content.
+  iframeMessages.on('yaar:drop-accept', (ctx) => {
+    if (!ctx.source) return;
+    setWindowDropClaims(ctx.source.windowId, ctx.data.kinds);
+  });
+
+  iframeMessages.on('yaar:file-drop', (ctx) => {
+    if (!ctx.source) return;
+    const raw: unknown = ctx.data.files;
+    // Structured clone rebuilds each File in this realm, so anything else is not a file.
+    const files = Array.isArray(raw) ? raw.filter((f): f is File => f instanceof File) : [];
+    dropFilesOnWindow(ctx.source.windowId, files);
   });
 
   // yaar:click — no-op (context menu removed)

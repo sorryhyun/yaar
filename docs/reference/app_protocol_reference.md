@@ -477,6 +477,27 @@ Two rules make it safe to reach for:
 
 **Source:** `packages/server/src/agents/window-event-coordinator.ts` (`wakeOwnAppAgent`).
 
+### `app.onDrop(handlers)`
+
+Take drops on the window over from the desktop. By default a drop wakes an agent: OS files are uploaded (images to `temp/`, everything else to `files/`) and announced as `<ui:image_drop>` / `<ui:file_drop>` naming the window, and text dragged out of another window as `<ui:select>` + `<ui:drag>`. A kind the app passes a handler for is delivered to the app instead, and no agent is involved.
+
+```typescript
+import { app } from '@bundled/yaar';
+
+app.onDrop({
+  files: (files) => importImages(files.filter((f) => f.type.startsWith('image/'))),
+  text: (text, source) => insertQuote(text, source.title),
+});
+```
+
+- **Whole window.** Drops on the title bar and on the content go through the same decision. Drag events do not cross into an iframe, so the injected `contextmenu` script takes an OS file drop that no app listener handled and posts it out as `{ type: 'yaar:file-drop', files }`. That also stops the browser opening a file dropped on an app that declares nothing.
+- **An app's own listeners win.** A `dragover`/`drop` the app already `preventDefault`s never reaches the desktop, so a drop zone inside the app keeps working as written. A drop on an `<input type="file">` stays native.
+- **Files are handed over, not uploaded.** `files` receives the `File` objects; call `sendInteraction` from the handler if the agent should hear about it.
+- **Announced, not asked.** Calling `onDrop` posts `{ type: 'yaar:drop-accept', kinds }` (the protocol script also posts it empty when it installs, so a reload that no longer registers a hook stops claiming). When a claimed drop lands, the desktop posts `{ type: 'yaar:drop', kind: 'files', files }` or `{ type: 'yaar:drop', kind: 'text', text, source: { windowId, title } }` with no round trip. Calling again replaces the handlers; `null` hands every drop back to the agent.
+- App icons dragged from the dock onto a window always go to the agent.
+
+**Source:** `packages/frontend/src/store/iframe-bridge/drop.ts`.
+
 ---
 
 ## Server-Side Internals

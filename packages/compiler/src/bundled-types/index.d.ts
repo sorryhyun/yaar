@@ -806,6 +806,33 @@ interface YaarApp {
    * this event, which is why the flag is per emit and not a subscription.
    */
   emit(channel: string, payload?: unknown, opts?: { wakeAgent?: boolean }): void;
+  /**
+   * Take drops on this window over from the desktop. Call once, at module scope.
+   *
+   * By default a drop wakes an agent: OS files are uploaded and announced as
+   * `<ui:image_drop>` / `<ui:file_drop>`, text dragged from another window as
+   * `<ui:drag>`. A kind you pass a handler for comes to you instead, and the agent
+   * hears nothing — call `sendInteraction` from the handler if it should.
+   *
+   * Covers drops on the whole window, title bar and content alike. A drop your own
+   * `dragover`/`drop` listeners already handle (`preventDefault`) stays yours and
+   * never reaches this. App icons dragged from the dock always go to the agent.
+   *
+   *   app.onDrop({
+   *     files: (files) => importImages(files.filter((f) => f.type.startsWith('image/'))),
+   *   });
+   *
+   * `files` receives the dropped `File`s themselves — nothing is uploaded. `text`
+   * receives the dragged text and the window it came from. Calling again replaces
+   * the handlers; `null` hands every drop back to the agent. A handler that throws
+   * is logged; the drop is not re-sent to the agent.
+   */
+  onDrop(
+    handlers: {
+      files?: (files: File[]) => void | Promise<void>;
+      text?: (text: string, source: { windowId: string; title: string }) => void | Promise<void>;
+    } | null,
+  ): void;
 }
 
 // -- Storage SDK --

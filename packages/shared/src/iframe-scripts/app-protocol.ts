@@ -22,6 +22,13 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   var registration = null;
   var aliasMap = {};  // alias → canonical command name
 
+  // app.onDrop's handlers ({ files?, text? }), or null. The desktop learns which kinds
+  // this frame claims from APP_MSG.dropAccept, restated empty here on every install:
+  // its record outlives a reload, and a frame that stopped registering a hook must stop
+  // claiming drops, or they would be delivered to nothing.
+  var dropHandlers = null;
+  window.parent.postMessage({ type: '${APP_MSG.dropAccept}', kinds: [] }, '*');
+
   // Validate the registration shape up front and throw naming the exact missing field.
   // Without this, a missing appId/name/description silently becomes \`undefined\` in the
   // manifest, and a missing handler throws a bare "handler is not a function" only when
@@ -172,6 +179,16 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         payload: payload,
         wakeAgent: !!(opts && opts.wakeAgent)
       }, '*');
+    },
+    // Take drops on this window over from the desktop. The claim is announced up front
+    // rather than asked for per drop, so the desktop decides between this app and the
+    // agent with no round trip — and a kind with no handler is never claimed.
+    onDrop: function(handlers) {
+      dropHandlers = (handlers && typeof handlers === 'object') ? handlers : null;
+      var kinds = [];
+      if (dropHandlers && typeof dropHandlers.files === 'function') kinds.push('files');
+      if (dropHandlers && typeof dropHandlers.text === 'function') kinds.push('text');
+      window.parent.postMessage({ type: '${APP_MSG.dropAccept}', kinds: kinds }, '*');
     }
   };
 
@@ -539,6 +556,28 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     if (msg.type === '${APP_MSG.close}') {
       if (registration && typeof registration.onClose === 'function') {
         try { registration.onClose(); } catch (_) {}
+      }
+      return;
+    }
+
+    // A drop of a kind this frame claimed with app.onDrop. The handler is looked up again
+    // rather than trusted from the claim: it may have been replaced or cleared since the
+    // desktop read it. A failing handler is logged and not re-sent to the agent — the app
+    // claimed the drop, so a second recipient would be a surprise, not a fallback.
+    if (msg.type === '${APP_MSG.drop}') {
+      if (msg.kind !== 'files' && msg.kind !== 'text') return;
+      var dropHandler = dropHandlers && dropHandlers[msg.kind];
+      if (typeof dropHandler !== 'function') return;
+      var dropFailed = function(err) {
+        console.error('[yaar] app.onDrop ' + msg.kind + ' handler failed', err);
+      };
+      try {
+        var dropOut = msg.kind === 'files'
+          ? dropHandler(Array.prototype.slice.call(msg.files || []))
+          : dropHandler(String(msg.text || ''), msg.source || null);
+        if (dropOut && typeof dropOut.then === 'function') dropOut.then(null, dropFailed);
+      } catch (err) {
+        dropFailed(err);
       }
       return;
     }

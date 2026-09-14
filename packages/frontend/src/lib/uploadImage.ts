@@ -41,7 +41,7 @@ export function isExternalFileDrag(): boolean {
 }
 
 /** Filter dataTransfer files to only image types. */
-export function filterImageFiles(files: FileList): File[] {
+export function filterImageFiles(files: Iterable<File>): File[] {
   const result: File[] = [];
   for (const file of files) {
     if (IMAGE_TYPES.includes(file.type)) {

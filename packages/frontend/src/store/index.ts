@@ -8,6 +8,8 @@ export {
   tryIframeSelfCapture,
   getIframeDragSource,
   consumeIframeDragSource,
+  dropFilesOnWindow,
+  dropTextOnWindow,
 } from './iframe-bridge';
 
 // Selectors

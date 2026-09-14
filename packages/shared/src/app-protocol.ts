@@ -238,6 +238,20 @@ export const APP_MSG = {
    * `iframe-scripts/app-protocol.ts` cancels that navigation and posts this.
    */
   openUrl: 'yaar:open-url',
+  /**
+   * Which kinds of drop this app takes over from the shell (`app.onDrop`), as `kinds`.
+   * The protocol script also posts it empty when it installs: the desktop's record
+   * outlives a reload, and a frame that no longer registers a hook must stop claiming
+   * drops, or they would be delivered to nothing.
+   */
+  dropAccept: 'yaar:drop-accept',
+  /**
+   * OS files dropped on the frame's content that no handler of the app's own took
+   * (iframe-scripts/contextmenu.ts). Drag events do not cross into an iframe, so the
+   * window frame's drop handling never sees these, and an unprepared frame let the
+   * browser open the file in place of the desktop.
+   */
+  fileDrop: 'yaar:file-drop',
 
   // Self-capture (iframe-scripts/capture.ts).
   captureRequest: 'yaar:capture-request',
@@ -267,6 +281,12 @@ export const APP_MSG = {
   notificationsUpdate: 'yaar:notifications-update',
   subscriptionUpdate: 'yaar:subscription-update',
   streamFrame: 'yaar:stream-frame',
+  /**
+   * A drop of a kind the app claimed with `app.onDrop` (see `dropAccept`):
+   * `{ kind: 'files', files }` or `{ kind: 'text', text, source: { windowId, title } }`.
+   * Sent by the desktop's `iframe-bridge/drop.ts`, instead of a gesture message to the agent.
+   */
+  drop: 'yaar:drop',
 } as const;
 
 /** Any `yaar:*` postMessage type. */

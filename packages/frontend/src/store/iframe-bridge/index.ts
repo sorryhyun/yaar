@@ -22,5 +22,6 @@ export {
   consumeIframeDragSource,
   initIframeMessageHandlers,
 } from './app-events';
+export { dropFilesOnWindow, dropTextOnWindow } from './drop';
 export { initWindowsSdkHandler } from './windows-sdk';
 export { initNotificationBroadcaster } from './notifications';
