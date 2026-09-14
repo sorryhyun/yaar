@@ -24,6 +24,9 @@ import {
   buildPatch,
   truncatePatch,
   resolveCompileStatus,
+  bumpPatch,
+  bumpAppJson,
+  manifestString,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -460,6 +463,45 @@ const compileStatus = suite('compile-status', {
   },
 });
 
+const appManifest = suite('app-manifest', {
+  'a patch bump raises only the patch number'() {
+    eq(bumpPatch('1.2.3'), { from: '1.2.3', to: '1.2.4', restarted: false });
+    eq(bumpPatch('0.9.9').to, '0.9.10', 'no carry into minor');
+  },
+
+  'a prerelease or build suffix is dropped by the bump'() {
+    eq(bumpPatch('1.2.3-beta.1').to, '1.2.4');
+    eq(bumpPatch('1.2.3+sha.abc').to, '1.2.4');
+  },
+
+  // Restarting must be reported, or a garbled version silently becomes 0.0.1.
+  'a missing or non-semver version restarts at 0.0.1 and says so'() {
+    eq(bumpPatch(undefined), { from: null, to: '0.0.1', restarted: true });
+    eq(bumpPatch('1.2'), { from: '1.2', to: '0.0.1', restarted: true });
+    eq(bumpPatch('v1.2.3').restarted, true);
+    eq(bumpPatch(3), { from: '3', to: '0.0.1', restarted: true });
+  },
+
+  'bumping app.json keeps its other fields, key order and trailing newline'() {
+    const out = bumpAppJson('{\n  "appId": "demo",\n  "version": "1.0.0",\n  "icon": "x"\n}\n');
+    eq(out.to, '1.0.1');
+    eq(out.text, '{\n  "appId": "demo",\n  "version": "1.0.1",\n  "icon": "x"\n}\n');
+    eq(bumpAppJson('{"appId":"demo"}').text, '{\n  "appId": "demo",\n  "version": "0.0.1"\n}');
+  },
+
+  'an app.json that is not a JSON object is refused'() {
+    throwsWith(() => bumpAppJson('{ nope'), 'not valid JSON');
+    throwsWith(() => bumpAppJson('[1]'), 'not a JSON object');
+  },
+
+  'manifestString answers null rather than throwing'() {
+    eq(manifestString('{"appId":"demo"}', 'appId'), 'demo');
+    eq(manifestString('{"version":3}', 'version'), null, 'a non-string is not a string field');
+    eq(manifestString('garbage', 'appId'), null);
+    eq(manifestString(null, 'appId'), null);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -469,4 +511,5 @@ export const libSuites: Suite[] = [
   removedText,
   diff,
   compileStatus,
+  appManifest,
 ];

@@ -20,9 +20,12 @@ import {
   setPreviewWindowId,
   buildSerial,
   setBuildSerial,
+  typecheckState,
 } from '../core';
 import { projectPath, relativizeProjectPaths } from '../lib/paths';
 import { parseDiagnostics } from '../lib/parse-diagnostics';
+import { bumpAppJson, manifestString, type VersionBump } from '../lib/app-manifest';
+import { readFileText, writeFile } from './files';
 
 // Build, type check and deploy — the calls that talk to the dev server and
 // report their outcome through the compile/diagnostic signals.
@@ -140,30 +143,37 @@ export async function deploy(opts: {
   message?: string;
   skipTypecheck?: boolean;
   allowProtocolShrink?: boolean;
+  bump?: boolean;
 }): Promise<{
   appId: string;
   name: string;
+  version?: string;
+  bumped?: VersionBump;
   previewClosed?: boolean;
   closedWindows?: string[];
   staleWindow?: string;
 }> {
   const proj = activeProject();
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');
+  const { bump, ...serverOpts } = opts;
+  const appJsonBefore = await readFileText('app.json');
+  // Written before the deploy because the server reads the version from the sandbox's app.json.
+  const bumped = bump ? await bumpVersion(appJsonBefore) : undefined;
+  const version = bumped?.to ?? manifestString(appJsonBefore, 'version');
+
   setStatusText('Deploying...');
   let result: Awaited<ReturnType<typeof devDeploy>>;
   try {
     // Permissions and other metadata are read from sandbox's app.json by the server
-    result = await devDeploy(projectPath(proj.id), opts);
+    result = await devDeploy(projectPath(proj.id), serverOpts);
   } catch (err) {
-    setStatusText(`Deploy failed: ${errMsg(err)}`);
-    throw new AppCommandError(`Deploy failed: ${errMsg(err)}`);
+    throw await deployFailure(errMsg(err), bumped, appJsonBefore);
   }
   if (!result.success) {
-    const reason = result.error ?? 'Unknown error';
-    setStatusText(`Deploy failed: ${reason}`);
-    throw new AppCommandError(`Deploy failed: ${reason}`);
+    throw await deployFailure(result.error ?? 'Unknown error', bumped, appJsonBefore);
   }
   const name = result.name ?? opts.appId;
+  const deployedAs = `Deployed as "${name}"${version ? ` v${version}` : ''}`;
 
   // Close the preview once the deploy has actually landed. A preview is a window onto a
   // *build*, not onto the app: it runs under the throwaway `preview--{projectId}` principal
@@ -194,16 +204,60 @@ export async function deploy(opts: {
   const staleWindow = typeof result.staleWindow === 'string' ? result.staleWindow : undefined;
   setStatusText(
     staleWindow
-      ? `Deployed as "${name}" — this window is still on the old build; reload it`
+      ? `${deployedAs} — this window is still on the old build; reload it`
       : closedWindows.length > 0
-        ? `Deployed as "${name}" — closed ${closedWindows.length} stale window(s)`
-        : `Deployed as "${name}"`,
+        ? `${deployedAs} — closed ${closedWindows.length} stale window(s)`
+        : deployedAs,
   );
   return {
     appId: result.appId ?? opts.appId,
     name,
+    ...(version ? { version } : {}),
+    ...(bumped ? { bumped } : {}),
     ...(previewClosed ? { previewClosed } : {}),
     ...(closedWindows.length > 0 ? { closedWindows } : {}),
     ...(staleWindow ? { staleWindow } : {}),
   };
+}
+
+async function writeAppJson(text: string, label: string): Promise<void> {
+  const verdict = typecheckState();
+  await writeFile('app.json', text, { label });
+  // writeFile resets the typecheck verdict on every write, but app.json is not part of the
+  // TypeScript program, so the check that ran before still describes the code.
+  setTypecheckState(verdict);
+}
+
+async function bumpVersion(appJson: string | null): Promise<VersionBump> {
+  if (appJson === null) throw new AppCommandError('Cannot bump: the project has no app.json.');
+  let next: ReturnType<typeof bumpAppJson>;
+  try {
+    next = bumpAppJson(appJson);
+  } catch (err) {
+    throw new AppCommandError(`Cannot bump: ${errMsg(err)}`);
+  }
+  await writeAppJson(next.text, `bump version ${next.from ?? '(none)'} → ${next.to}`);
+  return { from: next.from, to: next.to, restarted: next.restarted };
+}
+
+/**
+ * The error for a refused deploy, after undoing the version bump made for it — a bump that
+ * outlived its failed deploy would make the retry skip a version that never shipped.
+ */
+async function deployFailure(
+  reason: string,
+  bumped: VersionBump | undefined,
+  appJsonBefore: string | null,
+): Promise<AppCommandError> {
+  let note = '';
+  if (bumped && appJsonBefore !== null) {
+    try {
+      await writeAppJson(appJsonBefore, `revert version bump to ${bumped.from ?? '(none)'}`);
+      note = ` (version bump reverted to ${bumped.from ?? 'none'})`;
+    } catch (err) {
+      note = ` (app.json is still at ${bumped.to}: reverting the bump failed — ${errMsg(err)})`;
+    }
+  }
+  setStatusText(`Deploy failed: ${reason}${note}`);
+  return new AppCommandError(`Deploy failed: ${reason}${note}`);
 }

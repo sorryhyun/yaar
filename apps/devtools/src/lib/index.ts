@@ -9,3 +9,4 @@ export * from './edits';
 export * from './parse-diagnostics';
 export * from './diff';
 export * from './compile-status';
+export * from './app-manifest';

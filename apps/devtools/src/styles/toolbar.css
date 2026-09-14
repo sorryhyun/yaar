@@ -151,6 +151,21 @@
   flex: 1;
 }
 
+.toolbar-bump {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toolbar-bump input {
+  margin: 0;
+  accent-color: var(--yaar-accent);
+}
+
 /* The project menu lists "Load project…" and "Clone installed app…" too, so a
    narrow window drops the duplicate buttons and gives the space to the name. */
 @media (max-width: 720px) {

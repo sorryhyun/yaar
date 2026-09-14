@@ -1,13 +1,16 @@
 export {};
 import { createSignal, onCleanup, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { app, errMsg, onShortcut, tryToast } from '@bundled/yaar';
+import { app, errMsg, onShortcut, showConfirm, showToast, tryToast } from '@bundled/yaar';
 import { activeProject, projects, openTabs, previewUrl, type ProjectMeta } from '../core';
+import { manifestString } from '../lib';
 import {
   openProject,
   closeTab,
   compile,
   cloneApp,
+  deploy,
+  readFileText,
   listInstalledApps,
   type InstalledApp,
 } from '../services';
@@ -33,6 +36,8 @@ const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
 const [appsError, setAppsError] = createSignal<string | null>(null);
 const [busy, setBusy] = createSignal(false);
 const [menuOpen, setMenuOpen] = createSignal(false);
+const [bumpOnDeploy, setBumpOnDeploy] = createSignal(false);
+const [deploying, setDeploying] = createSignal(false);
 
 function closeMenu(): void {
   setMenuOpen(false);
@@ -118,6 +123,30 @@ function requestPreview(): void {
     previewUrl: url,
     projectName: activeProject()?.name ?? 'Preview',
   });
+}
+
+async function deployFromToolbar(): Promise<void> {
+  const appId = manifestString(await readFileText('app.json'), 'appId');
+  if (!appId) {
+    showToast('app.json has no appId to deploy under', 'error');
+    return;
+  }
+  const bump = bumpOnDeploy();
+  const confirmed = await showConfirm(
+    `Deploy this project over the installed "${appId}"${bump ? ', bumping its version' : ''}?`,
+    { title: 'Deploy', okLabel: 'Deploy' },
+  );
+  if (!confirmed) return;
+  setDeploying(true);
+  try {
+    const result = await tryToast(() => deploy({ appId, bump }));
+    if (result) {
+      const version = result.version ? ` v${result.version}` : '';
+      showToast(`Deployed "${result.name}"${version}`, 'success', 5000);
+    }
+  } finally {
+    setDeploying(false);
+  }
 }
 
 /** The project name, doubling as the open-project menu. */
@@ -336,6 +365,27 @@ export function ProjectToolbar() {
         title="Open preview window"
       >
         Preview
+      </button>
+
+      <label
+        class="toolbar-bump y-text-xs"
+        title="Raise app.json's version one patch step (1.2.3 → 1.2.4) before deploying"
+      >
+        <input
+          type="checkbox"
+          checked=${bumpOnDeploy}
+          onChange=${(e: Event) => setBumpOnDeploy((e.target as HTMLInputElement).checked)}
+        />
+        Bump version
+      </label>
+
+      <button
+        class="y-btn y-btn-sm"
+        disabled=${() => !activeProject() || deploying()}
+        onClick=${deployFromToolbar}
+        title="Deploy this project over the installed app"
+      >
+        ${() => (deploying() ? 'Deploying…' : 'Deploy')}
       </button>
 
       <${Show} when=${picker}>
