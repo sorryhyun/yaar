@@ -27,6 +27,15 @@ import type {
 import { resolveMountPath, mountRootAlias, loadMounts, type ResolvedPath } from './mounts.js';
 // A leaf, shared with window content inlining — see text-extensions.ts for why not here.
 import { isTextFile } from './text-extensions.js';
+// Also a leaf, for the same reason: paths that reach into an archive.
+import {
+  ARCHIVE_LIMITS,
+  MAX_ARCHIVE_READ_BYTES,
+  archiveChildren,
+  locateArchive,
+} from './archive-entries.js';
+import { archiveFormatOf, openArchive } from '@yaar/lib/archive';
+import { errMessage } from '@yaar/lib/errors';
 
 /**
  * Resolve a storage-relative path to an absolute path, checking mounts first.
@@ -192,6 +201,106 @@ export interface StorageReadOptions {
 }
 
 /**
+ * An image's bytes as a read result.
+ *
+ * Re-encoded to WebP on the way out (unless `raw`): this is a presentation read whose consumer
+ * is a vision model, and a PNG dropped into storage by another app or by the user otherwise
+ * enters the context at its full lossless size every single time it is read. The stored bytes
+ * are not touched — see `toWebPForModel` for what it declines to convert (WebP already, GIF
+ * because of animation) and when it hands the original back.
+ */
+async function imageReadResult(buf: Buffer, mime: string, raw?: boolean): Promise<StorageReadResult> {
+  const encoded = raw ? { data: buf, mimeType: mime } : await toWebPForModel(buf, mime);
+  const image: StorageImageContent = {
+    type: 'image',
+    data: encoded.data.toString('base64'),
+    mimeType: encoded.mimeType,
+  };
+  const note =
+    encoded.mimeType === mime
+      ? `Image file (${mime})`
+      : `Image file (${mime}, re-encoded to ${encoded.mimeType} for this read; the stored file is unchanged)`;
+  return { success: true, content: note, images: [image] };
+}
+
+const utf8Decoder = new TextDecoder();
+
+/**
+ * Read a path inside an archive (`data.zip/docs/readme.md`), which is not on disk under that name.
+ * Null when the path is not inside one, so the caller's "not found" stands.
+ */
+async function readFromArchive(
+  filePath: string,
+  opts?: StorageReadOptions,
+): Promise<StorageReadResult | null> {
+  const location = await locateArchive(normalizeSeparators(filePath), resolvePath);
+  if (!location || !location.innerPath) return null;
+  try {
+    const reader = await openArchive(location.absolutePath, location.format, ARCHIVE_LIMITS);
+    const entry = reader.entries.find((e) => e.path === location.innerPath);
+    if (!entry || entry.isDirectory) {
+      if (archiveChildren(reader, location)) {
+        return { success: false, isDirectory: true, error: `"${filePath}" is a directory. Use list instead.` };
+      }
+      return {
+        success: false,
+        notFound: true,
+        error: `File not found: ${filePath} (${location.archivePath} has no entry "${location.innerPath}")`,
+      };
+    }
+    if (entry.size > MAX_ARCHIVE_READ_BYTES) {
+      return {
+        success: false,
+        error:
+          `"${filePath}" is ${entry.size} bytes, more than the ${MAX_ARCHIVE_READ_BYTES} a read takes ` +
+          'out of an archive. Unpack the archive with invoke action "extract" instead.',
+      };
+    }
+    const data = await reader.read(entry.path);
+    const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+
+    const mime = imageFileMime(entry.path);
+    if (mime) return imageReadResult(bytes, mime, opts?.rawImage);
+    if (!isTextFile(entry.path)) {
+      const ext = extname(entry.path) || '(no extension)';
+      return {
+        success: true,
+        content: `Binary file (${ext}) inside ${location.archivePath} — cannot be read as text. Unpack the archive with invoke action "extract" to use it.`,
+      };
+    }
+    return { success: true, content: utf8Decoder.decode(bytes) };
+  } catch (err) {
+    return {
+      success: false,
+      error: sanitizeStorageError(`${location.archivePath}: ${errMessage(err)}`, filePath),
+    };
+  }
+}
+
+/**
+ * List a folder inside an archive, or an archive's root. Null when the path is neither, so the
+ * caller's own answer stands.
+ */
+async function listArchive(dirPath: string): Promise<StorageListResult | null> {
+  const location = await locateArchive(normalizeSeparators(dirPath), resolvePath);
+  if (!location) return null;
+  try {
+    const reader = await openArchive(location.absolutePath, location.format, ARCHIVE_LIMITS);
+    const entries = archiveChildren(reader, location);
+    if (entries) return { success: true, entries };
+    if (reader.entries.some((e) => e.path === location.innerPath)) {
+      return { success: false, error: `"${dirPath}" is a file, not a folder. Use read instead.` };
+    }
+    return { success: false, notFound: true, error: `Directory not found: ${dirPath}` };
+  } catch (err) {
+    return {
+      success: false,
+      error: sanitizeStorageError(`${location.archivePath}: ${errMessage(err)}`, dirPath),
+    };
+  }
+}
+
+/**
  * Read a file from storage.
  */
 export async function storageRead(
@@ -210,13 +319,30 @@ export async function storageRead(
     try {
       fileStat = await stat(validatedPath);
     } catch {
-      return { success: false, notFound: true, error: `File not found: ${filePath}` };
+      // Nothing on disk under this name — unless the name reaches into an archive.
+      return (
+        (await readFromArchive(filePath, opts)) ?? {
+          success: false,
+          notFound: true,
+          error: `File not found: ${filePath}`,
+        }
+      );
     }
     if (fileStat.isDirectory()) {
       return {
         success: false,
         isDirectory: true,
         error: `"${filePath}" is a directory. Use list instead.`,
+      };
+    }
+
+    // An archive reads as the folder it stands for: every door already lists on `isDirectory`.
+    if (archiveFormatOf(validatedPath)) {
+      return {
+        success: false,
+        isDirectory: true,
+        isArchive: true,
+        error: `"${filePath}" is an archive. List it to see its entries, or read one as ${filePath}/{entry}.`,
       };
     }
 
@@ -269,28 +395,11 @@ export async function storageRead(
       };
     }
 
-    // Image files — return as base64 image content.
-    //
-    // Re-encoded to WebP on the way out (unless `rawImage`): this is a presentation
-    // read whose consumer is a vision model, and a PNG dropped into storage by another
-    // app or by the user otherwise enters the context at its full lossless size every
-    // single time it is read. The file on disk is not touched — see `toWebPForModel`
-    // for what it declines to convert (WebP already, GIF because of animation) and when
-    // it hands the original back.
+    // Image files — return as base64 image content, re-encoded for the model (see imageReadResult).
     const mime = imageFileMime(validatedPath);
     if (mime) {
       const buf = Buffer.from(await Bun.file(validatedPath).arrayBuffer());
-      const encoded = opts?.rawImage ? { data: buf, mimeType: mime } : await toWebPForModel(buf, mime);
-      const image: StorageImageContent = {
-        type: 'image',
-        data: encoded.data.toString('base64'),
-        mimeType: encoded.mimeType,
-      };
-      const note =
-        encoded.mimeType === mime
-          ? `Image file (${mime})`
-          : `Image file (${mime}, re-encoded to ${encoded.mimeType} for this read; the stored file is unchanged)`;
-      return { success: true, content: note, images: [image] };
+      return imageReadResult(buf, mime, opts?.rawImage);
     }
 
     // Reject unknown binary files — don't read as UTF-8
@@ -475,10 +584,17 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
     try {
       const info = await stat(resolved.absolutePath);
       if (!info.isDirectory()) {
+        // An archive lists as the folder it stands for.
+        const archive = archiveFormatOf(cleaned) ? await listArchive(cleaned) : null;
+        if (archive) return archive;
         return { success: false, error: `"${cleaned}" is a file, not a folder. Use read instead.` };
       }
       dirEntries = await readdir(resolved.absolutePath);
     } catch {
+      // Nothing on disk under this name — unless the name reaches into an archive.
+      const inArchive = await listArchive(cleaned);
+      if (inArchive) return inArchive;
+
       // A directory that does not exist is not an empty one. Reporting it as
       // `{ success: true, entries: [] }` made `list('yaar://storage/nope/')`
       // indistinguishable from a folder with nothing in it — the same false success as

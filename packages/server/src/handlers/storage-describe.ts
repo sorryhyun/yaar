@@ -15,6 +15,7 @@
 
 import { stat } from 'fs/promises';
 import { extname } from 'path';
+import { archiveFormatOf } from '@yaar/lib/archive';
 import type { VerbResult } from './uri-registry.js';
 import { okJson, error, mimeFromPath } from './utils.js';
 import { resolvePath, storageList } from '../storage/storage-manager.js';
@@ -23,10 +24,21 @@ import { resolvePath, storageList } from '../storage/storage-manager.js';
 const DIRECTORY_VERBS = ['describe', 'read', 'list', 'invoke', 'delete'] as const;
 /** Verbs a file answers to. `list` is not one — a file is not a collection. */
 const FILE_VERBS = ['describe', 'read', 'invoke', 'delete'] as const;
+/** Verbs a folder inside an archive answers to. The archive is read-only from inside. */
+const ARCHIVE_FOLDER_VERBS = ['describe', 'read', 'list'] as const;
+const ARCHIVE_FILE_VERBS = ['describe', 'read'] as const;
 
 /** Sum the direct children's sizes. Shallow on purpose — `list` is shallow too. */
 function totalSizeOf(entries: Array<{ isDirectory: boolean; size?: number }>): number {
   return entries.reduce((sum, e) => sum + (e.isDirectory ? 0 : (e.size ?? 0)), 0);
+}
+
+/** Does a parent segment of this path name an archive? */
+function isInsideArchiveName(path: string): boolean {
+  return path
+    .split('/')
+    .slice(0, -1)
+    .some((segment) => archiveFormatOf(segment) !== null);
 }
 
 /**
@@ -48,6 +60,30 @@ export async function describeStoragePath(uri: string, path: string): Promise<Ve
     // synthesizes it from the mount table. Everything else that does not stat is
     // simply not there.
     if (cleaned === 'mounts') return describeDirectory(uri, cleaned);
+    // …except a path inside an archive, which is on disk only as the archive. `storageList`
+    // is what knows the archive's shape, so it answers for the path.
+    if (isInsideArchiveName(cleaned)) {
+      const listed = await storageList(cleaned);
+      if (listed.success) {
+        return okJson({
+          uri,
+          kind: 'directory',
+          insideArchive: true,
+          entries: listed.entries?.length ?? 0,
+          totalSize: totalSizeOf(listed.entries ?? []),
+          verbs: [...ARCHIVE_FOLDER_VERBS],
+        });
+      }
+      if (listed.error?.includes('is a file')) {
+        return okJson({
+          uri,
+          kind: 'file',
+          insideArchive: true,
+          mimeType: mimeFromPath(cleaned),
+          verbs: [...ARCHIVE_FILE_VERBS],
+        });
+      }
+    }
     return error(
       `No resource at ${uri}. Use list on the parent folder to see what is actually there.`,
     );
@@ -64,6 +100,20 @@ export async function describeStoragePath(uri: string, path: string): Promise<Ve
     mimeType: mimeFromPath(cleaned),
     verbs: [...FILE_VERBS],
   };
+
+  const format = archiveFormatOf(cleaned);
+  if (format) {
+    return okJson({
+      ...base,
+      kind: 'archive',
+      format,
+      verbs: [...DIRECTORY_VERBS],
+      hint:
+        `Reads as a read-only folder: list it, or read an entry as ${uri}/{entry}. To unpack ` +
+        `it, invoke a new folder's URI with { action: "extract", from: "${uri}" }.`,
+    });
+  }
+
   if (!isPdf) return okJson(base);
 
   // A PDF is the one file type whose read has options worth naming up front: reading

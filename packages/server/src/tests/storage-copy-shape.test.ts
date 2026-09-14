@@ -16,13 +16,16 @@
  */
 import { describe, it, expect } from 'bun:test';
 import {
+  COMPRESS_ACTION,
   COPY_ACTION,
   COPY_FROM_REQUIRED,
-  COPY_FROM_SCHEMA,
+  EXTRACT_ACTION,
+  FROM_SCHEMA,
   copyFrom,
-  copySources,
+  invokeSources as copySources,
   isCopyPayload,
-  resolveCopySources,
+  resolveInvokeSources as resolveCopySources,
+  sourcesRequired,
 } from '../handlers/storage-copy.js';
 import { initRegistry } from '../handlers/index.js';
 import { handleVerbRoutes } from '../http/routes/verb.js';
@@ -95,7 +98,68 @@ describe('copySources', () => {
     expect(isCopyPayload(payload)).toBe(true);
     expect(copyFrom(payload)).toBe('yaar://storage/a.txt');
     // The schema the doors advertise names the same field these read.
-    expect(COPY_FROM_SCHEMA.description).toContain('copy');
+    expect(FROM_SCHEMA.description).toContain('copy');
+  });
+});
+
+/**
+ * `extract` and `compress` read `from` exactly as `copy` does, so the gate must see them too —
+ * an archive of another app's storage is that storage, read.
+ */
+describe('invokeSources for the archive actions', () => {
+  it('collects the archive an extract reads, and every source a compress packs', () => {
+    expect(copySources({ action: EXTRACT_ACTION, from: 'yaar://storage/a.zip' })).toEqual({
+      sources: ['yaar://storage/a.zip'],
+    });
+    expect(
+      copySources({
+        action: COMPRESS_ACTION,
+        from: ['yaar://storage/docs/', 'yaar://apps/vault/storage/keys.json'],
+      }),
+    ).toEqual({ sources: ['yaar://storage/docs/', 'yaar://apps/vault/storage/keys.json'] });
+  });
+
+  it('refuses an archive action with no usable source', () => {
+    expect(copySources({ action: EXTRACT_ACTION })).toEqual({
+      error: sourcesRequired(EXTRACT_ACTION),
+    });
+    expect(copySources({ action: COMPRESS_ACTION, from: [] })).toEqual({
+      error: sourcesRequired(COMPRESS_ACTION),
+    });
+    // Only compress packs several; an extract naming an array names no one archive.
+    expect(copySources({ action: EXTRACT_ACTION, from: ['yaar://storage/a.zip'] })).toEqual({
+      error: sourcesRequired(EXTRACT_ACTION),
+    });
+  });
+
+  it('403s an extract of another app’s archive', async () => {
+    initRegistry();
+    const res = await callVerb(appToken(), 'invoke', 'yaar://apps/notes/storage/unpacked', {
+      action: EXTRACT_ACTION,
+      from: 'yaar://apps/vault/storage/backup.zip',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('403s a compress that slips another app’s file into its sources', async () => {
+    initRegistry();
+    const res = await callVerb(appToken(), 'invoke', 'yaar://apps/notes/storage/out.zip', {
+      action: COMPRESS_ACTION,
+      from: ['yaar://apps/notes/storage/notes.md', 'yaar://apps/vault/storage/keys.json'],
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('expands `self` in every element of a compress source array', () => {
+    expect(
+      resolveCopySources(
+        { action: COMPRESS_ACTION, from: ['yaar://apps/self/storage/a', 'yaar://storage/b'] },
+        'notes',
+      ),
+    ).toEqual({
+      action: COMPRESS_ACTION,
+      from: ['yaar://apps/notes/storage/a', 'yaar://storage/b'],
+    });
   });
 });
 

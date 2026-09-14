@@ -31,12 +31,15 @@ import {
 import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
 import { copyStorageBytes, decodeWriteContent } from './storage-bytes.js';
 import {
+  COMPRESS_ACTION,
   COPY_ACTION,
   COPY_FROM_REQUIRED,
-  COPY_FROM_SCHEMA,
+  EXTRACT_ACTION,
+  FROM_SCHEMA,
   copyFrom,
   isCopyPayload,
 } from './storage-copy.js';
+import { invokeArchiveAction } from './storage-archive.js';
 import { describeStoragePath } from './storage-describe.js';
 
 // ── Helpers ──
@@ -64,13 +67,20 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       'hand a file to another app), "temp/" (scratch, safe to prune), "files/" (user documents), ' +
       'and "apps/{id}/" (an app\'s private storage — also spelled yaar://apps/{id}/storage/). ' +
       'To move a file, prefer action "copy" over reading it and writing it back: copy moves ' +
-      'the bytes server-side, a read/write round-trip drags them through the conversation.',
+      'the bytes server-side, a read/write round-trip drags them through the conversation. ' +
+      'An archive (.zip, .tar, .tar.gz, .tgz) reads as a read-only folder: list it, and read ' +
+      'an entry as yaar://storage/{archive}/{entry}. To unpack one, invoke the new folder with ' +
+      'action "extract" and "from" the archive; to build one, invoke the archive to create with ' +
+      'action "compress" and "from" the files or folders to pack.',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['write', COPY_ACTION, 'edit', 'grep'] },
+        action: {
+          type: 'string',
+          enum: ['write', COPY_ACTION, 'edit', 'grep', EXTRACT_ACTION, COMPRESS_ACTION],
+        },
         pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
         glob: {
           type: 'string',
@@ -88,7 +98,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
             'Set to "base64" when "content" is base64-encoded binary (images, PDFs). ' +
             'Omit for text. Writing binary without it stores the base64 text itself.',
         },
-        from: COPY_FROM_SCHEMA,
+        from: FROM_SCHEMA,
         old_string: { type: 'string', description: 'Text to find (edit string mode)' },
         new_string: { type: 'string', description: 'Replacement text (edit)' },
         start_line: {
@@ -128,10 +138,15 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         rawImage: options?.rawImage,
       });
       if (!result.success) {
-        // Directory → fall through to list
-        if (result.error?.includes('is a directory'))
+        // Directory — or an archive, which reads as the folder it stands for → fall through to list
+        if (result.isDirectory)
           return this.list!(resolved).then((r) =>
-            prependNote(r, 'This is a folder — used list instead.'),
+            prependNote(
+              r,
+              result.isArchive
+                ? 'This is an archive — used list instead. Read an entry by its path under the archive.'
+                : 'This is a folder — used list instead.',
+            ),
           );
         // A caller with a fallback said so by passing `missingOk` — see ReadOptions.
         if (result.notFound && options?.missingOk) return okMissing();
@@ -235,6 +250,10 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`);
       }
 
+      // `extract` / `compress` — same shape as copy: this URI is written, `from` is read.
+      const archived = await invokeArchiveAction(payload, path, `yaar://storage/${path}`);
+      if (archived) return archived;
+
       if (action === 'edit') {
         if (!path) return error('Provide a file path to edit.');
         const raw = await readStorageRaw(path);
@@ -260,7 +279,9 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         });
       }
 
-      return error(`Unknown action "${action}". Use "write", "copy", "edit", or "grep".`);
+      return error(
+        `Unknown action "${action}". Use "write", "copy", "edit", "grep", "extract", or "compress".`,
+      );
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

@@ -16,6 +16,7 @@ export * from './image.js';
 export * from './open-url.js';
 export * from './pick-directory.js';
 export * from './ssrf.js';
+export * from './archive/index.js';
 export * from './download/index.js';
 export * from './fonts/index.js';
 export * from './freedpi/index.js';

@@ -14,7 +14,7 @@ import { expandBraceUri } from '@yaar/shared';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
-import { copySources, resolveCopySources } from '../../handlers/storage-copy.js';
+import { invokeSources, resolveInvokeSources } from '../../handlers/storage-copy.js';
 import type { InvokePayload, ReadOptions, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   namesSelf,
@@ -338,18 +338,19 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const denied = requirePermission(principal, uri, verb);
   if (denied) return denied;
 
-  // `invoke { action: 'copy', from }` reads one URI and writes another, so the write
-  // permission checked above covers only half of it. Without this an app permitted to
-  // write its own storage could name any source and pull the bytes in — a read grant
-  // for the whole tree, spelled as a write. The source is checked under the same rules
-  // as reading it directly; `copy` adds no authority, only a cheaper route.
+  // `invoke { action: 'copy' | 'extract' | 'compress', from }` reads one URI and writes
+  // another, so the write permission checked above covers only half of it. Without this an
+  // app permitted to write its own storage could name any source and pull the bytes in — a
+  // read grant for the whole tree, spelled as a write (or as an archive of it). Each source
+  // is checked under the same rules as reading it directly; these actions add no authority,
+  // only a cheaper route.
   //
-  // `copySources` is shared with the handlers that implement `copy` (handlers/storage-copy.ts)
+  // `invokeSources` is shared with the handlers that implement them (handlers/storage-copy.ts)
   // so the field this gate reads and the field they act on cannot drift apart. It covers
   // both payload axes: a batched invoke is N calls the registry runs without coming back
   // through this door, so checking only the object form would make the array form the bypass.
   if (verb === 'invoke') {
-    const copies = copySources(body.payload);
+    const copies = invokeSources(body.payload);
     if ('error' in copies) return errorResponse(copies.error, 400);
     for (const from of copies.sources) {
       const deniedSource = requirePermission(principal, from, 'read');
@@ -374,7 +375,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // an app literally named `self`. That made the copy asymmetric — an app could import
   // *into* its own storage and not export back out of it — which is the whole of what
   // devtools was missing to hand a project file to another app.
-  const payload = resolveCopySources(body.payload, tokenEntry?.appId);
+  const payload = resolveInvokeSources(body.payload, tokenEntry?.appId);
 
   // Log to session logs. Data-plane verbs (an app's proxied fetch) and the devtools
   // console poll are skipped; the rest are summarized — see lib/format-verb-log.ts.

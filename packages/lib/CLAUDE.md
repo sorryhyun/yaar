@@ -32,6 +32,7 @@ direction is one-way forever.
 
 | Path | What |
 | --- | --- |
+| `archive/` | zip (hand-written on `node:zlib`: CRC-checked, inflate capped at the declared size, ZIP64) and tar/tar.gz (`Bun.Archive` behind a bounded gunzip) — list, read one entry, build. Every limit is the caller's; nothing here writes entries to disk |
 | `download/` | Chunked, resumable HTTP download to a file |
 | `fonts/` | OpenType/CFF/glyf subsetting — the byte-level half. The catalog of served faces is the server's `features/fonts/` |
 | `freedpi/` | Loopback CONNECT proxy that fragments TLS past SNI-matching DPI. On by default; `YAAR_FREEDPI=0` turns it off |

@@ -33,6 +33,12 @@ export interface StorageReadResult {
    */
   isDirectory?: boolean;
   /**
+   * Alongside `isDirectory`: the path is an archive (.zip, .tar, .tar.gz, .tgz), which reads as
+   * the folder it stands for. Its entries are addressed as paths beneath it. Set only alongside
+   * `success: false`.
+   */
+  isArchive?: boolean;
+  /**
    * The file does not exist — as distinct from existing and being unreadable. The
    * read-side twin of `StorageListResult.notFound`: absence is the one failure a
    * caller routinely *expects* (an optional config file on a first run), and telling

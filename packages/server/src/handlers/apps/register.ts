@@ -17,7 +17,7 @@ import type { ReadOptions, ResourceRegistry, VerbResult } from '../uri-registry.
 import type { ResolvedUri } from '../uri-resolve.js';
 import { okJson, error } from '../utils.js';
 import { parseAppDbPath } from './paths.js';
-import { COPY_ACTION, COPY_FROM_SCHEMA } from '../storage-copy.js';
+import { COMPRESS_ACTION, COPY_ACTION, EXTRACT_ACTION, FROM_SCHEMA } from '../storage-copy.js';
 import { DB_DESCRIBE, handleDbVerb } from './db-resource.js';
 import {
   describePersonas,
@@ -143,17 +143,24 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         // wildcard, so `yaar://apps/{id}/storage/…` cannot register its own schema.
         action: {
           type: 'string',
-          enum: [...appActions.names, 'write', COPY_ACTION, 'grep'],
+          enum: [
+            ...appActions.names,
+            'write',
+            COPY_ACTION,
+            'grep',
+            EXTRACT_ACTION,
+            COMPRESS_ACTION,
+          ],
           description:
             `On the app itself: ${appActions.names.join(', ')}. ` +
-            'On a /storage/ sub-path: write, copy, grep. On a /db/ sub-path see ' +
+            'On a /storage/ sub-path: write, copy, grep, extract, compress. On a /db/ sub-path see ' +
             'describe(yaar://apps/{id}/db/{collection}).',
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
         content: { type: 'string', description: 'File content (for storage write)' },
         // The action enum has always advertised `copy` here and never said what to
         // copy *from* — the first casualty of the copy shape living in four files.
-        from: COPY_FROM_SCHEMA,
+        from: FROM_SCHEMA,
         encoding: {
           type: 'string',
           enum: ['utf-8', 'base64'],

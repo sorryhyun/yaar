@@ -21,6 +21,7 @@ import {
   notFoundError,
   mimeFromPath,
   applyReadOptions,
+  prependNote,
 } from '../utils.js';
 import {
   storageRead,
@@ -33,6 +34,7 @@ import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
 import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
 import { COPY_FROM_REQUIRED, copyFrom, isCopyPayload } from '../storage-copy.js';
+import { invokeArchiveAction } from '../storage-archive.js';
 import { describeStoragePath } from '../storage-describe.js';
 
 /**
@@ -90,7 +92,9 @@ export async function describeStorage(uri: string): Promise<VerbResult | null> {
       kind: 'directory',
       description:
         'App-scoped file storage. Invoke with action "write" (add "encoding": "base64" for ' +
-        'binary), "copy" (with "from": a yaar:// storage URI — moves bytes server-side), or "grep".',
+        'binary), "copy" (with "from": a yaar:// storage URI — moves bytes server-side), "grep", ' +
+        '"extract" (target a new folder, "from" an archive) or "compress" (target the archive ' +
+        'to create, "from" the files or folders). An archive reads as a read-only folder.',
       // A namespace root that nothing has written to yet lists as empty, not missing.
       entries: listed.entries?.length ?? 0,
       verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
@@ -114,6 +118,17 @@ export async function readStorage(
   }
   const result = await storageRead(prefixedPath);
   if (!result.success) {
+    // An archive reads as the folder it stands for. (A plain directory still answers with
+    // the error below: this door never fell through to list for one, and the SDK's
+    // `appStorage.read` relies on that.)
+    if (result.isArchive) {
+      return storageListLinks(storagePath.appId, prefixedPath).then((r) =>
+        prependNote(
+          r,
+          'This is an archive — used list instead. Read an entry by its path under the archive.',
+        ),
+      );
+    }
     // An app reading its own optional config declares that absence is fine by passing
     // `missingOk`; answer it with `null` rather than a failure it would only catch.
     if (result.notFound && options?.missingOk) return okMissing();
@@ -197,6 +212,13 @@ export async function invokeStorage(
     if ('error' in copied) return error(copied.error);
     subscriptionRegistry.notifyChange(resolved.sourceUri);
     return ok(`Copied ${from} → ${resolved.sourceUri} (${copied.bytes} bytes)`);
+  }
+
+  // `extract` / `compress` take copy's shape, and its gate: this URI is written, `from` is read.
+  const archived = await invokeArchiveAction(payload, prefixedPath, resolved.sourceUri);
+  if (archived) {
+    if (!archived.isError) subscriptionRegistry.notifyChange(resolved.sourceUri);
+    return archived;
   }
 
   if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);

@@ -109,7 +109,8 @@ src/
 │   ├── uri-registry.ts   # ResourceRegistry — central handler registry, access tiers, batch execution
 │   ├── uri-resolve.ts    # Server-side URI resolution
 │   ├── define-actions.ts # defineActions() — one table per action-bearing handler; enum, docs and dispatch all come off it
-│   ├── storage-copy.ts   # The shared `copy` shape — field name, schema, refusal wording, gate extraction, in one module
+│   ├── storage-copy.ts   # The shared source-reading shape (copy/extract/compress) — field name, schema, refusal wording, gate extraction, in one module
+│   ├── storage-archive.ts # extract/compress as verb results for both storage doors (storage/archive-ops.ts does the work)
 │   ├── storage-describe.ts # describeStoragePath() — describe for a path on disk, shared by both storage doors
 │   ├── apps/             # register.ts, app-resource.ts, protocol-resource.ts, agents-resource.ts, storage-resource.ts, db-resource.ts, paths.ts
 │   ├── agents.ts / apps.ts (barrel) / storage.ts / storage-bytes.ts / config.ts / history.ts / http.ts / mcp-gateway.ts
@@ -140,7 +141,9 @@ src/
 ├── reload/               # Fingerprint-based action cache
 ├── observability/        # log.ts — structured logging; the ONLY sanctioned console.* in the server
 ├── logging/              # Session logging (JSONL), reading, context/window restore, empty-log prune
-├── storage/              # StorageManager, permissions, shortcuts, settings, mounts, app-grants.ts
+├── storage/              # StorageManager, permissions, shortcuts, settings, mounts, app-grants.ts,
+│                         #   archive-entries.ts (paths *into* a .zip/.tar/.tgz — read and list treat an archive as a read-only folder),
+│                         #   archive-ops.ts (extract / compress)
 └── lib/                  # Utilities that need server internals (the generic half is @yaar/lib, see below)
     ├── browser/              # CDP browser automation — Chrome discovery, sessions, pool, downloads
     ├── schema-refs.ts        # resolveRef/selfContained — following a protocol schema's `$defs` pointers
