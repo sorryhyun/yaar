@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFile, readFile, mkdir, mkdtemp, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import type { Subprocess } from 'bun';
 import { cleanupStaleChrome, writePidFile, removePidFile } from '../lib/browser/pid-file.js';
 
 let testDir: string;
@@ -25,6 +26,26 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+const children: Subprocess[] = [];
+
+/** A harmless long-lived process carrying `args` on its command line. */
+function spawnIdler(args: string[]): Subprocess {
+  const child = Bun.spawn([process.execPath, '-e', 'setTimeout(() => {}, 60000)', '--', ...args], {
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+  children.push(child);
+  return child;
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('stale Chrome cleanup', () => {
@@ -34,6 +55,7 @@ describe('stale Chrome cleanup', () => {
     pidFile = join(testDir, 'yaar-browser.pid');
   });
   afterEach(async () => {
+    for (const child of children.splice(0)) child.kill();
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -88,6 +110,29 @@ describe('stale Chrome cleanup', () => {
       await cleanupStaleChrome({ pidFile, tempDir: testDir });
 
       expect(await fileExists(pidFile)).toBe(false);
+    });
+
+    it('leaves a live PID alone when it is not the recorded Chrome', async () => {
+      // A recycled PID: alive, but its command line names no profile of ours.
+      const child = spawnIdler([]);
+      const userDataDir = join(testDir, 'profile');
+      await writeFile(pidFile, JSON.stringify({ pid: child.pid, userDataDir }));
+
+      await cleanupStaleChrome({ pidFile, tempDir: testDir });
+
+      expect(isAlive(child.pid)).toBe(true);
+      expect(await fileExists(pidFile)).toBe(false);
+    });
+
+    it('kills a live PID whose command line names the recorded profile', async () => {
+      const userDataDir = join(testDir, 'profile');
+      const child = spawnIdler([`--user-data-dir=${userDataDir}`]);
+      await writeFile(pidFile, JSON.stringify({ pid: child.pid, userDataDir }));
+
+      await cleanupStaleChrome({ pidFile, tempDir: testDir });
+
+      await child.exited;
+      expect(isAlive(child.pid)).toBe(false);
     });
 
     it('handles missing PID file gracefully', async () => {

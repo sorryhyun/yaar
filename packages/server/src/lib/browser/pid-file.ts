@@ -58,6 +58,46 @@ function isProcessAlive(pid: number): boolean {
 }
 
 /**
+ * The full command line of a running process, or null when it can't be read.
+ * `-ww` because `ps` otherwise truncates to the terminal width, which can cut off
+ * the very flag {@link isRecordedChrome} matches on.
+ */
+function readCommandLine(pid: number): string | null {
+  try {
+    const cmd =
+      process.platform === 'win32'
+        ? [
+            'powershell',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+          ]
+        : ['ps', '-ww', '-p', String(pid), '-o', 'command='];
+    const result = Bun.spawnSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] });
+    if (result.exitCode !== 0) return null;
+    return result.stdout.toString().trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a live PID is still the Chrome this record describes.
+ *
+ * A PID file outlives its process whenever the server dies without cleanup, and PIDs
+ * are recycled — after a reboot, or just a long uptime — so a live PID from an old
+ * record can belong to anything, the user's own browser included. `--user-data-dir`
+ * names a directory only our launch uses (see `launchChrome`), so it is the proof;
+ * anything we can't read is treated as not ours.
+ */
+function isRecordedChrome(record: PidRecord): boolean {
+  if (!record.userDataDir) return false;
+  const commandLine = readCommandLine(record.pid);
+  return commandLine !== null && commandLine.includes(`--user-data-dir=${record.userDataDir}`);
+}
+
+/**
  * Clean up stale Chrome processes and temp dirs from previous crashed runs.
  * Called once before launching a new Chrome instance.
  *
@@ -74,7 +114,13 @@ export async function cleanupStaleChrome(options: CleanupOptions = {}): Promise<
   try {
     const data = await readFile(pidFile, 'utf-8');
     const record: PidRecord = JSON.parse(data);
-    if (record.pid && isProcessAlive(record.pid)) {
+    // Integer check first: the PID is interpolated into the Windows lookup command.
+    const livePid = Number.isInteger(record.pid) && record.pid > 0 && isProcessAlive(record.pid);
+    if (livePid && !isRecordedChrome(record)) {
+      console.log(
+        `[browser] PID ${record.pid} from a stale PID file is no longer our Chrome — leaving it alone`,
+      );
+    } else if (livePid) {
       console.log(`[browser] Killing stale Chrome process (PID ${record.pid})`);
       try {
         process.kill(record.pid, 'SIGKILL');
