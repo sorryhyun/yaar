@@ -18,7 +18,7 @@ it and `constants`/`types`/`schema` read by everything.
 | `actions/` | Everything the user can *do*, by domain: `catalog`, `update-all`, `publish`, `auth`, `github-status` | Render |
 | `components/` | One module per band of the UI, each paired with the stylesheet of the same name in `styles/` | Hold state (except a private UI signal) |
 
-`main.ts` is the protocol surface only: `defineApp` with 10 state keys and 8 commands,
+`main.ts` is the protocol surface only: `defineApp` with 11 state keys and 9 commands,
 all delegating into `store` and `actions`.
 
 ## Invariants worth knowing
@@ -45,6 +45,12 @@ all delegating into `store` and `actions`.
   existing copy, the case `confirmReplaceInstall` exists for, so the same warning is
   shown once up front. The protocol command defaults that prompt off — an agent calling
   `updateAll` has already been told to update.
+- **The `publish` command is the dialog without the checkbox.** `publishForAgent`
+  runs the same prepare → confirm, but never sends `acceptTermsVersion` and never
+  confirms across drift — both discard the freeze and come back as a status. Terms
+  acceptance is the user's, given once in the dialog; the host enforces that too.
+  Versions are not bumped here: this app cannot write another app's app.json, so the
+  version to publish is set by deploying the app first.
 - **The install grace window** (`INSTALL_RECONCILIATION_GRACE_MS`) exists because the
   host's app list lags a successful install. `store/installed.ts` is the whole of it.
 - **`SearchMode` values appear as literals in three places** — the tuple in
@@ -67,4 +73,5 @@ all delegating into `store` and `actions`.
 The preview runs under its own principal, so `/api/auth/google/*` is closed to it:
 the account panel always shows "sign-in is disabled" and the publish button never
 renders. Catalog browsing, search, filters and the settings popover all work there;
-**sign-in and the publish dialog can only be exercised in the installed app.**
+**sign-in, the publish dialog and the `publish` command can only be exercised in the
+installed app.**

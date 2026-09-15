@@ -5,6 +5,7 @@ import './styles/index';
 import { App } from './components/index.js';
 import {
   refreshAccount,
+  publishForAgent,
   refreshData,
   startGithubStatusPolling,
   updateAllApps,
@@ -17,6 +18,7 @@ import {
   installedVersionOf,
   outdatedApps,
   updateRun,
+  lastPublish,
   statusText,
   lastUpdated,
   loading,
@@ -106,6 +108,11 @@ export default defineApp({
         const run = updateRun();
         return { ...run, results: [...run.results] };
       },
+    },
+    lastPublish: {
+      description:
+        'Result of the last `publish` command, or null: appId, published, status, message, version, artifactSha256, byteLength, changedFiles (on drift), finishedAt',
+      get: () => lastPublish(),
     },
   },
   commands: {
@@ -228,6 +235,23 @@ export default defineApp({
         },
       },
       run: (p) => updateAllApps({ confirm: p.confirm === true }),
+    },
+    publish: {
+      description:
+        "Publish an installed app's local copy to the marketplace as the signed-in publisher, without the dialog: the host packages apps/{appId} at its app.json version and uploads it. Returns { published, status, message, ... } rather than throwing; fails when no publisher is signed in, the version is not newer than the published one, the publisher has not accepted the Publisher Terms in the dialog, or another publish is running.",
+      params: {
+        type: 'object',
+        properties: {
+          appId: { type: 'string', description: 'Id of the installed app to publish.' },
+          expectedVersion: {
+            type: 'string',
+            description:
+              'Refuse with status version_mismatch unless the packaged app.json version is exactly this — pins the publish to the build just deployed.',
+          },
+        },
+        required: ['appId'],
+      },
+      run: (p) => publishForAgent({ appId: p.appId, expectedVersion: p.expectedVersion }),
     },
     clearData: {
       description: 'Clear all app data',

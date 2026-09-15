@@ -10,6 +10,7 @@ import type {
   InstalledApp,
   ListedApp,
   PendingPublish,
+  PublishResult,
   UpdateRun,
 } from '../types.js';
 
@@ -62,6 +63,9 @@ export const [confirmBusy, setConfirmBusy] = createSignal(false);
  * from a previous dialog would be agreement nobody re-read.
  */
 export const [termsAgreed, setTermsAgreed] = createSignal(false);
+
+/** The last protocol `publish` to settle, or null before one has. Written only by `publishForAgent`. */
+export const [lastPublish, setLastPublish] = createSignal<PublishResult | null>(null);
 
 // ── Ambient status ─────────────────────────────────────────────────────
 

@@ -155,6 +155,33 @@ export type ConfirmOutcome = {
 };
 
 /**
+ * What the `publish` protocol command answers, and what `lastPublish` holds afterwards.
+ * Refusals decided before upload (`terms_required`, `version_mismatch`) share the
+ * shape of the host's own outcomes, so a caller reads one result either way.
+ */
+export type PublishResult = {
+  appId: string;
+  published: boolean;
+  status:
+    | 'published'
+    | 'terms_required'
+    | 'version_mismatch'
+    | 'drift_detected'
+    | 'busy'
+    | 'expired'
+    | 'not_found'
+    | 'error';
+  message: string;
+  /** The app.json version the host packaged; absent when prepare itself failed. */
+  version?: string | null;
+  artifactSha256?: string;
+  byteLength?: number;
+  /** Present only on `drift_detected`. */
+  changedFiles?: string[];
+  finishedAt: string;
+};
+
+/**
  * A publish awaiting the user's confirmation. Holds the frozen digest to show and,
  * once a confirm comes back reporting drift, the list of files that changed since
  * prepare — so the dialog can warn before shipping the frozen snapshot.
