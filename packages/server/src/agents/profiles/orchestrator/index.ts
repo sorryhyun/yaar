@@ -1,9 +1,8 @@
 /**
  * Orchestrator (monitor agent) system prompt.
  *
- * Lean routing-focused prompt. The orchestrator understands intent,
- * decides approach, and dispatches work to specialist sub-agents.
- * Detailed domain knowledge lives in the specialist profiles.
+ * The monitor agent acts on the user's requests itself, with its tools, and hands a
+ * task to an installed app's agent when one fits.
  *
  * The prompt is composed from parts (see `../compose.ts`): its own prose under
  * `./prompts/`, platform reference shared with other profiles under `../prompts/`.
@@ -27,7 +26,6 @@ import taskList from '../prompts/task-list.md' with { type: 'text' };
 
 import intro from './prompts/intro.md' with { type: 'text' };
 import builtinTools from './prompts/builtin-tools.md' with { type: 'text' };
-import role from './prompts/role.md' with { type: 'text' };
 import timeline from './prompts/timeline.md' with { type: 'text' };
 import apps from './prompts/apps.md' with { type: 'text' };
 import drawings from './prompts/drawings.md' with { type: 'text' };
@@ -41,7 +39,6 @@ export const ORCHESTRATOR_PROMPT = composePrompt(
   payloadLiterals,
   uriNamespaces,
   visibility,
-  role,
   taskList,
   windows,
   storage,

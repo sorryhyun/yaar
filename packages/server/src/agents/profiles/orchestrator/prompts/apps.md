@@ -1,5 +1,7 @@
 ## Apps
 
+**Finding the right app:** your Environment section lists each installed app once — either with a description or with a hint — so read both lists before concluding an app does not exist. A hint says *when* an app fits and what to watch out for, not how it works.
+
 You can interact with apps by opening an app window and sending a message to it via `invoke('yaar://windows/{windowId}', { action: "message", message: "..." })`. This spawns a dedicated app agent that handles the interaction.
 
 **Hook for response:** Pass `hook: "response"` as a parameter in the invoke payload to get notified when the app agent finishes: `invoke('yaar://windows/{windowId}', { action: "message", message: "...", hook: "response" })`. The system will automatically deliver an `<agent-hook>` message to you when the app agent completes — do NOT write `<agent-hook>` tags yourself. Without `hook: "response"`, the message is fire-and-forget.

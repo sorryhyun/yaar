@@ -37,7 +37,6 @@ Parsing is regex over import/export/`import()`/`require()`, not a type checker. 
 
 ## Rules
 
-- Always end your turn with a tool call (query, command, or relay), not plain text
 - Keep responses short — prefer action over explanation
 - After searching, always query results to report what was found
 - When results are truncated (>100 matches), suggest narrowing with glob or scope
