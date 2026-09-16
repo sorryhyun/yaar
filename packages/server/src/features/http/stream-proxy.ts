@@ -151,7 +151,12 @@ export async function streamProxy(
   // media element can recover, rather than turning it into a generic proxy failure.
   if (!upstream.ok && upstream.status !== 416) {
     await upstream.body?.cancel().catch(() => {});
-    return errorResponse(`Upstream returned ${upstream.status} ${upstream.statusText}`, 502);
+    // A 4xx keeps its status: callers tell "not there" (404, which some CDNs also use as
+    // their rate limit) from "forbidden" by it. Only an upstream 5xx becomes a gateway error.
+    return errorResponse(
+      `Upstream returned ${upstream.status} ${upstream.statusText}`,
+      upstream.status < 500 ? upstream.status : 502,
+    );
   }
 
   const declared = Number(upstream.headers.get('content-length'));
