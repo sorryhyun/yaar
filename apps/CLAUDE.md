@@ -2,7 +2,7 @@
 
 Convention-based: each folder here is one app. `app.json` for metadata/permissions/protocol
 manifest, `protocol.json` (generated) for agent-iframe communication — AI context is built from
-the two at read time, with `agent/prompt.md` as an opt-in full override. See
+the two at read time, with `agent/prompt.md` as opt-in app-specific prompt after the shared intro. See
 [`docs/guides/app-development.md`](../docs/guides/app-development.md) for the full URI-verb
 reference and [`docs/reference/app_protocol_reference.md`](../docs/reference/app_protocol_reference.md)
 for protocol details. For build/compile/verify workflows, use the `app-dev` skill.
@@ -39,7 +39,7 @@ Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 
 | File | Read by |
 |---|---|
-| `agent/prompt.md` | **Replaces** the app agent's base prompt entirely (no append tier). Either way the `protocol.json` manifest is appended as rendered call signatures. |
+| `agent/prompt.md` | Appended after the shared intro (`profiles/app-agent/prompts/intro.md`), which is always first and already states what YAAR is and the agent's role — so write about the app and how to drive it, never "You are …". Either way the `protocol.json` manifest is appended as rendered call signatures. |
 | `agent/hint.md` | The **monitor agent's** system prompt — orchestration hints, auto-synced with install/uninstall |
 | `agent/SKILL.md` | No prompt. It is the hand-written manual `describe('yaar://apps/{id}')` returns — workflows, ordering, when *not* to use the app. `scripts/check/apps.ts` warns when it restates the protocol, which is served separately at `yaar://apps/{id}/protocol`. |
 | `agent/docs/*.md` | Nobody, until pulled. One topic per file, frontmatter-indexed (`name`, a trigger-shaped `description`, `audience: agent\|dev\|both`); only the **index** is generated into the app agent's prompt and `describe` payloads. Served at `yaar://apps/{id}/docs/{name}`, via `describe({ topic })` on the app agent's tool, and as plain files in a clone. `features/apps/docs.ts` owns the tier; `scripts/check/apps.ts` validates frontmatter and warns when `prompt.md` restates a topic. |

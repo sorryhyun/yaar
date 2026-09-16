@@ -15,8 +15,9 @@ so what you write into the project survives the deploy and comes back on the nex
   app big enough that you had to work something out: the shape of `src/`, invariants not
   visible from any one file, why something is hand-rolled, what breaks if it changes. A
   small app needs none.
-- **`agent/prompt.md`** — the app agent's prompt. It *replaces* the generic one entirely, so
-  it must document the tools itself. The `protocol.json` manifest is appended automatically
+- **`agent/prompt.md`** — the app agent's prompt. It is appended after the shared app-agent
+  intro, which already says what YAAR is and that the reader is this app's agent — so open
+  with what the app *is*, never "You are …", and document the tools yourself. The `protocol.json` manifest is appended automatically
   and the platform adds its own tool-payload rules — duplicate neither. Focus on how to
   *use* the protocol: concrete `command`/`query` examples, multi-step workflows, the domain
   concepts needed to build valid params, anti-patterns.
@@ -41,8 +42,8 @@ so what you write into the project survives the deploy and comes back on the nex
   never be pulled. If a topic exists, `prompt.md` must not restate its content — keep the
   bright-line rules inline, move the reference prose.
 
-No file *appends* to the generic app-agent prompt — `agent/prompt.md` replaces it or you get
-the generic one whole. The line between these files is the **reader**, not the topic:
+The shared intro always comes first and cannot be replaced; `agent/prompt.md` is the only
+file that adds to it. The line between these files is the **reader**, not the topic:
 "`src/gizmo.ts` is hand-rolled because the bundled control drops pointer capture" is
 `AGENTS.md`; "call `addPrimitive` before setting a material" is `agent/prompt.md` if this
 app's own agent needs it on every turn, `agent/docs/` if it needs it rarely, and

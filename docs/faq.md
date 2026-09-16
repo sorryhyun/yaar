@@ -95,7 +95,7 @@ Because in most AI tooling, one capability is scattered across four registries: 
 ```
 apps/slides-lite/
   app.json          ← metadata + permissions; its description is what the AI reads by default
-  agent/prompt.md   ← optional: a dedicated agent prompt for this app, replacing the default
+  agent/prompt.md   ← optional: app-specific agent prompt, appended after the shared intro
   src/main.ts       ← the UI + logic
   dist/index.html   ← the build: one self-contained file
 ```

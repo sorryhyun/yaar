@@ -71,8 +71,8 @@ describe('the door every app holds', () => {
     expect(systemPrompt).not.toContain('Your app.json declares storage, so you hold');
   });
 
-  it('reaches an app whose own `agent/prompt.md` replaces the base prompt', async () => {
-    // Both storage sections are appended above the branch, so a `prompt.md` app gets them
+  it('reaches an app that ships its own `agent/prompt.md`', async () => {
+    // Both storage sections are appended at one site, so a `prompt.md` app gets them
     // too — the bug that first put them there, and the reason the append is unconditional
     // at one site rather than repeated per branch.
     for (const appId of ['devtools', 'session-logs']) {

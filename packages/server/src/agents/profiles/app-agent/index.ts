@@ -1,9 +1,11 @@
 /**
  * App agent profile builder — creates dynamic profiles for app-scoped agents.
  *
- * One prompt file, one meaning: `agent/prompt.md` (when the app ships one) *is* the
- * base prompt, and otherwise the generic base (`./prompts/generic-base.md`) is. There
- * is no append tier — what one used to carry is either `app.json`'s description or a
+ * The prompt always opens with the intro (`./prompts/intro.md`): what YAAR is and the
+ * role an app agent plays in it. An app's own `agent/prompt.md`, when it ships one,
+ * follows it — so that file describes the app and how to drive it, never who the agent
+ * *is*. Identity is stated once, here, rather than re-declared per app. There is no
+ * other append tier — what one used to carry is either `app.json`'s description or a
  * restatement of `protocol.json`, and the manifest appended further down states the
  * latter exactly.
  *
@@ -27,7 +29,7 @@ import { renderSignature } from '../../../lib/command-signature.js';
 import { defsOf } from '../../../lib/schema-refs.js';
 
 import payloadLiterals from '../prompts/payload-literals.md' with { type: 'text' };
-import genericBase from './prompts/generic-base.md' with { type: 'text' };
+import intro from './prompts/intro.md' with { type: 'text' };
 import appStorageSection from './prompts/app-storage.md' with { type: 'text' };
 
 /**
@@ -108,7 +110,7 @@ ${describeDesignTokensBrief()}
  * shared-storage section below.
  *
  * Every app agent gets both, in *either* prompt branch. The two doors are the same two
- * tools, so an app that replaces the base prompt with `agent/prompt.md` issues the same
+ * tools, so an app that ships its own `agent/prompt.md` issues the same
  * `query`/`command` payloads as a generic one and must be told the spellings. This used
  * to live in the generic branch alone — the same bug the shared-tree section was already
  * moved out of, one section short — which left every `prompt.md` app (devtools among
@@ -194,8 +196,8 @@ missing.`;
 
 /**
  * Build a dynamic agent profile for a specific app.
- * If `agent/prompt.md` exists it is the full system prompt base; otherwise the
- * generic prompt part is. Protocol manifest from app.json is appended in both cases.
+ * The intro always comes first, then `agent/prompt.md` if the app ships one. Protocol
+ * manifest from app.json is appended in both cases.
  */
 export async function buildAppAgentProfile(appId: string): Promise<AgentProfile> {
   const [appPrompt, apps, appDocs] = await Promise.all([
@@ -207,12 +209,12 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
   const appName = appInfo?.name ?? appId;
   const protocol = appInfo?.protocol;
 
-  // agent/prompt.md provides the full base prompt; the generic part is the fallback.
-  let systemPrompt = appPrompt ?? genericBase.replaceAll('{{appName}}', appName);
+  // The intro is unconditional; agent/prompt.md adds to it, never replaces it.
+  let systemPrompt = intro.replaceAll('{{appName}}', appName).trim();
+  if (appPrompt?.trim()) systemPrompt += `\n\n${appPrompt.trim()}\n`;
 
   // Payload-literal rule is always appended — an app with its own `agent/prompt.md`
-  // issues the same `command` payloads as a generic one, so replacing the base prompt
-  // must not drop it.
+  // issues the same `command` payloads as one without.
   systemPrompt += `\n${payloadLiterals}\n`;
 
   // Both storage doors, for every app — and this is the one site that appends them.

@@ -33,12 +33,14 @@ Everything an app agent is told and allowed lives in one `AgentProfile`, built b
 
 ## Prompt assembly, in order
 
-The system prompt is a base plus appended sections. Which base is a per-app choice; the
-appended sections apply to **both** bases (an app that ships its own prompt issues the same
-tool payloads as a generic one, so replacing the base must not drop the mechanics):
+The system prompt is an intro, the app's own prompt if it ships one, and appended sections
+that apply to every app (an app that ships its own prompt issues the same tool payloads as
+one without, so it must not lose the mechanics):
 
-1. **Base** — `agent/prompt.md` if the app ships one, otherwise
-   `profiles/app-agent/prompts/generic-base.md` with `{{appName}}` substituted. The lookup
+1. **Intro + app prompt** — `profiles/app-agent/prompts/intro.md` with `{{appName}}`
+   substituted, always first: what YAAR is and the app agent's role in it. Then
+   `agent/prompt.md` if the app ships one. The intro is the only place identity is stated,
+   so an app's `prompt.md` describes the app and how to drive it — no "You are …". The lookup
    (and the `app.json` `"agent": { "prompt": … }` path override, legacy fallbacks, and the
    deliberate retirement of `AGENTS.md` as a prompt source) is `AGENT_DOCS` in
    `features/apps/discovery.ts`.
@@ -115,8 +117,8 @@ part file. Order is load-bearing in one place: the shared-storage section opens 
 contrasting itself with "the app-scoped one above", so app storage must precede it.
 
 ```text
-{{base}}                                  ⟵ agent/prompt.md if shipped, else
-                                            generic-base.md with {{appName}} substituted
+…                                         ⟵ app-agent/prompts/intro.md, {{appName}} substituted, always
+{{appPrompt}}                             ⟨if agent/prompt.md shipped⟩
 
 ## Tool Payloads: write literal text, never escape sequences
 …                                         ⟵ profiles/prompts/payload-literals.md, always

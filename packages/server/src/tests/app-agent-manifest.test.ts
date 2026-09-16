@@ -38,28 +38,30 @@ describe('app agent protocol manifest', () => {
 });
 
 /**
- * One prompt file, one meaning. `agent/prompt.md` *is* the base prompt when an app
- * ships one, and the generic base is when it doesn't — there is no third tier that
- * appends to the generic prompt, which is what `SKILL.md` used to be.
+ * The intro always opens an app agent's prompt, and `agent/prompt.md` follows it when an
+ * app ships one — adding to the intro, never replacing it. Identity lives in the intro
+ * alone, so an app's own prompt only describes the app.
  */
 describe('app agent base prompt', () => {
-  const GENERIC_OPENING = "You handle user interactions within this app's windows.";
+  const INTRO_OPENING = 'running in a desktop workspace called YAAR';
 
-  it('uses agent/prompt.md as the whole base, not as an addition to the generic one', async () => {
+  it('opens with the intro, then agent/prompt.md', async () => {
     // devtools ships apps/devtools/agent/prompt.md.
     const { systemPrompt } = await buildAppAgentProfile('devtools');
 
-    expect(systemPrompt.startsWith('# Devtools Agent')).toBe(true);
-    expect(systemPrompt).not.toContain(GENERIC_OPENING);
+    expect(systemPrompt.startsWith('This is the "Dev Tools" application')).toBe(true);
+    expect(systemPrompt).toContain('# Devtools Agent');
+    expect(systemPrompt.indexOf(INTRO_OPENING)).toBeLessThan(
+      systemPrompt.indexOf('# Devtools Agent'),
+    );
   });
 
-  it('falls back to the generic prompt, with nothing appended from disk', async () => {
+  it('uses the intro alone when the app ships no prompt, with nothing appended from disk', async () => {
     // memo ships no agent/prompt.md — only an agent/hint.md, which is the *monitor*
     // agent's business and must not leak into this prompt.
     const { systemPrompt } = await buildAppAgentProfile('memo');
 
-    expect(systemPrompt).toContain('You are an AI assistant for the "Memo" app');
-    expect(systemPrompt).toContain(GENERIC_OPENING);
+    expect(systemPrompt.startsWith('This is the "Memo" application')).toBe(true);
     // The heading SKILL.md's contents used to arrive under.
     expect(systemPrompt).not.toContain('## App Documentation');
   });

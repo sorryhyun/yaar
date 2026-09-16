@@ -394,7 +394,7 @@ export async function doDeploy(
       await cp(join(sandboxPath, f), join(appPath, f));
     }
 
-    // Carry the docs across — `agent/prompt.md` is the app agent's whole system prompt,
+    // Carry the docs across — `agent/prompt.md` is the app agent's own system prompt,
     // `agent/hint.md` is what the monitor agent is told about the app, and `AGENTS.md`
     // is what the *coding* agent reads before editing it. `cloneApp` pulls all of them
     // into the sandbox, so a deploy that skipped one would silently discard every edit
