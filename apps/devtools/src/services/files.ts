@@ -74,6 +74,49 @@ async function countLines(projectId: string, entries: FileEntry[]): Promise<void
   );
 }
 
+/**
+ * Update the listing for one file this module just wrote or removed, instead of
+ * `refreshFiles()`.
+ *
+ * A refresh lists every directory and then reads every text file in the project to
+ * count its lines. Running that after each write meant an `editFile` on one file re-read
+ * the whole project, every time. A write already knows everything the listing holds
+ * about the file it wrote, so it updates that one entry. Anything written *outside*
+ * these functions (import, format, project open) still refreshes in full.
+ *
+ * Returns false when it cannot update the entry itself (no project, or a path that
+ * normalizes away), and the caller falls back to a full refresh.
+ */
+function patchFileEntry(path: string, next: { lines: number; bytes: number } | null): boolean {
+  const clean = normalizeProjectPath(path);
+  if (!clean || !activeProject()) return false;
+  // The walk skips the top-level dist/, so the listing must not gain it either.
+  if (next && clean.split('/')[0] === 'dist') return true;
+  const modifiedAt = new Date().toISOString();
+  let entries = files().filter((e) => e.path !== clean);
+  if (next) {
+    const known = new Set(entries.map((e) => e.path));
+    const segments = clean.split('/');
+    for (let i = 1; i < segments.length; i++) {
+      const dir = segments.slice(0, i).join('/');
+      if (!known.has(dir)) entries.push({ path: dir, isDirectory: true });
+    }
+    entries.push({
+      path: clean,
+      isDirectory: false,
+      lines: next.lines,
+      bytes: next.bytes,
+      modifiedAt,
+    });
+  } else {
+    entries = pruneEmptyDirectories(entries);
+  }
+  setFiles(entries);
+  const active = activeProject();
+  if (next && active) setActiveProject({ ...active, lastModified: Date.parse(modifiedAt) });
+  return true;
+}
+
 /** A directory entry is generated when anything inside it would be. */
 const isGeneratedEntry = (entry: FileEntry): boolean =>
   isGeneratedPath(entry.isDirectory ? `${entry.path}/-` : entry.path);
@@ -336,9 +379,9 @@ export async function writeFile(
     label?: string;
     /**
      * Skip the file-list refresh, for a caller writing many files in one pass that
-     * refreshes once at the end. A refresh re-reads every file in the project to
-     * recount lines, so paying for it per write turns a format-the-project run into
-     * a quadratic pile of reads. Everything else about the write is unchanged —
+     * refreshes once at the end. A write normally updates only its own listing
+     * entry, so this now just skips that; the batch's final refresh covers every
+     * file it touched. Everything else about the write is unchanged —
      * the change record, the editor buffer and the typecheck state all still land.
      */
     deferRefresh?: boolean;
@@ -358,13 +401,14 @@ export async function writeFile(
   if (openFilePath() === path) setOpenFileContent(content);
   // Whatever tsc last concluded, it concluded about the previous bytes.
   setTypecheckState('unknown');
-  if (!change?.deferRefresh) await refreshFiles();
-  setStatusText(`Saved ${path}`);
-  return {
+  const receipt = {
     path,
     lines: content.split('\n').length,
     bytes: new TextEncoder().encode(content).length,
   };
+  if (!change?.deferRefresh && !patchFileEntry(path, receipt)) await refreshFiles();
+  setStatusText(`Saved ${path}`);
+  return receipt;
 }
 
 export async function editFile(
@@ -496,7 +540,7 @@ export async function deleteFile(path: string): Promise<void> {
   }
   // Deleting a file is how an import breaks, so the last verdict no longer holds.
   setTypecheckState('unknown');
-  await refreshFiles();
+  if (!patchFileEntry(path, null)) await refreshFiles();
   setStatusText(`Deleted ${path}`);
 }
 
