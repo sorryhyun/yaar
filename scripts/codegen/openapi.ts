@@ -22,6 +22,7 @@ import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from '../../packages/server/src/htt
 import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from '../../packages/server/src/http/routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from '../../packages/server/src/http/routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from '../../packages/server/src/http/routes/files.js';
+import { PUBLIC_ENDPOINTS as MEDIA_PROXY_PUBLIC } from '../../packages/server/src/http/routes/media-proxy.js';
 import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from '../../packages/server/src/http/routes/ml-runtime.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from '../../packages/server/src/http/routes/proxy.js';
 import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from '../../packages/server/src/http/routes/sessions.js';
@@ -36,6 +37,7 @@ const ALL_ENDPOINTS: EndpointMeta[] = [
   ...BROWSER_PUBLIC,
   ...DEV_PUBLIC,
   ...FILES_PUBLIC,
+  ...MEDIA_PROXY_PUBLIC,
   ...ML_RUNTIME_PUBLIC,
   ...PROXY_PUBLIC,
   ...SESSIONS_PUBLIC,
@@ -54,6 +56,7 @@ const WIRED_ROUTE_FILES = new Set([
   'browser.ts',
   'dev.ts',
   'files.ts',
+  'media-proxy.ts',
   'ml-runtime.ts',
   'proxy.ts',
   'sessions.ts',

@@ -27,9 +27,10 @@ import {
   storageUriFor,
   type Principal,
 } from '../access.js';
-import { validateUrl, safeFetch } from '@yaar/lib/ssrf';
+import { validateUrl } from '@yaar/lib/ssrf';
 import { errMessage } from '@yaar/lib/errors';
 import { downloadToFile } from '@yaar/lib/download';
+import { streamProxy } from '../../features/http/stream-proxy.js';
 import { ensureDomainAllowed } from '../../features/http/domain-gate.js';
 import { extractDomain } from '../../features/config/domains.js';
 import { resolvePath } from '../../storage/storage-manager.js';
@@ -92,7 +93,7 @@ export async function handleMlRuntimeRoutes(req: Request, url: URL): Promise<Res
     return errorResponse('Method not allowed', 405);
   }
   if (url.pathname === '/api/ml-weights') {
-    return proxyWeights(req, url);
+    return proxyWeights(req, url, principal!);
   }
   return null;
 }
@@ -132,58 +133,15 @@ async function serveRuntimeArtifact(req: Request, url: URL): Promise<Response> {
   });
 }
 
-async function proxyWeights(req: Request, url: URL): Promise<Response> {
-  if (req.method !== 'GET' && req.method !== 'HEAD')
-    return errorResponse('Method not allowed', 405);
-
+async function proxyWeights(req: Request, url: URL, principal: Principal): Promise<Response> {
   const target = url.searchParams.get('url');
   if (!target) return errorResponse('Missing "url" query parameter', 400);
-
-  // SSRF guard (scheme + private-network block).
-  try {
-    validateUrl(target);
-  } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : 'Invalid URL', 400);
-  }
-
-  // Domain allowlist — do not silently exfiltrate to arbitrary hosts. An unknown domain
-  // is a question for the user, not a 403: on a fresh install the allowlist is empty, and
-  // refusing outright left the app dead with no way to consent.
-  const denial = await ensureDomainAllowed(target, {
-    purpose: `An app wants to load model weights from "${extractDomain(target)}".`,
-  });
-  if (denial) return errorResponse(denial.message, 403);
-
-  // Forward Range so browsers can resume/segment large downloads.
-  const range = req.headers.get('range');
-  const upstreamHeaders: Record<string, string> = {};
-  if (range) upstreamHeaders['Range'] = range;
-
-  let upstream: Response;
-  try {
-    upstream = await safeFetch(target, { method: 'GET', headers: upstreamHeaders });
-  } catch (err) {
-    return errorResponse(`Failed to fetch weights: ${errMessage(err)}`, 502);
-  }
-
-  if (!upstream.ok && upstream.status !== 206) {
-    return errorResponse(`Upstream returned ${upstream.status} ${upstream.statusText}`, 502);
-  }
-
-  // Stream the body straight through — no buffering, no base64.
-  const headers: Record<string, string> = {
-    'Content-Type': upstream.headers.get('content-type') || 'application/octet-stream',
-    'Cache-Control': 'no-store',
-    'Access-Control-Expose-Headers': 'Content-Length, ETag, Accept-Ranges, Content-Range',
-  };
-  for (const h of ['content-length', 'etag', 'accept-ranges', 'content-range', 'last-modified']) {
-    const v = upstream.headers.get(h);
-    if (v) headers[h] = v;
-  }
-
-  return new Response(req.method === 'HEAD' ? null : upstream.body, {
-    status: upstream.status,
-    headers,
+  return streamProxy(req, target, {
+    purpose: (domain) => `An app wants to load model weights from "${domain}".`,
+    sessionId: principal.kind === 'app' ? principal.sessionId : undefined,
+    // Multi-GB weights are the point of this route; the YAAR_MAX_DOWNLOAD_MB ceiling is
+    // sized for media, and this route never had one.
+    maxBytes: Number.POSITIVE_INFINITY,
   });
 }
 

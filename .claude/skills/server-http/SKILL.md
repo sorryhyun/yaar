@@ -43,7 +43,7 @@ attributes a request** — read it before adding a gate. The gates it exports:
 | `requirePermission()` | The main check — canonicalization, `self`, verbs |
 | `requireApp()` | Insist the caller is a real app. Needed because `requirePermission` returns `null` for `host`, so a door that only asks it is open to anyone who omits a token |
 | `requireHost()` | Routes no app can hold a permission for (`/api/iframe-token`, `/api/pick-directory`, `/api/remote-info`, `/api/agents/stats`, `/api/embeddable`, `/api/dev/preview/{appId}`, session restore) |
-| `requireBundle()` | Gated SDK doors (`/api/dev/*` → `yaar-dev`; `/api/browser`, `/api/bridge` → `yaar-web`; `/api/ml-weights*` → `yaar-ml`) |
+| `requireBundle()` | Gated SDK doors (`/api/dev/*` → `yaar-dev`; `/api/browser`, `/api/bridge` → `yaar-web`; `/api/ml-weights*` → `yaar-ml`; `/api/media-proxy` → `yaar-media`) |
 | `permissionsAllow()` | The matching rule as a boolean, for a caller with a permission list and no `Principal` (the app-agent storage door) |
 | `storageUriFor()` | Maps an HTTP storage path to the URI that names the same file |
 | `resolveSelf()` / `namesSelf()` | **The** expansion of `yaar://apps/self/…` |

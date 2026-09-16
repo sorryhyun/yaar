@@ -272,6 +272,16 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/media-proxy:
+    get:
+      summary: 'Streaming media proxy with Range passthrough (same-origin, no base64). Requires the yaar-media bundle.'
+      responses:
+        '200':
+          description: file
+          content:
+            application/json:
+              schema:
+                type: object
   /api/ml-runtime/{file}:
     parameters:
       - name: file

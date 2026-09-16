@@ -36,6 +36,7 @@ function probeUnderRemote(): Record<string, number> {
       apps: probe('/api/apps'),
       weights: probe('/api/ml-weights?url=https://host/model.onnx'),
       weightsDownload: probe('/api/ml-weights/download'),
+      mediaProxy: probe('/api/media-proxy?url=https://host/clip.mp4'),
     }));
   `;
   const proc = Bun.spawnSync(['bun', '-e', script], {
@@ -69,5 +70,11 @@ describe('REMOTE auth and /api/ml-runtime/', () => {
     // stays gated, on the remote token here and on the yaar-ml bundle in the route.
     expect(status.weights).toBe(401);
     expect(status.weightsDownload).toBe(401);
+  });
+
+  it('does not open the media proxy, which has the same shape as the weight proxy', () => {
+    // Same stream helper, same caller-named URL. The ORT exemption is a path prefix, and
+    // this route must never come to sit under one.
+    expect(status.mediaProxy).toBe(401);
   });
 });

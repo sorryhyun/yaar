@@ -44,7 +44,8 @@ const BUNDLE_DESCRIPTIONS: Record<string, string> = {
   'yaar-dev': 'compile, typecheck, and deploy apps on this machine',
   'yaar-web': 'drive a browser — navigate, click, and read pages',
   'yaar-ml': 'download and run machine-learning models in the browser',
-  'yaar-media': 'download audio from YouTube via the yt-dlp binary, into shared storage',
+  'yaar-media':
+    'stream audio and video from the web, and download audio from YouTube via the yt-dlp binary into shared storage',
 };
 
 interface PermissionDescription extends CapabilityLine {

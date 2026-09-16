@@ -2906,6 +2906,18 @@ declare module '@bundled/yaar-web' {
 }
 
 declare module '@bundled/yaar-media' {
+  /**
+   * A same-origin URL that streams a remote media file through the server
+   * (`/api/media-proxy`), with Range passthrough and no size-limited base64 envelope.
+   * Assign it to `<video src>` / `<audio src>` or `fetch()` it. Use this instead of a
+   * plain cross-origin `fetch` for anything large: that path buffers the whole body
+   * and is capped at 10MB. The domain goes through the same allowlist prompt as any
+   * other fetch.
+   *
+   * @param opts.referer Sent upstream as `Referer`, for CDNs that reject hotlinks.
+   */
+  export function mediaUrl(url: string, opts?: { referer?: string }): string;
+
   // Media download via the server's OPTIONAL yt-dlp binary (yaar://system/ytdlp).
   // Requires "bundles": ["yaar-media"] in app.json — the bundle alone grants the
   // capability at the verb door; no permissions entry is needed (a declared

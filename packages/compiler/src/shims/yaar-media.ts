@@ -2,7 +2,13 @@
 /**
  * Gated SDK for @bundled/yaar-media.
  *
- * Media download via the server's optional yt-dlp binary (`yaar://system/ytdlp`).
+ * Media streaming and download:
+ * - `mediaUrl()` — a same-origin URL for `<video src>` / `<audio src>` / `fetch()` that
+ *   streams a remote file through `/api/media-proxy` with Range passthrough. Unlike a
+ *   plain cross-origin `fetch`, which the prelude routes through `/api/fetch` (buffered,
+ *   base64, capped at 10MB), nothing is held in memory on either side.
+ * - Audio download via the server's optional yt-dlp binary (`yaar://system/ytdlp`).
+ *
  * Requires "yaar-media" in app.json `bundles` — the bundle both admits the code
  * and grants the capability at the verb door, like the other gated SDKs
  * (yaar-dev / yaar-web / yaar-ml). No `permissions` entry is needed, and a
@@ -15,7 +21,9 @@
  * and no extra grant.
  *
  * Usage:
- *   import { downloadAudio, ytdlpStatus } from '@bundled/yaar-media';
+ *   import { mediaUrl, downloadAudio, ytdlpStatus } from '@bundled/yaar-media';
+ *   video.src = mediaUrl(fileUrl, { referer: 'https://example.com/' });
+
  *   const { available } = await ytdlpStatus();       // yt-dlp installed here?
  *   const job = await downloadAudio(videoUrl);       // starts + polls to completion
  *   const bytes = await yaar.read(job.uri);          // it's in shared/media/
@@ -25,6 +33,29 @@
 const y = (window as any).yaar;
 
 const URI = 'yaar://system/ytdlp';
+
+/**
+ * A same-origin URL that streams `url` through the server, for a media element to load.
+ *
+ * A media element cannot set headers, so both of YAAR's credentials ride in the query:
+ * the remote token (`token`, REMOTE mode) and the iframe token (`__yaar_token`, which
+ * carries the `yaar-media` bundle declaration). `referer` is forwarded upstream as the
+ * `Referer` header, for CDNs that refuse hotlinked requests without one.
+ */
+export function mediaUrl(url: string, opts: { referer?: string } = {}): string {
+  const out = new URL('/api/media-proxy', location.href);
+  out.searchParams.set('url', url);
+  if (opts.referer) out.searchParams.set('referer', opts.referer);
+  try {
+    const remoteToken = new URLSearchParams(location.search).get('token');
+    if (remoteToken) out.searchParams.set('token', remoteToken);
+  } catch {
+    // No readable search — the iframe token below may still apply.
+  }
+  const iframeToken = window.__YAAR_TOKEN__;
+  if (iframeToken) out.searchParams.set('__yaar_token', iframeToken);
+  return out.href;
+}
 
 /** yt-dlp availability + the recent job table. Memory-only server-side; poll freely. */
 export async function ytdlpStatus() {
