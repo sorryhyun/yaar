@@ -36,7 +36,7 @@ describe('role-aware system prompt context', () => {
       contextLoaders(calls),
     );
 
-    expect(prompt).toContain('You are the **monitor agent** for `0`');
+    expect(prompt).toContain('This monitor is `0`.');
     expect(prompt).toContain('OTHER APP HINT');
     expect(calls).toEqual(['environment']);
   });

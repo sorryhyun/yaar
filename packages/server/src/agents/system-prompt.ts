@@ -15,23 +15,28 @@ export interface SystemPromptLoaders {
   buildEnvironment(providerType: ProviderType): Promise<string>;
 }
 
-/** Build a scope section so an agent knows its place in the hierarchy. */
+/**
+ * Build a scope section: the ids this agent is bound to, and how to address them.
+ *
+ * Identity is not restated here — the profile's intro already says which agent this is,
+ * so this section carries only what the intro cannot know at import time.
+ */
 function buildScopeSection(role: string, monitorId?: string): string {
   // Window agent: role is "window-{windowId}" or "window-{windowId}/{actionId}"
   const windowMatch = role.match(/^window-(.+?)(?:\/|$)/);
   if (windowMatch) {
     const windowId = windowMatch[1];
-    return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`. Your actions are limited to this window. Use \`yaar://windows/${windowId}\` to address it.`;
+    return `\n\n## Scope\nThis agent is bound to window \`${windowId}\`; your actions are limited to it. Use \`yaar://windows/${windowId}\` to address it.`;
   }
 
-  // Profile-driven agents define their own identity — no generic scope.
+  // Session and app profiles carry their own scope — no generic section.
   if (isSessionRole(role) || isAppRole(role)) {
     return '';
   }
 
   // Monitor/ephemeral agent with monitorId
   if (monitorId) {
-    return `\n\n## Scope\nYou are the **monitor agent** for \`${monitorId}\`. Use \`yaar://windows/\` URIs to create and manage windows (e.g. \`yaar://windows/my-window\`). The monitor is assigned automatically.`;
+    return `\n\n## Scope\nThis monitor is \`${monitorId}\`. Use \`yaar://windows/\` URIs to create and manage windows (e.g. \`yaar://windows/my-window\`). The monitor is assigned automatically.`;
   }
 
   return '';
