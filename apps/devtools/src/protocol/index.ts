@@ -47,8 +47,7 @@ export const devtoolsState = {
     description:
       'Active project, with its whole file tree in `files`. For one directory, a glob, or ' +
       'generated output included, call `listFiles` instead. With no active project this is ' +
-      'null, which a query surfaces as the STRING "Done." — so test for an object with an ' +
-      '`id`, never `=== null`; grep and deleteFile silently return empty in that state ' +
+      'null; grep and deleteFile silently return empty in that state ' +
       'rather than erroring. ' +
       '`lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
       'unknown). Files come with their size — { path, lines, bytes } for text, ' +

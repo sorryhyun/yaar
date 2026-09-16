@@ -39,6 +39,7 @@ import { expectSettlesWithin } from './harness/liveness.js';
 const { ResourceRegistry } = await import('../../handlers/uri-registry.js');
 const { registerWindowHandlers } = await import('../../handlers/window.js');
 const { runWithAgentContext } = await import('../../agents/agent-context.js');
+const { toEnvelope } = await import('../../http/routes/verb.js');
 
 let harness: Harness | undefined;
 
@@ -967,5 +968,18 @@ describe('S10 — a state read pays for no indentation the model would read', ()
     const result = await call('read', 'yaar://windows/memo/state/drafts');
 
     expect(textOf(result)).toBe(JSON.stringify([{ id: 'd-1', title: 'half a thought' }]));
+  });
+});
+
+describe('S10 — an empty state key reads as null, not as a finished command', () => {
+  it('a null state value is `null`, never the "Done." a command without a result gets', async () => {
+    const { call, memo } = await bootTwoAppWindows();
+    memo.state.selection = null;
+
+    const result = await call('read', 'yaar://windows/memo/state/selection');
+
+    expect(result.isError).toBeUndefined();
+    expect(textOf(result)).toBe('null');
+    expect(toEnvelope(result)).toEqual({ ok: true, data: null });
   });
 });

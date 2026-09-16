@@ -63,9 +63,14 @@ function truncateText(text: string): string {
  * result is text-only: a `structuredContent` copy beside it would be the unfiltered value,
  * and it is that copy the model would read. Content blocks are the app's own shaping and
  * are left alone — the registry then notes the filter was not applied.
+ *
+ * An empty value means different things on the two paths. A command that returns nothing
+ * finished, so it says "Done.". A state key that holds nothing *is* null, and says `null`
+ * — which `toEnvelope` parses back to a real `null` for SDK callers. Answering "Done." to
+ * a read made an empty selection indistinguishable from a command result (#103).
  */
 function wrapAppValue(value: unknown, read?: { label: string; options?: ReadOptions }): VerbResult {
-  if (value === undefined || value === null) return ok('Done.');
+  if (value === undefined || value === null) return ok(read ? 'null' : 'Done.');
 
   if (read && hasLineFilter(read.options) && !isContentBlocks(value)) {
     const text = applyReadOptionsToValue(value, read.label, read.options);
