@@ -111,6 +111,20 @@ Based on analysis, suggest improvements in:
 6. Present findings with specific examples, counts, and recommendations
 7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. Use this rather than `storage:write`: the built-ins would reach the same tree, but `saveReport` is what keeps every audit under `reports/` with a name the app has vetted.
 
+## Reports
+
+**Pass a long report as an array of lines.** `saveReport`'s `content` takes a string or a
+`string[]`, and the array is the form to reach for: elements are joined with a newline, one
+element per line, so no newline has to survive escaping inside a single JSON string literal
+— which is where a long body arrives with doubled escapes or cut mid-document. An
+empty-string element is a blank line.
+
+What you saved is readable again. `command('listReports')` gives every report as
+`{ name, bytes, savedAt }`, newest first, and `command('readReport', { name, offset?, limit? })`
+reads one back a character window at a time, paged exactly like `readTranscript`. Check
+`listReports` before saving under a name you have used before — `saveReport` overwrites
+without asking.
+
 ## Best Practices
 
 - Start from the `messages` index; let it tell you which `readTurns` call to make

@@ -1,6 +1,6 @@
 import { createMemo, For, onCleanup, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { appStorage, defineApp } from '@bundled/yaar';
+import { appStorage, defineApp, read } from '@bundled/yaar';
 import './styles/index';
 
 import { state, setState } from './store';
@@ -31,6 +31,49 @@ function requireSelected(): string {
   const id = state.selectedId;
   if (!id) throw new Error('No session loaded. Call selectSession({ sessionId }) first.');
   return id;
+}
+
+/**
+ * A report name → the file it addresses under `reports/`.
+ *
+ * Shared by every report command so the name rules cannot drift: `saveReport` is the only
+ * writer, so a reader accepting a name that could never have been written would answer
+ * "not found" for an argument the app itself refuses.
+ */
+function reportFile(raw: unknown): { file: string; path: string } {
+  const name = String(raw ?? '').trim();
+  if (!name) throw new Error('"name" is required.');
+  if (/[\\/]/.test(name) || name.includes('..')) {
+    throw new Error('"name" is a file name, not a path — reports all live in "reports/".');
+  }
+  const file = name.endsWith('.md') ? name : `${name}.md`;
+  return { file, path: `reports/${file}` };
+}
+
+/**
+ * A report body → the text to write.
+ *
+ * The array form exists because of how a body gets here: a caller emitting a whole
+ * document as one JSON string literal has to escape every newline in it, and a long one
+ * arrives with doubled escapes or cut mid-document. Elements are short and the newlines
+ * live between them, so nothing has to survive escaping. A non-string element is named
+ * rather than coerced — an `[object Object]` saved into the middle of a report is not
+ * recoverable afterwards.
+ */
+function reportBody(raw: unknown): string {
+  if (raw == null) throw new Error('"content" is required.');
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    raw.forEach((line, i) => {
+      if (typeof line !== 'string') {
+        throw new Error(
+          `"content[${i}]" is ${line === null ? 'null' : typeof line}, not a string — every element is one line of markdown.`,
+        );
+      }
+    });
+    return raw.join('\n');
+  }
+  throw new Error('"content" must be a markdown string, or an array of lines.');
 }
 
 const filteredSessions = createMemo(() => {
@@ -393,7 +436,8 @@ export default defineApp({
     saveReport: {
       description:
         'Save an analysis report into this app\'s own storage under "reports/". ' +
-        'Returns the storage URI it was written to.',
+        'Returns the storage URI it was written to. An existing name is overwritten — ' +
+        'listReports first if you need to know what is already there.',
       // A write, not state restoration: replaying it on an iframe remount would rewrite
       // a report nobody asked for a second time.
       replay: 'never',
@@ -406,22 +450,92 @@ export default defineApp({
               'File name, e.g. "audit-2026-08-12.md". A ".md" suffix is added if missing; ' +
               'path separators are not allowed.',
           },
-          content: { type: 'string', description: 'Report body (markdown)' },
+          content: {
+            oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+            description:
+              'Report body (markdown), as a string or an array of lines. Prefer the ARRAY ' +
+              'form for anything long: elements are joined with "\\n", one element per line, ' +
+              'so no newline has to survive inside a single JSON string literal — which is ' +
+              'where long bodies get mangled. An empty-string element is a blank line.',
+          },
         },
         required: ['name', 'content'],
       },
       run: async (params) => {
-        const raw = String(params.name ?? '').trim();
-        if (!raw) throw new Error('"name" is required.');
-        if (/[\\/]/.test(raw) || raw.includes('..')) {
-          throw new Error('"name" is a file name, not a path — reports all live in "reports/".');
-        }
-        const content = String(params.content ?? '');
+        const { path } = reportFile(params.name);
+        const content = reportBody(params.content);
         if (!content) throw new Error('"content" is required.');
-        const file = raw.endsWith('.md') ? raw : `${raw}.md`;
-        const path = `reports/${file}`;
         await appStorage.save(path, content);
         return { success: true, path, uri: `yaar://apps/session-logs/storage/${path}` };
+      },
+    },
+    listReports: {
+      description:
+        'List the reports saved under "reports/", newest first. Each entry is ' +
+        '{ name, bytes, savedAt } and `name` is what readReport takes. An empty array until ' +
+        'saveReport has written something — absence is an answer here, not an error.',
+      replay: 'never',
+      params: { type: 'object', properties: {} },
+      run: async () => {
+        // The directory does not exist until the first save, so a failed list is "nothing
+        // saved yet" rather than a fault worth reporting.
+        const entries = await appStorage.list('reports').catch(() => null);
+        if (!entries) return [];
+        return entries
+          .filter((e) => !e.isDirectory)
+          .map((e) => ({
+            name: e.path.split('/').pop() ?? e.path,
+            bytes: e.size ?? 0,
+            savedAt: e.modifiedAt ?? null,
+          }))
+          .sort((a, b) => (b.savedAt ?? '').localeCompare(a.savedAt ?? ''));
+      },
+    },
+    readReport: {
+      description:
+        "Read a character window of one saved report's markdown, by the `name` listReports " +
+        'returns. Paged like readTranscript: `chars` is the whole size and `nextOffset` is the ' +
+        'next window, or null at the end.',
+      replay: 'never',
+      params: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description:
+              'Report file name as listReports gives it, e.g. "audit-2026-08-12.md". A ".md" ' +
+              'suffix is added if missing; path separators are not allowed.',
+          },
+          offset: { type: 'number', description: 'Character offset to start at (default 0).' },
+          limit: {
+            type: 'number',
+            description: `Characters to return (default ${CHARS_DEFAULT}, max ${CHARS_MAX}).`,
+          },
+        },
+        required: ['name'],
+      },
+      run: async (params) => {
+        const { file, path } = reportFile(params.name);
+        // `missingOk` rather than a catch: a report that is not there is an expected
+        // answer, and a caught failure is still a failure the session recorded.
+        const full = await read<string | null>(`yaar://apps/self/storage/${path}`, {
+          missingOk: true,
+        });
+        if (full == null) {
+          throw new Error(`No report named "${file}". Call listReports to see what is saved.`);
+        }
+        const offset = clampInt(params.offset, 0, 0, full.length);
+        const limit = clampInt(params.limit, CHARS_DEFAULT, 1, CHARS_MAX);
+        const text = full.slice(offset, offset + limit);
+        const nextOffset = offset + text.length;
+        return {
+          name: file,
+          chars: full.length,
+          offset,
+          returned: text.length,
+          nextOffset: nextOffset < full.length ? nextOffset : null,
+          text,
+        };
       },
     },
   },
