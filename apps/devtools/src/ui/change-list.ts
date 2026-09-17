@@ -12,9 +12,9 @@ import { setMainView } from './panel-state';
 // fills the editor area, so picking a row here is what opens the diff there.
 
 const KIND_ICON: Record<FileChange['kind'], string> = {
-  create: '➕',
-  update: '✏️',
-  delete: '🗑️',
+  create: 'A',
+  update: 'M',
+  delete: 'D',
 };
 
 /** Basename plus its directory, so a long path stays readable when it truncates. */

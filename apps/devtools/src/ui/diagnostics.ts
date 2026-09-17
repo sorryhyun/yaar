@@ -12,6 +12,7 @@ import {
   showFiles,
   type BottomTab,
 } from './panel-state';
+import { Icon } from './icons';
 
 // The bottom panel: Problems and Console, and nothing else.
 //
@@ -46,7 +47,7 @@ function ProblemsPanel() {
               openFile(d.file);
             }}
           >
-            <span class="diag-icon">${d.severity === 'error' ? '❌' : '⚠️'}</span>
+            <span class="diag-icon">${d.severity === 'error' ? '✕' : '!'}</span>
             <span class="diag-location y-text-xs">${d.file}:${d.line}</span>
             <span class="diag-message y-text-xs">${d.message}</span>
           </div>
@@ -59,9 +60,9 @@ function ProblemsPanel() {
 export function DiagnosticsPanel() {
   return html`
     <div class=${() => `diagnostics${bottomCollapsed() ? ' collapsed' : ''}`}>
-      <div class="y-tabs bottom-tabs">
+      <div class="y-tabs dt-tabs bottom-tabs">
         <button
-          class=${() => `y-tab bottom-tab${isShowing('problems') ? ' active' : ''}`}
+          class=${() => `y-tab dt-tab bottom-tab${isShowing('problems') ? ' active' : ''}`}
           onClick=${() => onTabClick('problems')}
         >
           Problems
@@ -72,7 +73,7 @@ export function DiagnosticsPanel() {
           <//>
         </button>
         <button
-          class=${() => `y-tab bottom-tab${isShowing('console') ? ' active' : ''}`}
+          class=${() => `y-tab dt-tab bottom-tab${isShowing('console') ? ' active' : ''}`}
           onClick=${() => onTabClick('console')}
         >
           Console
@@ -91,7 +92,7 @@ export function DiagnosticsPanel() {
             title=${() => (bottomCollapsed() ? 'Expand panel' : 'Collapse panel')}
             onClick=${() => setBottomCollapsed(!bottomCollapsed())}
           >
-            ${() => (bottomCollapsed() ? '▴' : '▾')}
+            ${Icon('chevron', 'bottom-collapse-icon')}
           </button>
         </span>
       </div>

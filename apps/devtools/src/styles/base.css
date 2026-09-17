@@ -4,6 +4,13 @@
      redefinition of a shipped token. */
   --dt-diff-del-strong: color-mix(in srgb, var(--yaar-error) 40%, transparent);
   --dt-diff-ins-strong: color-mix(in srgb, var(--yaar-success) 40%, transparent);
+
+  /* One height per chrome row, so the sidebar tabs, the editor header and the
+     bottom tabs line up across the column divider. */
+  --dt-toolbar-h: 40px;
+  --dt-header-h: 32px;
+  --dt-status-h: 24px;
+  --dt-control-h: 26px;
 }
 
 #app {
@@ -17,5 +24,161 @@
   background: var(--yaar-bg);
   color: var(--yaar-text);
   font-family: var(--yaar-font);
-  font-size: 13px;
+  font-size: var(--yaar-text-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dt-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.devtools :focus-visible {
+  outline: 2px solid var(--yaar-wash-accent-border);
+  outline-offset: 1px;
+}
+
+/* ── Buttons — layered over y-btn. Scoped under .devtools so the override wins
+   over the injected y-* rules regardless of stylesheet order. ── */
+.devtools .dt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--dt-control-h);
+  padding: 0 var(--yaar-sp-3);
+  font-family: inherit;
+  font-size: var(--yaar-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: var(--yaar-radius);
+  transition:
+    background var(--yaar-ease),
+    border-color var(--yaar-ease),
+    color var(--yaar-ease);
+}
+
+.devtools .dt-btn:not(.y-btn-primary):not(.y-btn-ghost) {
+  background: var(--yaar-bg);
+  border-color: var(--yaar-border);
+  color: var(--yaar-text);
+}
+
+.devtools .dt-btn:not(.y-btn-primary):not(.y-btn-ghost):hover:not(:disabled) {
+  background: var(--yaar-bg-surface-hover);
+  border-color: var(--yaar-text-dim);
+}
+
+.devtools .dt-btn.y-btn-primary {
+  background: var(--yaar-accent-emphasis);
+  border-color: var(--yaar-accent-emphasis);
+  box-shadow: var(--yaar-shadow-sm);
+}
+
+.devtools .dt-btn.y-btn-primary:hover:not(:disabled) {
+  background: var(--yaar-accent-emphasis-hover);
+  border-color: var(--yaar-accent-emphasis-hover);
+}
+
+.devtools .dt-btn.y-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--yaar-text-muted);
+}
+
+.devtools .dt-btn.y-btn-ghost:hover:not(:disabled) {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+
+.devtools .dt-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Tab strips (sidebar and bottom panel) — layered over y-tabs / y-tab ── */
+.devtools .dt-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex-shrink: 0;
+  height: var(--dt-header-h);
+  padding: 0 var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+  overflow: hidden;
+}
+
+.devtools .dt-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--yaar-sp-2);
+  margin-bottom: -1px;
+  font-family: inherit;
+  font-size: var(--yaar-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--yaar-text-dim);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    color var(--yaar-ease),
+    border-color var(--yaar-ease);
+}
+
+.devtools .dt-tab:hover {
+  color: var(--yaar-text);
+}
+
+.devtools .dt-tab.active {
+  color: var(--yaar-text);
+  border-bottom-color: var(--yaar-accent);
+}
+
+/* Tab-strip count badge. */
+.devtools .diagnostics-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: var(--yaar-radius-full);
+}
+
+/* Small text actions at the end of a tab strip or panel header (Clear, collapse). */
+.devtools .sidebar-tab-action,
+.devtools .bottom-tab-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: center;
+  height: 22px;
+  padding: 0 var(--yaar-sp-2);
+  font-family: inherit;
+  color: var(--yaar-text-dim);
+  background: none;
+  border: none;
+  border-radius: var(--yaar-radius-sm);
+  cursor: pointer;
+}
+
+.devtools .sidebar-tab-action:hover,
+.devtools .bottom-tab-action:hover {
+  color: var(--yaar-text);
+  background: var(--yaar-bg-surface-hover);
 }

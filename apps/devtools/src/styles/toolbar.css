@@ -1,4 +1,19 @@
-/* ── Toolbar — y-toolbar y-toolbar-dense in markup ── */
+/* ── Toolbar — y-toolbar y-toolbar-dense dt-toolbar in markup ── */
+.devtools .dt-toolbar {
+  gap: 6px;
+  height: var(--dt-toolbar-h);
+  padding: 0 var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.dt-tsep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  flex-shrink: 0;
+  background: var(--yaar-border);
+}
 
 /* ── Project menu (the active project's name, doubling as the open-project
    dropdown that the old second toolbar row used to be). Capped rather than
@@ -12,24 +27,36 @@
 .project-menu-trigger {
   display: flex;
   align-items: center;
-  gap: var(--yaar-sp-1);
+  gap: 6px;
+  height: var(--dt-control-h);
   max-width: 240px;
   min-width: 0;
-  padding: 3px var(--yaar-sp-2);
+  padding: 0 var(--yaar-sp-2);
   font-family: inherit;
-  font-size: var(--yaar-text-base);
+  font-size: var(--yaar-text-sm);
   font-weight: 600;
   color: var(--yaar-text);
-  background: var(--yaar-bg-surface);
+  background: var(--yaar-bg);
   border: 1px solid var(--yaar-border);
   border-radius: var(--yaar-radius);
   cursor: pointer;
   user-select: none;
+  transition:
+    background var(--yaar-ease),
+    border-color var(--yaar-ease);
 }
 
 .project-menu-trigger:hover {
   background: var(--yaar-bg-surface-hover);
-  border-color: var(--yaar-accent);
+  border-color: var(--yaar-text-dim);
+}
+
+.project-menu-icon {
+  color: var(--yaar-accent);
+}
+
+.project-menu-trigger.empty .project-menu-icon {
+  color: var(--yaar-text-dim);
 }
 
 .project-menu-trigger.open {
@@ -48,11 +75,15 @@
 }
 
 .project-menu-caret {
-  margin-left: var(--yaar-sp-1);
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.7;
-  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  color: var(--yaar-text-dim);
+  transition: transform var(--yaar-ease);
+}
+
+.project-menu-trigger.open .project-menu-caret {
+  transform: rotate(180deg);
+  color: var(--yaar-accent);
 }
 
 .project-menu-panel {
@@ -67,14 +98,15 @@
   padding: var(--yaar-sp-1);
   background: var(--yaar-bg-surface);
   border: 1px solid var(--yaar-border);
-  border-radius: var(--yaar-radius);
+  border-radius: var(--yaar-radius-lg);
   box-shadow: var(--yaar-shadow-lg);
 }
 
 .project-menu-section {
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  padding: 6px var(--yaar-sp-2) var(--yaar-sp-1);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .project-menu-empty {
@@ -85,8 +117,10 @@
   display: flex;
   align-items: center;
   gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  min-height: 28px;
+  padding: 0 var(--yaar-sp-2);
   border-radius: var(--yaar-radius-sm);
+  font-size: var(--yaar-text-sm);
   color: var(--yaar-text-muted);
   cursor: pointer;
   user-select: none;
@@ -151,25 +185,38 @@
   flex: 1;
 }
 
-.toolbar-bump {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-1);
-  color: var(--yaar-text-muted);
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-}
-
-.toolbar-bump input {
-  margin: 0;
-  accent-color: var(--yaar-accent);
-}
-
 /* The project menu lists "Load project…" and "Clone installed app…" too, so a
    narrow window drops the duplicate buttons and gives the space to the name. */
 @media (max-width: 720px) {
-  .toolbar-picker-btn {
+  .devtools .toolbar-picker-btn {
+    display: none;
+  }
+}
+
+/* Below this the build actions keep their icons and drop their labels (the title
+   attribute still names them); Compile keeps its label as the primary action. */
+@media (max-width: 560px) {
+  .devtools .dt-toolbar .dt-btn:not(.y-btn-primary) {
+    width: var(--dt-control-h);
+    padding: 0;
+  }
+
+  .devtools .dt-toolbar .dt-btn:not(.y-btn-primary) .dt-btn-label {
+    display: none;
+  }
+
+  .project-menu-trigger {
+    max-width: 160px;
+  }
+}
+
+@media (max-width: 400px) {
+  .devtools .dt-toolbar .dt-btn.y-btn-primary {
+    width: var(--dt-control-h);
+    padding: 0;
+  }
+
+  .devtools .dt-toolbar .dt-btn.y-btn-primary .dt-btn-label {
     display: none;
   }
 }

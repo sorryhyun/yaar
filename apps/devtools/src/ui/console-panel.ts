@@ -6,10 +6,10 @@ import { consoleLogs, type ConsoleEntry } from '../core';
 import { addConsoleEntry } from '../services';
 
 function levelIcon(level: string): string {
-  if (level === 'error') return '❌';
-  if (level === 'warn') return '⚠️';
-  if (level === 'info') return 'ℹ️';
-  return '●';
+  if (level === 'error') return '✕';
+  if (level === 'warn') return '!';
+  if (level === 'info') return 'i';
+  return '›';
 }
 
 export function ConsolePanel() {

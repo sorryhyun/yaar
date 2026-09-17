@@ -2,7 +2,14 @@ export {};
 import { createSignal, onCleanup, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { app, errMsg, onShortcut, showConfirm, showToast, tryToast } from '@bundled/yaar';
-import { activeProject, projects, openTabs, previewUrl, type ProjectMeta } from '../core';
+import {
+  activeProject,
+  bundleStatus,
+  projects,
+  openTabs,
+  previewUrl,
+  type ProjectMeta,
+} from '../core';
 import { manifestString } from '../lib';
 import {
   openProject,
@@ -14,6 +21,7 @@ import {
   listInstalledApps,
   type InstalledApp,
 } from '../services';
+import { Icon } from './icons';
 
 // Project selection and build actions in the app chrome.
 //
@@ -36,7 +44,6 @@ const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
 const [appsError, setAppsError] = createSignal<string | null>(null);
 const [busy, setBusy] = createSignal(false);
 const [menuOpen, setMenuOpen] = createSignal(false);
-const [bumpOnDeploy, setBumpOnDeploy] = createSignal(false);
 const [deploying, setDeploying] = createSignal(false);
 
 function closeMenu(): void {
@@ -131,15 +138,15 @@ async function deployFromToolbar(): Promise<void> {
     showToast('app.json has no appId to deploy under', 'error');
     return;
   }
-  const bump = bumpOnDeploy();
-  const confirmed = await showConfirm(
-    `Deploy this project over the installed "${appId}"${bump ? ', bumping its version' : ''}?`,
-    { title: 'Deploy', okLabel: 'Deploy' },
-  );
+  // Version bumps are the agent's call (`deploy({ bump })`), so the button never bumps.
+  const confirmed = await showConfirm(`Deploy this project over the installed "${appId}"?`, {
+    title: 'Deploy',
+    okLabel: 'Deploy',
+  });
   if (!confirmed) return;
   setDeploying(true);
   try {
-    const result = await tryToast(() => deploy({ appId, bump }));
+    const result = await tryToast(() => deploy({ appId }));
     if (result) {
       const version = result.version ? ` v${result.version}` : '';
       showToast(`Deployed "${result.name}"${version}`, 'success', 5000);
@@ -183,10 +190,11 @@ function ProjectMenu() {
         title="Switch, load or clone a project"
         onClick=${() => setMenuOpen(!menuOpen())}
       >
+        ${Icon('folder', 'project-menu-icon')}
         <span class="project-menu-name y-truncate"
           >${() => activeProject()?.name ?? 'No project open'}</span
         >
-        <span class="project-menu-caret">▾</span>
+        ${Icon('chevron', 'project-menu-caret')}
       </button>
 
       <${Show} when=${menuOpen}>
@@ -327,65 +335,62 @@ export function ProjectToolbar() {
   );
 
   return html`
-    <div class="y-toolbar y-toolbar-dense">
+    <div class="y-toolbar y-toolbar-dense dt-toolbar">
       <${ProjectMenu} />
 
       <button
-        class="y-btn y-btn-sm toolbar-picker-btn"
+        class="y-btn y-btn-sm y-btn-ghost dt-btn toolbar-picker-btn"
         onClick=${openLoadPicker}
         title="Open an existing project"
       >
-        Load
+        ${Icon('folder')}
+        <span class="dt-btn-label">Load</span>
       </button>
 
       <button
-        class="y-btn y-btn-sm toolbar-picker-btn"
+        class="y-btn y-btn-sm y-btn-ghost dt-btn toolbar-picker-btn"
         disabled=${busy}
         onClick=${openClonePicker}
         title="Clone an installed app's source into an editable project"
       >
-        Clone
+        ${Icon('copy')}
+        <span class="dt-btn-label">Clone</span>
       </button>
 
       <span class="toolbar-gap"></span>
 
       <button
-        class="y-btn y-btn-sm y-btn-primary"
-        disabled=${() => !activeProject()}
+        class="y-btn y-btn-sm y-btn-primary dt-btn"
+        disabled=${() => !activeProject() || bundleStatus() === 'compiling'}
         onClick=${() => compile()}
-        title="Compile"
+        title="Type check and build"
       >
-        Compile
+        ${Icon('code')}
+        <span class="dt-btn-label"
+          >${() => (bundleStatus() === 'compiling' ? 'Compiling…' : 'Compile')}</span
+        >
       </button>
 
       <button
-        class="y-btn y-btn-sm"
+        class="y-btn y-btn-sm dt-btn"
         disabled=${() => !activeProject() || !previewUrl()}
         onClick=${requestPreview}
         title="Open preview window"
       >
-        Preview
+        ${Icon('eye')}
+        <span class="dt-btn-label">Preview</span>
       </button>
 
-      <label
-        class="toolbar-bump y-text-xs"
-        title="Raise app.json's version one patch step (1.2.3 → 1.2.4) before deploying"
-      >
-        <input
-          type="checkbox"
-          checked=${bumpOnDeploy}
-          onChange=${(e: Event) => setBumpOnDeploy((e.target as HTMLInputElement).checked)}
-        />
-        Bump version
-      </label>
+      <span class="dt-tsep"></span>
 
       <button
-        class="y-btn y-btn-sm"
+        class="y-btn y-btn-sm dt-btn"
         disabled=${() => !activeProject() || deploying()}
         onClick=${deployFromToolbar}
         title="Deploy this project over the installed app"
       >
-        ${() => (deploying() ? 'Deploying…' : 'Deploy')}
+        ${Icon('upload')}
+        <span class="dt-btn-label">${() => (deploying() ? 'Deploying…' : 'Deploy')}</span>
       </button>
 
       <${Show} when=${picker}>

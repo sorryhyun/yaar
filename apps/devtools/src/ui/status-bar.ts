@@ -48,10 +48,12 @@ export function StatusBar() {
       </div>
       <div class="status-right">
         <${Show} when=${cursorPos}>
-          <span>Ln ${() => cursorPos()?.line}, Col ${() => cursorPos()?.col}</span>
+          <span class="status-cursor"
+            >Ln ${() => cursorPos()?.line}, Col ${() => cursorPos()?.col}</span
+          >
         <//>
         <${Show} when=${language}>
-          <span>${language}</span>
+          <span class="status-lang">${language}</span>
         <//>
         <${Show} when=${() => activeProject()}>
           <button

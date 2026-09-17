@@ -562,7 +562,10 @@ const references = suite('references', {
     );
     eq(out.definition, { file: 'src/a.ts', line: 1, column: 7 });
     eq(out.declaredHere, false);
-    eq(otherReferencesSummary(out.total, out.files, out.declaredHere), '1 other reference in 1 file');
+    eq(
+      otherReferencesSummary(out.total, out.files, out.declaredHere),
+      '1 other reference in 1 file',
+    );
   },
 
   'hovering the declaration says so and lists only real usages'() {

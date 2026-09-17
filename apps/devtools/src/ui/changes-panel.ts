@@ -173,9 +173,8 @@ export function ChangeView() {
   return html`
     <div class="change-view">
       <div class="y-editbar y-toolbar-dense changes-toolbar">
-        <span class="y-text-xs y-text-muted">Changes</span>
         <select
-          class="y-select y-text-xs"
+          class="y-select y-text-xs dt-select"
           value=${diffViewMode}
           onChange=${(e: Event) =>
             setDiffViewMode((e.target as HTMLSelectElement).value as 'side-by-side' | 'unified')}
@@ -184,15 +183,17 @@ export function ChangeView() {
           <option value="side-by-side">Side by side</option>
         </select>
         <button
-          class="y-btn y-btn-sm y-btn-ghost"
+          class="y-btn y-btn-sm y-btn-ghost dt-btn"
           onClick=${() => setChangesMode(changesMode() === 'manual' ? 'changes' : 'manual')}
         >
           ${() => (changesMode() === 'manual' ? 'Back to changes' : 'Compare text…')}
         </button>
         <span class="changes-toolbar-gap"></span>
-        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => clearChanges()}>Clear</button>
+        <button class="y-btn y-btn-sm y-btn-ghost dt-btn" onClick=${() => clearChanges()}>
+          Clear
+        </button>
         <button
-          class="y-btn y-btn-sm y-btn-ghost"
+          class="y-btn y-btn-sm y-btn-ghost dt-btn"
           title="Back to the editor"
           onClick=${() => setMainView('editor')}
         >

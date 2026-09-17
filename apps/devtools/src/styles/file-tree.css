@@ -3,50 +3,94 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--yaar-sp-1) 0;
+  padding: 6px 0;
 }
 
 .file-tree-empty {
-  padding: var(--yaar-sp-3);
+  padding: var(--yaar-sp-6) var(--yaar-sp-3);
   text-align: center;
 }
 
 .file-tree-item {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  border-radius: 3px;
-  margin: 0 4px;
+  gap: 6px;
+  height: 24px;
+  margin: 0 6px;
+  padding-right: var(--yaar-sp-2);
   min-width: 0;
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  border-radius: var(--yaar-radius-sm);
+  cursor: pointer;
+  user-select: none;
 }
 
 .file-tree-item:hover {
   background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
 }
 
 .file-tree-item.active {
-  background: var(--yaar-accent);
-  color: #fff;
+  background: var(--yaar-wash-accent-strong);
+  color: var(--yaar-text);
+  box-shadow: inset 2px 0 0 var(--yaar-accent);
 }
 
 .file-tree-item.dir {
-  font-weight: 500;
+  color: var(--yaar-text);
+  font-weight: 600;
 }
 
-.file-icon {
-  font-size: 10px;
+/* The chevron and the badge share one 16px column, so a file's name starts where
+   its sibling folder's name does. */
+.file-chevron {
+  width: 16px;
+  height: 12px;
+  color: var(--yaar-text-dim);
+  transition: transform var(--yaar-ease);
+}
+
+.file-tree-item.collapsed .file-chevron {
+  transform: rotate(-90deg);
+}
+
+.file-badge {
   flex-shrink: 0;
-  width: 14px;
+  width: 16px;
+  font-family: var(--yaar-font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
   text-align: center;
-  color: var(--yaar-text-muted);
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  color: var(--yaar-text-dim);
 }
 
-.file-tree-item.active .file-icon {
-  color: inherit;
+.file-badge.kind-ts {
+  color: var(--yaar-accent);
+}
+
+.file-badge.kind-js,
+.file-badge.kind-json {
+  color: var(--yaar-warning);
+}
+
+.file-badge.kind-css {
+  color: var(--yaar-success);
+}
+
+.file-badge.kind-html {
+  color: var(--yaar-error);
+}
+
+.file-badge.kind-md {
+  color: var(--yaar-text-muted);
+}
+
+.file-badge.kind-asset {
+  font-size: 11px;
 }
 
 .file-name {

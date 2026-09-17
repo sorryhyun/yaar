@@ -166,7 +166,13 @@ export function Editor() {
         `}
       >
         <div class="y-editbar y-toolbar-dense editor-header y-text-muted">
-          <span class="editor-file-name">${() => openFilePath()}</span>
+          <span class="editor-file-name"
+            ><span class="editor-file-dir"
+              >${() => (openFilePath() ?? '').replace(/[^/]*$/, '')}</span
+            ><span class="editor-file-base"
+              >${() => (openFilePath() ?? '').split('/').pop()}</span
+            ></span
+          >
           <${Show} when=${isDirty}>
             <span class="y-dot y-dot-accent"></span>
           <//>

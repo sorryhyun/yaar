@@ -1,4 +1,17 @@
 /* ── Status bar — y-statusbar y-statusbar-dense in markup ── */
+.devtools .y-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-3);
+  height: var(--dt-status-h);
+  padding: 0 var(--yaar-sp-3);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  background: var(--yaar-bg-surface);
+  border-top: 1px solid var(--yaar-border);
+}
+
 .status-left,
 .status-right {
   display: flex;
@@ -8,18 +21,25 @@
 }
 
 .status-left {
-  gap: 6px;
+  gap: var(--yaar-sp-2);
+  color: var(--yaar-text-muted);
 }
 
 .status-right {
   flex-shrink: 0;
-  color: var(--yaar-text-muted);
+}
+
+.status-cursor {
+  font-family: var(--yaar-font-mono);
+  font-size: 10px;
 }
 
 .status-problems {
   display: flex;
+  align-items: center;
   gap: var(--yaar-sp-2);
-  padding: 0 var(--yaar-sp-1);
+  height: 18px;
+  padding: 0 6px;
   font: inherit;
   color: inherit;
   background: none;
@@ -43,4 +63,21 @@
 
 .status-project {
   max-width: 140px;
+  padding-left: var(--yaar-sp-3);
+  border-left: 1px solid var(--yaar-border);
+  color: var(--yaar-text-muted);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .status-lang,
+  .status-project {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-cursor {
+    display: none;
+  }
 }

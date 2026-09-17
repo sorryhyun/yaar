@@ -4,13 +4,29 @@ import html from '@bundled/solid-js/html';
 import { files, openFilePath, activeProject, type FileEntry } from '../core';
 import { openFile } from '../services';
 import { setMainView } from './panel-state';
+import { Icon } from './icons';
 
-function getFileIcon(path: string): string {
-  if (path.endsWith('.ts') || path.endsWith('.tsx')) return '📄';
-  if (path.endsWith('.css')) return '🎨';
-  if (path.endsWith('.json')) return '📋';
-  if (path.endsWith('.md')) return '📝';
-  return '📄';
+/** A short type label for the file badge; its colour comes from `kind-*` in file-tree.css. */
+const FILE_KINDS: Record<string, [label: string, kind: string]> = {
+  ts: ['TS', 'ts'],
+  tsx: ['TS', 'ts'],
+  js: ['JS', 'js'],
+  jsx: ['JS', 'js'],
+  css: ['#', 'css'],
+  json: ['{}', 'json'],
+  md: ['M', 'md'],
+  html: ['<>', 'html'],
+  png: ['▨', 'asset'],
+  jpg: ['▨', 'asset'],
+  jpeg: ['▨', 'asset'],
+  webp: ['▨', 'asset'],
+  gif: ['▨', 'asset'],
+  svg: ['▨', 'asset'],
+};
+
+function fileKind(path: string): [label: string, kind: string] {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  return FILE_KINDS[ext] ?? ['·', 'other'];
 }
 
 function basename(path: string): string {
@@ -112,20 +128,23 @@ export function FileTree() {
           ${(entry: FileEntry) => {
             const name = basename(entry.path);
             const depth = entry.path.split('/').length - 1;
-            const indent = depth * 14;
+            const indent = depth * 12;
             const isDir = entry.isDirectory;
             return html`
               <div
                 data-path=${entry.path}
                 data-isdir=${isDir ? 'true' : 'false'}
                 class=${() =>
-                  `file-tree-item${openFilePath() === entry.path ? ' active' : ''}${isDir ? ' dir' : ''}`}
-                style=${`padding-left: ${8 + indent}px`}
+                  `file-tree-item${openFilePath() === entry.path ? ' active' : ''}${isDir ? ' dir' : ''}${isDir && collapsedDirs().has(entry.path) ? ' collapsed' : ''}`}
+                style=${`padding-left: ${6 + indent}px`}
               >
-                <span class="file-icon">
-                  ${() =>
-                    isDir ? (collapsedDirs().has(entry.path) ? '▶' : '▼') : getFileIcon(entry.path)}
-                </span>
+                ${
+                  isDir
+                    ? Icon('chevron', 'file-chevron')
+                    : html`<span class=${`file-badge kind-${fileKind(entry.path)[1]}`}
+                      >${fileKind(entry.path)[0]}</span
+                    >`
+                }
                 <span class="file-name">${name}</span>
               </div>
             `;

@@ -1,12 +1,12 @@
 /* ── Main area ── */
 .main-area {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 208px 1fr;
   min-height: 0;
   overflow: hidden;
 }
 
-/* A change row carries a path, a +/- pair and a clock; 200px truncates all three.
+/* A change row carries a path, a +/- pair and a clock; 208px truncates all three.
    The tree does not need the extra width, so the column widens only for the tab
    that does. */
 .main-area.wide-sidebar {
@@ -15,46 +15,65 @@
 
 @media (max-width: 720px) {
   .main-area {
-    grid-template-columns: 168px 1fr;
+    grid-template-columns: 172px 1fr;
   }
 
   .main-area.wide-sidebar {
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 232px 1fr;
   }
 }
 
-/* ── Sidebar (Files / Changes) — layered over y-sidebar: a grid cell must be
-   allowed to shrink or the file tree pushes the pane past the window. ── */
-.sidebar-pane {
-  min-height: 0;
+@media (max-width: 560px) {
+  .main-area {
+    grid-template-columns: 144px 1fr;
+  }
+
+  .main-area.wide-sidebar {
+    grid-template-columns: 188px 1fr;
+  }
 }
 
-/* Layered over y-tabs / y-tab (hover and .active come from them): a tighter,
-   bolder, smaller tab on the surface tint, with an action pushed to the right. */
-.sidebar-tabs {
-  align-items: center;
-  background: var(--yaar-bg-surface);
-}
-
-.sidebar-tab {
+/* ── Sidebar (Files / Changes / Worker) — layered over y-sidebar: a grid cell must
+   be allowed to shrink or the file tree pushes the pane past the window. ── */
+.devtools .sidebar-pane {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
-  font-size: var(--yaar-text-xs);
-  font-weight: 600;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--yaar-bg-surface);
+  border-right: 1px solid var(--yaar-border);
 }
 
-.sidebar-tab-action {
+/* Three tabs have to fit a 144px column; they tighten rather than clip. */
+@media (max-width: 720px) {
+  .devtools .sidebar-tabs {
+    padding: 0 var(--yaar-sp-1);
+    gap: 0;
+  }
+
+  .devtools .sidebar-tab {
+    padding: 0 6px;
+  }
+}
+
+@media (max-width: 560px) {
+  .devtools .sidebar-tabs {
+    padding: 0 2px;
+  }
+
+  .devtools .sidebar-tab {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0 3px;
+    letter-spacing: 0;
+  }
+
+  /* The change view's own toolbar carries Clear; the tabs need the room. */
+  .devtools .sidebar-tabs .sidebar-tab-action {
+    display: none;
+  }
+}
+
+.devtools .sidebar-tab-action {
   margin-left: auto;
-  padding: 2px var(--yaar-sp-2);
-  background: none;
-  border: none;
-  color: var(--yaar-text-muted);
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.sidebar-tab-action:hover {
-  color: var(--yaar-text);
 }

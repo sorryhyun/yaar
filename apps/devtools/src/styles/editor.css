@@ -20,7 +20,18 @@
   height: 100%;
 }
 
-/* .editor-header is y-editbar y-toolbar-dense in markup. */
+/* .editor-header is y-editbar y-toolbar-dense in markup; sized to match the sidebar
+   tab strip so the two headers read as one row. */
+.devtools .editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  flex-shrink: 0;
+  height: var(--dt-header-h);
+  padding: 0 var(--yaar-sp-2) 0 var(--yaar-sp-3);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
 
 .editor-content {
   display: flex;
@@ -35,6 +46,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--yaar-text-sm);
+}
+
+.editor-file-dir {
+  color: var(--yaar-text-dim);
+}
+
+.editor-file-base {
+  color: var(--yaar-text);
+  font-weight: 600;
 }
 
 /* Wrap and Lines sit together at the right; the first one carries the push. */
@@ -42,13 +63,35 @@
   margin-left: auto;
 }
 
-.editor-toggle[aria-pressed='true'] {
-  color: var(--yaar-accent);
+.devtools .editor-toggle {
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 var(--yaar-sp-2);
+  font-size: var(--yaar-text-xs);
+  font-weight: 600;
+  color: var(--yaar-text-dim);
+  border: 1px solid transparent;
+  border-radius: var(--yaar-radius-sm);
 }
 
-.editor-toggle:disabled {
+.devtools .editor-toggle:hover:not(:disabled) {
+  color: var(--yaar-text);
+  background: var(--yaar-bg-surface-hover);
+}
+
+.devtools .editor-toggle[aria-pressed='true'] {
+  color: var(--yaar-accent);
+  background: var(--yaar-wash-accent);
+  border-color: var(--yaar-wash-accent-border);
+}
+
+.devtools .editor-toggle:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.editor-empty {
+  font-size: var(--yaar-text-sm);
 }
 
 .editor-gutter {
