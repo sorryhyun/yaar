@@ -66,6 +66,11 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
           name: 'ytdlp',
           description: 'Audio download from YouTube via the optional yt-dlp binary',
         },
+        {
+          uri: 'yaar://system/remote-control',
+          name: 'remote-control',
+          description: 'Host Claude Remote Control so claude.ai/code can drive this machine',
+        },
       ]);
     },
   });

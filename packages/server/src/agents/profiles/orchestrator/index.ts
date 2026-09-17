@@ -31,6 +31,7 @@ import apps from './prompts/apps.md' with { type: 'text' };
 import drawings from './prompts/drawings.md' with { type: 'text' };
 import config from './prompts/config.md' with { type: 'text' };
 import reloadCache from './prompts/reload-cache.md' with { type: 'text' };
+import remoteControl from './prompts/remote-control.md' with { type: 'text' };
 
 export const ORCHESTRATOR_PROMPT = composePrompt(
   intro,
@@ -49,6 +50,7 @@ export const ORCHESTRATOR_PROMPT = composePrompt(
   skills,
   drawings,
   config,
+  remoteControl,
   userPrompts,
   reloadCache,
 );

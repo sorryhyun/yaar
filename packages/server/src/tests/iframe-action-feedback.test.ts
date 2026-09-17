@@ -15,6 +15,10 @@ import { getBroadcastCenter } from '../session/broadcast-center.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import type { SessionId, YaarWebSocket } from '../session/types.js';
+import {
+  registerExternalPrincipal,
+  unregisterExternalPrincipal,
+} from '../mcp/external-principals.js';
 
 const SESSION = 'iframe-feedback-session' as SessionId;
 
@@ -27,7 +31,10 @@ function fakeSocket(sink: ServerEvent[]): YaarWebSocket {
 }
 
 /** Emit `action` as devtools' iframe would, and collect what reached the frontend. */
-async function broadcastFromIframe(action: OSAction): Promise<OSAction[]> {
+async function broadcastFromIframe(
+  action: OSAction,
+  agentId = 'iframe:devtools',
+): Promise<OSAction[]> {
   const events: ServerEvent[] = [];
   const session = new LiveSession(SESSION);
   const bc = getBroadcastCenter();
@@ -36,9 +43,8 @@ async function broadcastFromIframe(action: OSAction): Promise<OSAction[]> {
   // for no other. A real tab says so as it connects (?monitorId= / SUBSCRIBE_MONITOR).
   bc.subscribeToMonitor('conn-1', '0');
   try {
-    await runWithAgentContext(
-      { agentId: 'iframe:devtools', sessionId: SESSION, monitorId: '0' },
-      () => actionEmitter.emitActionWithFeedback(action, 10, SESSION, '0'),
+    await runWithAgentContext({ agentId, sessionId: SESSION, monitorId: '0' }, () =>
+      actionEmitter.emitActionWithFeedback(action, 10, SESSION, '0'),
     );
   } finally {
     bc.unsubscribe('conn-1');
@@ -92,5 +98,36 @@ describe('iframe-emitted actions awaiting feedback', () => {
 
     expect(create).toBeDefined();
     expect(create?.windowId).toBe('0/devtools-preview-1752345678902');
+  });
+
+  /**
+   * The hosted Remote Control agent has no ToolActionBridge either. Its windows used to
+   * land in the server's registry — readable, listed in its layout — and on no screen.
+   */
+  it('also covers an external principal, which has no bridge', async () => {
+    registerExternalPrincipal('remote-control', {
+      sessionId: SESSION,
+      monitorId: '0',
+      role: 'monitor',
+    });
+    try {
+      const actions = await broadcastFromIframe(
+        {
+          type: 'window.create',
+          windowId: 'music-maker',
+          title: 'Music Maker',
+          bounds: { x: 65, y: 80, w: 640, h: 480 },
+          content: { renderer: 'iframe', data: '/api/apps/music-maker/dist/index.html' },
+        } as OSAction,
+        'remote-control',
+      );
+      const create = actions.find((a) => a.type === 'window.create') as
+        | (OSAction & { windowId?: string; requestId?: string })
+        | undefined;
+      expect(create?.windowId).toBe('0/music-maker');
+      expect(create?.requestId).toBeTruthy();
+    } finally {
+      unregisterExternalPrincipal('remote-control');
+    }
   });
 });

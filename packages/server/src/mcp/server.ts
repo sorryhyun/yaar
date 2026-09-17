@@ -45,6 +45,7 @@ import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
 import { resolveAgentToken } from './agent-tokens.js';
+import { getExternalPrincipal } from './external-principals.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
 import { getActiveSession } from '../handlers/utils.js';
 import { registerAppAgentTools } from './app-agent/index.js';
@@ -259,10 +260,13 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   }
   const agentId = (presented && resolveAgentToken(presented)) ?? 'unknown';
   const hub = getSessionHub();
-  const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
-  const monitorId = hub.findMonitorForAgent(agentId);
+  // A process YAAR spawned outside the pool (hosted Remote Control) — see external-principals.ts.
+  const external = getExternalPrincipal(agentId);
+  const yaarSessionId =
+    hub.findSessionByAgent(agentId) ?? external?.sessionId ?? hub.getDefault()?.sessionId;
+  const monitorId = hub.findMonitorForAgent(agentId) ?? external?.monitorId;
   const windowId = hub.findWindowForAgent(agentId);
-  const role = hub.findRoleForAgent(agentId);
+  const role = hub.findRoleForAgent(agentId) ?? external?.role;
 
   return runWithAgentContext(
     { agentId, sessionId: yaarSessionId, monitorId, windowId, role },
