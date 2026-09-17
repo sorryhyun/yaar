@@ -5,6 +5,7 @@
  *                                 an iframe token injected (host-only, see below)
  * POST /api/dev/compile       — compile a project directory
  * POST /api/dev/typecheck     — typecheck a project directory
+ * POST /api/dev/find-references — symbol references and callers in a project (TS language service)
  * POST /api/dev/deploy        — deploy a project as an installed app
  * POST /api/dev/format        — format one file's text (text in, text out; no disk)
  * POST /api/dev/git-history   — list an app's version history
@@ -34,6 +35,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     path: '/api/dev/typecheck',
     response: 'json',
     description: 'Typecheck a project',
+  },
+  {
+    method: 'POST',
+    path: '/api/dev/find-references',
+    response: 'json',
+    description: 'Find symbol references and callers in a project',
   },
   { method: 'POST', path: '/api/dev/deploy', response: 'json', description: 'Deploy a project' },
   {
@@ -77,7 +84,7 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 /** App ids are directory names. Keep this to what a directory name may be. */
 const APP_ID = /^[A-Za-z0-9._-]+$/;
 
-const PATH_ACTIONS = ['compile', 'typecheck', 'deploy'] as const;
+const PATH_ACTIONS = ['compile', 'typecheck', 'find-references', 'deploy'] as const;
 const GIT_ACTIONS = ['git-history', 'git-diff', 'git-restore', 'git-checkpoint'] as const;
 /** Actions over text the caller sends, addressing no project directory at all. */
 const TEXT_ACTIONS = ['format'] as const;
@@ -404,6 +411,25 @@ async function dispatchDevAction(
         success: result.success,
         diagnostics: result.diagnostics,
       });
+    }
+
+    case 'find-references': {
+      // Shape validation lives with the query type in the compiler; the route only
+      // picks the known keys so nothing else in the body reaches the worker.
+      const { findReferences } = await import('@yaar/compiler');
+      const result = await findReferences(
+        absolutePath,
+        {
+          file: body.file as string,
+          symbol: body.symbol as string | undefined,
+          line: body.line as number | undefined,
+          column: body.column as number | undefined,
+          callers: body.callers === true,
+          maxResults: body.maxResults as number | undefined,
+        },
+        { bundles },
+      );
+      return jsonResponse(result);
     }
 
     case 'deploy': {

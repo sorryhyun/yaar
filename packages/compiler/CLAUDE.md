@@ -17,6 +17,12 @@ src/
 ├── index.ts               # Barrel exports — the whole public surface, deep imports are internal
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
+├── sandbox-tsconfig.ts    # sandboxCompilerOptions + sliceBundledTypes — the one TS view of a sandbox, shared by typecheck and references
+├── references/
+│   ├── index.ts           # findReferences() host — one idle-reaped Worker, per-query timeout, `unavailable` in exe
+│   ├── worker.ts          # Worker entry — LRU of 2 warm SandboxReferences
+│   ├── service.ts         # LanguageService over a sandbox: symbol resolution, references, callers (call hierarchy, or derived)
+│   └── types.ts           # FindReferencesQuery / FindReferencesResult
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── paths.ts               # MODULE_ROOT / PACKAGE_ROOT / SHIMS_DIR — the one src-vs-dist derivation
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
@@ -64,7 +70,7 @@ src/
     │   ├── rasterize.ts   # rasterize() — DOM → SVG foreignObject → canvas, with the six quiet failures closed
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
-    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
+    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, findReferences, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── three-addons.ts    # curated examples/jsm surface (three core stays external — one copy)
@@ -244,6 +250,21 @@ denylist of extensions, so a new format is covered the day it is imported.
 Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LIBS=1` to print plugin initialization, resolution strategy, and resolved filesystem paths.
 
 **`typecheckSandbox(path, { bundles })`** — runs the real TypeScript JS entry through Bun and removes ambient declarations for gated SDKs not present in `app.json` `bundles`. Compile and typecheck therefore reject the same unauthorized `@bundled/yaar-*` imports.
+
+**`findReferences(path, query, { bundles })`** — symbol references and callers, from a TypeScript
+LanguageService built on `sandbox-tsconfig.ts`, the same options and grant-sliced declarations
+typecheck hands tsc. Two readers of one definition is the point: a symbol typecheck resolves and
+references cannot would be two tools describing two programs. Three rules:
+
+- **Never on the calling thread.** Building a program is synchronous and takes about a second per
+  10k lines; the caller is the server's event loop. It runs in one Worker that keeps up to two
+  programs warm (file versions are mtimes) and is terminated after 5 idle minutes or on a timeout.
+- **`unavailable`, never an empty success**, where there is no TypeScript (the exe) — "no
+  references" is a real answer someone would act on.
+- **Callers come from call hierarchy when it can start, else from call-site references** grouped by
+  enclosing function (`callersFrom` says which). Call hierarchy cannot start from a variable, and a
+  signal setter is one. A query from the renamed end of `export { a as b }` also re-queries from the
+  original, because references do not cross a rename backwards.
 
 ## Adding to the Agent-Facing Surface
 

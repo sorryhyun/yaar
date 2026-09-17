@@ -9,6 +9,15 @@ export {
 } from './compile.js';
 export { typecheckSandbox, type TypecheckOptions, type TypecheckResult } from './typecheck.js';
 export {
+  findReferences,
+  disposeReferencesWorker,
+  type FindReferencesOptions,
+  type FindReferencesQuery,
+  type FindReferencesResult,
+  type ReferenceHit,
+  type CallerHit,
+} from './references/index.js';
+export {
   BUNDLED_LIBRARIES,
   BUNDLED_SHIMS,
   GATED_BUNDLED_LIBRARIES,

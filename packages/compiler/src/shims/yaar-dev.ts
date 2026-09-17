@@ -71,6 +71,33 @@ export function typecheck(path: string) {
   return devPost<{ success: boolean; diagnostics: string[] }>('typecheck', { path });
 }
 
+/**
+ * References and callers of a symbol in a project, from the TypeScript language
+ * service — not a text search. Follows re-exports, renamed imports, methods called
+ * through an instance, and members declared in `@bundled/*`.
+ *
+ * Name the symbol by `symbol` (a declaration in `file`; `Class.method` for a
+ * member), by `line` + `column`, or by `line` + `symbol`. Lines and columns are
+ * 1-based; paths are project-relative.
+ */
+export function findReferences(
+  path: string,
+  query: {
+    file: string;
+    symbol?: string;
+    line?: number;
+    column?: number;
+    callers?: boolean;
+    maxResults?: number;
+  },
+) {
+  // The full result shape is YaarDevReferencesResult in bundled-types/index.d.ts.
+  return devPost<{ success: boolean; kind?: string; error?: string }>('find-references', {
+    path,
+    ...query,
+  });
+}
+
 export function deploy(
   path: string,
   opts: {

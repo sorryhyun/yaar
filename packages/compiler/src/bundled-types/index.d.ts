@@ -1207,6 +1207,83 @@ interface YaarDevFormatResult {
   error?: string;
 }
 
+interface YaarDevReferencesQuery {
+  /** The file the symbol is declared (or used) in, project-relative — `src/main.ts`. */
+  file: string;
+  /**
+   * A declaration in `file`: `setBlocks`, or `Class.method` / `obj.prop` for a member.
+   * With `line`, the first occurrence of that name on that line — declaration or use.
+   */
+  symbol?: string;
+  /** 1-based. */
+  line?: number;
+  /** 1-based. Needs `line`. */
+  column?: number;
+  /** Also answer who calls it. */
+  callers?: boolean;
+  /** Cap on `references` and `callers`. Default 200. */
+  maxResults?: number;
+}
+
+interface YaarDevSourceLocation {
+  /** Project-relative, or `@bundled-types/index.d.ts` for a declaration in `@bundled/*`. */
+  file: string;
+  line: number;
+  column: number;
+}
+
+interface YaarDevReferenceHit extends YaarDevSourceLocation {
+  /** The source line, trimmed. */
+  text: string;
+  /** The innermost named function or method around it — `Editor.save` — or null at module scope. */
+  enclosing: string | null;
+  isDefinition?: true;
+  isWrite?: true;
+  isCall?: true;
+  role?: 'import' | 'export';
+}
+
+interface YaarDevCallerHit {
+  /** `Class.method`, `fn`, `commands.save.run`, or `(top level)`. */
+  caller: string;
+  kind: string;
+  file: string;
+  line: number;
+  calls: { line: number; column: number }[];
+}
+
+interface YaarDevReferencesResult {
+  success: boolean;
+  /** The name the query resolved to. */
+  symbol?: string;
+  /** Where the resolution landed. */
+  at?: YaarDevSourceLocation;
+  /** Other declarations the same `symbol` matched — pass `line` to pick one. */
+  ambiguous?: YaarDevSourceLocation[];
+  definitions?: (YaarDevSourceLocation & { name: string; kind: string })[];
+  /** Project references only, sorted by file then position. */
+  references?: YaarDevReferenceHit[];
+  /** Present when `callers` was asked. */
+  callers?: YaarDevCallerHit[];
+  /**
+   * `call-hierarchy` — the checker's own incoming calls. `references` — call sites
+   * grouped by `enclosing`, the fallback for a symbol call hierarchy cannot start
+   * from (a variable holding a function, such as a signal setter).
+   */
+  callersFrom?: 'call-hierarchy' | 'references';
+  /** References in the project before `maxResults` clipped them. */
+  totalReferences?: number;
+  /** Distinct project files among them. */
+  files?: number;
+  truncated?: true;
+  /**
+   * Why it failed: `invalid` (malformed query), `not-found` (file not in `src/**\/*.ts`,
+   * or no symbol there), `unavailable` (this build has no TypeScript), `timeout`, `failed`.
+   */
+  kind?: 'invalid' | 'not-found' | 'unavailable' | 'timeout' | 'failed';
+  error?: string;
+}
+
 interface YaarDevDeployOpts {
   appId: string;
   name?: string;
@@ -1316,6 +1393,7 @@ interface YaarDevRestoreResult {
 interface YaarDev {
   compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   typecheck(path: string): Promise<YaarDevTypecheckResult>;
+  findReferences(path: string, query: YaarDevReferencesQuery): Promise<YaarDevReferencesResult>;
   format(path: string, source: string): Promise<YaarDevFormatResult>;
   deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
   bundledLibraries(): Promise<string[]>;
@@ -2278,6 +2356,21 @@ declare module '@bundled/yaar' {
 declare module '@bundled/yaar-dev' {
   export function compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   export function typecheck(path: string): Promise<YaarDevTypecheckResult>;
+  /**
+   * References and callers of a symbol in the project at `path`, from the TypeScript
+   * language service — not a text search. Follows re-exports, renamed imports, methods
+   * called through an instance, and members declared in `@bundled/*`, under the same
+   * compiler options and bundle grants as `typecheck`.
+   *
+   * Name the symbol by `symbol` (a declaration in `file`; `Class.method` for a member),
+   * by `line` + `column`, or by `line` + `symbol`. The first query on a project builds
+   * its program (about a second per 10k lines); later ones reuse it and re-read only
+   * the files that changed.
+   */
+  export function findReferences(
+    path: string,
+    query: YaarDevReferencesQuery,
+  ): Promise<YaarDevReferencesResult>;
   /**
    * Format source text with the host's prettier, in the repo's own style.
    *

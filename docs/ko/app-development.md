@@ -192,7 +192,7 @@ import anime from '@bundled/anime';
 
 | SDK | Import 경로 | 용도 | 필요한 `bundles` 값 |
 |-----|------------|------|-------------------|
-| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, 그리고 앱별 버전 이력: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
+| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `findReferences()` (TypeScript 언어 서비스 기반 심볼 참조·호출자 추적), `deploy()`, `bundledLibraries()`, 그리고 앱별 버전 이력: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()` 등 | `"yaar-web"` |
 | ML 런타임 | `@bundled/yaar-ml` | 브라우저 내 모델 추론(WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
 | 미디어 | `@bundled/yaar-media` | `mediaUrl(url, { referer? })` — `/api/media-proxy`를 통해 Range 요청을 그대로 전달하며 스트리밍하는 동일 출처 URL로, `<video src>`/`<audio src>`/`fetch()`에 사용합니다(10MB base64 봉투 없음). 서버의 선택적 yt-dlp 바이너리를 통한 YouTube 오디오 다운로드: `ytdlpStatus()`, `resolveMedia()`, `downloadAudio()`, `cancelDownload()`. bundle 선언만으로 권한까지 부여됩니다 — `permissions` 항목은 필요 없으며, 앱 매니페스트는 `yaar://system/*` URI를 갖지 않습니다. 파일은 `shared/media/`에 저장됩니다 | `"yaar-media"` |

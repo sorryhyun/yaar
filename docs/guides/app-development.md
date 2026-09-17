@@ -225,7 +225,7 @@ Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app
 
 | SDK | Import Path | Purpose | Required `bundles` value |
 |-----|------------|---------|------------------------|
-| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, and per-app version history: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
+| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `findReferences()` (symbol references and callers via the TypeScript language service), `deploy()`, `bundledLibraries()`, and per-app version history: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()`, etc. | `"yaar-web"` |
 | ML runtime | `@bundled/yaar-ml` | In-browser model inference (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
 | Media | `@bundled/yaar-media` | `mediaUrl(url, { referer? })` — a same-origin URL for `<video src>`/`<audio src>`/`fetch()` that streams through `/api/media-proxy` with Range passthrough (no 10MB base64 envelope). YouTube audio download via the server's optional yt-dlp binary: `ytdlpStatus()`, `resolveMedia()`, `downloadAudio()`, `cancelDownload()`. The bundle alone grants the capability — no `permissions` entry, app manifests never hold `yaar://system/*` URIs. Files land in `shared/media/` | `"yaar-media"` |
