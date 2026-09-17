@@ -85,7 +85,7 @@ are noise, not changes the user made.
 
 ## The worker proposes; only one command applies
 
-The worker reads the project and cannot write to it. **`acceptEditRequest` in `protocol/worker.ts`
+A worker reads the project and cannot write to it. **`acceptEditRequest` in `protocol/worker.ts`
 is the only thing in this app that turns a proposal into a write.** Anything added to the worker's
 tool list that writes directly re-opens that hole.
 
@@ -98,7 +98,23 @@ tool list that writes directly re-opens that hole.
   degrades into a forward. A discipline gate, not a security boundary.
 - A rejection reaches the worker at the head of its *next* task (`pendingFeedback`), because the
   server takes no message while no turn is running. Drop that queue and rejected proposals return
-  unchanged.
+  unchanged. The queue is **per worker**, keyed by `proposal.worker` — feedback delivered to the
+  wrong slot teaches a worker about an edit it never made.
+
+## Workers run in parallel; that rests on them never writing
+
+`services/worker.ts` holds a fixed pool of slots (`worker`, `worker-2`, `worker-3`), each its own
+persona, stream, watchdog and in-flight record; `workerCap()` of them may run at once.
+`MAX_WORKERS` must not exceed `subagents.max` in `app.json`, or the third spawn is refused.
+
+- **Every `persona:*` handler passes `personaId` through** to the service. Dropping it files the
+  tool call, report or proposal under the first slot and feeds the wrong watchdog, so a busy
+  worker's turn times out while an idle one is kept alive.
+- **A slot is `reserved` from pick to in-flight.** `startWorkerTask` awaits a spawn in between;
+  without the flag two quick starts land on the same slot.
+- **`acceptEditRequest` is serialized** (`serializeAccept`). Each accept writes, typechecks,
+  compiles and may revert; two interleaved would judge each other's build. Parallel proposals to
+  one file are flagged (`conflictsWith`), never merged.
 
 ## Where the panes live
 

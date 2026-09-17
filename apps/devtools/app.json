@@ -12,7 +12,7 @@
     "agents"
   ],
   "subagents": {
-    "max": 2
+    "max": 3
   },
   "controls": [
     "browser-user",
@@ -30,7 +30,7 @@
     "yaar://skills/"
   ],
   "run": "dist/index.html",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "author": "YAAR",
   "kind": "system",
   "appId": "devtools"

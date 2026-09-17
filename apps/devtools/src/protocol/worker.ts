@@ -27,6 +27,11 @@ import {
   validateProposedEdits,
   waitForWorker,
   workerProposals,
+  workerCap,
+  setWorkerCap,
+  workerSlots,
+  pendingOnPath,
+  MAX_WORKERS,
   NO_ACTIVE_PROJECT,
 } from '../services';
 
@@ -80,6 +85,18 @@ async function applyProposal(
   return { before, after };
 }
 
+/**
+ * Accepts run one at a time. Each one writes, typechecks, compiles and may roll
+ * back; two interleaved would judge each other's build and could revert a file
+ * the other had just written.
+ */
+let acceptChain: Promise<unknown> = Promise.resolve();
+function serializeAccept<T>(run: () => Promise<T>): Promise<T> {
+  const next = acceptChain.then(run, run);
+  acceptChain = next.catch(() => {});
+  return next;
+}
+
 /** Type errors right now, and whether that number means anything yet. */
 function typeErrorCount(): { count: number; reliable: boolean } {
   return {
@@ -89,6 +106,41 @@ function typeErrorCount(): { count: number; reliable: boolean } {
 }
 
 export const workerCommands = {
+  workerConfig: defineAppCommand({
+    description:
+      'Read or set how many workers may run tasks at the same time (1-3, default 2), persisted across reloads. Returns { maxWorkers, workers } with each ' +
+      "worker's status and running taskId. Lowering the cap stops nothing already running; " +
+      'it only refuses new tasks beyond it. Workers are read-only, so parallel ones never ' +
+      'clobber files — their proposed edits are applied one at a time by acceptEditRequest.',
+    params: {
+      type: 'object',
+      properties: {
+        maxWorkers: {
+          type: 'number',
+          description: 'New cap, 1-3. Omit to read the current settings.',
+        },
+      },
+    },
+    replay: 'never',
+    run: async (p) => {
+      if (p.maxWorkers != null) {
+        const n = Number(p.maxWorkers);
+        if (!Number.isFinite(n)) throw new AppCommandError('maxWorkers must be a number.');
+        await setWorkerCap(n);
+      }
+      const cap = workerCap();
+      return {
+        maxWorkers: cap,
+        ceiling: MAX_WORKERS,
+        workers: workerSlots.map((s, i) => ({
+          worker: s.id,
+          status: s.status(),
+          enabled: i < cap,
+          taskId: s.activeTask()?.id ?? null,
+        })),
+      };
+    },
+  }),
   workerTask: defineAppCommand({
     description:
       'Start one task on the worker — a sonnet-tier sub-agent that explores the active ' +
@@ -104,9 +156,12 @@ export const workerCommands = {
       'as kind "report" — a cue to re-scope or call workerInterrupt, not a sign the task is ' +
       'done. A very long answer can reach you marked "[truncated, N chars]" — the wakeup is a ' +
       'prompt injection with a context budget; call workerWait with the taskId to read the ' +
-      'full record, which is kept whole. The worker keeps its memory across tasks; follow-ups like "now check the other ' +
-      'file" work, and `fresh` is how you opt out of that. One task at a time — starting ' +
-      'another while one runs is a refusal, not a queue.',
+      'full record, which is kept whole. Several workers run in parallel, up to the cap in ' +
+      '`workerConfig` (default 2, max 3): each call lands on a free worker and returns its ' +
+      '`worker` id, so fan independent surveys out as separate tasks and collect each by ' +
+      'taskId. A worker keeps its memory across tasks and a task goes to the worker that ' +
+      'finished last when it is free — pass `worker` to pin a follow-up to a specific one, ' +
+      'and `fresh` to opt out of memory. With every worker busy the call is refused, not queued.',
     params: {
       type: 'object',
       properties: {
@@ -114,10 +169,17 @@ export const workerCommands = {
           type: 'string',
           description: 'The task, self-contained — the worker sees none of your context.',
         },
+        worker: {
+          type: 'string',
+          description:
+            'Run on this worker ("worker", "worker-2", "worker-3") — for a follow-up that ' +
+            "needs that worker's memory. Refused if it is busy or beyond the cap. Omit to use " +
+            'any free one.',
+        },
         fresh: {
           type: 'boolean',
           description:
-            'Retire the worker first, so this task starts with no memory of earlier ones. ' +
+            'Retire the chosen worker first, so this task starts with no memory of earlier ones. ' +
             'Use when its context has gone stale or an earlier answer was wrong and you do ' +
             'not want this one built on it. Costs a respawn; the default (false) is right ' +
             'for a follow-up.',
@@ -132,10 +194,12 @@ export const workerCommands = {
       const started = await startWorkerTask(String(p.task), {
         wakeAgent: true,
         ...(p.fresh === true ? { fresh: true } : {}),
+        ...(p.worker != null ? { worker: String(p.worker) } : {}),
       });
       if (started.error) throw new AppCommandError(started.error);
       return {
         taskId: started.taskId,
+        worker: started.worker,
         status: 'running',
         collect:
           `You will be woken with the answer (channel "worker", taskId ${started.taskId}). ` +
@@ -145,15 +209,25 @@ export const workerCommands = {
   }),
   workerInterrupt: defineAppCommand({
     description:
-      'Stop the task the worker is running and take whatever it has produced so far — its ' +
+      'Stop a running worker task and take whatever it has produced so far — its ' +
       'partial answer and every interim report. Use it when a report or a state-key read ' +
       'shows the task was mis-scoped: a wrong path list, a pattern that matches nothing, an ' +
       'instruction resting on something untrue. Stopping and re-sending a corrected task ' +
       'beats waiting out a turn you already know is wrong. The worker keeps its memory, so ' +
-      'the retry can say "same as before, but under src/ this time".',
-    params: { type: 'object', properties: {} },
+      'the retry can say "same as before, but under src/ this time" (pass the same `worker`). ' +
+      'Pass taskId when several tasks run; omitted with more than one running, nothing is ' +
+      'stopped and `running` lists the ids.',
+    params: {
+      type: 'object',
+      properties: {
+        taskId: {
+          type: 'number',
+          description: 'The task to stop. Optional when exactly one task is running.',
+        },
+      },
+    },
     replay: 'never',
-    run: async () => interruptWorker(),
+    run: async (p) => interruptWorker(p.taskId != null ? { taskId: Number(p.taskId) } : {}),
   }),
   workerWait: defineAppCommand({
     description:
@@ -161,8 +235,10 @@ export const workerCommands = {
       'still working. Blocks up to waitMs (default 60000, max 170000) — always pass a ' +
       'timeoutMs at least 10s larger than waitMs, or the platform kills the call before the ' +
       'wait ends. Timing out is cheap: the task keeps running and calling again resumes the ' +
-      'wait, so a long survey can be collected in slices. Omit taskId to ask about the task ' +
-      'in flight (or the last one to finish). Never re-send a task to "retry" a wait. ' +
+      'wait, so a long survey can be collected in slices. Omit taskId to collect whichever ' +
+      'running task settles first (the result names its taskId and worker; a timeout lists ' +
+      'the ids still `running`), or the last one to finish when none runs — so a fan-out of ' +
+      'N tasks is N calls. Never re-send a task to "retry" a wait. ' +
       '`reports` carries the interim findings the worker posted, and `proposals` the edits it ' +
       'submitted; both come back on a timeout too — read them before deciding whether to keep ' +
       'waiting or to workerInterrupt. A ' +
@@ -223,8 +299,12 @@ export const workerCommands = {
       return {
         id: proposal.id,
         taskId: proposal.taskId,
+        worker: proposal.worker,
         path: proposal.path,
         status: proposal.status,
+        ...(proposal.status === 'pending' && pendingOnPath(proposal.path, id).length
+          ? { conflictsWith: pendingOnPath(proposal.path, id).map((q) => q.id) }
+          : {}),
         rationale: proposal.rationale,
         edits: proposal.edits,
         token: proposal.token,
@@ -241,7 +321,9 @@ export const workerCommands = {
       'writing if they no longer apply. If the bundle then fails, or type errors increase, ' +
       'the file is restored, the project is rebuilt clean, and the result comes back with ' +
       '`rolledBack: true` and the `failure` that caused it — a broken build never survives this ' +
-      'command. The write is recorded in the Changes panel labelled with the proposal ' +
+      'command. Accepts run one at a time even when called concurrently; `otherPendingOnPath` ' +
+      'names proposals to the same file (often from a parallel worker) that were verified ' +
+      'against the bytes this one replaced, and are re-checked when you accept them. The write is recorded in the Changes panel labelled with the proposal ' +
       'number. Slow (up to two builds): pass timeoutMs, e.g. 120000.',
     params: {
       type: 'object',
@@ -261,117 +343,131 @@ export const workerCommands = {
       required: ['id', 'token', 'intent'],
     },
     replay: 'never',
-    run: async (p) => {
-      if (!activeProject())
-        throw new AppCommandError('No active project. Open or create one first.');
-      const id = Number(p.id);
-      const intent = String(p.intent ?? '').trim();
-      const proposal = findProposal(id);
-      if (!proposal) throw new AppCommandError('No edit request #' + id + '.');
-      if (proposal.status !== 'pending') {
-        throw new AppCommandError(
-          'Edit request #' +
-            id +
-            ' is already ' +
-            proposal.status +
-            ': ' +
-            (proposal.resolution ?? ''),
-        );
-      }
-      if (String(p.token ?? '') !== proposal.token) {
-        throw new AppCommandError(
-          'Wrong token for edit request #' +
-            id +
-            '. Call readEditRequest first and pass the ' +
-            'token it returns — this command will not apply an edit you have not read.',
-        );
-      }
-      if (intent.length < 12) {
-        throw new AppCommandError(
-          'intent must say something. One line in your own words about what this edit does ' +
-            'and why you are taking it.',
-        );
-      }
+    run: (p) =>
+      serializeAccept(async () => {
+        if (!activeProject())
+          throw new AppCommandError('No active project. Open or create one first.');
+        const id = Number(p.id);
+        const intent = String(p.intent ?? '').trim();
+        const proposal = findProposal(id);
+        if (!proposal) throw new AppCommandError('No edit request #' + id + '.');
+        if (proposal.status !== 'pending') {
+          throw new AppCommandError(
+            'Edit request #' +
+              id +
+              ' is already ' +
+              proposal.status +
+              ': ' +
+              (proposal.resolution ?? ''),
+          );
+        }
+        if (String(p.token ?? '') !== proposal.token) {
+          throw new AppCommandError(
+            'Wrong token for edit request #' +
+              id +
+              '. Call readEditRequest first and pass the ' +
+              'token it returns — this command will not apply an edit you have not read.',
+          );
+        }
+        if (intent.length < 12) {
+          throw new AppCommandError(
+            'intent must say something. One line in your own words about what this edit does ' +
+              'and why you are taking it.',
+          );
+        }
 
-      // The proposal was checked when it was submitted, against the file as it was
-      // then. Anything since — another accept, an editFile of your own, a project
-      // switch — may have invalidated it, and an anchor that no longer matches is
-      // the thing this catches before a write rather than after one.
-      const recheck = await validateProposedEdits(proposal.path, proposal.edits);
-      if (!recheck.ok) {
-        resolveProposal(id, 'failed', 'Stale at accept: ' + recheck.error);
-        queueWorkerFeedback(
-          'Edit request #' +
-            id +
-            ' could not be applied — ' +
-            recheck.error +
-            ' The file changed after you proposed it. Re-read it before proposing again.',
-        );
-        throw new AppCommandError(
-          'Edit request #' + id + ' no longer applies: ' + recheck.error + ' Nothing was written.',
-        );
-      }
+        // The proposal was checked when it was submitted, against the file as it was
+        // then. Anything since — another accept, an editFile of your own, a project
+        // switch — may have invalidated it, and an anchor that no longer matches is
+        // the thing this catches before a write rather than after one.
+        const recheck = await validateProposedEdits(proposal.path, proposal.edits);
+        if (!recheck.ok) {
+          resolveProposal(id, 'failed', 'Stale at accept: ' + recheck.error);
+          queueWorkerFeedback(
+            'Edit request #' +
+              id +
+              ' could not be applied — ' +
+              recheck.error +
+              ' The file changed after you proposed it. Re-read it before proposing again.',
+            proposal.worker,
+          );
+          throw new AppCommandError(
+            'Edit request #' +
+              id +
+              ' no longer applies: ' +
+              recheck.error +
+              ' Nothing was written.',
+          );
+        }
 
-      const baseline = typeErrorCount();
-      const applied = await applyProposal(id, proposal.path, proposal.edits);
-      await typecheck();
-      await compile();
-
-      const built = bundleStatus() === 'success';
-      const after = typeErrorCount();
-      // Two different failures, and only one of them is this edit's fault. A bundle
-      // that stopped building is: Bun built before and does not now. A type error
-      // count is only evidence if a typecheck had run before the edit — otherwise
-      // the errors may be older than the proposal, and rolling back on them would
-      // discard a good edit to hide someone else's mess.
-      const regressed = baseline.reliable && after.count > baseline.count;
-      if (!built || regressed) {
-        const why = !built
-          ? 'the bundle failed'
-          : 'type errors went from ' + baseline.count + ' to ' + after.count;
-        // Read before the revert: the rebuild below succeeds, so asking afterwards
-        // reports the clean state and says nothing about what went wrong.
-        const failure = built
-          ? diagnostics().filter((d) => d.severity === 'error')
-          : compileErrors();
-        await writeFile(proposal.path, applied.before, {
-          before: applied.after,
-          label: 'revert worker edit #' + id,
-        });
+        const baseline = typeErrorCount();
+        const applied = await applyProposal(id, proposal.path, proposal.edits);
         await typecheck();
         await compile();
-        resolveProposal(id, 'failed', 'Applied and rolled back: ' + why);
+
+        const built = bundleStatus() === 'success';
+        const after = typeErrorCount();
+        // Two different failures, and only one of them is this edit's fault. A bundle
+        // that stopped building is: Bun built before and does not now. A type error
+        // count is only evidence if a typecheck had run before the edit — otherwise
+        // the errors may be older than the proposal, and rolling back on them would
+        // discard a good edit to hide someone else's mess.
+        const regressed = baseline.reliable && after.count > baseline.count;
+        if (!built || regressed) {
+          const why = !built
+            ? 'the bundle failed'
+            : 'type errors went from ' + baseline.count + ' to ' + after.count;
+          // Read before the revert: the rebuild below succeeds, so asking afterwards
+          // reports the clean state and says nothing about what went wrong.
+          const failure = built
+            ? diagnostics().filter((d) => d.severity === 'error')
+            : compileErrors();
+          await writeFile(proposal.path, applied.before, {
+            before: applied.after,
+            label: 'revert worker edit #' + id,
+          });
+          await typecheck();
+          await compile();
+          resolveProposal(id, 'failed', 'Applied and rolled back: ' + why);
+          queueWorkerFeedback(
+            'Edit request #' +
+              id +
+              ' was applied and rolled back because ' +
+              why +
+              '. ' +
+              (failure.length ? 'First error: ' + JSON.stringify(failure[0]) + '. ' : '') +
+              'Read the file again and check what your replacement text broke.',
+            proposal.worker,
+          );
+          return {
+            applied: false,
+            rolledBack: true,
+            id,
+            path: proposal.path,
+            reason: why,
+            failure,
+          };
+        }
+
+        resolveProposal(id, 'accepted', intent);
         queueWorkerFeedback(
-          'Edit request #' +
-            id +
-            ' was applied and rolled back because ' +
-            why +
-            '. ' +
-            (failure.length ? 'First error: ' + JSON.stringify(failure[0]) + '. ' : '') +
-            'Read the file again and check what your replacement text broke.',
+          'Edit request #' + id + ' was accepted and applied. ' + intent,
+          proposal.worker,
         );
+        // Proposals parked against the same file were verified against the bytes this
+        // accept just replaced; name them so the caller re-reads before taking another.
+        const stillPending = pendingOnPath(proposal.path, id).map((q) => q.id);
         return {
-          applied: false,
-          rolledBack: true,
+          applied: true,
           id,
           path: proposal.path,
-          reason: why,
-          failure,
+          editsApplied: proposal.edits.length,
+          lines: recheck.lines,
+          typeErrors: after.count,
+          status: after.count === 0 ? 'success' : 'error',
+          ...(stillPending.length ? { otherPendingOnPath: stillPending } : {}),
         };
-      }
-
-      resolveProposal(id, 'accepted', intent);
-      queueWorkerFeedback('Edit request #' + id + ' was accepted and applied. ' + intent);
-      return {
-        applied: true,
-        id,
-        path: proposal.path,
-        editsApplied: proposal.edits.length,
-        lines: recheck.lines,
-        typeErrors: after.count,
-        status: after.count === 0 ? 'success' : 'error',
-      };
-    },
+      }),
   }),
   rejectEditRequest: defineAppCommand({
     description:
@@ -420,6 +516,7 @@ export const workerCommands = {
       resolveProposal(id, 'rejected', reason);
       queueWorkerFeedback(
         'Edit request #' + id + ' (' + proposal.path + ') was rejected: ' + reason,
+        proposal.worker,
       );
       return {
         id,
@@ -447,13 +544,15 @@ export const workerCommands = {
     replay: 'never',
     run: async (p) => {
       const path = String(p.path ?? '');
-      noteWorkerToolCall('edit_request ' + path);
+      const personaId = String(p.personaId ?? '');
+      noteWorkerToolCall('edit_request ' + path, personaId);
       if (!activeProject()) return NO_PROJECT;
       return addWorkerEditRequest({
         path,
         editsJson: String(p.edits ?? ''),
         rationale: String(p.rationale ?? ''),
         notify: p.notify === true,
+        personaId,
       });
     },
   }),
@@ -466,8 +565,8 @@ export const workerCommands = {
       required: ['personaId'],
     },
     replay: 'never',
-    run: async () => {
-      noteWorkerToolCall('list_files');
+    run: async (p) => {
+      noteWorkerToolCall('list_files', String(p.personaId ?? ''));
       const proj = activeProject();
       if (!proj) return NO_PROJECT;
       const lines = files()
@@ -496,7 +595,7 @@ export const workerCommands = {
     replay: 'never',
     run: async (p) => {
       const path = String(p.path);
-      noteWorkerToolCall(`read_file ${path}`);
+      noteWorkerToolCall(`read_file ${path}`, String(p.personaId ?? ''));
       if (!activeProject()) return NO_PROJECT;
       try {
         const result = await readFileContent(path, {
@@ -527,7 +626,8 @@ export const workerCommands = {
     // worker talking, not the worker looking. No `noteWorkerToolCall` either —
     // `addWorkerReport` files its own transcript line and feeds the watchdog,
     // and a "⚙ report" line above every finding would be noise.
-    run: async (p) => addWorkerReport(String(p.finding ?? ''), p.notify === true),
+    run: async (p) =>
+      addWorkerReport(String(p.finding ?? ''), p.notify === true, String(p.personaId ?? '')),
   }),
   'persona:grep': defineAppCommand({
     description: "Called by the worker sub-agent's grep tool: regex search across the project.",
@@ -543,7 +643,10 @@ export const workerCommands = {
     replay: 'never',
     run: async (p) => {
       const pattern = String(p.pattern);
-      noteWorkerToolCall(`grep /${pattern}/${p.glob ? ` in ${p.glob}` : ''}`);
+      noteWorkerToolCall(
+        `grep /${pattern}/${p.glob ? ` in ${p.glob}` : ''}`,
+        String(p.personaId ?? ''),
+      );
       if (!activeProject()) return NO_PROJECT;
       // Generated output stays filtered out for the worker with no way to ask for it: it
       // explores source, and a minified bundle line would eat its context for nothing.

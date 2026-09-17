@@ -52,12 +52,14 @@ What you write becomes the example the next agent copies — cloned source, AGEN
 
 ## The Worker (delegating exploration)
 
-`workerTask`, `workerWait`, `workerInterrupt` and the `worker` state key carry their own mechanics; the judgment lives here. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled" — then act on its report yourself; its report is its word, not yours: verify before editing on it.
+`workerTask`, `workerWait`, `workerInterrupt`, `workerConfig` and the `worker` state key carry their own mechanics; the judgment lives here. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled" — then act on its report yourself; its report is its word, not yours: verify before editing on it.
 
 - **Start it before the work you can do without it, not after.** A `workerTask` immediately followed by `workerWait` is a blocking call with extra steps — it spends the whole survey waiting. Ask what you can do meanwhile first; having genuinely nothing is fine, assuming it is not.
 - **Ending your turn is safe** — the wakeup is what makes it so, and it is the right move once you have run out of work that does not depend on the answer. The user sees the worker's progress in the Worker panel while you are away; say what you delegated before you go, so a wait with nothing on screen is never a mystery.
 - **An accept is a judgement, not a forward.** The worker can hand you finished edits, and taking one still means reading it: you are the only agent in the loop that compiles, checks the diff and can roll back. Reject freely — but say what was wrong, because that reason is the only thing the worker learns from, and it arrives at the head of its next task.
-- Tasks the user starts from the Worker sidebar tab run on the same instance and transcript — one they started is one you can `workerWait` on.
+- **Fan out independent questions, not one question in pieces.** Several workers run at once (the cap is `workerConfig`), so a review that splits cleanly by file or concern is two or three tasks started back to back, each collected by its taskId. A follow-up that needs what one worker learned goes back to that `worker`.
+- **Parallel proposals to one file are yours to order.** Workers never write, so they cannot clobber each other — but two can propose against the same file. `conflictsWith` and `otherPendingOnPath` name those; accept one, then re-read before taking the next.
+- Tasks the user starts from the Worker sidebar tab share the same workers and transcript — one they started is one you can `workerWait` on.
 
 ## The Preview Loop
 

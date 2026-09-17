@@ -19,9 +19,11 @@ import {
 import {
   workerStatus,
   workerEntries,
-  workerActiveTask,
+  workerActiveTasks,
   workerLastResult,
   workerProposals,
+  workerSlots,
+  workerCap,
   summarizeProposal,
 } from '../services/worker';
 import { previewWindowIsOpen } from '../services';
@@ -201,10 +203,12 @@ export const devtoolsState = {
   },
   worker: {
     description:
-      'The worker sub-agent (see workerTask): its status (offline | spawning | idle | ' +
-      'running | error) and the tail of its transcript — tasks, tool calls, interim ' +
-      'reports, answers, errors, newest last. `activeTask` is the backgrounded task in ' +
-      'flight ({ taskId, task, elapsedMs, reports }) or null — its `reports` are the ' +
+      'The worker sub-agents (see workerTask): overall `status` (offline | spawning | idle | ' +
+      'running | error — running if any is), `maxWorkers` (the concurrency cap, see ' +
+      'workerConfig), `workers` ({ worker, status, taskId } per worker within the cap), and ' +
+      'the tail of the shared transcript — tasks, tool calls, interim reports, answers, ' +
+      'errors, newest last, each tagged with its `worker`. `activeTasks` lists every task in ' +
+      'flight ({ taskId, worker, task, elapsedMs, reports }), empty when none — its `reports` are the ' +
       'findings posted so far, which is how you see what a long task has turned up before ' +
       'it ends; `lastResult` is the last one to finish ({ taskId, answer, error, reports, ' +
       'elapsedMs }), always carrying an answer or an error. This is the poll-shaped read: ' +
@@ -219,21 +223,27 @@ export const devtoolsState = {
       // deep transcript cannot flood a query result.
       const clip = (text: string) =>
         text.length > 4_000 ? `${text.slice(0, 4_000)}… (truncated)` : text;
-      const active = workerActiveTask();
+      const active = workerActiveTasks();
       const last = workerLastResult();
       return {
         status: workerStatus(),
-        activeTask: active
-          ? {
-              taskId: active.id,
-              task: clip(active.task),
-              elapsedMs: Date.now() - active.startedAt,
-              ...(active.reports?.length ? { reports: active.reports.map(clip) } : {}),
-            }
-          : null,
+        maxWorkers: workerCap(),
+        workers: workerSlots.slice(0, workerCap()).map((s) => ({
+          worker: s.id,
+          status: s.status(),
+          taskId: s.activeTask()?.id ?? null,
+        })),
+        activeTasks: active.map((t) => ({
+          taskId: t.id,
+          worker: t.worker,
+          task: clip(t.task),
+          elapsedMs: Date.now() - t.startedAt,
+          ...(t.reports?.length ? { reports: t.reports.map(clip) } : {}),
+        })),
         lastResult: last
           ? {
               taskId: last.id,
+              worker: last.worker,
               ...(last.answer ? { answer: clip(last.answer) } : {}),
               ...(last.error ? { error: last.error } : {}),
               ...(last.reports?.length ? { reports: last.reports.map(clip) } : {}),
@@ -241,7 +251,9 @@ export const devtoolsState = {
             }
           : null,
         proposals: workerProposals().map(summarizeProposal),
-        transcript: entries.slice(-30).map((e) => ({ kind: e.kind, text: clip(e.text) })),
+        transcript: entries
+          .slice(-30)
+          .map((e) => ({ kind: e.kind, worker: e.worker, text: clip(e.text) })),
       };
     },
   },

@@ -9,6 +9,27 @@
 
 /* .worker-status is y-toolbar y-toolbar-dense in markup. */
 
+.worker-status {
+  flex-wrap: wrap;
+  gap: var(--yaar-sp-2);
+}
+
+.worker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+}
+
+.worker-status-spacer {
+  flex: 1;
+}
+
+.worker-cap {
+  width: auto;
+  padding: 0 var(--yaar-sp-1);
+  font-size: var(--yaar-text-xs);
+}
+
 .worker-list {
   flex: 1;
   min-height: 0;

@@ -1,42 +1,51 @@
 export {};
-import { createSignal, batch } from '@bundled/solid-js';
-import { app, invoke, read, del, stream, errMsg, type StreamFrame } from '@bundled/yaar';
+import { createSignal, batch, type Accessor, type Setter } from '@bundled/solid-js';
+import {
+  app,
+  appStorage,
+  invoke,
+  read,
+  del,
+  stream,
+  errMsg,
+  type StreamFrame,
+} from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { activeProject } from '../core';
 import { applyEdits, type EditSpec } from '../lib/edits';
 import { PersonaHandleSchema, WorkerEditListSchema, WorkerFrameDataSchema } from '../schema';
 import { readFileText } from './files';
 
-// The worker sub-agent — a sonnet-tier explorer devtools spawns for itself via
+// The worker sub-agents — sonnet-tier explorers devtools spawns for itself via
 // `yaar://apps/self/agents` (requires the user-granted `subagents` capability in
-// app.json). The worker holds NO YAAR verbs and no filesystem: its only reach is
-// the four tools declared at spawn, each of which the server routes back to this
-// iframe as a `persona:{name}` command (handlers: protocol/worker.ts, which run
-// against devtools' own storage grants). Containment, not plumbing — the worker
-// can never see more of the machine than devtools itself shows it.
+// app.json). A worker holds NO YAAR verbs and no filesystem: its only reach is
+// the five tools declared at spawn, each of which the server routes back to this
+// iframe as a `persona:{name}` command stamped with the calling `personaId`
+// (handlers: protocol/worker.ts). Containment, not plumbing — a worker can never
+// see more of the machine than devtools itself shows it.
 //
-// Three of the five look outward (list_files, read_file, grep). The other two
-// look back: `report`, how the worker says something before its turn ends, and
-// `edit_request`, how it proposes a change it cannot make. Neither needed a new
-// capability, precisely because of the shape above — a tool is already just a
-// name over the bridge to this one iframe, so the only agent either can reach is
-// devtools' own. See `addWorkerReport` and the Edit requests section for what
-// they buy.
+// A small pool, not one worker: up to MAX_WORKERS slots with fixed persona ids,
+// of which `workerCap()` may run at once. Each slot is its own persistent session,
+// so a follow-up goes to the slot that ran the previous task (see `pickSlot`), and
+// `fresh` retires only the slot it lands on.
 //
-// One worker, not a cast: the id below is fixed (the manifest's `subagents.max`
-// is a ceiling, not a target), and the provider session is persistent —
-// successive tasks are turns of one conversation, so "now check the other file"
-// works as a follow-up. `reset` is the fresh-context escape hatch.
+// Concurrency is safe because workers never write. Their only route to a change
+// is `edit_request`, which dry-runs and parks a proposal; `acceptEditRequest` is
+// the single writer and runs accepts one at a time. Two proposals against the same
+// file are flagged `conflictsWith` each other at submission, and the second accept
+// re-checks against the file the first one left.
 
-/** The one persona id. Spawn is idempotent on it, which is what makes reload cheap. */
-const WORKER_ID = 'worker';
+/** Hard ceiling — must not exceed `subagents.max` in app.json. */
+export const MAX_WORKERS = 3;
+export const DEFAULT_WORKER_CAP = 2;
+const WORKER_IDS = ['worker', 'worker-2', 'worker-3'] as const;
+const CONFIG_PATH = 'worker-config.json';
 
 /**
  * How long a turn may go without any sign of life before we give up on it.
  * "Life" is any stream frame OR any tool-handler invocation — a worker deep in a
  * grep loop produces no text frames, so the tool handlers call `noteWorkerToolCall`
- * to keep the watchdog fed (chitchats only needed frames; a tool-using worker doesn't
- * emit them while a tool call is outstanding).
+ * to keep the watchdog fed.
  */
 const TURN_IDLE_TIMEOUT_MS = 180_000;
 
@@ -46,111 +55,184 @@ export interface WorkerEntry {
   kind: 'task' | 'answer' | 'tool' | 'report' | 'edit-request' | 'error';
   text: string;
   timestamp: number;
+  /** The slot id that produced this line. */
+  worker: string;
 }
 
 /**
  * How one task ended. `answer` may accompany `error` — the partial draft of a
  * turn that went quiet or was interrupted is worth more than the error alone.
- *
- * Exactly one of `answer`/`error` is always set by the time `settle` is done
- * with it; see the invariant there.
  */
 export interface TurnOutcome {
   answer?: string;
   error?: string;
-  /** Interim findings the worker posted with its `report` tool during the turn. */
   reports?: string[];
-  /** Edits the worker proposed during the turn, as summaries. */
   proposals?: EditProposalSummary[];
 }
 
-/**
- * One task, from acceptance to outcome. The id is what makes the task
- * *backgroundable*: `workerTask` hands it back the moment the turn is queued,
- * and every later read — `workerWait`, the `worker` state key — answers about
- * that id rather than about "whatever the worker last said", which is the one
- * ambiguity a fire-and-collect caller cannot resolve on its own.
- */
+/** One task, from acceptance to outcome. Ids are global across slots. */
 export interface WorkerTaskRecord {
   id: number;
   task: string;
+  /** The slot id running it. */
+  worker: string;
   startedAt: number;
-  /** Set when the task settled; absent while it runs. */
   endedAt?: number;
   answer?: string;
   error?: string;
   /**
-   * Interim findings posted with the `report` tool while the turn ran, oldest
-   * first.
-   *
-   * Mutated in place by {@link addWorkerReport} rather than replaced, because
-   * this record *is* the one `inflight` holds and the one `settle` spreads —
-   * a copy would have to be threaded back into both. Nothing renders it
-   * reactively (the panel reads the transcript signal instead), so in-place is
-   * safe here in a way it would not be for a signal-backed value.
+   * Interim findings, oldest first. Mutated in place by {@link addWorkerReport}:
+   * this record is the one the slot's `inflight` holds and the one `settle`
+   * spreads, and nothing renders it reactively.
    */
   reports?: string[];
-  /** Edits proposed during the turn, filled in at settle from the proposal list. */
   proposals?: EditProposalSummary[];
   /**
    * Whether the app agent started this one, and so should be woken when it
-   * settles. False for a task the user ran from the Worker panel: nobody is
-   * waiting on that, and waking an idle opus agent to tell it so costs a turn
-   * for nothing.
+   * settles. False for a task the user ran from the Worker panel.
    */
   wakeAgent?: boolean;
 }
 
-export const [workerStatus, setWorkerStatus] = createSignal<WorkerStatus>('offline');
-export const [workerEntries, setWorkerEntries] = createSignal<WorkerEntry[]>([]);
-/** Accumulated text deltas of the turn in flight. */
-export const [workerDraft, setWorkerDraft] = createSignal('');
-/** Accumulated thinking deltas — shown behind a fold. */
-export const [workerThinking, setWorkerThinking] = createSignal('');
-/** The task running right now, or null when the worker is idle. */
-export const [workerActiveTask, setWorkerActiveTask] = createSignal<WorkerTaskRecord | null>(null);
-/**
- * The most recently *settled* task, answer or error included. Only the last one
- * is kept: the full history is the transcript, and a caller that needs an older
- * answer is asking a question `workerEntries` already answers.
- */
-export const [workerLastResult, setWorkerLastResult] = createSignal<WorkerTaskRecord | null>(null);
-
-/** Unsubscribe thunk for the live stream. Not reactive — nothing renders it. */
-let stopStream: (() => void) | null = null;
-/**
- * The turn in flight, settled by the stream's terminal frame or the watchdog.
- * `waiters` is a list rather than one resolver because nobody owns the turn any
- * more: the panel starts a task and never waits, the app agent starts one and
- * may wait twice (once, time out, wait again), and both must see the same end.
- */
-let inflight: {
+interface Inflight {
   record: WorkerTaskRecord;
   timer: ReturnType<typeof setTimeout>;
   /** Returns whether it actually delivered — a waiter whose own wait already
-   * timed out returns false, which is what keeps the wakeup below honest. */
+   * timed out returns false, which is what keeps the wakeup honest. */
   waiters: Array<(outcome: TurnOutcome) => boolean>;
-} | null = null;
-/** A spawn in flight, so two rapid Run clicks don't race two spawns. */
-let spawning: Promise<void> | null = null;
-/** Monotonic task ids, per iframe lifetime. Restart on remount is fine — the
- * worker's own session is what carries memory, and ids are only ever compared
- * against the two records above. */
-let taskSeq = 0;
-
-function appendEntry(kind: WorkerEntry['kind'], text: string): void {
-  setWorkerEntries([...workerEntries(), { kind, text, timestamp: Date.now() }]);
 }
 
 /**
- * Why a task that produced no answer is an *error* and never a quiet success.
- *
- * A survey is very often a search for negative results — "most of these files
- * are clean" is a real and expected answer — so a settled task carrying neither
- * `answer` nor `error` is indistinguishable from "nothing found". A caller that
- * takes it at face value concludes there was nothing to do and ships a no-op.
- * The turn cost minutes and told us nothing; saying so is the only honest
- * report.
+ * One worker. Signals for what the panel renders; plain fields for bookkeeping
+ * nothing renders. Slots are created once at module scope and never replaced.
+ */
+export interface WorkerSlot {
+  id: string;
+  /** Short panel label: W1, W2, W3. */
+  label: string;
+  status: Accessor<WorkerStatus>;
+  setStatus: Setter<WorkerStatus>;
+  /** Accumulated text deltas of the turn in flight. */
+  draft: Accessor<string>;
+  setDraft: Setter<string>;
+  thinking: Accessor<string>;
+  setThinking: Setter<string>;
+  activeTask: Accessor<WorkerTaskRecord | null>;
+  setActiveTask: Setter<WorkerTaskRecord | null>;
+  inflight: Inflight | null;
+  /** Held between choosing this slot and its turn being in flight, so two starts
+   * racing through the spawn await cannot pick the same slot. */
+  reserved: boolean;
+  stopStream: (() => void) | null;
+  spawning: Promise<void> | null;
+  /**
+   * Feedback owed to this worker on its earlier proposals, delivered at the head
+   * of its next task — the server takes no message while no turn is running.
+   */
+  pendingFeedback: string[];
+}
+
+function makeSlot(id: string, index: number): WorkerSlot {
+  const [status, setStatus] = createSignal<WorkerStatus>('offline');
+  const [draft, setDraft] = createSignal('');
+  const [thinking, setThinking] = createSignal('');
+  const [activeTask, setActiveTask] = createSignal<WorkerTaskRecord | null>(null);
+  return {
+    id,
+    label: `W${index + 1}`,
+    status,
+    setStatus,
+    draft,
+    setDraft,
+    thinking,
+    setThinking,
+    activeTask,
+    setActiveTask,
+    inflight: null,
+    reserved: false,
+    stopStream: null,
+    spawning: null,
+    pendingFeedback: [],
+  };
+}
+
+export const workerSlots: WorkerSlot[] = WORKER_IDS.map(makeSlot);
+
+export const [workerCap, setWorkerCapSignal] = createSignal(DEFAULT_WORKER_CAP);
+export const [workerEntries, setWorkerEntries] = createSignal<WorkerEntry[]>([]);
+/**
+ * The most recently settled task. Older settled records stay reachable by id
+ * through `settledTasks` so a caller fanning out several tasks can collect each.
+ */
+export const [workerLastResult, setWorkerLastResult] = createSignal<WorkerTaskRecord | null>(null);
+
+const MAX_SETTLED = 30;
+const settledTasks = new Map<number, WorkerTaskRecord>();
+/** The slot that settled most recently — where a follow-up task goes. */
+let lastSlotId: string | null = null;
+let taskSeq = 0;
+
+/** The pool's overall status, for the sidebar dot: running beats error beats idle. */
+export function workerStatus(): WorkerStatus {
+  const all = workerSlots.map((s) => s.status());
+  if (all.includes('running')) return 'running';
+  if (all.includes('spawning')) return 'spawning';
+  if (all.includes('error')) return 'error';
+  if (all.includes('idle')) return 'idle';
+  return 'offline';
+}
+
+/** Every task in flight, oldest first. */
+export function workerActiveTasks(): WorkerTaskRecord[] {
+  return workerSlots
+    .map((s) => s.activeTask())
+    .filter((t): t is WorkerTaskRecord => t !== null)
+    .sort((a, b) => a.id - b.id);
+}
+
+function slotById(id: string | undefined): WorkerSlot | undefined {
+  return workerSlots.find((s) => s.id === id);
+}
+
+/** The slot a persona tool call came from; the first slot for an unknown id. */
+function slotOf(personaId: string | undefined): WorkerSlot {
+  return slotById(personaId) ?? workerSlots[0];
+}
+
+function isBusy(slot: WorkerSlot): boolean {
+  return slot.reserved || slot.inflight !== null;
+}
+
+function appendEntry(slot: WorkerSlot, kind: WorkerEntry['kind'], text: string): void {
+  setWorkerEntries([...workerEntries(), { kind, text, timestamp: Date.now(), worker: slot.id }]);
+}
+
+/** Load the persisted concurrency cap. Absent or unreadable keeps the default. */
+export async function loadWorkerConfig(): Promise<void> {
+  try {
+    const raw = await appStorage.readJsonOr<{ maxWorkers?: unknown }>(CONFIG_PATH, {});
+    if (typeof raw?.maxWorkers === 'number') setWorkerCapSignal(clampCap(raw.maxWorkers));
+  } catch {
+    /* keep the default */
+  }
+}
+
+function clampCap(n: number): number {
+  return Math.max(1, Math.min(MAX_WORKERS, Math.round(n)));
+}
+
+/** Set and persist how many workers may run at once. Running tasks are never stopped. */
+export async function setWorkerCap(n: number): Promise<number> {
+  const cap = clampCap(n);
+  setWorkerCapSignal(cap);
+  await appStorage.save(CONFIG_PATH, JSON.stringify({ maxWorkers: cap }, null, 2));
+  return cap;
+}
+
+/**
+ * Why a task that produced no answer is an *error* and never a quiet success:
+ * a survey is often a search for negative results, so a settled task carrying
+ * neither `answer` nor `error` is indistinguishable from "nothing found".
  */
 function noAnswerError(reports: string[]): string {
   return reports.length
@@ -163,23 +245,17 @@ function noAnswerError(reports: string[]): string {
         'the worker to report as it goes.';
 }
 
-/** Settle the turn in flight once, whatever ended it, and stop its watchdog. */
-function settle(outcome: TurnOutcome): void {
+/** Settle a slot's turn once, whatever ended it, and stop its watchdog. */
+function settle(slot: WorkerSlot, outcome: TurnOutcome): void {
+  const inflight = slot.inflight;
   if (!inflight) return;
   clearTimeout(inflight.timer);
   const { record, waiters } = inflight;
-  inflight = null;
+  slot.inflight = null;
   const reports = record.reports ?? [];
   const answer = outcome.answer?.trim() || undefined;
-  // The invariant every reader of this module depends on: a settled task
-  // reports *something*. Callers of `settle` normally name the shortfall
-  // themselves (they know whether the turn was interrupted, went quiet, or just
-  // came back empty); this is the backstop for the path that forgets to, and
-  // for any added later.
+  // The invariant every reader depends on: a settled task reports *something*.
   const error = outcome.error ?? (answer ? undefined : noAnswerError(reports));
-  // Proposals ride out with the result for the same reason reports do: a task
-  // whose whole product is a proposed edit has produced something even if its
-  // answer was lost, and the caller cannot act on what it is not told about.
   const proposals = proposalsOfTask(record.id);
   const settled: TurnOutcome = {
     ...(answer ? { answer } : {}),
@@ -188,23 +264,24 @@ function settle(outcome: TurnOutcome): void {
     ...(proposals.length ? { proposals } : {}),
   };
   const finished: WorkerTaskRecord = { ...record, endedAt: Date.now(), ...settled };
+  settledTasks.set(finished.id, finished);
+  if (settledTasks.size > MAX_SETTLED) settledTasks.delete(settledTasks.keys().next().value!);
+  lastSlotId = slot.id;
   batch(() => {
-    setWorkerActiveTask(null);
+    slot.setActiveTask(null);
     setWorkerLastResult(finished);
   });
   let served = false;
   for (const resolve of waiters) served = resolve(settled) || served;
 
-  // The event goes out either way — a subscriber watching this channel wants
-  // every settle. What is conditional is the *wakeup*, and on two things: the
-  // agent started this task, and no `workerWait` of its own just answered it.
-  // Without the second, an agent that chose to block would be woken a turn later
-  // to be told what it had already been handed.
+  // The event always goes out; the wakeup only when the agent started this task
+  // and no `workerWait` of its own was handed the answer already.
   app?.emit(
     'worker',
     {
       kind: 'result',
       taskId: finished.id,
+      worker: slot.id,
       task: finished.task,
       ...(finished.answer ? { answer: finished.answer } : {}),
       ...(finished.error ? { error: finished.error } : {}),
@@ -216,70 +293,59 @@ function settle(outcome: TurnOutcome): void {
   );
 }
 
-/** Restart the silence watchdog — any frame or tool call counts as progress. */
-function keepAlive(): void {
+/** Restart a slot's silence watchdog — any frame or tool call counts as progress. */
+function keepAlive(slot: WorkerSlot): void {
+  const inflight = slot.inflight;
   if (!inflight) return;
   clearTimeout(inflight.timer);
   inflight.timer = setTimeout(() => {
-    const draft = workerDraft().trim();
+    const draft = slot.draft().trim();
     batch(() => {
-      appendEntry('error', `Worker went quiet${draft ? ` — partial answer kept:\n${draft}` : ''}.`);
-      setWorkerDraft('');
-      setWorkerStatus('idle');
+      appendEntry(
+        slot,
+        'error',
+        `Worker went quiet${draft ? ` — partial answer kept:\n${draft}` : ''}.`,
+      );
+      slot.setDraft('');
+      slot.setStatus('idle');
     });
-    settle({ error: 'The worker went quiet.', ...(draft ? { answer: draft } : {}) });
+    settle(slot, { error: 'The worker went quiet.', ...(draft ? { answer: draft } : {}) });
   }, TURN_IDLE_TIMEOUT_MS);
 }
 
 /**
- * Tool handlers report in here (protocol/worker.ts). It is how a tool-calling
- * stretch of the turn shows up in the transcript, and how it feeds the watchdog.
+ * Tool handlers report in here (protocol/worker.ts): the transcript line for a
+ * tool call, and the watchdog's sign of life for the slot that made it.
  */
-export function noteWorkerToolCall(summary: string): void {
-  appendEntry('tool', summary);
-  keepAlive();
+export function noteWorkerToolCall(summary: string, personaId?: string): void {
+  const slot = slotOf(personaId);
+  appendEntry(slot, 'tool', summary);
+  keepAlive(slot);
 }
 
 /**
- * Take one interim finding from the worker, mid-turn.
+ * Take one interim finding from a worker, mid-turn.
  *
- * This is the whole of the worker→caller channel, and it is deliberately not a
- * new capability: `report` is an app-declared tool like `grep`, so it arrives
- * over the same bridge and lands in the same iframe. Its only reach is this
- * function, which means the one agent it can ever reach is devtools' own.
- *
- * It buys three things a final answer alone cannot:
- *
- * 1. **Partial results survive.** A turn whose answer is lost to a size cap or
- *    an interrupt still delivered everything reported before it. The failure
- *    degrades from "nothing" to "some".
- * 2. **Course correction happens early.** A mis-scoped task announces itself at
- *    the first report rather than at the end, and `workerInterrupt` is how the
- *    caller acts on that.
- * 3. **Progress is legible.** The transcript gains findings, not just an
- *    `elapsedMs` that ticks up.
- *
- * `notify` is the difference between posting and interrupting: it wakes the app
- * agent (as `settle` does), and so is worth a turn of an opus agent's attention.
- * Routine progress leaves it off and is simply collected with the result.
- * A report on a task the *user* started never wakes anyone, by the same rule
- * `settle` follows.
+ * `report` is an app-declared tool like `grep`, so it arrives over the same
+ * bridge and its only reach is this function. It buys partial results that
+ * survive a lost answer, early course correction, and legible progress. `notify`
+ * wakes the app agent; routine progress is collected with the result. A report on
+ * a task the *user* started never wakes anyone.
  */
-export function addWorkerReport(finding: string, notify = false): string {
+export function addWorkerReport(finding: string, notify = false, personaId?: string): string {
+  const slot = slotOf(personaId);
   const text = finding.trim();
   if (!text) return 'Empty report — nothing recorded. Say what you found, or say nothing.';
-  if (!inflight) {
-    // Kept in the transcript rather than dropped: a report with no turn behind
-    // it is strange enough that hiding it would make the next bug harder.
-    appendEntry('report', text);
+  if (!slot.inflight) {
+    appendEntry(slot, 'report', text);
     return 'Recorded, but no task is in flight — nobody is waiting on this.';
   }
 
-  const { record } = inflight;
+  const { record } = slot.inflight;
   const reports = (record.reports ??= []);
   reports.push(text);
-  appendEntry('report', text);
-  keepAlive();
+  appendEntry(slot, 'report', text);
+  keepAlive(slot);
 
   const wakeAgent = !!record.wakeAgent && notify;
   app?.emit(
@@ -287,6 +353,7 @@ export function addWorkerReport(finding: string, notify = false): string {
     {
       kind: 'report',
       taskId: record.id,
+      worker: slot.id,
       task: record.task,
       report: text,
       reportIndex: reports.length,
@@ -302,85 +369,59 @@ export function addWorkerReport(finding: string, notify = false): string {
 
 // ── Edit requests ─────────────────────────────────────────────────────────────
 //
-// The worker reads the project but cannot write to it, and its prompt has always
-// asked it to describe the precise edit it would make so the caller could apply
-// it. That description arrived as prose, which meant the main agent re-typed the
-// whole thing as `editFile` params — so delegating a survey saved reading tokens
-// and spent them all again on output. `edit_request` is that same instruction
-// given a shape: the worker submits EditSpecs, the main agent accepts or rejects
-// an id.
-//
-// Two properties keep this from being a write door in disguise:
-//
-// 1. **Nothing is applied here.** A submission is dry-run against the file and
-//    then parked. `acceptEditRequest` (protocol/worker.ts) is the only writer.
-// 2. **The dry run is the worker's own feedback loop.** A `persona:*` handler's
-//    return value lands in the worker's turn as a tool result, so a mismatched
-//    search string or an ambiguous one comes back while the worker still has the
-//    file in context and can fix it. Only proposals that already apply cleanly
-//    ever reach the main agent.
+// A worker reads the project but cannot write to it. `edit_request` gives the
+// edit it would make a shape: it is dry-run and parked, and `acceptEditRequest`
+// (protocol/worker.ts) is the only writer. The dry run's answer lands in the
+// worker's own turn, so a bad search string is fixed while it still has the file
+// in context and only proposals that apply cleanly reach the main agent.
 
-/** Every proposal a settled worker turn leaves behind, capped like the transcript. */
 const MAX_PROPOSALS = 40;
 
 /**
  * Refused as a string the worker can act on, not thrown: a missing project is a
- * normal state mid-conversation (the user closed it), and an error would read as
- * the tool being broken rather than the project being gone.
+ * normal state mid-conversation.
  */
 export const NO_ACTIVE_PROJECT = 'No project is active in Dev Tools right now. Say so and stop.';
 
-/** A change the worker proposes and cannot make. */
+/** A change a worker proposes and cannot make. */
 export interface EditProposal {
   id: number;
   /** The task it came out of, or null for one submitted with no turn in flight. */
   taskId: number | null;
+  /** The slot id that proposed it — where its feedback is delivered. */
+  worker: string;
   path: string;
   edits: EditSpec[];
   rationale: string;
   createdAt: number;
   status: 'pending' | 'accepted' | 'rejected' | 'failed';
   /**
-   * The read gate. `readEditRequest` is the only command that serves this, and
-   * `acceptEditRequest` refuses without it — so an accept is proof the payload
-   * passed through the main agent's context, which is the property that keeps
-   * "the agent that verifies is the agent that applies" true once the main agent
-   * stopped having to retype the edits.
-   *
-   * A discipline gate, not a security boundary: the worker is subordinate and
-   * already inside this iframe. It exists to make rubber-stamping take more
-   * effort than reading, not to withstand an adversary.
+   * The read gate: `readEditRequest` is the only command that serves this, and
+   * `acceptEditRequest` refuses without it. A discipline gate, not a security
+   * boundary.
    */
   token: string;
-  /** Why it was rejected, or how applying it went. */
   resolution?: string;
 }
 
 /** What a list of proposals says without quoting their bodies. */
 export interface EditProposalSummary {
   id: number;
+  worker: string;
   path: string;
   edits: number;
   rationale: string;
   status: EditProposal['status'];
+  /** Other pending proposals against the same file — accepting one may stale the rest. */
+  conflictsWith?: number[];
 }
 
 export const [workerProposals, setWorkerProposals] = createSignal<EditProposal[]>([]);
 let proposalSeq = 0;
 
-/**
- * Feedback owed to the worker, delivered at the head of its next task.
- *
- * A rejection lands after the turn that proposed it has ended, and the server
- * takes no message while a turn is not running — so the alternative to a queue
- * is a worker that proposes the same rejected edit again next task. Drained by
- * `startWorkerTask`.
- */
-let pendingFeedback: string[] = [];
-
 /** FNV-1a over the proposal body. Short, stable, and not derivable from a summary. */
 function proposalToken(path: string, rationale: string, edits: EditSpec[]): string {
-  const source = `${path} ${rationale} ${JSON.stringify(edits)}`;
+  const source = `${path} ${rationale} ${JSON.stringify(edits)}`;
   let hash = 0x811c9dc5;
   for (let i = 0; i < source.length; i++) {
     hash ^= source.charCodeAt(i);
@@ -389,15 +430,29 @@ function proposalToken(path: string, rationale: string, edits: EditSpec[]): stri
   return (hash >>> 0).toString(36).padStart(7, '0');
 }
 
+/** Pending proposals other than `id` that target `path`. */
+export function pendingOnPath(path: string, exceptId?: number): EditProposal[] {
+  return workerProposals().filter(
+    (p) => p.status === 'pending' && p.path === path && p.id !== exceptId,
+  );
+}
+
 /**
  * A summary carries the rationale and never the edit bodies: `readEditRequest` is
- * where those live, and an accept is supposed to cost a deliberate read. The cap is
- * therefore sized to fit a whole rationale rather than to save room — one cut
- * mid-sentence is worse than useless, since it reads as a complete thought.
+ * where those live, and an accept is supposed to cost a deliberate read.
  */
 export function summarizeProposal(p: EditProposal): EditProposalSummary {
   const rationale = p.rationale.length > 500 ? `${p.rationale.slice(0, 500)}…` : p.rationale;
-  return { id: p.id, path: p.path, edits: p.edits.length, rationale, status: p.status };
+  const conflicts = p.status === 'pending' ? pendingOnPath(p.path, p.id).map((q) => q.id) : [];
+  return {
+    id: p.id,
+    worker: p.worker,
+    path: p.path,
+    edits: p.edits.length,
+    rationale,
+    status: p.status,
+    ...(conflicts.length ? { conflictsWith: conflicts } : {}),
+  };
 }
 
 export function findProposal(id: number): EditProposal | undefined {
@@ -415,12 +470,11 @@ export function resolveProposal(
   );
 }
 
-/** Tell the worker how one of its proposals ended, at the start of its next task. */
-export function queueWorkerFeedback(line: string): void {
-  pendingFeedback.push(line);
+/** Tell a worker how one of its proposals ended, at the start of its next task. */
+export function queueWorkerFeedback(line: string, workerId?: string): void {
+  slotOf(workerId).pendingFeedback.push(line);
 }
 
-/** What a dry run concluded: the edits apply, or the reason they do not. */
 export interface ProposalCheck {
   ok: boolean;
   error?: string;
@@ -428,13 +482,9 @@ export interface ProposalCheck {
 }
 
 /**
- * Apply the edits in memory and throw nothing away — the check both `edit_request`
- * and `acceptEditRequest` run, for different reasons. At submission it is the
- * worker's correction loop; at accept it is the staleness check, because the file
- * may have moved under the proposal in between.
- *
- * `requireUnique` is on: a search string that matches twice would splice into
- * whichever came first, and the worker is not there to notice.
+ * Apply the edits in memory and throw nothing away — run at submission (the
+ * worker's correction loop) and at accept (the staleness check). `requireUnique`
+ * is on: a search string that matches twice would splice into a guess.
  */
 export async function validateProposedEdits(
   path: string,
@@ -457,18 +507,17 @@ export async function validateProposedEdits(
 }
 
 /**
- * Take one proposed edit from the worker, dry-run it, and park it for the caller.
- *
- * Returns the string the worker reads as its tool result — which is the whole
- * point of validating here rather than at accept: a rejection it can act on
- * arrives inside the turn that can still fix it.
+ * Take one proposed edit from a worker, dry-run it, and park it for the caller.
+ * Returns the string the worker reads as its tool result.
  */
 export async function addWorkerEditRequest(input: {
   path: string;
   editsJson: string;
   rationale: string;
   notify?: boolean;
+  personaId?: string;
 }): Promise<string> {
+  const slot = slotOf(input.personaId);
   const path = input.path.trim();
   const rationale = input.rationale.trim();
   if (!path) return 'No path given — say which file this edit is for.';
@@ -488,8 +537,6 @@ export async function addWorkerEditRequest(input: {
   }
   if (parsed.data.length === 0) return 'edits is empty — nothing to propose.';
 
-  // Normalize the aliases once, so everything downstream (the dry run, the stored
-  // record, the accept) sees one spelling.
   const edits: EditSpec[] = parsed.data.map((e) => ({
     ...(e.search !== undefined || e.oldString !== undefined
       ? { search: e.search ?? e.oldString }
@@ -504,14 +551,14 @@ export async function addWorkerEditRequest(input: {
 
   const check = await validateProposedEdits(path, edits);
   if (!check.ok) {
-    // Not recorded: a proposal that does not apply is not a proposal, and parking
-    // it would spend the caller's attention on the worker's typo.
     return `Not submitted — ${check.error} Re-read the file and try again; nothing was changed.`;
   }
 
+  const rivals = pendingOnPath(path);
   const proposal: EditProposal = {
     id: ++proposalSeq,
-    taskId: inflight?.record.id ?? null,
+    taskId: slot.inflight?.record.id ?? null,
+    worker: slot.id,
     path,
     edits,
     rationale,
@@ -521,92 +568,98 @@ export async function addWorkerEditRequest(input: {
   };
   setWorkerProposals([...workerProposals(), proposal].slice(-MAX_PROPOSALS));
   appendEntry(
+    slot,
     'edit-request',
-    `#${proposal.id} ${path} · ${edits.length} edit${edits.length === 1 ? '' : 's'}\n${rationale}`,
+    `#${proposal.id} ${path} · ${edits.length} edit${edits.length === 1 ? '' : 's'}` +
+      (rivals.length ? ` · conflicts with #${rivals.map((r) => r.id).join(', #')}` : '') +
+      `\n${rationale}`,
   );
-  keepAlive();
+  keepAlive(slot);
 
-  const wakeAgent = !!inflight?.record.wakeAgent && input.notify === true;
+  const wakeAgent = !!slot.inflight?.record.wakeAgent && input.notify === true;
   app?.emit(
     'worker',
     {
       kind: 'edit-request',
       taskId: proposal.taskId,
+      worker: slot.id,
       proposal: summarizeProposal(proposal),
-      elapsedMs: inflight ? Date.now() - inflight.record.startedAt : 0,
+      elapsedMs: slot.inflight ? Date.now() - slot.inflight.record.startedAt : 0,
     },
     { wakeAgent },
   );
 
+  const conflictNote = rivals.length
+    ? ` Note: ${rivals.length} other pending proposal${rivals.length === 1 ? '' : 's'} ` +
+      `(#${rivals.map((r) => r.id).join(', #')}) already target this file, possibly from ` +
+      'another worker running in parallel; whichever is accepted second is re-checked and may ' +
+      'no longer apply.'
+    : '';
   return (
     `Edit request #${proposal.id} submitted and verified against ${path} — it applies cleanly ` +
-    `(${check.lines} lines after). The caller decides whether to apply it; you cannot. ` +
-    'Keep working, and still describe this change in your final answer.'
+    `(${check.lines} lines after). The caller decides whether to apply it; you cannot.` +
+    conflictNote +
+    ' Keep working, and still describe this change in your final answer.'
   );
 }
 
-/** The proposals one task produced, for the result it settles with. */
 function proposalsOfTask(taskId: number): EditProposalSummary[] {
   return workerProposals()
     .filter((p) => p.taskId === taskId)
     .map(summarizeProposal);
 }
 
-/** Fold one stream frame into the panel state; settle the turn on a terminal. */
-function onFrame(frame: StreamFrame): void {
+/** Fold one stream frame into a slot's state; settle its turn on a terminal. */
+function onFrame(slot: WorkerSlot, frame: StreamFrame): void {
   const parsed = z.safeParse(WorkerFrameDataSchema, frame.data ?? {});
   if (!parsed.success) {
-    console.warn('[devtools] unreadable worker frame', frame.kind, frame.data);
+    console.warn('[devtools] unreadable worker frame', slot.id, frame.kind, frame.data);
     return;
   }
   const data = parsed.data;
-  keepAlive();
+  keepAlive(slot);
 
   switch (frame.kind) {
     case 'start':
       batch(() => {
-        setWorkerDraft('');
-        setWorkerThinking('');
-        setWorkerStatus('running');
+        slot.setDraft('');
+        slot.setThinking('');
+        slot.setStatus('running');
       });
       break;
     case 'text':
-      setWorkerDraft(workerDraft() + (data.delta ?? ''));
+      slot.setDraft(slot.draft() + (data.delta ?? ''));
       break;
     case 'thinking':
-      setWorkerThinking(workerThinking() + (data.delta ?? ''));
+      slot.setThinking(slot.thinking() + (data.delta ?? ''));
       break;
     case 'done': {
-      // `done` carries the authoritative final text; the draft is the fallback
-      // for a stream that dropped a delta.
-      const text = (data.text ?? workerDraft()).trim();
-      // Neither one, and the frame was capped in transit: the answer exists and
-      // is simply too big for one frame. That is a different fact from an empty
-      // turn and must never be reported as one — go get it from the persona
-      // itself, which keeps the last turn's final text for exactly this case.
+      const text = (data.text ?? slot.draft()).trim();
+      // Capped in transit: the answer exists and is too big for one frame — go
+      // get it from the persona, which keeps the last turn's final text.
       if (!text && data.truncated) {
         batch(() => {
-          setWorkerDraft('');
-          setWorkerStatus('idle');
+          slot.setDraft('');
+          slot.setStatus('idle');
         });
-        void settleFromPersonaRead();
+        void settleFromPersonaRead(slot);
         break;
       }
-      // Two ways a `done` frame is not the success it looks like: no text at
-      // all, and a turn the server stopped rather than finished. Named here,
-      // where the frame is, so `settle`'s backstop stays a backstop.
       const shortfall = !text
-        ? noAnswerError(inflight?.record.reports ?? [])
+        ? noAnswerError(slot.inflight?.record.reports ?? [])
         : data.status === 'interrupted'
           ? 'The turn was interrupted before the worker finished — the answer is partial.'
           : undefined;
       batch(() => {
-        if (text) appendEntry('answer', text);
-        if (shortfall) appendEntry('error', shortfall);
-        setWorkerDraft('');
-        setWorkerStatus('idle');
+        if (text) appendEntry(slot, 'answer', text);
+        if (shortfall) appendEntry(slot, 'error', shortfall);
+        slot.setDraft('');
+        slot.setStatus('idle');
       });
-      settle({ ...(text ? { answer: text } : {}), ...(shortfall ? { error: shortfall } : {}) });
+      settle(slot, {
+        ...(text ? { answer: text } : {}),
+        ...(shortfall ? { error: shortfall } : {}),
+      });
       break;
     }
     case 'error': {
@@ -616,36 +669,26 @@ function onFrame(frame: StreamFrame): void {
           ? 'The worker’s turn failed with an error too large to fit one stream frame.'
           : 'stream error');
       batch(() => {
-        appendEntry('error', message);
-        setWorkerDraft('');
-        setWorkerStatus('idle');
+        appendEntry(slot, 'error', message);
+        slot.setDraft('');
+        slot.setStatus('idle');
       });
-      settle({ error: message });
+      settle(slot, { error: message });
       break;
     }
   }
 }
 
 /**
- * Recover an answer the `done` frame could not carry, and settle with it.
- *
- * The server keeps the final text of a sub-agent's last completed turn on the
- * persona itself, reachable with a plain `read`, precisely so a subscriber that
- * missed the stream can still collect what the model already paid for. This is
- * that subscriber: the frame arrived, it was over the wire's payload cap, and
- * the cap replaces the whole payload with a marker rather than trimming a field.
- *
- * Safe against reading a *stale* answer, and that is the only reason this is
- * gated on `truncated` rather than on "no text": a capped frame is proof the
- * turn produced text, and the server records it before it publishes the `done`
- * that carried it. A genuinely empty turn leaves an uncapped frame and takes the
- * ordinary path, where an empty answer stays an error.
+ * Recover an answer the `done` frame could not carry, and settle with it. Gated
+ * on `truncated`: a capped frame is proof the turn produced text, so the
+ * persona's `lastResponse` cannot be a stale one.
  */
-async function settleFromPersonaRead(): Promise<void> {
+async function settleFromPersonaRead(slot: WorkerSlot): Promise<void> {
   let answer = '';
   let failure = '';
   try {
-    const raw = await read(`yaar://apps/self/agents/${WORKER_ID}`);
+    const raw = await read(`yaar://apps/self/agents/${slot.id}`);
     const parsed = z.safeParse(PersonaHandleSchema, raw);
     if (!parsed.success) failure = 'reading the worker back returned an unexpected shape';
     else answer = (parsed.data.lastResponse ?? '').trim();
@@ -654,8 +697,8 @@ async function settleFromPersonaRead(): Promise<void> {
   }
 
   if (answer) {
-    appendEntry('answer', answer);
-    settle({ answer });
+    appendEntry(slot, 'answer', answer);
+    settle(slot, { answer });
     return;
   }
   const shortfall =
@@ -663,22 +706,19 @@ async function settleFromPersonaRead(): Promise<void> {
     `from the worker itself ${failure ? `failed (${failure})` : 'came back empty'}. The turn ` +
     'is NOT "nothing found" — re-run it in smaller slices, and tell the worker to report as ' +
     'it goes so the findings arrive before the answer does.';
-  appendEntry('error', shortfall);
-  settle({ error: shortfall });
+  appendEntry(slot, 'error', shortfall);
+  settle(slot, { error: shortfall });
 }
 
 /**
- * The worker's constitution. Written to the worker, in the second person — this
- * is the whole system prompt, used verbatim (the platform appends nothing).
- *
- * Project-agnostic on purpose: the persona is spawned once and its prompt is
- * fixed for its lifetime, but the user can switch the active project between
- * tasks. The tools always answer for the project active *now*, so the prompt
- * tells the worker to trust the tools over its own memory.
+ * The worker's constitution, used verbatim as its whole system prompt.
+ * Project-agnostic: the prompt is fixed for the persona's lifetime, but the active
+ * project can change between tasks.
  */
-const WORKER_PROMPT = `You are the Dev Tools worker: a fast, subordinate explorer inside YAAR's Dev Tools IDE.
+const WORKER_PROMPT = `You are a Dev Tools worker: a fast, subordinate explorer inside YAAR's Dev Tools IDE.
 Each message is one task about the currently active app project — a small web app built from
-TypeScript/Solid.js sources, an app.json manifest, and assets.
+TypeScript/Solid.js sources, an app.json manifest, and assets. Other workers may be running other
+tasks on the same project at the same time; stay inside the task you were given.
 
 Method: use your tools before answering, never memory alone. list_files when you don't know the
 layout, grep to locate, read_file to confirm. The active project can be switched between tasks;
@@ -691,7 +731,9 @@ replace instead of retyping it, which is the whole reason the tool exists. Read 
 copy the search string out of what read_file showed you, with enough surrounding lines that it
 occurs exactly once — a string matching twice is refused, because replacing the first match would
 be a guess. The tool answers you either way, so a refusal is yours to fix and resubmit in this same
-turn. Still describe the change in your final answer: the caller decides from that.
+turn. If it tells you another proposal already targets the same file, keep your edit minimal and
+say in the rationale what it depends on. Still describe the change in your final answer: the
+caller decides from that.
 
 Report as you go with the report tool — after each batch of files, not saved up for the end. Two
 reasons, both real: your final answer can be lost whole to a size cap, while a report already
@@ -805,183 +847,203 @@ const WORKER_TOOLS = [
 ];
 
 /**
- * Spawn the worker (idempotent server-side) and attach to its stream.
- *
- * Safe to call before every task: spawning an id that already lives hands back
- * the live one with its memory intact, which is also what makes an iframe
- * reload cheap. The likely failure is the `subagents` grant being absent —
- * reported in the transcript rather than thrown past it.
+ * Spawn a slot's worker (idempotent server-side) and attach to its stream.
+ * Spawning an id that already lives hands back the live one with its memory,
+ * which is what makes an iframe reload cheap.
  */
-async function ensureWorker(): Promise<void> {
-  if (stopStream) return;
-  if (spawning) return spawning;
-  spawning = (async () => {
-    setWorkerStatus('spawning');
+async function ensureWorker(slot: WorkerSlot): Promise<void> {
+  if (slot.stopStream) return;
+  if (slot.spawning) return slot.spawning;
+  slot.spawning = (async () => {
+    slot.setStatus('spawning');
     const raw = await invoke('yaar://apps/self/agents', {
       action: 'spawn',
-      personaId: WORKER_ID,
+      personaId: slot.id,
       systemPrompt: WORKER_PROMPT,
       tools: WORKER_TOOLS,
       model: 'sonnet',
     });
     const handle = z.safeParse(PersonaHandleSchema, raw);
     if (!handle.success) throw new Error('spawn returned an unexpected shape');
-    const stop = await stream(handle.data.streamUri, onFrame, {
+    const stop = await stream(handle.data.streamUri, (frame) => onFrame(slot, frame), {
       kinds: ['start', 'text', 'thinking', 'done', 'error'],
     });
-    stopStream = stop;
-    setWorkerStatus('idle');
+    slot.stopStream = stop;
+    slot.setStatus('idle');
   })();
   try {
-    await spawning;
+    await slot.spawning;
   } catch (err) {
-    setWorkerStatus('error');
+    slot.setStatus('error');
     throw err;
   } finally {
-    spawning = null;
+    slot.spawning = null;
   }
 }
 
 /**
- * What starting a task reports: the id to collect by, or why nothing started.
- * Exactly one field is ever set — but written as one optional-field shape rather
- * than a discriminated union, because app sources typecheck with `strict: false`,
- * where a union narrows on nothing and every read is an error.
+ * What starting a task reports. Exactly one of `taskId`/`error` is set — an
+ * optional-field shape rather than a union, because app sources typecheck with
+ * `strict: false`, where a union narrows on nothing.
  */
 export interface StartOutcome {
   taskId?: number;
+  worker?: string;
   error?: string;
 }
 
+function describeRunning(): string {
+  return workerActiveTasks()
+    .map((t) => `#${t.id} on ${t.worker}`)
+    .join(', ');
+}
+
 /**
- * Hand the worker one task and return as soon as it is *accepted* — not when it
- * is answered.
- *
- * The awaits here are the two short ones: spawning the worker (so a missing
- * `subagents` grant is reported at the call that caused it, not three frames
- * into a subscription) and queuing the turn. The long wait — the worker
- * actually working — is nobody's await: the stream folds frames into the panel
- * as they arrive, and the terminal frame (or the watchdog) settles the record.
- * That is what lets the app agent start a survey, spend its next turns editing
- * or compiling, and collect the answer afterwards with `waitForWorker`.
- *
- * One turn at a time — a task sent while one is in flight is refused rather
- * than queued, and the server's own busy refusal backs that up.
- *
- * Two callers, one function: the panel's Run button and the app agent's
- * `workerTask` command. Both land every task and answer in the same transcript
- * signals, which is what keeps the panel a faithful window on agent-driven work.
- * They differ in exactly one thing, `opts.wakeAgent`: the agent's own task wakes
- * it when the answer lands, the user's does not (see `settle`).
+ * Choose a free slot within the cap. A named slot is taken or refused as asked.
+ * Otherwise the slot that settled last wins (so a follow-up keeps its memory),
+ * then any already-spawned slot, then the first free one.
  */
-export async function startWorkerTask(
-  task: string,
-  opts: { wakeAgent?: boolean; fresh?: boolean } = {},
-): Promise<StartOutcome> {
-  const content = task.trim();
-  if (!content) return { error: 'Empty task.' };
-  if (inflight) {
+function pickSlot(worker?: string): { slot?: WorkerSlot; error?: string } {
+  const cap = workerCap();
+  const allowed = workerSlots.slice(0, cap);
+  if (worker) {
+    const named = slotById(worker);
+    if (!named) {
+      return { error: `No worker "${worker}". Workers are ${WORKER_IDS.join(', ')}.` };
+    }
+    if (!allowed.includes(named)) {
+      return {
+        error: `${worker} is beyond the concurrency cap (${cap}). Raise it with workerConfig first.`,
+      };
+    }
+    if (isBusy(named)) {
+      return {
+        error:
+          `${worker} is busy with task #${named.inflight?.record.id ?? '?'}. Collect it (workerWait), ` +
+          'interrupt it, or omit `worker` to use any free one.',
+      };
+    }
+    return { slot: named };
+  }
+  const free = allowed.filter((s) => !isBusy(s));
+  if (!free.length) {
     return {
       error:
-        `The worker is already on task #${inflight.record.id}. Collect that one first ` +
-        '(workerWait, or the "worker" state key), or stop it with workerInterrupt — ' +
+        `All ${cap} worker${cap === 1 ? ' is' : 's are'} busy (${describeRunning()}). Collect one ` +
+        '(workerWait), stop one with workerInterrupt, or raise the cap with workerConfig — ' +
         'tasks are refused, not queued.',
     };
   }
+  const slot =
+    free.find((s) => s.id === lastSlotId) ?? free.find((s) => s.stopStream !== null) ?? free[0];
+  return { slot };
+}
+
+/**
+ * Hand a worker one task and return as soon as it is *accepted* — not when it
+ * is answered. The stream folds frames into the slot as they arrive, and the
+ * terminal frame (or the watchdog) settles the record.
+ *
+ * Two callers: the panel's Run button and the agent's `workerTask`. They differ
+ * only in `wakeAgent` — the agent's own task wakes it when the answer lands.
+ */
+export async function startWorkerTask(
+  task: string,
+  opts: { wakeAgent?: boolean; fresh?: boolean; worker?: string } = {},
+): Promise<StartOutcome> {
+  const content = task.trim();
+  if (!content) return { error: 'Empty task.' };
   if (!activeProject()) {
-    appendEntry('error', 'No active project. Open or create one first.');
+    appendEntry(workerSlots[0], 'error', 'No active project. Open or create one first.');
     return { error: 'No active project. Open or create one first.' };
   }
-
-  // After the in-flight guard, never before it: a fresh start retires the
-  // worker, and doing that to a running task would destroy an answer the caller
-  // asked for the moment before.
-  if (opts.fresh) await resetWorker();
-
-  try {
-    await ensureWorker();
-  } catch (err) {
-    appendEntry('error', `Could not spawn the worker: ${errMsg(err)}`);
-    return { error: `Could not spawn the worker: ${errMsg(err)}` };
-  }
-
-  // Feedback on earlier proposals is delivered here rather than pushed when it
-  // was decided: the server takes a message only while a turn is running, and
-  // an accept or a reject lands after the proposing turn has ended.
-  const owed = pendingFeedback;
-  pendingFeedback = [];
-  const message = owed.length
-    ? `Since your last turn:\n${owed.map((line) => `- ${line}`).join('\n')}\n\nNow: ${content}`
-    : content;
-
-  const record: WorkerTaskRecord = {
-    id: ++taskSeq,
-    task: content,
-    startedAt: Date.now(),
-    ...(opts.wakeAgent ? { wakeAgent: true } : {}),
-  };
-  batch(() => {
-    appendEntry('task', content);
-    setWorkerActiveTask(record);
-    setWorkerStatus('running');
-    setWorkerDraft('');
-    setWorkerThinking('');
-  });
-  inflight = { record, timer: setTimeout(() => {}, 0), waiters: [] };
-  keepAlive();
+  const picked = pickSlot(opts.worker);
+  if (!picked.slot) return { error: picked.error };
+  const slot = picked.slot;
+  slot.reserved = true;
 
   try {
-    await invoke(`yaar://apps/self/agents/${WORKER_ID}`, { action: 'message', content: message });
-  } catch (err) {
-    // A turn that already settled is not this call's to fail: a fast worker can
-    // finish before `message` resolves, and reporting the queue error then would
-    // discard a real answer.
-    if (inflight?.record.id !== record.id) return { taskId: record.id };
+    // After the busy check, never before it: a fresh start retires this slot's
+    // worker, and doing that to a running task would destroy its answer.
+    if (opts.fresh) await resetSlot(slot);
+
+    try {
+      await ensureWorker(slot);
+    } catch (err) {
+      appendEntry(slot, 'error', `Could not spawn the worker: ${errMsg(err)}`);
+      return { error: `Could not spawn ${slot.id}: ${errMsg(err)}` };
+    }
+
+    const owed = slot.pendingFeedback;
+    slot.pendingFeedback = [];
+    const message = owed.length
+      ? `Since your last turn:\n${owed.map((line) => `- ${line}`).join('\n')}\n\nNow: ${content}`
+      : content;
+
+    const record: WorkerTaskRecord = {
+      id: ++taskSeq,
+      task: content,
+      worker: slot.id,
+      startedAt: Date.now(),
+      ...(opts.wakeAgent ? { wakeAgent: true } : {}),
+    };
     batch(() => {
-      appendEntry('error', errMsg(err));
-      setWorkerStatus('idle');
+      appendEntry(slot, 'task', content);
+      slot.setActiveTask(record);
+      slot.setStatus('running');
+      slot.setDraft('');
+      slot.setThinking('');
     });
-    settle({ error: errMsg(err) });
-    return { error: errMsg(err) };
-  }
+    slot.inflight = { record, timer: setTimeout(() => {}, 0), waiters: [] };
+    slot.reserved = false;
+    keepAlive(slot);
 
-  return { taskId: record.id };
+    try {
+      await invoke(`yaar://apps/self/agents/${slot.id}`, { action: 'message', content: message });
+    } catch (err) {
+      // A fast worker can settle before `message` resolves; that answer stands.
+      if (slot.inflight?.record.id !== record.id) return { taskId: record.id, worker: slot.id };
+      batch(() => {
+        appendEntry(slot, 'error', errMsg(err));
+        slot.setStatus('idle');
+      });
+      settle(slot, { error: errMsg(err) });
+      return { error: errMsg(err) };
+    }
+
+    return { taskId: record.id, worker: slot.id };
+  } finally {
+    slot.reserved = false;
+  }
 }
 
 /** Longest one `workerWait` may block, kept under the app-command ceiling (180s). */
 const MAX_WAIT_MS = 170_000;
-/** What `workerWait` waits when the caller names no bound. */
 export const DEFAULT_WAIT_MS = 60_000;
 
-/**
- * The answer to "is task #N done, and what did it say" — `done: false` when it
- * is still running, which is a report, not a failure.
- */
+/** "Is task #N done, and what did it say" — `done: false` is a report, not a failure. */
 export interface WaitResult {
   done: boolean;
   taskId: number | null;
+  worker?: string;
   status: WorkerStatus;
   elapsedMs: number | null;
   answer?: string;
   error?: string;
-  /** Interim findings the worker posted while it worked, oldest first. */
   reports?: string[];
-  /** Edits the worker proposed, as summaries — read one whole with readEditRequest. */
   proposals?: EditProposalSummary[];
+  /** On a timeout with no taskId: every task still running. */
+  running?: number[];
 }
 
-/** Project a settled record into the wait result shape. */
 function resultOf(record: WorkerTaskRecord): WaitResult {
   return {
     done: true,
     taskId: record.id,
-    status: workerStatus(),
+    worker: record.worker,
+    status: slotById(record.worker)?.status() ?? workerStatus(),
     elapsedMs: (record.endedAt ?? Date.now()) - record.startedAt,
     ...(record.answer ? { answer: record.answer } : {}),
-    // A settled record always carries one of the two (see `settle`); the
-    // fallback is for the record that somehow reached here without going
-    // through it, and exists so this projection can never be the thing that
-    // turns a failure into a silent success.
     ...(record.error || record.answer ? {} : { error: noAnswerError(record.reports ?? []) }),
     ...(record.error ? { error: record.error } : {}),
     ...(record.reports?.length ? { reports: record.reports } : {}),
@@ -990,152 +1052,212 @@ function resultOf(record: WorkerTaskRecord): WaitResult {
 }
 
 /**
- * Collect a backgrounded task: resolve now if it has already settled, otherwise
- * block until it does or until `waitMs` runs out.
+ * Collect a backgrounded task: resolve now if it has settled, otherwise block
+ * until it does or `waitMs` runs out. Timing out is cheap and repeatable.
  *
- * Timing out is deliberately cheap and repeatable — the task keeps running, the
- * record keeps its id, and calling again picks the same wait back up. That is
- * the property that makes a long survey safe to collect in bounded slices
- * instead of one call the caller's own deadline may kill.
- *
- * With no `taskId` it answers about the task in flight, or about the last one to
- * settle if the worker is idle.
+ * With no `taskId`: when tasks are in flight, whichever of them settles first
+ * (so a fan-out is collected one call per task); when none is, the last to settle.
  */
 export function waitForWorker(
   opts: { taskId?: number; waitMs?: number } = {},
 ): Promise<WaitResult> {
   const waitMs = Math.max(1_000, Math.min(opts.waitMs ?? DEFAULT_WAIT_MS, MAX_WAIT_MS));
   const wanted = opts.taskId;
-  const last = workerLastResult();
+  const running = workerSlots.filter((s) => s.inflight !== null);
 
-  if (wanted !== undefined && (!inflight || inflight.record.id !== wanted)) {
-    if (last && last.id === wanted) return Promise.resolve(resultOf(last));
-    // Waiting on an id nothing holds would block for the full waitMs and then
-    // report "still running" about a task that is not — say so instead.
-    return Promise.resolve({
-      done: true,
-      taskId: wanted,
-      status: workerStatus(),
-      elapsedMs: null,
-      error:
-        `No record of task #${wanted}. Only the task in flight and the last one to finish ` +
-        'are kept — read the transcript in the "worker" state key for anything older.',
-    });
+  let targets: WorkerSlot[];
+  if (wanted !== undefined) {
+    const slot = running.find((s) => s.inflight!.record.id === wanted);
+    if (!slot) {
+      const settled = settledTasks.get(wanted);
+      if (settled) return Promise.resolve(resultOf(settled));
+      return Promise.resolve({
+        done: true,
+        taskId: wanted,
+        status: workerStatus(),
+        elapsedMs: null,
+        error:
+          `No record of task #${wanted}. The last ${MAX_SETTLED} settled tasks and those in ` +
+          'flight are kept — read the transcript in the "worker" state key for anything older.',
+      });
+    }
+    targets = [slot];
+  } else {
+    if (!running.length) {
+      const last = workerLastResult();
+      if (last) return Promise.resolve(resultOf(last));
+      return Promise.resolve({
+        done: true,
+        taskId: null,
+        status: workerStatus(),
+        elapsedMs: null,
+        error: 'No worker has run a task yet.',
+      });
+    }
+    targets = running;
   }
 
-  if (!inflight) {
-    if (last) return Promise.resolve(resultOf(last));
-    return Promise.resolve({
-      done: true,
-      taskId: null,
-      status: workerStatus(),
-      elapsedMs: null,
-      error: 'The worker has not run a task yet.',
-    });
-  }
-
-  const { record, waiters } = inflight;
   return new Promise<WaitResult>((resolve) => {
     let answered = false;
     const timer = setTimeout(() => {
       if (answered) return;
       answered = true;
+      if (targets.length === 1) {
+        const record = targets[0].inflight?.record;
+        if (record) {
+          const proposals = proposalsOfTask(record.id);
+          resolve({
+            done: false,
+            taskId: record.id,
+            worker: record.worker,
+            status: targets[0].status(),
+            elapsedMs: Date.now() - record.startedAt,
+            ...(record.reports?.length ? { reports: [...record.reports] } : {}),
+            ...(proposals.length ? { proposals } : {}),
+          });
+          return;
+        }
+      }
       resolve({
         done: false,
-        taskId: record.id,
+        taskId: null,
         status: workerStatus(),
-        elapsedMs: Date.now() - record.startedAt,
-        // Reports so far ride along on a timeout too — that is the point of
-        // them. A caller whose wait expired gets what the worker has found up
-        // to now instead of only "still running", and can decide from it
-        // whether to keep waiting or interrupt.
-        ...(record.reports?.length ? { reports: [...record.reports] } : {}),
-        ...(proposalsOfTask(record.id).length ? { proposals: proposalsOfTask(record.id) } : {}),
+        elapsedMs: null,
+        running: workerActiveTasks().map((t) => t.id),
       });
     }, waitMs);
-    waiters.push((outcome) => {
-      // Already reported "still running" — this caller has moved on, and saying
-      // so is what lets `settle` know a wakeup is still owed.
-      if (answered) return false;
-      answered = true;
-      clearTimeout(timer);
-      resolve({
-        done: true,
-        taskId: record.id,
-        status: workerStatus(),
-        elapsedMs: Date.now() - record.startedAt,
-        ...(outcome.answer ? { answer: outcome.answer } : {}),
-        ...(outcome.error ? { error: outcome.error } : {}),
-        ...(outcome.reports?.length ? { reports: outcome.reports } : {}),
-        ...(outcome.proposals?.length ? { proposals: outcome.proposals } : {}),
+    for (const slot of targets) {
+      const inflight = slot.inflight!;
+      const { record } = inflight;
+      inflight.waiters.push((outcome) => {
+        // Already answered (timed out, or another task settled first) — this
+        // outcome was not delivered, so `settle` still owes its wakeup.
+        if (answered) return false;
+        answered = true;
+        clearTimeout(timer);
+        resolve({
+          done: true,
+          taskId: record.id,
+          worker: record.worker,
+          status: slot.status(),
+          elapsedMs: Date.now() - record.startedAt,
+          ...(outcome.answer ? { answer: outcome.answer } : {}),
+          ...(outcome.error ? { error: outcome.error } : {}),
+          ...(outcome.reports?.length ? { reports: outcome.reports } : {}),
+          ...(outcome.proposals?.length ? { proposals: outcome.proposals } : {}),
+        });
+        return true;
       });
-      return true;
-    });
+    }
   });
 }
 
 /**
- * Stop the turn in flight, and hand back everything it managed to produce — the
- * partial draft plus any reports.
- *
- * Returns a result rather than void because interrupting is now something the
- * app agent does (`workerInterrupt`), and the whole reason to interrupt a
- * mis-scoped task is that the partial work is still worth reading. A caller
- * that only wants the click, like the panel, ignores the return.
+ * Stop one slot's turn and hand back everything it produced — partial draft plus
+ * reports. Target by `taskId`, by slot id, or (with neither) the only running task;
+ * several running and nothing named is refused rather than guessed.
  */
-export async function interruptWorker(): Promise<WaitResult> {
-  const stopped = inflight?.record;
+export async function interruptWorker(
+  opts: { taskId?: number; worker?: string } = {},
+): Promise<WaitResult> {
+  const running = workerSlots.filter((s) => s.inflight !== null);
+  let slot: WorkerSlot | undefined;
+  if (opts.taskId !== undefined) {
+    slot = running.find((s) => s.inflight!.record.id === opts.taskId);
+    if (!slot) {
+      const settled = settledTasks.get(opts.taskId);
+      if (settled) return resultOf(settled);
+      return {
+        done: true,
+        taskId: opts.taskId,
+        status: workerStatus(),
+        elapsedMs: null,
+        error: `Task #${opts.taskId} is not running.`,
+      };
+    }
+  } else if (opts.worker !== undefined) {
+    slot = slotById(opts.worker);
+  } else if (running.length > 1) {
+    return {
+      done: false,
+      taskId: null,
+      status: workerStatus(),
+      elapsedMs: null,
+      running: running.map((s) => s.inflight!.record.id),
+      error: `${running.length} tasks are running (${describeRunning()}) — pass taskId to say which to stop.`,
+    };
+  } else {
+    slot = running[0];
+  }
+  if (!slot || !slot.inflight) {
+    return {
+      done: true,
+      taskId: null,
+      status: workerStatus(),
+      elapsedMs: null,
+      error: 'Nothing was running.',
+    };
+  }
+
+  const stopped = slot.inflight.record;
   try {
-    await invoke(`yaar://apps/self/agents/${WORKER_ID}`, { action: 'interrupt' });
+    await invoke(`yaar://apps/self/agents/${slot.id}`, { action: 'interrupt' });
   } catch {
     /* not spawned or already idle — nothing to stop */
   }
-  const draft = workerDraft().trim();
+  const draft = slot.draft().trim();
+  const target = slot;
   batch(() => {
-    if (draft) appendEntry('answer', `${draft}\n(interrupted)`);
-    else appendEntry('error', 'Interrupted.');
-    setWorkerDraft('');
-    setWorkerStatus('idle');
+    if (draft) appendEntry(target, 'answer', `${draft}\n(interrupted)`);
+    else appendEntry(target, 'error', 'Interrupted.');
+    target.setDraft('');
+    target.setStatus('idle');
   });
-  settle({ error: 'Interrupted.', ...(draft ? { answer: draft } : {}) });
+  settle(slot, { error: 'Interrupted.', ...(draft ? { answer: draft } : {}) });
 
-  // Read back through `workerLastResult` rather than from the outcome above:
-  // the turn may have settled on its own between the invoke and here, and the
-  // answer it settled with is better than the one we were about to force.
-  const last = workerLastResult();
-  if (last && (!stopped || last.id === stopped.id)) return resultOf(last);
-  return {
-    done: true,
-    taskId: stopped?.id ?? null,
-    status: workerStatus(),
-    elapsedMs: null,
-    error: 'Nothing was running.',
-  };
+  // The turn may have settled on its own between the invoke and here; the
+  // answer it settled with is better than the one forced above.
+  const settled = settledTasks.get(stopped.id);
+  return settled
+    ? resultOf(settled)
+    : { done: true, taskId: stopped.id, status: workerStatus(), elapsedMs: null };
+}
+
+/** Retire one slot's worker so its next task starts with no memory. */
+async function resetSlot(slot: WorkerSlot): Promise<void> {
+  settle(slot, { error: 'The worker was reset.' });
+  slot.stopStream?.();
+  slot.stopStream = null;
+  await del(`yaar://apps/self/agents/${slot.id}`).catch(() => {});
+  const drop = new Set(
+    workerProposals()
+      .filter((p) => p.worker === slot.id)
+      .map((p) => p.id),
+  );
+  batch(() => {
+    setWorkerEntries(workerEntries().filter((e) => e.worker !== slot.id));
+    slot.setDraft('');
+    slot.setThinking('');
+    slot.setStatus('offline');
+    // Proposals go with the conversation that justified them.
+    setWorkerProposals(workerProposals().filter((p) => !drop.has(p.id)));
+    slot.pendingFeedback = [];
+    if (workerLastResult()?.worker === slot.id) setWorkerLastResult(null);
+  });
+  for (const [id, record] of settledTasks) if (record.worker === slot.id) settledTasks.delete(id);
+  if (lastSlotId === slot.id) lastSlotId = null;
 }
 
 /**
- * Retire the worker and clear the transcript. The next task spawns a fresh
- * session with none of this one's memory — the escape hatch for a worker whose
- * context has gone stale or heavy.
+ * Retire every worker and clear the transcript. The next tasks spawn fresh
+ * sessions with none of this memory.
  */
 export async function resetWorker(): Promise<void> {
-  settle({ error: 'The worker was reset.' });
-  stopStream?.();
-  stopStream = null;
-  await del(`yaar://apps/self/agents/${WORKER_ID}`).catch(() => {});
+  await Promise.all(workerSlots.map((slot) => resetSlot(slot)));
   batch(() => {
     setWorkerEntries([]);
-    setWorkerDraft('');
-    setWorkerThinking('');
-    setWorkerStatus('offline');
-    // Proposals go with the transcript too: their rationale is a turn of a
-    // conversation that no longer exists, and accepting one on the strength of a
-    // summary alone is the reading this feature exists to prevent.
     setWorkerProposals([]);
-    pendingFeedback = [];
-    // The last result goes with the transcript it belonged to. Keeping it would
-    // hand the next `workerWait` an answer from a conversation that no longer
-    // exists — the one reading a reset worker is least equipped to catch.
     setWorkerLastResult(null);
   });
+  settledTasks.clear();
 }

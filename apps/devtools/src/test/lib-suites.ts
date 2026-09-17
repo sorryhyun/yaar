@@ -501,7 +501,6 @@ const appManifest = suite('app-manifest', {
     eq(manifestString(null, 'appId'), null);
   },
 });
-
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
