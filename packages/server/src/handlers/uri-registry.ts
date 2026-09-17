@@ -157,6 +157,12 @@ export interface ReadOptions {
   /** Number of context lines around pattern matches (default: 0). */
   context?: number;
   /**
+   * Character range to read, e.g. "0-50000" or "150000-" (0-based offset, end exclusive —
+   * `String.slice`). The only filter that can page a file that is one huge line: `lines`
+   * and `pattern` both hand back whole lines. Exclusive with `lines`/`pattern`.
+   */
+  chars?: string;
+  /**
    * PDF only: extract the text layer. `true` (or "all") reads the whole document; a range
    * string like "1-3" scopes it. Cheapest way to read a text-based PDF.
    */
@@ -198,7 +204,7 @@ export interface ReadOptions {
  * came back whole, indistinguishable from a read where every line matched.
  */
 export function hasLineFilter(options?: ReadOptions): boolean {
-  return Boolean(options?.lines || options?.pattern);
+  return Boolean(options?.lines || options?.pattern || options?.chars);
 }
 
 /**
@@ -519,7 +525,7 @@ export class ResourceRegistry {
       if (readFiltered || result.isError || !hasLineFilter(readOptions)) return result;
       return prependNote(
         result,
-        'Note: lines/pattern filtering is not supported for this resource and was ignored — ' +
+        'Note: lines/pattern/chars filtering is not supported for this resource and was ignored — ' +
           'this is the full value.',
       );
     }

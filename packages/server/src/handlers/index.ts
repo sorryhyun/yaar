@@ -27,6 +27,7 @@ import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
 import { resolveShorthandUri } from '../http/uri-match.js';
 import { LARGE_RESULT_META } from '../mcp/result-size.js';
+import { spillOversizedResult } from '../mcp/result-spill.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 
 export const VERB_TOOL_NAMES = [
@@ -130,7 +131,9 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
     // Normal single-URI path
     recordVerbCall(verb, uri, payload);
     const result = await reg.execute(verb, uri, payload, readOptions);
-    return { ...appendLayoutContext(foldNotes(result)) };
+    return {
+      ...appendLayoutContext(await spillOversizedResult(verb, expanded, foldNotes(result))),
+    };
   }
 
   // Multi-URI: execute all in parallel, format combined result
@@ -140,7 +143,8 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
       return reg.execute(verb, u, payload, readOptions);
     }),
   );
-  return { ...appendLayoutContext(formatBatchResults(expanded, settled)) };
+  const combined = formatBatchResults(expanded, settled);
+  return { ...appendLayoutContext(await spillOversizedResult(verb, expanded, combined)) };
 };
 
 /** Register the 5 verb tools on an MCP server instance. */
@@ -166,7 +170,8 @@ export function registerVerbTools(server: McpServer): void {
     {
       description:
         'Read the current value/state of a yaar:// resource. ' +
-        'For text files and window state, optionally filter by line range or regex pattern ' +
+        'For text files and window state, optionally filter by line range, regex pattern, or ' +
+        'character range ' +
         '(elsewhere the filter is ignored, with a note saying so). ' +
         'Reading a PDF returns its metadata plus a hint to open it in a viewer window — it does ' +
         'NOT ingest the content unless you pass pdfText (text layer) or pdfPages (page images). ' +
@@ -185,6 +190,14 @@ export function registerVerbTools(server: McpServer): void {
           .number()
           .optional()
           .describe('Context lines around pattern matches (default: 0)'),
+        chars: z
+          .string()
+          .optional()
+          .describe(
+            'Character range (0-based, end exclusive), e.g. "0-50000", "50000-100000", "150000-". ' +
+              'Pages a file that is one huge line, where lines/pattern return all or nothing. ' +
+              'Not combinable with lines/pattern.',
+          ),
         pdfText: z
           .union([z.boolean(), z.string()])
           .optional()
@@ -210,8 +223,16 @@ export function registerVerbTools(server: McpServer): void {
       },
       _meta: LARGE_RESULT_META,
     },
-    async ({ uri, lines, pattern, context, pdfText, pdfPages, rawImage }) =>
-      exec(reg, 'read', uri, undefined, { lines, pattern, context, pdfText, pdfPages, rawImage }),
+    async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage }) =>
+      exec(reg, 'read', uri, undefined, {
+        lines,
+        pattern,
+        context,
+        chars,
+        pdfText,
+        pdfPages,
+        rawImage,
+      }),
   );
 
   server.registerTool(

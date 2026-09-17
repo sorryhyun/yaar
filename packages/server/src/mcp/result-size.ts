@@ -59,6 +59,8 @@
  * for Codex rather than something that needs a provider fork.
  */
 export const MCP_MAX_RESULT_CHARS = 150_000;
+// A verb result is spilled into storage well before this is reached — `mcp/result-spill.ts` —
+// so for the verb door this ceiling is a backstop, not the path a large result takes.
 
 /**
  * The `_meta` block to spread into a `registerTool` config so the tool declares

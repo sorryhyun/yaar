@@ -948,7 +948,7 @@ describe('S10 — a state read honors lines/pattern, or says it did not', () => 
 
     const result = await call('read', 'yaar://windows/notes', undefined, { pattern: 'x' });
 
-    expect(textOf(result)).toContain('lines/pattern filtering is not supported');
+    expect(textOf(result)).toContain('lines/pattern/chars filtering is not supported');
   });
 
   it('an unfiltered read is untouched — no note, and an object keeps its structured copy', async () => {

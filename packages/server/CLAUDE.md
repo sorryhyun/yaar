@@ -118,6 +118,7 @@ src/
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS; the one protocol era
 │   ├── result-size.ts    # The MCP result-size cliff and the per-tool annotation that moves it
+│   ├── result-spill.ts   # Verb results past 100K chars go to yaar://storage/temp/tool-results/, paged back with read `chars`
 │   ├── agent-tokens.ts   # Per-agent token minting, bound to agent id server-side
 │   ├── system/           # Always-active: reload_cached, list_reload_options
 │   ├── app-agent/        # describe / query / command / relay (+ direct_message)

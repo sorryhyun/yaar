@@ -300,6 +300,39 @@ function parseLineRange(range: string): [start: number, end: number | null] | nu
 }
 
 /**
+ * Slice `rawContent` by a `chars` range — "30000-60000" (0-based, end exclusive), "50000"
+ * (from there to the end is too easy to overflow with, so a bare number is the *start* of a
+ * default-sized page), or "150000-".
+ *
+ * Unnumbered on purpose: the slice is raw text a caller stitches back together, and a
+ * line-number gutter would land mid-sentence on a file that is one line.
+ */
+function applyCharRange(rawContent: string, filePath: string, range: string): string {
+  const m = range.match(/^(\d+)(?:-(\d*))?$/);
+  if (!m) return `Invalid char range: "${range}". Use "0-50000", "50000-100000", or "150000-".`;
+  const total = rawContent.length;
+  const start = parseInt(m[1], 10);
+  const end =
+    m[2] === undefined
+      ? Math.min(start + CHAR_PAGE_SIZE, total)
+      : m[2] === ''
+        ? total
+        : Math.min(parseInt(m[2], 10), total);
+  if (start >= total)
+    return `Char offset ${start} is past the end of ${filePath} (${total} chars).`;
+  if (end <= start) return `Invalid char range: "${range}" — end must be greater than start.`;
+  const more =
+    end < total ? ` — next: chars "${end}-${Math.min(end + CHAR_PAGE_SIZE, total)}"` : '';
+  return `── ${filePath} chars ${start}-${end} of ${total}${more} ──\n${rawContent.slice(start, end)}`;
+}
+
+/**
+ * The page a `chars` read steps by. Well under `MCP_MAX_RESULT_CHARS` (150,000) even after
+ * the result's JSON serialization escapes every quote and newline in the slice.
+ */
+export const CHAR_PAGE_SIZE = 50_000;
+
+/**
  * {@link applyReadOptions} for a value that is not a file — a window's state, say.
  *
  * A string is filtered as it is. Anything else is filtered as *indented* JSON whatever its
@@ -324,6 +357,13 @@ export function applyReadOptions(
   filePath: string,
   options?: import('./uri-registry.js').ReadOptions,
 ): string {
+  if (options?.chars) {
+    if (options.lines || options.pattern) {
+      return 'chars cannot be combined with lines or pattern — use one filter per read.';
+    }
+    return applyCharRange(rawContent, filePath, options.chars);
+  }
+
   const lines = rawContent.split('\n');
   const totalLines = lines.length;
   const width = String(totalLines).length;
