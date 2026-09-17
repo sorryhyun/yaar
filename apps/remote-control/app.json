@@ -1,0 +1,13 @@
+{
+  "icon": "📡",
+  "name": "Remote Control",
+  "description": "Turn on Claude Remote Control so claude.ai/code or the Claude app can drive this monitor",
+  "run": "dist/index.html",
+  "permissions": [
+    "yaar://system/remote-control"
+  ],
+  "version": "1.0.0",
+  "author": "YAAR",
+  "kind": "system",
+  "appId": "remote-control"
+}

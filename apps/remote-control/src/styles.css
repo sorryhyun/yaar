@@ -1,0 +1,134 @@
+.rc-app {
+  padding: var(--yaar-sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-3);
+  max-width: 560px;
+  margin: 0 auto;
+  overflow-y: auto;
+}
+
+.rc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-3);
+}
+
+.rc-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+}
+
+.rc-sub,
+.rc-note {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+  margin: 0;
+}
+
+.rc-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rc-switch.on {
+  background: var(--yaar-success);
+  border-color: var(--yaar-success);
+}
+
+.rc-switch:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.rc-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--yaar-text);
+  transition: transform 0.15s;
+}
+
+.rc-switch.on .rc-knob {
+  transform: translateX(24px);
+  background: var(--yaar-bg);
+}
+
+.rc-state {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.rc-banner {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+  font-size: var(--yaar-text-sm);
+}
+
+.rc-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+
+.rc-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+}
+
+.rc-check {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  font-size: var(--yaar-text-sm);
+}
+
+.rc-link {
+  padding: var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  border-color: var(--yaar-success);
+}
+
+.rc-url {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+  word-break: break-all;
+  user-select: all;
+}
+
+.rc-link-actions {
+  display: flex;
+  gap: var(--yaar-sp-2);
+}
+
+.rc-terminal pre {
+  margin: var(--yaar-sp-2) 0 0;
+  padding: var(--yaar-sp-2);
+  max-height: 240px;
+  overflow: auto;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: 6px;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  white-space: pre-wrap;
+}

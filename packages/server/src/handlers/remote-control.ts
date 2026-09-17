@@ -22,6 +22,7 @@ import { getMonitorId, getSessionId } from '../agents/agent-context.js';
 import {
   getRemoteControlStatus,
   prepareStart,
+  REMOTE_CONTROL_URI,
   PERMISSION_MODES,
   RemoteControlRequestError,
   SPAWN_MODES,
@@ -94,7 +95,7 @@ const INVOKE_SCHEMA: Record<string, unknown> = {
 };
 
 export function registerRemoteControlHandlers(registry: ResourceRegistry): void {
-  registry.register('yaar://system/remote-control', {
+  registry.register(REMOTE_CONTROL_URI, {
     description:
       'Claude Remote Control hosted by YAAR: a `claude remote-control` process in a PTY whose ' +
       'sessions run as a YAAR agent on the starting monitor, driven from claude.ai/code or the ' +
@@ -105,7 +106,9 @@ export function registerRemoteControlHandlers(registry: ResourceRegistry): void 
     invokeSchema: INVOKE_SCHEMA,
 
     async read(): Promise<VerbResult> {
-      return okJson(getRemoteControlStatus());
+      // The caller's own monitor beside the host's, so an app window can tell "running
+      // here" from "running on another monitor" — it has no other way to learn its monitor.
+      return okJson({ ...getRemoteControlStatus(), callerMonitorId: getMonitorId() ?? null });
     },
 
     async invoke(_resolved, payload): Promise<VerbResult> {

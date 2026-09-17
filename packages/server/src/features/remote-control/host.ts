@@ -16,10 +16,14 @@
  * are generated from the monitor agent's SDK options (`agent-config.ts`), and its MCP
  * calls carry a token registered as a `monitor` principal on the monitor that started
  * it (`mcp/external-principals.ts`). Both are torn down when the process exits.
+ *
+ * Every state change pings subscribers of `REMOTE_CONTROL_URI` — the Remote Control app
+ * follows the host that way instead of polling, terminal tail included.
  */
 
 import type { Subprocess } from 'bun';
 import { getClaudeSpawnArgs } from '../../config.js';
+import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { createLogger } from '../../observability/log.js';
 import { revokeAgentToken } from '../../mcp/agent-tokens.js';
 import {
@@ -31,12 +35,16 @@ import { REMOTE_AGENT_ID, writeRemoteAgentConfig } from './agent-config.js';
 
 const log = createLogger('RemoteControl');
 
+export const REMOTE_CONTROL_URI = 'yaar://system/remote-control';
+
 /** Raw terminal bytes kept for `read`. Enough for the banner, the URL and a prompt. */
 const OUTPUT_LIMIT = 64 * 1024;
 /** How much ANSI-stripped tail `read` returns. */
 const TAIL_CHARS = 4000;
 const COLS = 120;
 const ROWS = 40;
+/** Terminal output arrives in bursts; subscribers hear about a burst once. */
+const OUTPUT_NOTIFY_MS = 250;
 
 export const PERMISSION_MODES = [
   'acceptEdits',
@@ -95,6 +103,19 @@ interface Host {
 }
 
 let host: Host | null = null;
+let outputNotify: ReturnType<typeof setTimeout> | null = null;
+
+function notifyChanged(): void {
+  if (outputNotify) {
+    clearTimeout(outputNotify);
+    outputNotify = null;
+  }
+  subscriptionRegistry.notifyChange(REMOTE_CONTROL_URI);
+}
+
+function notifyOutput(): void {
+  outputNotify ??= setTimeout(notifyChanged, OUTPUT_NOTIFY_MS);
+}
 
 // OSC 8 hyperlinks carry the URL inside the escape, which stripANSI removes — so the
 // URL is matched against the raw bytes, where the character class stops at ESC/BEL.
@@ -185,6 +206,9 @@ export async function startRemoteControl(
           current.sessionUrl = url;
           current.state = 'ready';
           log.info('remote control session ready', { pid: proc.pid });
+          notifyChanged();
+        } else {
+          notifyOutput();
         }
       },
     },
@@ -214,8 +238,10 @@ export async function startRemoteControl(
       unregisterExternalPrincipal(REMOTE_AGENT_ID);
     }
     log.info('remote control exited', { pid: proc.pid, code });
+    notifyChanged();
   });
 
+  notifyChanged();
   return getRemoteControlStatus();
 }
 

@@ -127,7 +127,8 @@ describe('writeRemoteAgentConfig', () => {
     expect(settings.outputStyle).toBe('yaar');
     expect(style).toContain('keep-coding-instructions: false');
     expect(style).toContain('not in a cloud container');
-    expect(style).not.toContain('## Remote Control');
+    // The orchestrator's own section; an app hint's `### Remote Control (remote-control)` is fine.
+    expect(style).not.toMatch(/^## Remote Control$/m);
     expect(style).not.toContain('## Onboarding');
 
     // Secrets stay in env: the file holds `${VAR}` refs, and the agent-token ref resolves

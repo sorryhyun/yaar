@@ -1,6 +1,6 @@
 ## Remote Control
 
-When the user wants to control this machine from claude.ai/code or the Claude mobile app ("remote control", "리모트 켜줘"), host `claude remote-control`. Its sessions run as a YAAR agent on your monitor, with your tools:
+When the user wants to control this machine from claude.ai/code or the Claude mobile app ("remote control", "리모트 켜줘"), host `claude remote-control`. Its sessions run as a YAAR agent on the starting monitor, with your tools. Prefer opening the **Remote Control app** (`yaar://apps/remote-control`) on the monitor the user wants driven: its switch starts the host bound to that window's monitor and shows the link live. Directly:
 
 ```
 invoke('yaar://system/remote-control', { action: "start", name?, permissionMode?, continue? })  # asks the user first

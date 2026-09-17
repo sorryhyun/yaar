@@ -9,11 +9,20 @@ This is different from [Remote Mode](./remote_mode.md). Remote Mode sends the YA
 another device over Tailscale. Claude Remote leaves the desktop where it is and gives you a YAAR
 *agent* in the Claude app, with no tunnel and no second browser.
 
-**Source:** `packages/server/src/features/remote-control/host.ts`, `packages/server/src/features/remote-control/agent-config.ts`, `packages/server/src/handlers/remote-control.ts`, `packages/server/src/mcp/external-principals.ts`, `packages/server/src/session/live-session.ts`
+**Source:** `apps/remote-control/`, `packages/server/src/features/remote-control/host.ts`, `packages/server/src/features/remote-control/agent-config.ts`, `packages/server/src/handlers/remote-control.ts`, `packages/server/src/mcp/external-principals.ts`, `packages/server/src/session/live-session.ts`
 
 ## Using it
 
-Ask the monitor agent: "claude remote 켜줘" / "start remote control". It will:
+**From the app.** Open **Remote Control** (📡) on the monitor you want the remote Claude to
+drive and flip the switch. After the permission dialog it shows `starting`, then the session link
+with Open / Copy once the CLI prints it, and the terminal tail while it waits (Press Enter answers
+a prompt). The host is bound to the monitor of the window that started it. A window on another
+monitor shows where it is running and can turn it off. The app follows the host through a
+subscription on `yaar://system/remote-control`: `host.ts` pings it on start, on the link, on exit,
+and (throttled) on terminal output. `read` also returns `callerMonitorId`, which is how a window
+learns its own monitor.
+
+**From the monitor agent.** Ask: "claude remote 켜줘" / "start remote control". It will:
 
 1. Call `invoke('yaar://system/remote-control', { action: "start" })`. **You get a permission
    dialog first, every time.**
