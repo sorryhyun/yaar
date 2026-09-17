@@ -204,8 +204,12 @@ export async function startRemoteControl(
         const url = lastMatch(current.output, SESSION_URL);
         if (url && url !== current.sessionUrl) {
           current.sessionUrl = url;
-          current.state = 'ready';
-          log.info('remote control session ready', { pid: proc.pid });
+          // The TUI redraws, and its buffer holds both URL forms, so the last match can
+          // alternate — only the transition is worth a log line.
+          if (current.state === 'starting') {
+            current.state = 'ready';
+            log.info('remote control session ready', { pid: proc.pid });
+          }
           notifyChanged();
         } else {
           notifyOutput();
