@@ -46,7 +46,12 @@ export const PERMISSION_MODES = [
   'dontAsk',
   'plan',
 ] as const;
-export const SPAWN_MODES = ['same-dir', 'worktree', 'session'] as const;
+/**
+ * No `worktree`: the generated cwd is git-ignored inside the YAAR checkout, so a worktree
+ * session would start in a fresh checkout with none of `agent-config.ts`'s files and run
+ * as a stock Claude Code with the repo's own project settings.
+ */
+export const SPAWN_MODES = ['same-dir', 'session'] as const;
 
 export type RemoteControlState = 'starting' | 'ready' | 'exited';
 
@@ -115,12 +120,23 @@ function buildArgs(opts: StartOptions): string[] {
     }
     args.push('--permission-mode', opts.permissionMode);
   }
-  if (opts.spawn) {
-    if (!SPAWN_MODES.includes(opts.spawn)) {
-      throw new RemoteControlRequestError(`Unknown spawn mode: ${opts.spawn}`);
+  if (opts.continue) {
+    // The CLI refuses `--spawn` beside `--continue`: a reattach keeps the recorded mode.
+    if (opts.spawn) {
+      throw new RemoteControlRequestError('`spawn` cannot be combined with `continue`.');
     }
-    args.push('--spawn', opts.spawn);
+  } else {
+    const spawn = opts.spawn ?? 'same-dir';
+    if (!SPAWN_MODES.includes(spawn)) {
+      throw new RemoteControlRequestError(`Unknown spawn mode: ${spawn}`);
+    }
+    // Always explicit: without it a first run stops on an interactive spawn-mode prompt
+    // that also offers `worktree`.
+    args.push('--spawn', spawn);
   }
+  // Claude in Chrome is not a monitor-agent tool; the machine's /chrome setting would
+  // otherwise hand it to every spawned session.
+  args.push('--no-chrome');
   return args;
 }
 

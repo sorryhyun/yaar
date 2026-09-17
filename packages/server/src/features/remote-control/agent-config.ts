@@ -16,6 +16,14 @@
  * | `tools`        | `permissions.deny` for every built-in the SDK set leaves out    |
  * | `model`        | `model` in the same settings                                    |
  *
+ * Two things are deliberately not the local monitor's. The prompt is the remote variant
+ * (`getRemoteOrchestratorPrompt`): the user reads the chat on claude.ai, and the per-turn
+ * context the local monitor is fed — timeline, reload options, relays — never arrives,
+ * so the reload tools that only serve that context are dropped from the tool set too.
+ * And the CLI defers MCP tools behind ToolSearch where the SDK path loads them up front,
+ * so the env turns that off (`ENABLE_TOOL_SEARCH=false`, an explicit opt-out that also
+ * beats the service-side force flag).
+ *
  * Header values never touch disk: the bearer and the agent token are secrets, so the
  * file names env vars and the spawn env carries the values.
  *
@@ -41,22 +49,55 @@ const CLI_BUILTIN_TOOLS = [
   'Agent',
   'Bash',
   'BashOutput',
+  'CronCreate',
+  'CronDelete',
+  'CronList',
+  'DesignSync',
   'Edit',
+  'EnterPlanMode',
+  'EnterWorktree',
   'ExitPlanMode',
+  'ExitWorktree',
+  'FetchInboxMessage',
   'Glob',
   'Grep',
   'KillShell',
+  'ListMcpResourcesTool',
   'LSP',
+  'Monitor',
   'MultiEdit',
   'NotebookEdit',
+  'PowerShell',
+  'PushNotification',
   'Read',
+  'ReadMcpResourceTool',
+  'RemoteTrigger',
+  'REPL',
+  'ScheduleWakeup',
+  'SendMessage',
   'Skill',
   'Task',
+  'TaskCreate',
+  'TaskGet',
+  'TaskList',
+  'TaskOutput',
+  'TaskStop',
+  'TaskUpdate',
   'TodoWrite',
   'WebFetch',
   'WebSearch',
+  'Workflow',
   'Write',
 ];
+
+/**
+ * Env the remote session needs on top of the monitor agent's. The SDK path gets MCP
+ * tools loaded up front; the CLI defers them behind ToolSearch unless told not to, which
+ * cost the first remote turn a round trip just to load YAAR's own verbs.
+ */
+const REMOTE_ENV_OVERRIDES = {
+  ENABLE_TOOL_SEARCH: 'false',
+} as const;
 
 export interface RemoteAgentConfig {
   cwd: string;
@@ -71,27 +112,42 @@ export interface RemoteAgentConfig {
  * profile/provider graph it needs already reaches back into the registry at import time.
  */
 export async function writeRemoteAgentConfig(monitorId: string): Promise<RemoteAgentConfig> {
-  const [{ buildSDKOptions }, { getOrchestratorPrompt }, { getMonitorTurnOptions }, sp, roles] =
-    await Promise.all([
-      import('../../providers/claude/sdk-options.js'),
-      import('../../agents/profiles/orchestrator/index.js'),
-      import('../../agents/profiles/turn-options.js'),
-      import('../../agents/system-prompt.js'),
-      import('../../agents/roles.js'),
-    ]);
+  const [
+    { buildSDKOptions },
+    { getRemoteOrchestratorPrompt },
+    { getMonitorTurnOptions },
+    sp,
+    roles,
+    { buildEnvironmentSection },
+    { SYSTEM_TOOL_NAMES },
+  ] = await Promise.all([
+    import('../../providers/claude/sdk-options.js'),
+    import('../../agents/profiles/orchestrator/index.js'),
+    import('../../agents/profiles/turn-options.js'),
+    import('../../agents/system-prompt.js'),
+    import('../../agents/roles.js'),
+    import('../../providers/environment.js'),
+    import('../../mcp/system/tool-names.js'),
+  ]);
 
   const turn = getMonitorTurnOptions('claude');
   const systemPrompt = await sp.assembleSystemPromptForRole(
-    getOrchestratorPrompt(),
+    getRemoteOrchestratorPrompt(),
     roles.monitorRole(monitorId),
     'claude',
     monitorId,
+    // Onboarding waits for a desktop click that never reaches a remote session.
+    { buildEnvironment: (provider) => buildEnvironmentSection(provider, { onboarding: false }) },
   );
+  // reload_cached / list_reload_options replay `<reload_options>`, which only a local
+  // monitor turn is given.
+  const reloadTools = new Set<string>(SYSTEM_TOOL_NAMES);
+  const allowedTools = turn.allowedTools?.filter((t) => !reloadTools.has(t));
   const options = buildSDKOptions({
     options: {
       systemPrompt,
       model: turn.model,
-      allowedTools: turn.allowedTools,
+      allowedTools,
       monitorId,
       agentId: REMOTE_AGENT_ID,
     },
@@ -106,6 +162,7 @@ export async function writeRemoteAgentConfig(monitorId: string): Promise<RemoteA
   for (const [k, v] of Object.entries(options.env ?? {})) {
     if (typeof v === 'string') env[k] = v;
   }
+  Object.assign(env, REMOTE_ENV_OVERRIDES);
 
   const secretVars = new Map<string, string>(); // header value → env var name
   const envRef = (value: string): string => {

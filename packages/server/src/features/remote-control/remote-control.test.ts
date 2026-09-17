@@ -7,12 +7,16 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { ResourceRegistry, setAccessPrincipalResolver } from '../../handlers/uri-registry.js';
 import { registerRemoteControlHandlers } from '../../handlers/remote-control.js';
 import { registerSystemHandlers } from '../../handlers/system.js';
-import { ORCHESTRATOR_PROMPT } from '../../agents/profiles/orchestrator/index.js';
+import {
+  ORCHESTRATOR_PROMPT,
+  REMOTE_ORCHESTRATOR_PROMPT,
+} from '../../agents/profiles/orchestrator/index.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { resolveAgentToken, revokeAgentToken } from '../../mcp/agent-tokens.js';
 import { initMcpServer } from '../../mcp/server.js';
 import { REMOTE_AGENT_ID, writeRemoteAgentConfig } from './agent-config.js';
+import { prepareStart } from './host.js';
 
 function text(result: { content: unknown[] }): string {
   return result.content
@@ -62,6 +66,46 @@ describe('yaar://system/remote-control', () => {
   });
 });
 
+describe('prepareStart', () => {
+  test('pins same-dir so the CLI never asks, and keeps Claude in Chrome off', () => {
+    expect(prepareStart({}).args).toEqual(['remote-control', '--spawn', 'same-dir', '--no-chrome']);
+  });
+
+  test('refuses worktree — its checkout would not carry the generated config', () => {
+    expect(() => prepareStart({ spawn: 'worktree' as never })).toThrow('Unknown spawn mode');
+  });
+
+  test('continue carries no spawn flag, which the CLI refuses beside it', () => {
+    expect(prepareStart({ continue: true }).args).toEqual([
+      'remote-control',
+      '--continue',
+      '--no-chrome',
+    ]);
+    expect(() => prepareStart({ continue: true, spawn: 'same-dir' })).toThrow('continue');
+  });
+});
+
+describe('the remote prompt', () => {
+  test('frames a chat user on the user’s own machine', () => {
+    expect(REMOTE_ORCHESTRATOR_PROMPT).toContain('not in a cloud container');
+    expect(REMOTE_ORCHESTRATOR_PROMPT).toContain('answer in chat');
+  });
+
+  test('leaves out context a remote session never receives, and its own start door', () => {
+    for (const heading of [
+      '## Interaction Timeline',
+      '## Action Reload Cache',
+      '## User Drawings',
+      '## Remote Control',
+      '## User Prompts',
+    ]) {
+      expect(ORCHESTRATOR_PROMPT).toContain(heading);
+      expect(REMOTE_ORCHESTRATOR_PROMPT).not.toContain(heading);
+    }
+    expect(REMOTE_ORCHESTRATOR_PROMPT).not.toContain('Plain text responses are invisible');
+  });
+});
+
 describe('writeRemoteAgentConfig', () => {
   beforeAll(() => initMcpServer());
   afterAll(() => revokeAgentToken(REMOTE_AGENT_ID));
@@ -73,12 +117,18 @@ describe('writeRemoteAgentConfig', () => {
     const style = readFileSync(join(cwd, '.claude', 'output-styles', 'yaar.md'), 'utf8');
 
     // Every tool the monitor agent is allowed, via the servers it needs and no others.
-    expect(Object.keys(mcp.mcpServers).sort()).toEqual(['messaging', 'system', 'verbs']);
+    // The reload tools serve `<reload_options>`, which a remote session never gets.
+    expect(Object.keys(mcp.mcpServers).sort()).toEqual(['messaging', 'verbs']);
     expect(settings.permissions.allow).toContain('mcp__verbs__invoke');
-    expect(settings.permissions.deny).toContain('Bash');
+    expect(settings.permissions.allow).not.toContain('mcp__system__reload_cached');
+    expect(settings.permissions.deny).toEqual(
+      expect.arrayContaining(['Bash', 'CronCreate', 'EnterWorktree', 'SendMessage', 'Monitor']),
+    );
     expect(settings.outputStyle).toBe('yaar');
     expect(style).toContain('keep-coding-instructions: false');
-    expect(style).toContain('yaar://system/remote-control');
+    expect(style).toContain('not in a cloud container');
+    expect(style).not.toContain('## Remote Control');
+    expect(style).not.toContain('## Onboarding');
 
     // Secrets stay in env: the file holds `${VAR}` refs, and the agent-token ref resolves
     // to a token minted for the remote principal.
@@ -88,5 +138,7 @@ describe('writeRemoteAgentConfig', () => {
     expect(resolveAgentToken(env[tokenRef!])).toBe(REMOTE_AGENT_ID);
     expect(readFileSync(join(cwd, '.mcp.json'), 'utf8')).not.toContain(env[tokenRef!]);
     expect(env.MCP_SDK_GENERATION).toBe('v2');
+    // YAAR's verbs load up front, as on the SDK path, instead of behind ToolSearch.
+    expect(env.ENABLE_TOOL_SEARCH).toBe('false');
   });
 });

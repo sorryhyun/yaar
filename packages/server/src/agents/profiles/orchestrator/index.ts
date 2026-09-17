@@ -32,6 +32,8 @@ import drawings from './prompts/drawings.md' with { type: 'text' };
 import config from './prompts/config.md' with { type: 'text' };
 import reloadCache from './prompts/reload-cache.md' with { type: 'text' };
 import remoteControl from './prompts/remote-control.md' with { type: 'text' };
+import remoteIntro from './prompts/remote-intro.md' with { type: 'text' };
+import remoteVisibility from './prompts/remote-visibility.md' with { type: 'text' };
 
 export const ORCHESTRATOR_PROMPT = composePrompt(
   intro,
@@ -55,8 +57,42 @@ export const ORCHESTRATOR_PROMPT = composePrompt(
   reloadCache,
 );
 
+/**
+ * The monitor agent's prompt for a hosted Remote Control session
+ * (`features/remote-control/agent-config.ts`).
+ *
+ * Same platform reference, different situation. The user reads the chat reply on
+ * claude.ai/code rather than the desktop, and none of the per-turn context the local
+ * monitor is fed ever arrives — no timeline, no `<reload_options>`, no drawings, no relays
+ * — so the parts that describe that context are left out rather than contradicted, and
+ * so is this agent's own door to starting Remote Control. Visibility and user prompts
+ * both assume someone at the desktop and are replaced by one remote section.
+ */
+export const REMOTE_ORCHESTRATOR_PROMPT = composePrompt(
+  remoteIntro,
+  verbTools,
+  payloadLiterals,
+  uriNamespaces,
+  remoteVisibility,
+  taskList,
+  windows,
+  storage,
+  http,
+  mcp,
+  apps,
+  skills,
+  config,
+);
+
 const customPrompt = loadCustomSystemPrompt();
 
 export function getOrchestratorPrompt(): string {
   return customPrompt ?? ORCHESTRATOR_PROMPT;
+}
+
+/** A custom prompt replaces the platform reference, so it still gets the remote framing. */
+export function getRemoteOrchestratorPrompt(): string {
+  return customPrompt
+    ? composePrompt(remoteIntro, customPrompt, remoteVisibility)
+    : REMOTE_ORCHESTRATOR_PROMPT;
 }

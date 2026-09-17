@@ -27,7 +27,7 @@ YAAR down stops it too.
 | Verb | Payload | Does |
 |---|---|---|
 | `read` | — | `state` (`starting`/`ready`/`exited`), `sessionUrl`, `monitorId`, `pid`, `tail` (ANSI-stripped terminal output) |
-| `invoke` | `{ action: "start", name?, permissionMode?, spawn?, continue? }` | User-confirmed spawn. The flags pass through to the CLI. `continue` reattaches to the last session (the CLI keeps it for about 4h) |
+| `invoke` | `{ action: "start", name?, permissionMode?, spawn?, continue? }` | User-confirmed spawn. The flags pass through to the CLI, plus `--no-chrome`. `spawn` is `same-dir` (default, always passed so the CLI never asks) or `session`; `worktree` is refused, because a worktree checkout lacks the git-ignored generated config. `continue` reattaches to the last session (the CLI keeps it for about 4h) and can't be combined with `spawn` |
 | `invoke` | `{ action: "write", data }` | Types into the host terminal, e.g. `"\r"` for a prompt the `tail` shows it waiting on |
 | `delete` | — | SIGINT, then SIGKILL after 3s |
 
@@ -48,17 +48,31 @@ OSC 8 hyperlink and `Bun.stripANSI` would delete the URL along with the escape.
 
 `claude remote-control` takes no `--mcp-config`, `--system-prompt` or `--tools`. The sessions it
 spawns do read their working directory and inherit its environment, though. So on every start YAAR
-runs the **same `buildSDKOptions`** that a real monitor turn uses (orchestrator prompt, monitor tool
-set, monitor model), and writes each field into `config/remote-control/`, which becomes the cwd:
+runs the **same `buildSDKOptions`** that a real monitor turn uses (monitor tool set, monitor model,
+env), and writes each field into `config/remote-control/`, which becomes the cwd:
 
 | SDK option | Where the remote session gets it |
 |---|---|
 | `env` (`buildClaudeEnv`) | the spawn env of `remote-control` itself |
 | `mcpServers` + headers | `.mcp.json`, with header values as `${YAAR_MCP_HEADER_n}` refs. The bearer and the agent token live only in env, never on disk |
-| `systemPrompt` | `.claude/output-styles/yaar.md` with `keep-coding-instructions: false`, selected by `outputStyle` |
+| `systemPrompt` | `.claude/output-styles/yaar.md` with `keep-coding-instructions: false`, selected by `outputStyle`. It is the **remote** orchestrator prompt (below) |
 | `allowedTools` | `permissions.allow` in `.claude/settings.json` |
 | `tools` / `disallowedTools` | `permissions.deny`: every CLI built-in the SDK set leaves out (Bash, Edit, Read, …) |
 | `model` | `model` in the same settings |
+
+Three things deliberately differ from a local monitor turn:
+
+- **Prompt.** `REMOTE_ORCHESTRATOR_PROMPT` swaps the intro and Visibility for remote ones: the user
+  reads the chat reply, not the desktop. It also says the session runs on the user's machine,
+  which overrides the "cloud container, git push" section claude.ai adds to the base prompt. It
+  leaves out what a remote session never receives (Interaction Timeline, Action Reload Cache, User
+  Drawings), user-prompt dialogs nobody may be at the desktop to answer, its own Remote Control
+  section, and onboarding.
+- **Tools.** `reload_cached` / `list_reload_options` are dropped, since only local turns get
+  `<reload_options>`, so `.mcp.json` lists just `verbs` and `messaging`.
+- **Env.** `ENABLE_TOOL_SEARCH=false`. The CLI otherwise defers MCP tools behind ToolSearch, which
+  cost the first remote turn a round trip just to load the verbs. An explicit off also beats the
+  service-side force flag.
 
 Because the directory is regenerated from `buildSDKOptions` on each start, a change to the monitor
 agent's prompt, tools or env reaches remote sessions automatically. **Don't hand-edit
@@ -119,9 +133,9 @@ work.
 - **No YAAR-side hooks.** The escape-repair `PreToolUse` hook and per-turn session logging don't
   apply.
 - **Deny list is hand-spelled.** Settings can only *deny* tools, so the SDK's allowlist becomes a
-  list of CLI built-in names. A built-in the CLI adds later isn't denied until it is added there.
-  The CLI's deferred tools (Cron*, plan mode, …) still show up in the remote session's tool
-  search.
+  list of CLI built-in names (Cron*, worktree, plan mode, Monitor, SendMessage, … included). A
+  built-in the CLI adds later isn't denied until it is added there. Check the transcript's
+  `deferred_tools_delta` / tool list after a CLI upgrade.
 - **One monitor, one host.** The principal is bound to the monitor that ran `start`. A second host,
   or one host per monitor, is not supported yet.
 

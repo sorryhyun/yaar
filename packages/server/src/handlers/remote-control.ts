@@ -82,7 +82,7 @@ const INVOKE_SCHEMA: Record<string, unknown> = {
     spawn: {
       type: 'string',
       enum: [...SPAWN_MODES],
-      description: 'start: spawn mode.',
+      description: 'start: spawn mode (default same-dir).',
     },
     continue: {
       type: 'boolean',
