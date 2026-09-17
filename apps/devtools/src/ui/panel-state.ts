@@ -31,6 +31,16 @@ export const [changesMode, setChangesMode] = createSignal<ChangesMode>('changes'
 
 export const [bottomTab, setBottomTab] = createSignal<BottomTab>('problems');
 
+/**
+ * A position the editor should move its caret to once `path` is the open file. Set by
+ * whoever opens a file at a location; the editor clears it after revealing.
+ */
+export const [pendingReveal, setPendingReveal] = createSignal<{
+  path: string;
+  line: number;
+  column: number;
+} | null>(null);
+
 /** Collapsed leaves only the tab strip, whose badges still report counts. */
 export const [bottomCollapsed, setBottomCollapsed] = createPersistedSignal(
   'preferences/bottom-panel-collapsed.json',

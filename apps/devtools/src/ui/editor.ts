@@ -6,6 +6,13 @@ import Prism from '@bundled/prismjs';
 import { createPersistedSignal, errMsg, escapeHtml } from '@bundled/yaar';
 import { openFilePath, openFileContent, openFileImage, setStatusText } from '../core';
 import { writeFile } from '../services';
+import { pendingReveal, setPendingReveal } from './panel-state';
+import {
+  ReferencesPopover,
+  hideReferences,
+  onEditorMouseLeave,
+  onEditorMouseMove,
+} from './references-hover';
 
 // Register TypeScript grammar (Prism base only has js/css/markup)
 // TypeScript extends JavaScript, so we define it here
@@ -198,8 +205,38 @@ export function Editor() {
   `;
 }
 
+/** Move the caret to a 1-based line/column and scroll it into the upper third of the view. */
+function reveal(ta: HTMLTextAreaElement, line: number, column: number) {
+  const lines = ta.value.split('\n');
+  const row = Math.min(Math.max(line, 1), lines.length);
+  let lineStart = 0;
+  for (let i = 0; i < row - 1; i++) lineStart += lines[i].length + 1;
+  const col = Math.min(Math.max(column - 1, 0), lines[row - 1].length);
+  const offset = lineStart + col;
+  ta.focus();
+  ta.setSelectionRange(offset, offset);
+  const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 20;
+  ta.scrollTop = Math.max(0, (row - 1) * lineHeight - ta.clientHeight / 3);
+  ta.dispatchEvent(new Event('scroll'));
+  setCursorPos({ line: row, col: col + 1 });
+}
+
 /** The code surface: highlighted <pre> under a transparent <textarea>. */
 function TextEditor() {
+  let textarea: HTMLTextAreaElement | undefined;
+
+  // Runs after the file's content lands in the textarea, whether the target file was
+  // already open or had to be loaded first.
+  createEffect(() => {
+    const target = pendingReveal();
+    const content = openFileContent();
+    if (!target || !textarea || content == null || openFilePath() !== target.path) return;
+    queueMicrotask(() => {
+      if (textarea) reveal(textarea, target.line, target.column);
+    });
+    setPendingReveal(null);
+  });
+
   return html`
     <div class=${() => `editor-content${wordWrap() ? ' wrap' : ''}`}>
       <${Show} when=${() => showLineNumbers() && !wordWrap()}>
@@ -216,6 +253,7 @@ ${lineNumbers}</pre
         <pre class="editor-highlight" aria-hidden="true"><code innerHTML=${highlightedHtml}></code>
 </pre>
         <textarea
+          ref=${(el: HTMLTextAreaElement) => (textarea = el)}
           class="editor-textarea"
           spellcheck=${false}
           value=${currentContent}
@@ -227,12 +265,19 @@ ${lineNumbers}</pre
             setHighlightedHtml(highlight(val, lang));
             scheduleSave();
             trackCursor(e);
+            hideReferences();
           }}
-          onScroll=${syncScroll}
+          onScroll=${(e: Event) => {
+            syncScroll(e);
+            hideReferences();
+          }}
+          onMouseMove=${(e: MouseEvent) => onEditorMouseMove(e, isDirty())}
+          onMouseLeave=${onEditorMouseLeave}
           onKeyUp=${trackCursor}
           onClick=${trackCursor}
           onFocus=${trackCursor}
           onKeyDown=${(e: KeyboardEvent) => {
+            hideReferences();
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
               e.preventDefault();
               saveNow();
@@ -255,6 +300,7 @@ ${lineNumbers}</pre
             }
           }}
         ></textarea>
+        <${ReferencesPopover} />
       </div>
     </div>
   `;

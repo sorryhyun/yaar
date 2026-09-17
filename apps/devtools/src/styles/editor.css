@@ -156,6 +156,92 @@
   -webkit-text-fill-color: transparent;
 }
 
+/* ── References hover ──
+   Lives inside .editor-overlay (position: relative), above the textarea. Size limits match
+   POPOVER_WIDTH / POPOVER_MAX_HEIGHT in ui/references-hover.ts, which positions it. */
+.refs-popover {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100% - 16px));
+  max-height: 280px;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  box-shadow: var(--yaar-shadow-lg);
+  font-family: var(--yaar-font);
+  overflow: hidden;
+}
+
+.refs-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.refs-symbol {
+  font-family: var(--yaar-font-mono);
+  color: var(--yaar-accent);
+}
+
+.refs-error {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  color: var(--yaar-error);
+}
+
+.refs-note {
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+}
+
+.refs-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--yaar-sp-1) 0;
+}
+
+.refs-item {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  column-gap: var(--yaar-sp-3);
+  width: 100%;
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  border: none;
+  background: transparent;
+  color: var(--yaar-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.refs-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.refs-loc {
+  font-family: var(--yaar-font-mono);
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+}
+
+.refs-text {
+  font-family: var(--yaar-font-mono);
+}
+
+.refs-enclosing {
+  grid-column: 2;
+}
+
+.refs-tag {
+  margin-left: var(--yaar-sp-1);
+  padding: 0 var(--yaar-sp-1);
+  border-radius: var(--yaar-radius-sm);
+  background: var(--yaar-wash-accent);
+  color: var(--yaar-accent);
+}
+
 /* ── Prism token overrides ──
    The base .token.* palette is compiler-injected; only deviations are kept here.
    mirrors compiler-injected Prism palette */

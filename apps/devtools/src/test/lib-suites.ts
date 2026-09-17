@@ -27,6 +27,10 @@ import {
   bumpPatch,
   bumpAppJson,
   manifestString,
+  identifierAt,
+  isReferenceLookupPath,
+  otherReferences,
+  otherReferencesSummary,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -501,6 +505,139 @@ const appManifest = suite('app-manifest', {
     eq(manifestString(null, 'appId'), null);
   },
 });
+
+const identifier = suite('identifier', {
+  'finds the whole identifier from any offset inside it, or just after it'() {
+    const text = 'const a = 1;\n  setBlocks($x);';
+    const at = text.indexOf('Blocks');
+    eq(identifierAt(text, at), {
+      name: 'setBlocks',
+      line: 2,
+      column: 3,
+      start: at - 3,
+      end: at + 6,
+    });
+    eq(identifierAt(text, at + 6)?.name, 'setBlocks', 'caret right after the name');
+    eq(identifierAt(text, text.indexOf('$x') + 1)?.name, '$x');
+  },
+
+  'whitespace, punctuation, numbers and reserved words are not symbols'() {
+    const text = 'const a = 12 ;';
+    eq(identifierAt(text, 0), null, 'keyword');
+    eq(identifierAt(text, text.indexOf('12') + 1), null, 'number');
+    eq(identifierAt(text, text.indexOf('=')), null, 'operator between spaces');
+    eq(identifierAt(text, 99), null, 'out of range');
+    eq(identifierAt(text, text.indexOf('a'))?.name, 'a');
+  },
+
+  'lookups are offered only where the language service resolves: src/**/*.ts'() {
+    ok(isReferenceLookupPath('src/ui/editor.ts'));
+    ok(!isReferenceLookupPath('src/styles/editor.css'));
+    ok(!isReferenceLookupPath('agent/prompt.md'));
+    ok(!isReferenceLookupPath('src/types.d.ts'));
+    ok(!isReferenceLookupPath(null));
+  },
+});
+
+const references = suite('references', {
+  'the hovered usage and the declaration are both dropped; the declaration becomes the jump target'() {
+    const out = otherReferences(
+      {
+        references: [
+          { file: 'src/a.ts', line: 1, column: 7 },
+          { file: 'src/a.ts', line: 5, column: 3 },
+          { file: 'src/b.ts', line: 2, column: 1 },
+        ],
+        definitions: [{ file: 'src/a.ts', line: 1, column: 7 }],
+        totalReferences: 3,
+        files: 2,
+      },
+      { file: 'src/a.ts', line: 5, column: 1, length: 5 },
+    );
+    eq(out.total, 1);
+    eq(out.files, 1);
+    eq(
+      out.references.map((r) => [r.file, r.line]),
+      [['src/b.ts', 2]],
+    );
+    eq(out.definition, { file: 'src/a.ts', line: 1, column: 7 });
+    eq(out.declaredHere, false);
+    eq(otherReferencesSummary(out.total, out.files, out.declaredHere), '1 other reference in 1 file');
+  },
+
+  'hovering the declaration says so and lists only real usages'() {
+    const out = otherReferences(
+      {
+        references: [
+          { file: 'src/a.ts', line: 1, column: 17, isDefinition: true },
+          { file: 'src/a.ts', line: 9, column: 3 },
+          { file: 'src/b.ts', line: 4, column: 5 },
+          { file: 'src/c.ts', line: 2, column: 1 },
+        ],
+        definitions: [{ file: 'src/a.ts', line: 1, column: 17 }],
+        totalReferences: 4,
+      },
+      { file: 'src/a.ts', line: 1, column: 17, length: 8 },
+    );
+    eq(out.declaredHere, true);
+    eq(out.total, 3);
+    eq(out.files, 3);
+    eq(
+      out.references.map((r) => r.line),
+      [9, 4, 2],
+    );
+    eq(otherReferencesSummary(out.total, out.files, out.declaredHere), '3 references in 3 files');
+  },
+
+  'a declaration line is never a usage, even when its column differs from definitions'() {
+    const out = otherReferences(
+      {
+        references: [
+          { file: 'src/a.ts', line: 3, column: 1 },
+          { file: 'src/b.ts', line: 8, column: 2 },
+        ],
+        definitions: [{ file: 'src/a.ts', line: 3, column: 14 }],
+        totalReferences: 2,
+      },
+      { file: 'src/b.ts', line: 20, column: 1, length: 3 },
+    );
+    eq(
+      out.references.map((r) => [r.file, r.line]),
+      [['src/b.ts', 8]],
+    );
+    eq(out.total, 1);
+  },
+
+  'only the hovered declaration means no references'() {
+    const out = otherReferences(
+      {
+        references: [{ file: 'src/a.ts', line: 1, column: 7, isDefinition: true }],
+        totalReferences: 1,
+      },
+      { file: 'src/a.ts', line: 1, column: 7, length: 3 },
+    );
+    eq(out.references, []);
+    eq(out.declaredHere, true);
+    eq(otherReferencesSummary(out.total, out.files, out.declaredHere), 'No references');
+    eq(otherReferencesSummary(0, 0), 'No other references');
+    eq(otherReferencesSummary(1, 1), '1 other reference in 1 file');
+    eq(otherReferencesSummary(3, 2), '3 other references in 2 files');
+  },
+
+  'a clipped list still counts what the cap cut off'() {
+    const out = otherReferences(
+      {
+        references: [{ file: 'src/a.ts', line: 1, column: 1 }],
+        totalReferences: 250,
+        files: 9,
+        truncated: true,
+      },
+      { file: 'src/a.ts', line: 1, column: 1, length: 4 },
+    );
+    eq([out.total, out.files], [249, 9]);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -511,4 +648,6 @@ export const libSuites: Suite[] = [
   diff,
   compileStatus,
   appManifest,
+  identifier,
+  references,
 ];
