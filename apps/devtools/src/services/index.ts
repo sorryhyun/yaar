@@ -10,6 +10,7 @@ export * from './storage-import';
 export * from './projects';
 export * from './console';
 export * from './grep';
+export * from './references';
 export * from './build';
 export * from './format';
 export * from './git';

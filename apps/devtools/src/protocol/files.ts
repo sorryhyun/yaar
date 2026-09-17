@@ -8,6 +8,7 @@ import {
   deleteFile,
   copyFile,
   grep,
+  findReferences,
   readFileContent,
   readImageFile,
   listProjectFiles,
@@ -553,6 +554,64 @@ export const fileCommands = {
         return [...blocks, { type: 'text' as const, text: `(${notes.join('; ')})` }];
       }
       return blocks;
+    },
+  }),
+  findReferences: defineAppCommand({
+    description:
+      'Find every reference to a TypeScript symbol in the project via the language service, ' +
+      'not a text search: follows re-exports, renamed imports and methods called through an ' +
+      'instance. Name it by `symbol` (declared in `file`), by `line`+`column`, or by ' +
+      '`line`+`symbol`. Returns { symbol, at, definitions, references: [{ file, line, column, ' +
+      'text, enclosing, isDefinition?, isWrite?, isCall?, role? }], totalReferences, files }, ' +
+      'plus `callers` when asked; `ambiguous` lists other matching declarations — re-ask with ' +
+      '`line`. Only `src/**/*.ts` files resolve; throws with the reason (not-found, invalid, ' +
+      'unavailable, timeout) rather than answering zero references. Reads saved files, so ' +
+      'no compile is needed first.',
+    params: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          description:
+            'Project-relative file the symbol is declared or used in, e.g. "src/main.ts".',
+        },
+        symbol: {
+          type: 'string',
+          description:
+            'Name declared in `file` — `setBlocks`, or `Class.method` / `obj.prop` for a member. ' +
+            'With `line`, the first occurrence of that name on that line.',
+        },
+        line: { type: 'number', description: '1-based line.' },
+        column: { type: 'number', description: '1-based column. Needs `line`.' },
+        callers: {
+          type: 'boolean',
+          description: 'Also return who calls it, grouped by enclosing function.',
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Cap on references and callers (default 200); `truncated` says it clipped.',
+        },
+      },
+      required: ['file'],
+    },
+    run: async (p) => {
+      const symbol = p.symbol ? String(p.symbol) : undefined;
+      const line = typeof p.line === 'number' ? p.line : undefined;
+      const column = typeof p.column === 'number' ? p.column : undefined;
+      if (!symbol && line === undefined) {
+        throw new AppCommandError('Pass `symbol`, or `line` (with `column` or `symbol`).');
+      }
+      if (column !== undefined && line === undefined) {
+        throw new AppCommandError('`column` needs `line`.');
+      }
+      return await findReferences({
+        file: String(p.file),
+        ...(symbol ? { symbol } : {}),
+        ...(line !== undefined ? { line } : {}),
+        ...(column !== undefined ? { column } : {}),
+        ...(p.callers === true ? { callers: true } : {}),
+        ...(typeof p.maxResults === 'number' ? { maxResults: p.maxResults } : {}),
+      });
     },
   }),
 };
