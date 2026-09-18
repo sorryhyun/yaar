@@ -136,6 +136,12 @@ export class ContextPool implements PoolContext {
     string,
     { queue: MonitorQueuePolicy; timeline: InteractionTimeline }
   >();
+  /**
+   * Timelines of readers outside the pool, per monitor and keyed by agent id — see
+   * {@link followTimeline}. Held apart from `monitors` so a monitor reset, which drops and
+   * recreates that record, does not silently detach them.
+   */
+  private timelineFollowers = new Map<string, Map<string, InteractionTimeline>>();
   private resetting = false;
   /**
    * The monitors a `resetMonitor()` is currently tearing down.
@@ -225,7 +231,7 @@ export class ContextPool implements PoolContext {
     if (!state) {
       state = {
         queue: new MonitorQueuePolicy(MAX_QUEUE_SIZE),
-        timeline: new InteractionTimeline(),
+        timeline: new InteractionTimeline(() => this.followersOf(monitorId)),
       };
       this.monitors.set(monitorId, state);
     }
@@ -235,6 +241,58 @@ export class ContextPool implements PoolContext {
   /** The timeline for one monitor, created on first use. */
   timelineFor(monitorId: string): InteractionTimeline {
     return this.monitorState(monitorId).timeline;
+  }
+
+  /**
+   * A second reader's timeline for one monitor: everything pushed onto the monitor's own
+   * timeline from now on is copied here, and this one is drained independently — so the
+   * follower never takes an entry away from the monitor agent. Stable per agent id.
+   *
+   * For an agent that takes turns outside the pool (the hosted Remote Control session),
+   * which cannot share the monitor agent's drain-on-read timeline.
+   */
+  followTimeline(monitorId: string, agentId: string): InteractionTimeline {
+    let byAgent = this.timelineFollowers.get(monitorId);
+    if (!byAgent) {
+      byAgent = new Map();
+      this.timelineFollowers.set(monitorId, byAgent);
+    }
+    let timeline = byAgent.get(agentId);
+    if (!timeline) {
+      timeline = new InteractionTimeline();
+      byAgent.set(agentId, timeline);
+    }
+    return timeline;
+  }
+
+  /** Stop copying into an agent's follower timelines, on every monitor. */
+  unfollowTimeline(agentId: string): void {
+    for (const [monitorId, byAgent] of this.timelineFollowers) {
+      byAgent.delete(agentId);
+      if (byAgent.size === 0) this.timelineFollowers.delete(monitorId);
+    }
+  }
+
+  /**
+   * What a follower's next turn should be told, the way a monitor turn is: the timeline
+   * since its last turn, drained, then the desktop's windows. Empty when there is neither.
+   */
+  followerTurnContext(monitorId: string, agentId: string): string {
+    const timeline = this.followTimeline(monitorId, agentId).drainAndFormat();
+    const openWindows = this.contextAssembly.formatOpenWindows(
+      this.windowState.stackOrder(monitorId),
+      {
+        monitorId,
+        getRawWindowId: (handle) => this.windowState.handleMap.getRawWindowId(handle),
+        focusedWindowId: this.windowState.getFocusedWindowId(),
+      },
+    );
+    return timeline + openWindows;
+  }
+
+  /** The follower timelines of one monitor. */
+  followersOf(monitorId: string): Iterable<InteractionTimeline> {
+    return this.timelineFollowers.get(monitorId)?.values() ?? [];
   }
 
   /** Whether this monitor's main queue is occupied. Never creates one. */

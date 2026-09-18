@@ -13,9 +13,16 @@
   "variant": "panel",
   "dockEdge": "top",
   "permissions": [
-    "yaar://http"
+    "yaar://http",
+    {
+      "uri": "yaar://session/agents",
+      "verbs": [
+        "list"
+      ]
+    }
   ],
   "version": "1.0.1",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "appId": "dock"
 }

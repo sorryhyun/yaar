@@ -33,6 +33,7 @@ import config from './prompts/config.md' with { type: 'text' };
 import reloadCache from './prompts/reload-cache.md' with { type: 'text' };
 import remoteControl from './prompts/remote-control.md' with { type: 'text' };
 import remoteIntro from './prompts/remote-intro.md' with { type: 'text' };
+import remoteTimeline from './prompts/remote-timeline.md' with { type: 'text' };
 import remoteVisibility from './prompts/remote-visibility.md' with { type: 'text' };
 
 export const ORCHESTRATOR_PROMPT = composePrompt(
@@ -62,11 +63,13 @@ export const ORCHESTRATOR_PROMPT = composePrompt(
  * (`features/remote-control/agent-config.ts`).
  *
  * Same platform reference, different situation. The user reads the chat reply on
- * claude.ai/code rather than the desktop, and none of the per-turn context the local
- * monitor is fed ever arrives — no timeline, no `<reload_options>`, no drawings, no relays
- * — so the parts that describe that context are left out rather than contradicted, and
- * so is this agent's own door to starting Remote Control. Visibility and user prompts
- * both assume someone at the desktop and are replaced by one remote section.
+ * claude.ai/code rather than the desktop, and of the per-turn context the local monitor
+ * is fed only the timeline and open windows arrive (through a hook — see
+ * `features/remote-control/turn-context.ts`), with no relays in it. So the timeline gets
+ * its own remote section, the parts describing context that never arrives —
+ * `<reload_options>`, drawings — are left out rather than contradicted, and so is this
+ * agent's own door to starting Remote Control. Visibility and user prompts both assume
+ * someone at the desktop and are replaced by one remote section.
  */
 export const REMOTE_ORCHESTRATOR_PROMPT = composePrompt(
   remoteIntro,
@@ -74,6 +77,7 @@ export const REMOTE_ORCHESTRATOR_PROMPT = composePrompt(
   payloadLiterals,
   uriNamespaces,
   remoteVisibility,
+  remoteTimeline,
   taskList,
   windows,
   storage,

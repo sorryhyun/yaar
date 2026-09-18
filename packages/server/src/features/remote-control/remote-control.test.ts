@@ -15,7 +15,7 @@ import { readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { resolveAgentToken, revokeAgentToken } from '../../mcp/agent-tokens.js';
 import { initMcpServer } from '../../mcp/server.js';
-import { REMOTE_AGENT_ID, writeRemoteAgentConfig } from './agent-config.js';
+import { REMOTE_AGENT_ID, TURN_CONTEXT_PATH, writeRemoteAgentConfig } from './agent-config.js';
 import { prepareStart } from './host.js';
 
 function text(result: { content: unknown[] }): string {
@@ -104,6 +104,11 @@ describe('the remote prompt', () => {
     }
     expect(REMOTE_ORCHESTRATOR_PROMPT).not.toContain('Plain text responses are invisible');
   });
+
+  test('explains the timeline its hook delivers, without the relays it never gets', () => {
+    expect(REMOTE_ORCHESTRATOR_PROMPT).toContain('## Desktop Changes');
+    expect(REMOTE_ORCHESTRATOR_PROMPT).not.toContain('<relay from=');
+  });
 });
 
 describe('writeRemoteAgentConfig', () => {
@@ -141,6 +146,24 @@ describe('writeRemoteAgentConfig', () => {
     expect(env.MCP_SDK_GENERATION).toBe('v2');
     // YAAR's verbs load up front, as on the SDK path, instead of behind ToolSearch.
     expect(env.ENABLE_TOOL_SEARCH).toBe('false');
+  });
+
+  test('asks YAAR for the turn context before every prompt, with the MCP credentials', async () => {
+    const { cwd, env } = await writeRemoteAgentConfig('0');
+    const settings = JSON.parse(readFileSync(join(cwd, '.claude', 'settings.json'), 'utf8'));
+    const mcp = JSON.parse(readFileSync(join(cwd, '.mcp.json'), 'utf8'));
+
+    const [hook] = settings.hooks.UserPromptSubmit[0].hooks;
+    expect(hook.type).toBe('http');
+    expect(new URL(hook.url).pathname).toBe(TURN_CONTEXT_PATH);
+    expect(new URL(hook.url).origin).toBe(new URL(mcp.mcpServers.verbs.url).origin);
+    // Same refs as the MCP headers, and the CLI only interpolates names it is allowed to.
+    expect(hook.headers).toEqual(mcp.mcpServers.verbs.headers);
+    for (const ref of Object.values(hook.headers as Record<string, string>)) {
+      const name = ref.match(/^\$\{(\w+)\}$/)?.[1];
+      expect(hook.allowedEnvVars).toContain(name);
+      expect(env[name!]).toBeDefined();
+    }
   });
 
   test('the generated directory inherits no config from the checkout around it', async () => {

@@ -15,11 +15,13 @@
  * | `allowedTools` | `permissions.allow` in `<cwd>/.claude/settings.json`            |
  * | `tools`        | `permissions.deny` for every built-in the SDK set leaves out    |
  * | `model`        | `model` in the same settings                                    |
+ * | per-turn prompt| a `UserPromptSubmit` HTTP hook in the same settings             |
  *
  * Two things are deliberately not the local monitor's. The prompt is the remote variant
  * (`getRemoteOrchestratorPrompt`): the user reads the chat on claude.ai, and the per-turn
  * context the local monitor is fed — timeline, reload options, relays — never arrives,
  * so the reload tools that only serve that context are dropped from the tool set too.
+(The timeline and open windows do arrive, through the hook — see `turn-context.ts`.)
  * And the CLI defers MCP tools behind ToolSearch where the SDK path loads them up front,
  * so the env turns that off (`ENABLE_TOOL_SEARCH=false`, an explicit opt-out that also
  * beats the service-side force flag).
@@ -56,6 +58,11 @@ const log = createLogger('RemoteControl');
 export const REMOTE_AGENT_ID = 'remote-control';
 
 const OUTPUT_STYLE = 'yaar';
+
+/** Where the session's `UserPromptSubmit` hook fetches its turn context (`turn-context.ts`). */
+export const TURN_CONTEXT_PATH = '/mcp/hooks/user-prompt-submit';
+/** Seconds the CLI waits on the hook before starting the turn without it. */
+const TURN_CONTEXT_TIMEOUT = 5;
 
 /**
  * Claude Code built-ins a YAAR monitor agent does not have. The SDK expresses this as
@@ -268,6 +275,32 @@ export async function writeRemoteAgentConfig(monitorId: string): Promise<RemoteA
     mcpServers[name] = { type: server.type, url: server.url, headers };
   }
 
+  // The hook authenticates exactly as the MCP calls do, so it reuses their headers — and
+  // their env refs, which the CLI interpolates only for names listed in `allowedEnvVars`.
+  const mcpServer = Object.values(options.mcpServers ?? {}).find((srv) => 'url' in srv);
+  const hookHeaders: Record<string, string> = {};
+  if (mcpServer && 'url' in mcpServer) {
+    for (const [h, v] of Object.entries(mcpServer.headers ?? {})) hookHeaders[h] = envRef(v);
+  }
+  const hooks =
+    mcpServer && 'url' in mcpServer
+      ? {
+          UserPromptSubmit: [
+            {
+              hooks: [
+                {
+                  type: 'http',
+                  url: new URL(TURN_CONTEXT_PATH, mcpServer.url).href,
+                  headers: hookHeaders,
+                  allowedEnvVars: [...secretVars.values()],
+                  timeout: TURN_CONTEXT_TIMEOUT,
+                },
+              ],
+            },
+          ],
+        }
+      : undefined;
+
   const tools = new Set(Array.isArray(options.tools) ? options.tools : []);
   const settings = {
     enableAllProjectMcpServers: true,
@@ -276,6 +309,7 @@ export async function writeRemoteAgentConfig(monitorId: string): Promise<RemoteA
     // are not among them, and `Skill` is denied below anyway.
     disableBundledSkills: true,
     ...(options.model ? { model: options.model } : {}),
+    ...(hooks ? { hooks } : {}),
     permissions: {
       allow: options.allowedTools ?? [],
       deny: [

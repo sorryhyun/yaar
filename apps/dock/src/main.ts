@@ -1,7 +1,8 @@
-import { createSignal, onMount, onCleanup, Show } from '@bundled/solid-js';
+import { createSignal, onMount, onCleanup, Show, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { defineApp, notifications, safeParseOr } from '@bundled/yaar';
 import { OpenMeteoResponse, NominatimResponse } from './schema';
+import { POLL_MS, fetchRoster, formatTokens, roster, rosterError, type AgentRow } from './agents';
 import './styles.css';
 
 // ── WMO code → emoji ─────────────────────────────────────────────────────────
@@ -31,6 +32,8 @@ const [weatherTemp, setWeatherTemp] = createSignal('--°');
 const [weatherCity, setWeatherCity] = createSignal('');
 
 const [notifCount, setNotifCount] = createSignal(0);
+
+const [agentsOpen, setAgentsOpen] = createSignal(false);
 
 const [showPanel, setShowPanel] = createSignal(false);
 const [panelOpacity, setPanelOpacity] = createSignal(0.45);
@@ -157,6 +160,10 @@ function App() {
     const weatherTimer = setInterval(initWeather, 15 * 60 * 1000);
     onCleanup(() => clearInterval(weatherTimer));
 
+    fetchRoster();
+    const agentsTimer = setInterval(fetchRoster, POLL_MS);
+    onCleanup(() => clearInterval(agentsTimer));
+
     // Notifications subscription
     if (notifications) {
       notifications.onChange((items: unknown[]) => {
@@ -168,17 +175,35 @@ function App() {
   return html`
     <div class="panel" style=${() => panelStyle()}>
 
-      <!-- Row 1: Time (big) -->
-      <div class="row row-time">
-        <span class="time">${() => timeStr()}</span>
-      </div>
+      <!-- Rows 1-2: Time + date. The window is a fixed-height strip (the launch hook
+           sizes it) and an app cannot resize its own window, so the expanded agent
+           list takes this space instead of adding a row that would overflow it. -->
+      <${Show}
+        when=${() => agentsOpen() && roster()}
+        fallback=${html`
+          <div class="row row-time">
+            <span class="time">${() => timeStr()}</span>
+          </div>
+          <div class="row row-date">
+            <span class="date">${() => dateStr()}</span>
+          </div>
+        `}
+      >
+        <div class="agents-list">
+          <${For} each=${() => roster()?.agents ?? []}>
+            ${(a: AgentRow) => html`
+              <div class="agent-row" title=${a.id}>
+                <span class=${'agent-dot' + (a.busy ? ' busy' : '')}></span>
+                <span class="agent-type">${a.type}</span>
+                <span class="agent-label">${a.label}</span>
+                <span class="agent-tokens">${a.usage ? formatTokens(a.usage.total) : '—'}</span>
+              </div>
+            `}
+          </${For}>
+        </div>
+      </${Show}>
 
-      <!-- Row 2: Date -->
-      <div class="row row-date">
-        <span class="date">${() => dateStr()}</span>
-      </div>
-
-      <!-- Row 3: Weather + Notifications -->
+      <!-- Row 3: Weather + Notifications + Agents badge -->
       <div class="row row-bottom">
         <div class="weather-section">
           <span class="weather-icon">${() => weatherIcon()}</span>
@@ -196,6 +221,21 @@ function App() {
             <span class="notif-count">${() => String(notifCount())}</span>
           </${Show}>
         </div>
+
+        <span class="sep">·</span>
+
+        <button
+          class=${() => 'agents-badge' + (rosterError() ? ' agents-error' : '')}
+          title=${() => rosterError() ?? 'Running agents · session tokens (cache reads excluded). Click to expand.'}
+          onClick=${() => setAgentsOpen(!agentsOpen())}
+        >
+          ${() => {
+            const r = roster();
+            if (!r) return rosterError() ? '🤖 ?' : '🤖 …';
+            const tokens = r.sessionUsage ? formatTokens(r.sessionUsage.total) : '—';
+            return `🤖 ${r.agents.length}${r.busy ? ` (${r.busy})` : ''} · ${tokens}`;
+          }}
+        </button>
       </div>
 
     </div>
@@ -226,6 +266,32 @@ export default defineApp({
         panelBlurPx: panelBlurPx(),
       }),
     },
+    agents: {
+      description:
+        'Running agents from yaar://session/agents, polled every 5s: { count, busy, expanded, updatedAt, error, list: [{ id, type, label, busy, appId, usage }] }',
+      get: () => {
+        const r = roster();
+        return {
+          count: r?.agents.length ?? 0,
+          busy: r?.busy ?? 0,
+          expanded: agentsOpen(),
+          updatedAt: r?.updatedAt ?? null,
+          error: rosterError(),
+          list: r?.agents ?? [],
+        };
+      },
+    },
+    tokenUsage: {
+      description:
+        'Real token counters from the server. `session` is the lifetime total including disposed agents; `perAgent` covers live agents only. `total` = input + cacheWrite + output (cache reads excluded, matching Process Explorer).',
+      get: () => {
+        const r = roster();
+        return {
+          session: r?.sessionUsage ?? null,
+          perAgent: (r?.agents ?? []).map((a) => ({ id: a.id, type: a.type, label: a.label, usage: a.usage ?? null })),
+        };
+      },
+    },
     weather: {
       description: 'Current weather data: { icon, temp, city }',
       get: () => ({
@@ -236,6 +302,22 @@ export default defineApp({
     },
   },
   commands: {
+    refreshAgents: {
+      description: 'Re-read yaar://session/agents now instead of waiting for the 5s poll. Params: {}',
+      params: { type: 'object', properties: {} },
+      run: async () => {
+        await fetchRoster();
+        return { agents: roster()?.agents ?? [], error: rosterError() };
+      },
+    },
+    setAgentsExpanded: {
+      description: 'Expand or collapse the agent list under the badge. Params: { expanded: boolean }',
+      params: { type: 'object', properties: { expanded: { type: 'boolean' } }, required: ['expanded'] },
+      run: (p) => {
+        setAgentsOpen(!!p?.expanded);
+        return { expanded: agentsOpen() };
+      },
+    },
     refreshNow: {
       description: 'Force immediate clock refresh. Params: {}',
       params: { type: 'object', properties: {} },

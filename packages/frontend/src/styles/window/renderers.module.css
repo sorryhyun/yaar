@@ -58,6 +58,11 @@
   height: 100%;
   border: none;
   background: transparent;
+  /* Chromium paints an opaque backdrop (white for a light document) behind an iframe
+     whose own color-scheme differs from the embedding element's. The shell's :root is
+     dark and app documents declare none, so without this every app iframe gets one and
+     a transparent app (the dock) shows a white box. `normal` matches app documents. */
+  color-scheme: normal;
 }
 
 .iframeLoading {

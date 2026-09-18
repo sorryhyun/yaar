@@ -131,3 +131,70 @@ body {
 .notif-muted {
   opacity: 0.35;
 }
+
+/* ── Agents (badge in Row 3; the expanded list replaces Rows 1-2) ── */
+.agents-badge {
+  font: inherit;
+  font-size: var(--yaar-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--yaar-text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--yaar-radius-full);
+  padding: 0 6px;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.agents-badge:hover {
+  color: var(--yaar-text);
+  background: rgba(255, 255, 255, 0.12);
+}
+.agents-error {
+  color: var(--yaar-error);
+}
+.agents-list {
+  width: 100%;
+  /* Same height as the time + date rows it stands in for. */
+  height: 44px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: var(--yaar-text-xs);
+}
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px;
+  border-radius: var(--yaar-radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+}
+.agent-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--yaar-text-dim);
+  flex-shrink: 0;
+}
+.agent-dot.busy {
+  background: var(--yaar-success);
+}
+.agent-type {
+  color: var(--yaar-accent);
+  flex-shrink: 0;
+}
+.agent-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-tokens {
+  color: var(--yaar-text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}

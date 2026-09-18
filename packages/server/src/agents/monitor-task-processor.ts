@@ -16,6 +16,16 @@ import { enqueueOrReject } from './queue-refusal.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
 
+/** How much of a desktop turn's reply a follower is told. */
+const FOLLOWER_RESPONSE_CHARS = 300;
+
+function excerpt(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > FOLLOWER_RESPONSE_CHARS
+    ? flat.slice(0, FOLLOWER_RESPONSE_CHARS) + '…'
+    : flat;
+}
+
 const log = createLogger('MonitorTaskProcessor');
 
 /**
@@ -222,6 +232,10 @@ export class MonitorTaskProcessor {
     const resumeSessionId = this.ctx.savedThreadIds?.[canonicalMonitor];
     delete this.ctx.savedThreadIds?.[canonicalMonitor];
 
+    // The monitor agent does not read its own turns back from its timeline, but another
+    // reader of this desktop (a follower) has no other way to hear of them.
+    let response: string | undefined;
+
     await runAgentTurn(this.ctx, {
       agent,
       role: turnRole,
@@ -233,6 +247,20 @@ export class MonitorTaskProcessor {
       resumeSessionId,
       monitorId,
       ...getMonitorTurnOptions(this.ctx.providerType ?? ''),
+      onAssistantResponse: (content) => {
+        response = content;
+      },
+      onAfterRun: (recordedActions) => {
+        for (const follower of this.ctx.followersOf(monitorId)) {
+          follower.pushAI(
+            turnRole,
+            task.content,
+            recordedActions,
+            undefined,
+            response && excerpt(response),
+          );
+        }
+      },
       onFinally: () => {
         agent.session.setOutputCallback(null);
       },

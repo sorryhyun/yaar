@@ -68,15 +68,16 @@ env), and writes each field into `config/remote-control/`, which becomes the cwd
 | `allowedTools` | `permissions.allow` in `.claude/settings.json` |
 | `tools` / `disallowedTools` | `permissions.deny`: every CLI built-in the SDK set leaves out (Bash, Edit, Read, …) |
 | `model` | `model` in the same settings |
+| per-turn `<timeline>` + `<open_windows>` | a `UserPromptSubmit` **HTTP hook** in the same settings, pointed at `/mcp/hooks/user-prompt-submit` with the MCP headers' `${VAR}` refs (listed in `allowedEnvVars`) |
 
 Three things deliberately differ from a local monitor turn:
 
 - **Prompt.** `REMOTE_ORCHESTRATOR_PROMPT` swaps the intro and Visibility for remote ones: the user
   reads the chat reply, not the desktop. It also says the session runs on the user's machine,
-  which overrides the "cloud container, git push" section claude.ai adds to the base prompt. It
-  leaves out what a remote session never receives (Interaction Timeline, Action Reload Cache, User
-  Drawings), user-prompt dialogs nobody may be at the desktop to answer, its own Remote Control
-  section, and onboarding.
+  which overrides the "cloud container, git push" section claude.ai adds to the base prompt. The
+  timeline gets a remote section (Desktop Changes) with no relays in it. It leaves out what a
+  remote session never receives (Action Reload Cache, User Drawings), user-prompt dialogs nobody
+  may be at the desktop to answer, its own Remote Control section, and onboarding.
 - **Tools.** `reload_cached` / `list_reload_options` are dropped, since only local turns get
   `<reload_options>`, so `.mcp.json` lists just `verbs` and `messaging`.
 - **Env.** `ENABLE_TOOL_SEARCH=false`. The CLI otherwise defers MCP tools behind ToolSearch, which
@@ -86,6 +87,23 @@ Three things deliberately differ from a local monitor turn:
 Because the directory is regenerated from `buildSDKOptions` on each start, a change to the monitor
 agent's prompt, tools or env reaches remote sessions automatically. **Don't hand-edit
 `config/remote-control/`. It is overwritten.**
+
+### Per-turn context (`features/remote-control/turn-context.ts`)
+
+A local monitor turn is prefixed with `<timeline>` (what happened on the desktop since the last
+turn) and `<open_windows>`, because YAAR hands that turn to the provider. A remote turn goes from
+claude.ai straight into the CLI, so YAAR never sees it start. The CLI's `UserPromptSubmit` hook is
+the one place that runs before a turn. It POSTs to `/mcp/hooks/user-prompt-submit`, authenticated
+like MCP (bearer, then an agent token that must belong to an external principal). YAAR answers
+with the same prefix as `additionalContext`.
+
+The monitor agent's timeline is drained when it is read, so the remote session can't share it.
+Draining it here would take the entries away from the desktop's next turn. Instead
+`ContextPool.followTimeline` gives the remote agent a **follower** timeline: every push onto the
+monitor's timeline is copied into it, and each one drains independently. The desktop monitor
+agent's own turns also go to followers as `<ai>` entries (actions plus a 300-character reply
+excerpt), since those are other-agent activity from the remote side. The follower is created on
+the first hook call and detached when the host exits.
 
 ### 3. An identity outside the agent pool (`mcp/external-principals.ts`)
 
@@ -135,9 +153,10 @@ work.
 
 ## Known gaps
 
-- **Separate histories.** Remote turns are not in the monitor agent's `ContextTape`, so the desktop
-  monitor agent doesn't know what the remote one did, and vice versa. They share only the desktop
-  itself.
+- **Separate histories, one direction bridged.** Remote turns are not in the monitor agent's
+  `ContextTape`. The remote agent does hear about the desktop through its follower timeline, but
+  its own actions are not pushed onto the monitor's timeline, so the desktop monitor agent still
+  doesn't know what the remote one did.
 - **Invisible to the desktop UI.** No status-bar chip, and not listed in `yaar://session/agents`.
 - **No YAAR-side hooks.** The escape-repair `PreToolUse` hook and per-turn session logging don't
   apply.

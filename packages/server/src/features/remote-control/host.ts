@@ -240,6 +240,11 @@ export async function startRemoteControl(
     if (host === current) {
       revokeAgentToken(REMOTE_AGENT_ID);
       unregisterExternalPrincipal(REMOTE_AGENT_ID);
+      // Dynamic for the reason agent-config.ts's imports are: the session graph reaches back
+      // into the verb registry this module is loaded from.
+      void import('./turn-context.js').then((m) =>
+        m.releaseTurnContext(REMOTE_AGENT_ID, target.sessionId),
+      );
     }
     log.info('remote control exited', { pid: proc.pid, code });
     notifyChanged();

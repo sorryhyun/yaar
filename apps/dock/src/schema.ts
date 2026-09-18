@@ -1,8 +1,7 @@
-// Boundary schemas for untrusted external JSON fetched by the dock.
-//
-// These validate the responses from the two network calls in main.ts:
-//   - Open-Meteo current-weather forecast
-//   - Nominatim reverse-geocoding
+// Boundary schemas for untrusted JSON read by the dock:
+//   - Open-Meteo current-weather forecast (main.ts)
+//   - Nominatim reverse-geocoding (main.ts)
+//   - the yaar://session/agents roster (agents.ts)
 // Only the fields the dock actually reads are validated. Loose objects so
 // additive upstream fields survive; nested/leaf fields are optional because
 // either service may omit them, and the dock degrades gracefully rather than
@@ -21,6 +20,33 @@ export const OpenMeteoResponse = z.looseObject({
       weather_code: z.optional(z.number()),
     })
   ),
+});
+
+// `list('yaar://session/agents')` — the roster Process Explorer renders. The
+// server owns this shape and may run a different version, so every counter is
+// optional and rows are parsed one at a time in agents.ts: one unreadable agent
+// costs that row, not the badge.
+export const AgentUsage = z.looseObject({
+  inputTokens: z.optional(z.number()),
+  outputTokens: z.optional(z.number()),
+  cacheReadTokens: z.optional(z.number()),
+  cacheWriteTokens: z.optional(z.number()),
+});
+
+export const AgentEntry = z.looseObject({
+  id: z.string(),
+  type: z.string(),
+  label: z.optional(z.string()),
+  busy: z.optional(z.boolean()),
+  appId: z.optional(z.string()),
+  usage: z.optional(AgentUsage),
+});
+
+export const AgentRoster = z.looseObject({
+  totalAgents: z.optional(z.number()),
+  busyAgents: z.optional(z.number()),
+  usage: z.optional(AgentUsage),
+  agents: z.optional(z.array(z.unknown())),
 });
 
 // Nominatim reverse geocode — main.ts reads data.address.{city,town,county}.

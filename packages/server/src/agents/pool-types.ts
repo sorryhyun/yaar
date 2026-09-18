@@ -163,6 +163,8 @@ export interface TurnContext {
  */
 export interface TimelineAccess {
   timelineFor(monitorId: string): InteractionTimeline;
+  /** Readers of the monitor outside the pool (`ContextPool.followTimeline`). */
+  followersOf(monitorId: string): Iterable<InteractionTimeline>;
 }
 
 /** What `MonitorTaskProcessor` needs: the monitor queues, the background budget, threads. */
