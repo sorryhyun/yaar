@@ -74,7 +74,8 @@ function wrapAppValue(value: unknown, read?: { label: string; options?: ReadOpti
   if (value === undefined || value === null) return ok(read ? 'null' : 'Done.');
 
   if (read && hasLineFilter(read.options) && !isContentBlocks(value)) {
-    const text = applyReadOptionsToValue(value, read.label, read.options);
+    // App state walks paths (`handleAppQuery`), so a search's paths are addressable here.
+    const text = applyReadOptionsToValue(value, read.label, read.options, true);
     return { content: [{ type: 'text', text: truncateText(text) }], readFiltered: true };
   }
 

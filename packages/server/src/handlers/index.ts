@@ -189,11 +189,18 @@ export function registerVerbTools(server: McpServer): void {
         pattern: z
           .string()
           .optional()
-          .describe('Regex pattern — returns only matching lines with line numbers'),
+          .describe(
+            'Regex pattern — returns only matching lines with line numbers. On an object/array ' +
+              'window state (without `lines`) it searches one "path: value" line per leaf ' +
+              'instead, each path appendable to the read URI',
+          ),
         context: z
           .number()
           .optional()
-          .describe('Context lines around pattern matches (default: 0)'),
+          .describe(
+            'Context lines around pattern matches (default: 0); on a state path search, ' +
+              'sibling values on each side under the same parent',
+          ),
         chars: z
           .string()
           .optional()

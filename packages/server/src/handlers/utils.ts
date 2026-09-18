@@ -11,6 +11,7 @@ import type { SessionId } from '../session/types.js';
 import type { ContextPool } from '../agents/context-pool.js';
 import { MIME_TYPES } from '../config.js';
 import { extname } from 'path';
+import { searchValuePaths } from '../features/window/state-path.js';
 
 /**
  * Thrown when the caller names a session the hub doesn't hold. This is transient,
@@ -335,15 +336,23 @@ export const CHAR_PAGE_SIZE = 50_000;
 /**
  * {@link applyReadOptions} for a value that is not a file — a window's state, say.
  *
- * A string is filtered as it is. Anything else is filtered as *indented* JSON whatever its
- * size, overriding {@link jsonText}: compact JSON is one line, and a line filter over one
- * line returns all of it or nothing.
+ * A string is filtered as it is. A `pattern` alone over anything else is a path search
+ * (`searchValuePaths`): one `path: value` line per leaf, so a match says where it is and
+ * the pattern is not written against JSON punctuation the model never saw. `lines` (with
+ * or without `pattern`) and `chars` filter *indented* JSON whatever its size, overriding
+ * {@link jsonText}: compact JSON is one line, and a line filter over one line returns all
+ * of it or nothing.
  */
 export function applyReadOptionsToValue(
   value: unknown,
   label: string,
   options?: import('./uri-registry.js').ReadOptions,
+  /** Whether `label` accepts a path after it — see `searchValuePaths`. */
+  addressable = false,
 ): string {
+  if (typeof value !== 'string' && options?.pattern && !options.lines && !options.chars) {
+    return searchValuePaths(value, label, options.pattern, options.context ?? 0, addressable);
+  }
   const text = typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? 'null');
   return applyReadOptions(text, label, options);
 }

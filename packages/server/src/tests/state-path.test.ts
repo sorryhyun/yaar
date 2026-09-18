@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { splitStatePath, selectStatePath } from '../features/window/state-path.js';
+import {
+  splitStatePath,
+  selectStatePath,
+  searchValuePaths,
+} from '../features/window/state-path.js';
 
 const scene = {
   nodes: [
@@ -74,5 +78,51 @@ describe('selectStatePath', () => {
 
     const leaf = selectStatePath(scene, 'scene', ['camera', 'fov', 'x']);
     expect(!leaf.ok && leaf.message).toContain('number, which has no parts');
+  });
+});
+
+describe('searchValuePaths', () => {
+  const label = 'yaar://windows/studio-3d/state/scene';
+
+  test('one path: value line per matching leaf, with no JSON punctuation to guess at', () => {
+    const text = searchValuePaths(scene, label, 'name: "HandR');
+    expect(text).toContain('3 of');
+    expect(text).toContain('nodes/palm/name: "HandR Palm"');
+    expect(text).toContain('nodes/thumb0/children/seg0/name: "HandR Thumb Seg0"');
+  });
+
+  test('every listed path reads back through selectStatePath', () => {
+    const lines = searchValuePaths(scene, label, '.').split('\n').slice(1);
+    for (const line of lines) {
+      const path = line.slice(0, line.indexOf(': '));
+      const walked = selectStatePath(scene, 'scene', splitStatePath(`scene/${path}`).path);
+      expect(walked.ok).toBe(true);
+    }
+  });
+
+  test('an element without a unique id is spelled by position', () => {
+    const value = { rows: [{ id: 'a' }, { id: 'a' }, { v: 1 }] };
+    const text = searchValuePaths(value, 'X', '.');
+    expect(text).toContain('rows/__idx/0/id: "a"');
+    expect(text).toContain('rows/__idx/2/v: 1');
+  });
+
+  test('context is siblings under the same parent, containers summarized', () => {
+    const text = searchValuePaths(scene, label, 'Thumb Seg0', 1);
+    expect(text).toContain(
+      'nodes/thumb0/children/seg0/\n  id: "seg0"\n  name: "HandR Thumb Seg0"\n  geometry: {radius}',
+    );
+  });
+
+  test('only an addressable label is offered as a read prefix', () => {
+    expect(searchValuePaths(scene, label, 'fov', 0, true)).toContain(`read ${label}/{path}`);
+    const plain = searchValuePaths(scene, label, 'fov');
+    expect(plain).toContain('paths are relative to it');
+    expect(plain).not.toContain('{path}');
+  });
+
+  test('no match says what was searched, and a bad regex says so', () => {
+    expect(searchValuePaths(scene, label, 'nope')).toContain('No matches for /nope/');
+    expect(searchValuePaths(scene, label, '(')).toContain('Invalid regex');
   });
 });

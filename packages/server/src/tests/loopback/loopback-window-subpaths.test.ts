@@ -921,14 +921,17 @@ describe('S10 — a state read honors lines/pattern, or says it did not', () => 
     expect(text).not.toContain('plain line');
   });
 
-  it('filters an object state as indented JSON, and carries no unfiltered copy', async () => {
+  it('searches an object state as path: value lines, and carries no unfiltered copy', async () => {
     const { call } = await bootTwoAppWindows();
 
     const result = await call('read', 'yaar://windows/memo/state/settings', undefined, {
       pattern: 'theme',
     });
 
-    expect(textOf(result)).toContain('"theme": "dark"');
+    // One line per leaf, spelled as a path the read URI accepts — not an indented-JSON
+    // line whose `"key": ` spacing the model, shown the value compact, never saw.
+    expect(textOf(result)).toContain('theme: "dark"');
+    expect(textOf(result)).not.toContain('"theme"');
     expect(textOf(result)).not.toContain('fontSize');
     // The model reads `structuredContent` over any text beside it — a full copy riding
     // along would undo the filter for exactly the reader that asked for it.
