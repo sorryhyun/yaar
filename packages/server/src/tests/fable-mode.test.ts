@@ -30,7 +30,7 @@ describe('fable mode on (FABLE=1)', () => {
   it('runs the monitor agent on Fable', () => {
     process.env.FABLE = '1';
     expect(getMonitorTurnOptions('claude').model).toBe(FABLE_MODEL);
-    expect(getMonitorTurnOptions('codex').model).toBe('gpt-5.6-sol');
+    expect(getMonitorTurnOptions('codex').model).toBe('gpt-6-astra');
   });
 
   it('pins every agent below the monitor to Opus', () => {

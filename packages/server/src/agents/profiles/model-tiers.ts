@@ -38,10 +38,15 @@ export function resolveAgentModel(agentType?: string): string | undefined {
   return subordinateModel(AGENT_TYPE_MODELS[agentType] ?? agentType); // allow full model ID as fallback
 }
 
-/** Map Claude capability tiers to their Codex equivalents. */
+/**
+ * Map Claude capability tiers to their Codex equivalents. Fable is its own tier on both
+ * sides: only fable mode's monitor agent names it, so under Codex that monitor runs on
+ * Astra while the Opus-pinned agents below it run on Sol.
+ */
 export function claudeModelToCodex(model?: string): string | undefined {
   if (!model) return undefined;
-  if (model.includes('fable') || model.includes('opus')) return 'gpt-5.6-sol';
+  if (model.includes('fable')) return 'gpt-6-astra';
+  if (model.includes('opus')) return 'gpt-5.6-sol';
   if (model.includes('sonnet')) return 'gpt-5.6-terra';
   return undefined;
 }

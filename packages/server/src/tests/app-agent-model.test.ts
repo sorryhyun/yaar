@@ -18,10 +18,17 @@ describe('app agent model selection', () => {
 
     expect(profile.model).toBe('claude-sonnet-5');
     expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-terra');
-    expect(profile.appStateKeys).toEqual(['appearance', 'display', 'nowIso', 'weather']);
+    expect(profile.appStateKeys).toEqual([
+      'agents',
+      'appearance',
+      'display',
+      'nowIso',
+      'tokenUsage',
+      'weather',
+    ]);
   });
 
-  it('preserves an explicit Opus app tier and maps it to Terra', async () => {
+  it('preserves an explicit Opus app tier and maps it to Sol', async () => {
     const profile = await buildAppAgentProfile('devtools');
 
     expect(profile.model).toBe('claude-opus-5');

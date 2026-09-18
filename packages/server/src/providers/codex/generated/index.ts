@@ -12,6 +12,7 @@ export type { ClientNotification } from "./ClientNotification.js";
 export type { ClientRequest } from "./ClientRequest.js";
 export type { CodexResponseHandoffMode } from "./CodexResponseHandoffMode.js";
 export type { CollaborationMode } from "./CollaborationMode.js";
+export type { ConfigurationReasoning } from "./ConfigurationReasoning.js";
 export type { ContentItem } from "./ContentItem.js";
 export type { ConversationGitInfo } from "./ConversationGitInfo.js";
 export type { ConversationSummary } from "./ConversationSummary.js";

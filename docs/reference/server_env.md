@@ -33,8 +33,9 @@ whatever its `agentType`, and every sub-agent, including one spawned with an exp
 Off, the usual tiers apply (monitor and session agent Opus, apps Sonnet unless declared).
 
 The flag is read per turn (`isFableMode()`), so the prewarmed monitor stream and the first real
-turn agree. Fable and Opus both map to `gpt-5.6-sol` on Codex, so under `PROVIDER=codex` the
-only visible effect is app and sub-agents moving from Terra to Sol.
+turn agree. Under `PROVIDER=codex` (e.g. `FABLE=1 make codex-dev`) Fable maps to `gpt-6-astra`
+and Opus to `gpt-5.6-sol`, so the monitor agent runs on Astra and app and sub-agents move from
+Terra to Sol.
 
 **Source:** `packages/server/src/agents/profiles/model-tiers.ts`, `packages/server/src/agents/profiles/turn-options.ts`
 

@@ -18,7 +18,7 @@
  * generated against and `codex-version.test.ts` refuses to let it ship.
  *
  * So the floor moves only when a release actually breaks something we send or read — not
- * on every codex version. It currently sits at 0.145.0 with bindings from 0.150.1.
+ * on every codex version. It currently sits at 0.145.0 with bindings from 0.155.0.
  *
  * 0.147.0 is the first regeneration whose diff is *not* purely additive, so the "only adds
  * fields" reasoning above does not cover it on its own and the floor was re-derived by hand.
@@ -42,6 +42,17 @@
  * `thread/revert` and `server/diagnostics` request families we never call. The one addition
  * that reached non-generated code is `CodexErrorInfo.misalignmentPolicyViolation`, for which
  * the total `Record` in `errors.ts` forced a sentence — the guard working as designed.
+ *
+ * 0.155.0 is the third. Its only non-additive changes are two more `AbsolutePathBuf` →
+ * `LegacyAppPathString` retypes (`GuardianApprovalReviewAction`'s `command.cwd`,
+ * `PermissionsRequestApprovalParams.cwd`), both approval-request shapes YAAR never reads.
+ * The rest is new: `userVerification/*`, `thread/attachment/*`, `memory/status`,
+ * `plugin/reconcile` and `turn/settings/update` requests; `modelProvider/authRecovery*` and
+ * `thread/attachment/updated` notifications; `ThreadItem.functionCallOutput`;
+ * `ResponseItem.configuration_update`; and optional fields on `Thread`, `TurnStartParams` and
+ * others. Two additions reached `errors.ts`: `CodexErrorInfo.rateLimitExceeded` (the total
+ * `Record` forced a sentence again) and `TurnError.misalignment`, whose explanation is now
+ * surfaced beside the policy code.
  *
  * The additive half worth knowing about: `InitializeCapabilities.extensions`, the successor
  * to the `mcpServerOpenaiFormElicitation` flag and the seam a client declares MCP extensions

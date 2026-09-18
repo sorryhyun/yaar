@@ -35,6 +35,7 @@ const CODEX_ERROR_TEXT: Record<CodexErrorCode, string> = {
   contextWindowExceeded: 'The conversation exceeded the model context window.',
   sessionBudgetExceeded: 'The session budget was exhausted.',
   usageLimitExceeded: 'Your Codex usage limit is exhausted.',
+  rateLimitExceeded: 'The Codex API rate limit was hit.',
   serverOverloaded: 'The Codex API is overloaded.',
   cyberPolicy: 'The request was declined by the cyber-activity policy.',
   misalignmentPolicyViolation: 'The request was declined by the misalignment policy.',
@@ -97,6 +98,11 @@ export function describeTurnError(
     parts.push(err.message);
   }
   if (err?.additionalDetails) parts.push(err.additionalDetails);
+  // A misalignment block carries its own public explanation. Its `steer` (the
+  // continuation prompt Codex offers) is not surfaced: YAAR has no confirm-and-resume
+  // flow, and replaying it unasked would override the block.
+  const explanation = err?.misalignment?.detailedExplanation;
+  if (explanation && !parts.includes(explanation)) parts.push(explanation);
   return {
     text: parts.length ? parts.join(' ') : fallback,
     code: info?.code ?? 'turn_failed',
