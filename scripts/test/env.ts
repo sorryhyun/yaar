@@ -114,6 +114,11 @@ process.env.YAAR_USER_APPS = scratchDir('user-apps');
 // (`detectUserMcpServers()` in `config/providers/codex.ts`). An empty dir is the pinned answer;
 // a suite that wants a config writes one and points this at it.
 process.env.CODEX_HOME = scratchDir('codex-home');
+// Same shape, for the other CLI: unset means `~/.claude.json`, the developer's real Claude Code
+// config — which `writeRemoteAgentConfig()` *writes* to, to record workspace trust for the
+// directory it generates. A scratch dir is the pinned answer, and it is what keeps a test run
+// out of the file the developer's own CLI is reading.
+process.env.CLAUDE_CONFIG_DIR = scratchDir('claude-config');
 
 // One process, one set of dirs — removed on the way out. `exit` (not a signal handler) so a
 // suite that is killed mid-run leaves them in the OS temp dir rather than half-deleted under

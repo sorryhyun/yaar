@@ -11,7 +11,7 @@ import {
   ORCHESTRATOR_PROMPT,
   REMOTE_ORCHESTRATOR_PROMPT,
 } from '../../agents/profiles/orchestrator/index.js';
-import { readFileSync } from 'fs';
+import { readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { resolveAgentToken, revokeAgentToken } from '../../mcp/agent-tokens.js';
 import { initMcpServer } from '../../mcp/server.js';
@@ -141,5 +141,34 @@ describe('writeRemoteAgentConfig', () => {
     expect(env.MCP_SDK_GENERATION).toBe('v2');
     // YAAR's verbs load up front, as on the SDK path, instead of behind ToolSearch.
     expect(env.ENABLE_TOOL_SEARCH).toBe('false');
+  });
+
+  test('the generated directory inherits no config from the checkout around it', async () => {
+    const { cwd, env } = await writeRemoteAgentConfig('0');
+    const settings = JSON.parse(readFileSync(join(cwd, '.claude', 'settings.json'), 'utf8'));
+
+    // Subagents, skills and settings.local.json are searched from the cwd up to the
+    // repository root. This directory is one, so the search never reaches YAAR's own
+    // `.claude/agents/*` — a monitor agent is not offered `app-dev` or `reviewer`.
+    expect(readFileSync(join(cwd, '.git', 'HEAD'), 'utf8')).toBe('ref: refs/heads/main\n');
+    expect(readFileSync(join(cwd, '.git', 'config'), 'utf8')).toContain('repositoryformatversion');
+    // CLAUDE.md's walk has no such floor, so it is turned off outright.
+    expect(env.CLAUDE_CODE_DISABLE_CLAUDE_MDS).toBe('1');
+    expect(settings.disableBundledSkills).toBe(true);
+  });
+
+  test('and is recorded as a trusted workspace, since it no longer inherits one', async () => {
+    const { cwd } = await writeRemoteAgentConfig('0');
+    const file = join(process.env.CLAUDE_CONFIG_DIR!, '.claude.json');
+    const config = JSON.parse(readFileSync(file, 'utf8'));
+
+    // Trust is keyed by the git root, so severing the checkout severed the accepted dialog
+    // this directory was riding on — and the CLI exits on the spot without one, which the
+    // desktop can only show as a host that dies the moment it is switched on.
+    expect(config.projects[cwd].hasTrustDialogAccepted).toBe(true);
+    // One path, and no other entry disturbed.
+    expect(Object.keys(config.projects)).toEqual([cwd]);
+    // Replaced by a rename, so the mode is ours to set — this file holds account state.
+    expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 });
