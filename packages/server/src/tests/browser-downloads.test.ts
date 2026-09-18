@@ -55,8 +55,26 @@ function capture(onComplete: (d: CapturedDownload) => void = () => {}): Download
   return c;
 }
 
-/** Give the watcher and the settle loop room to run. */
-const settle = () => Bun.sleep(600);
+/**
+ * Wait until the watcher and the settle loop have produced what `check` looks for.
+ *
+ * Polled, not slept: a watch event's latency is the machine's, and under a full test
+ * run it outgrew the fixed 600ms this used to be. The common case returns in the
+ * ~150ms one settle sample takes.
+ */
+async function until(check: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(`condition not met within ${timeoutMs}ms`);
+    await Bun.sleep(20);
+  }
+}
+
+/**
+ * For asserting that nothing happened, which no condition can wait for. Longer than one
+ * settle sample, so a record that was going to be made would have been.
+ */
+const quiet = () => Bun.sleep(400);
 
 afterEach(async () => {
   for (const c of live) await c.dispose();
@@ -72,7 +90,7 @@ describe('DownloadCapture', () => {
     expect(cap.available).toBe(true);
 
     await landFile(dir(), '2609.02367v1.pdf', 2048);
-    await settle();
+    await until(() => seen.length > 0);
 
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({
@@ -96,14 +114,13 @@ describe('DownloadCapture', () => {
     await cap.attach(cdp);
 
     await landFile(dir(), '2609.20511.pdf', 2048);
-    await settle();
+    await until(() => seen.length === 1);
     const first = cap.take('2609.20511.pdf');
     expect(first).toBeDefined();
     await rm(first!.file);
-    await settle();
 
     await landFile(dir(), '2609.20511.pdf', 4096);
-    await settle();
+    await until(() => seen.length === 2);
     expect(seen.map((d) => d.bytes)).toEqual([2048, 4096]);
     expect(cap.list().map((d) => d.id)).toEqual(['2609.20511.pdf']);
   });
@@ -114,9 +131,8 @@ describe('DownloadCapture', () => {
     await cap.attach(cdp);
 
     await landFile(dir(), 'paper.pdf', 16);
-    await settle();
+    await until(() => cap.list().length === 1);
     await rm(cap.take('paper.pdf')!.file);
-    await settle();
 
     const waited = cap.waitForNext(Date.now(), 3_000);
     await landFile(dir(), 'paper.pdf', 32);
@@ -130,11 +146,11 @@ describe('DownloadCapture', () => {
     await cap.attach(cdp);
 
     await writeFile(join(dir(), 'big.pdf.crdownload'), Buffer.alloc(4096, 1));
-    await settle();
+    await quiet();
     expect(seen).toEqual([]);
 
     await rename(join(dir(), 'big.pdf.crdownload'), join(dir(), 'big.pdf'));
-    await settle();
+    await until(() => seen.length > 0);
     expect(seen.map((d) => d.id)).toEqual(['big.pdf']);
   });
 
@@ -150,7 +166,7 @@ describe('DownloadCapture', () => {
       suggestedFilename: 'paper.pdf',
     });
     await landFile(dir(), 'paper.pdf', 16);
-    await settle();
+    await until(() => seen.length > 0);
     expect(seen[0]?.url).toBe('https://arxiv.test/pdf/2609.02367v1');
   });
 
@@ -162,7 +178,7 @@ describe('DownloadCapture', () => {
     const { cdp, dir } = fakeCdp();
     await cap.attach(cdp);
     await landFile(dir(), 'silent.zip', 32);
-    await settle();
+    await until(() => seen.length > 0);
     expect(seen.map((d) => d.id)).toEqual(['silent.zip']);
     expect(seen[0]?.url).toBe('');
   });
@@ -173,7 +189,7 @@ describe('DownloadCapture', () => {
     await cap.attach(cdp);
     // Straight into the directory, no watch event of our making — the sweep finds it.
     await writeFile(join(dir(), 'earlier.pdf'), Buffer.alloc(64, 1));
-    await settle();
+    await until(() => cap.list().length > 0);
     expect(cap.list().map((d) => d.id)).toContain('earlier.pdf');
   });
 
@@ -205,7 +221,7 @@ describe('DownloadCapture', () => {
     const { cdp, dir } = fakeCdp();
     await cap.attach(cdp);
     await landFile(dir(), 'a.zip', 8);
-    await settle();
+    await until(() => cap.list().length > 0);
 
     expect(cap.take('a.zip')?.bytes).toBe(8);
     expect(cap.take('a.zip')).toBeUndefined();
@@ -236,7 +252,7 @@ describe('DownloadCapture', () => {
     await cap.attach(cdp);
 
     await landFile(dir(), 'page-pressed-it.pdf', 12);
-    await settle();
+    await until(() => announced.length > 0);
     expect(announced.map((d) => d.id)).toEqual(['page-pressed-it.pdf']);
     expect(cap.list().map((d) => d.id)).toEqual(['page-pressed-it.pdf']);
   });
@@ -248,7 +264,7 @@ describe('DownloadCapture', () => {
 
     // The previous download, not the one being asked for.
     await landFile(dir(), 'old.pdf', 4);
-    await settle();
+    await until(() => cap.list().length > 0);
 
     const waiting = cap.waitForNext(Date.now() + 1, 5000);
     await Bun.sleep(20);
