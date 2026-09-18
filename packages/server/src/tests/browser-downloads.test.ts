@@ -11,7 +11,7 @@
  * injected `<a download>` click) are exercised by driving the app, not here.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
-import { rename, writeFile } from 'node:fs/promises';
+import { rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadCapture, type CapturedDownload } from '../lib/browser/downloads.js';
 import type { CDPClient } from '../lib/browser/cdp.js';
@@ -84,6 +84,43 @@ describe('DownloadCapture', () => {
       bytes: 2048,
     });
     expect(cap.list().map((d) => d.id)).toEqual(['2609.02367v1.pdf']);
+  });
+
+  it('captures the same name again once the first was claimed', async () => {
+    // A claim deletes the capture, so Chrome names the next download of the same paper
+    // exactly as it named the first. That second file is a new download, not a repeat
+    // event for the old one.
+    const seen: CapturedDownload[] = [];
+    const cap = capture((d) => seen.push(d));
+    const { cdp, dir } = fakeCdp();
+    await cap.attach(cdp);
+
+    await landFile(dir(), '2609.20511.pdf', 2048);
+    await settle();
+    const first = cap.take('2609.20511.pdf');
+    expect(first).toBeDefined();
+    await rm(first!.file);
+    await settle();
+
+    await landFile(dir(), '2609.20511.pdf', 4096);
+    await settle();
+    expect(seen.map((d) => d.bytes)).toEqual([2048, 4096]);
+    expect(cap.list().map((d) => d.id)).toEqual(['2609.20511.pdf']);
+  });
+
+  it('resolves a waiter for a same-named second download', async () => {
+    const cap = capture();
+    const { cdp, dir } = fakeCdp();
+    await cap.attach(cdp);
+
+    await landFile(dir(), 'paper.pdf', 16);
+    await settle();
+    await rm(cap.take('paper.pdf')!.file);
+    await settle();
+
+    const waited = cap.waitForNext(Date.now(), 3_000);
+    await landFile(dir(), 'paper.pdf', 32);
+    expect((await waited).bytes).toBe(32);
   });
 
   it('ignores a download still in progress', async () => {

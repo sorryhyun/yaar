@@ -85,8 +85,22 @@ export class DownloadCapture {
   private dir: string | null = null;
   private armed = false;
   private watcher: FSWatcher | null = null;
-  /** Names already turned into a record, so two watch events cost one record. */
-  private seen = new Set<string>();
+  /**
+   * Which *file* each name last became a record for, as `ino:mtimeMs`, so the several
+   * watch events one completion produces cost one record.
+   *
+   * Keyed by file, not by name: a claim deletes the capture, and Chrome then gives the
+   * next download of the same paper the same name. A name-only set filed that second
+   * download as already seen — the PDF viewer's download arrow went silent, and
+   * `download { url }` waited out its timeout with the bytes on disk.
+   */
+  private seen = new Map<string, string>();
+  /**
+   * Names being considered right now → whether another event arrived meanwhile. Checked
+   * synchronously, so concurrent events for one name run one look, plus one re-look if
+   * something changed during it.
+   */
+  private pending = new Map<string, boolean>();
   /** `downloadWillBegin` metadata, keyed by the name Chrome said it would use. */
   private announced = new Map<string, string>();
   private finished: CapturedDownload[] = [];
@@ -189,33 +203,44 @@ export class DownloadCapture {
    * completion signal and arrives as its own watch event. The size-stability loop after
    * it is insurance for the case where a file appears under its final name from the
    * start — cheap, because in the common case the very first sample is already stable.
-   *
-   * The name is marked seen *before* the awaits, so the several watch events one rename
-   * produces cost one record rather than several.
    */
   private async notice(name: string): Promise<void> {
-    if (!this.dir || !name || name.endsWith(PARTIAL_SUFFIX) || this.seen.has(name)) return;
-    this.seen.add(name);
-
-    const file = join(this.dir, name);
-    let bytes = -1;
-    for (let i = 0; i < SETTLE_ATTEMPTS; i++) {
-      let size: number;
-      try {
-        size = (await stat(file)).size;
-      } catch {
-        // Gone again — a temp file Chrome renamed away. Not a download.
-        this.seen.delete(name);
-        return;
-      }
-      if (size > 0 && size === bytes) break;
-      bytes = size;
-      await Bun.sleep(SETTLE_INTERVAL_MS);
-    }
-    if (bytes <= 0) {
-      this.seen.delete(name);
+    if (!this.dir || !name || name.endsWith(PARTIAL_SUFFIX)) return;
+    if (this.pending.has(name)) {
+      this.pending.set(name, true);
       return;
     }
+    this.pending.set(name, false);
+    try {
+      await this.consider(this.dir, name);
+    } finally {
+      const again = this.pending.get(name);
+      this.pending.delete(name);
+      if (again) void this.notice(name);
+    }
+  }
+
+  private async consider(dir: string, name: string): Promise<void> {
+    const file = join(dir, name);
+    let bytes = -1;
+    let key = '';
+    for (let i = 0; i < SETTLE_ATTEMPTS; i++) {
+      let st: Awaited<ReturnType<typeof stat>>;
+      try {
+        st = await stat(file);
+      } catch {
+        // Gone — a temp file Chrome renamed away, or a capture its claimer removed.
+        return;
+      }
+      key = `${st.ino}:${st.mtimeMs}`;
+      // The file a record was already made of: another event for the same completion.
+      if (this.seen.get(name) === key) return;
+      if (st.size > 0 && st.size === bytes) break;
+      bytes = st.size;
+      await Bun.sleep(SETTLE_INTERVAL_MS);
+    }
+    if (bytes <= 0) return;
+    this.seen.set(name, key);
 
     const entry: CapturedDownload = {
       id: name,
@@ -240,8 +265,8 @@ export class DownloadCapture {
    * Only downloads nobody asked for reach `onComplete`, which is exactly the set the
    * announcement exists for: the ones Chrome performed on the page's initiative.
    *
-   * An evicted name stays in `seen`. Its file is being removed, and re-noticing a name
-   * whose file is on its way out would file the same download twice.
+   * An evicted file stays in `seen`: a watch event arriving before its removal lands
+   * finds the same file and is dropped, rather than filing the download twice.
    */
   private record(entry: CapturedDownload): void {
     const waiter = this.waiters.find((w) => entry.at >= w.since);
@@ -324,6 +349,7 @@ export class DownloadCapture {
     this.watcher = null;
     this.finished = [];
     this.seen.clear();
+    this.pending.clear();
     this.announced.clear();
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
