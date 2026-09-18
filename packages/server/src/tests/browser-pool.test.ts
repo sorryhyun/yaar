@@ -410,6 +410,43 @@ describe('BrowserPool', () => {
     expect(session.isCrashed).toBe(false);
   });
 
+  it('follows navigations the tab makes on its own (a human in the live view)', async () => {
+    mockCdpOn.mockClear();
+    const { session } = await pool.createSession('live');
+    const handler = (event: string) =>
+      (mockCdpOn.mock.calls as unknown as [string, (p: unknown) => void][])
+        .filter(([name]) => name === event)
+        .at(-1)![1];
+    const updates: string[] = [];
+    session.on('updated', (u: { url: string }) => updates.push(u.url));
+
+    // A sub-frame moving is not the tab moving.
+    handler('Page.frameNavigated')({
+      frame: { id: 'sub', parentId: 'main', url: 'https://ads.example/x' },
+    });
+    expect(session.currentUrl).not.toBe('https://ads.example/x');
+
+    handler('Page.frameNavigated')({
+      frame: { id: 'main', url: 'https://arxiv.org/pdf/2609.20511' },
+    });
+    expect(session.currentUrl).toBe('https://arxiv.org/pdf/2609.20511');
+
+    handler('Page.navigatedWithinDocument')({
+      frameId: 'main',
+      url: 'https://arxiv.org/pdf/2609.20511#page=3',
+    });
+    expect(session.currentUrl).toBe('https://arxiv.org/pdf/2609.20511#page=3');
+
+    // An unchanged address is not news.
+    handler('Page.frameNavigated')({
+      frame: { id: 'main', url: 'https://arxiv.org/pdf/2609.20511', urlFragment: '#page=3' },
+    });
+    expect(updates).toEqual([
+      'https://arxiv.org/pdf/2609.20511',
+      'https://arxiv.org/pdf/2609.20511#page=3',
+    ]);
+  });
+
   it('lists live and suspended sessions for Process Explorer', async () => {
     const { session } = await pool.createSession('one');
     session.currentUrl = 'https://example.com/one';

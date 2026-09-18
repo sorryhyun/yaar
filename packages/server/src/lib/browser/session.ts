@@ -260,11 +260,29 @@ export class BrowserSession extends EventEmitter {
     // Nothing may `Network.disable` on this socket later.
     await cdp.send('Network.enable');
     this.blockStats = { blocked: 0, requests: 0 };
+    let mainFrameId: string | undefined;
     // Counters are per page, not per socket: the badge that shows them resets on
     // navigation, and "blocked since some earlier tab" is not a number anyone wants.
     cdp.on('Page.frameNavigated', (params: unknown) => {
-      const frame = (params as { frame?: { parentId?: string } }).frame;
-      if (frame && !frame.parentId) this.blockStats = { blocked: 0, requests: 0 };
+      const frame = (
+        params as { frame?: { id?: string; parentId?: string; url?: string; urlFragment?: string } }
+      ).frame;
+      if (!frame || frame.parentId) return;
+      mainFrameId = frame.id;
+      this.blockStats = { blocked: 0, requests: 0 };
+      // The address has to come from the tab, not from whoever caused the move: a
+      // human clicking through the live screencast is forwarded as raw input, so no
+      // operation here ever learns where it went. Without this, `download` with no
+      // url saved the page before — arXiv's abstract HTML instead of the PDF on screen.
+      if (frame.url) this.observeLocation(frame.url + (frame.urlFragment ?? ''));
+    });
+    cdp.on('Page.navigatedWithinDocument', (params: unknown) => {
+      const { frameId, url } = params as { frameId?: string; url?: string };
+      if (url && frameId === mainFrameId) this.observeLocation(url);
+    });
+    // `frameNavigated` carries no title; the loaded document does.
+    cdp.on('Page.loadEventFired', () => {
+      void this.refreshLocation();
     });
     cdp.on('Network.requestWillBeSent', (params: unknown) => {
       this.blockStats.requests++;
@@ -446,6 +464,13 @@ export class BrowserSession extends EventEmitter {
     } catch {
       /* a tab that won't answer keeps the address it was adopted at */
     }
+  }
+
+  /** Take an address the tab reported on its own, announcing it only if it moved. */
+  private observeLocation(url: string): void {
+    if (url === this.currentUrl) return;
+    this.currentUrl = url;
+    this.notifyUpdate();
   }
 
   private touch() {
