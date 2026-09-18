@@ -142,6 +142,8 @@ export class SessionLogger {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private metadataTimer: ReturnType<typeof setTimeout> | null = null;
   private metadataDirty = false;
+  // Files whose last append failed and whose lines were put back for one retry.
+  private retriedFiles = new Set<string>();
 
   // Blobs awaiting write (sha256 → bytes), and the hashes already stored this session.
   // `knownBlobs` is what makes a re-read of the same resource cost a set lookup instead
@@ -281,12 +283,30 @@ export class SessionLogger {
       }
     }
 
-    // Write each file's accumulated lines in a single appendFile call
-    const writes = entries.map(([filePath, lines]) =>
-      appendFile(filePath, lines.join('')).catch(() => {
-        // Agent file might not exist yet
-      }),
-    );
+    // Write each file's accumulated lines in a single appendFile call. A failed batch goes
+    // back ahead of anything logged since and gets one retry on the next flush; failing
+    // twice in a row drops it — loudly, since a persistent disk error would otherwise grow
+    // the buffer without bound.
+    const writes = entries.map(async ([filePath, lines]) => {
+      try {
+        await appendFile(filePath, lines.join(''));
+        this.retriedFiles.delete(filePath);
+      } catch (err) {
+        if (this.retriedFiles.has(filePath)) {
+          this.retriedFiles.delete(filePath);
+          log.error('log write failed twice — dropping lines', {
+            filePath,
+            count: lines.length,
+            err,
+          });
+          return;
+        }
+        log.warn('log write failed — will retry once', { filePath, count: lines.length, err });
+        this.retriedFiles.add(filePath);
+        this.writeBuffer.set(filePath, [...lines, ...(this.writeBuffer.get(filePath) ?? [])]);
+        this.scheduleFlush();
+      }
+    });
     await Promise.all(writes);
 
     // Also flush metadata if dirty

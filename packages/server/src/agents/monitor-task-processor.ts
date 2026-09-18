@@ -333,9 +333,11 @@ export class MonitorTaskProcessor {
       while (queue.size() > 0) {
         if (this.ctx.agentPool.isMonitorAgentBusy(monitorId)) break;
 
+        // A suspended queue keeps its items but dequeues nothing — without this break the
+        // loop spins synchronously and freezes the event loop. resumeMonitor re-drains.
         const next = queue.dequeue();
-        if (next)
-          await this.processMonitorTask(this.ctx.agentPool.getMonitorAgent(monitorId)!, next.task);
+        if (!next) break;
+        await this.processMonitorTask(this.ctx.agentPool.getMonitorAgent(monitorId)!, next.task);
       }
     } finally {
       queue.endProcessing();

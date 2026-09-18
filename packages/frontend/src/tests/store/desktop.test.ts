@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { useDesktopStore } from '../../store/desktop';
+import { ACTIVITY_LOG_LIMIT } from '../../store/slices/debugSlice';
 import {
   selectHasMaximizedWindow,
   selectVisibleWindows,
@@ -238,6 +239,24 @@ describe('Desktop Store', () => {
       const visible = selectVisibleWindows(useDesktopStore.getState());
       expect(visible.length).toBe(1);
       expect(visible[0].id).toBe(key('w1'));
+    });
+
+    it('applyActions caps the activity log like applyAction does', () => {
+      const { applyActions } = useDesktopStore.getState();
+      const toast = (i: number) => ({
+        type: 'toast.show' as const,
+        id: `t${i}`,
+        message: `m${i}`,
+      });
+
+      for (let i = 0; i < 250; i++) applyActions([toast(i)]);
+      expect(useDesktopStore.getState().activityLog.length).toBe(ACTIVITY_LOG_LIMIT);
+
+      // One batch larger than the limit keeps its newest entries.
+      applyActions(Array.from({ length: 300 }, (_, i) => toast(1000 + i)));
+      const log = useDesktopStore.getState().activityLog;
+      expect(log.length).toBe(ACTIVITY_LOG_LIMIT);
+      expect((log[log.length - 1] as { id: string }).id).toBe('t1299');
     });
 
     it('selectWindowsInOrder returns correct order', () => {

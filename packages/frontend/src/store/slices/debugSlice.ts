@@ -4,6 +4,9 @@
 import type { SliceCreator, DebugSlice } from '../types';
 import type { OSAction } from '@yaar/shared';
 
+/** How many recent OS actions the activity log keeps, whichever path appended them. */
+export const ACTIVITY_LOG_LIMIT = 200;
+
 export const createDebugSlice: SliceCreator<DebugSlice> = (set, _get) => ({
   activityLog: [],
   debugLog: [],
@@ -13,8 +16,8 @@ export const createDebugSlice: SliceCreator<DebugSlice> = (set, _get) => ({
   addToActivityLog: (action: OSAction) =>
     set((state) => {
       state.activityLog.push(action);
-      if (state.activityLog.length > 200) {
-        state.activityLog = state.activityLog.slice(-200);
+      if (state.activityLog.length > ACTIVITY_LOG_LIMIT) {
+        state.activityLog = state.activityLog.slice(-ACTIVITY_LOG_LIMIT);
       }
     }),
 

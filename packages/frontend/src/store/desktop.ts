@@ -55,6 +55,7 @@ import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
 import { applyUserPromptAction } from './slices/userPromptsSlice';
+import { ACTIVITY_LOG_LIMIT } from './slices/debugSlice';
 import { handleClipboardAction } from '@/lib/clipboard';
 
 // Import iframe bridge (circular import — safe, only accessed at runtime)
@@ -262,6 +263,9 @@ export const useDesktopStore = create<DesktopStore>()(
             } else {
               console.warn(`[applyActions] Unhandled action type: ${t}`);
             }
+          }
+          if (state.activityLog.length > ACTIVITY_LOG_LIMIT) {
+            state.activityLog = state.activityLog.slice(-ACTIVITY_LOG_LIMIT);
           }
         });
       }
