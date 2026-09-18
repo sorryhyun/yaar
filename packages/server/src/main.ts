@@ -1,7 +1,9 @@
 /**
  * YAAR TypeScript Backend Entry Point.
  *
- * Single Bun.serve() call unifying HTTP + WebSocket.
+ * Bun.serve() sockets unifying HTTP + WebSocket: the desktop socket on PORT, plus the
+ * loopback HTTPS + HTTP/2 socket (http/local-tls.ts) and, in remote mode, the app-origin
+ * socket — all running the same handlers.
  */
 
 import { createFetchHandler } from './http/index.js';
@@ -17,6 +19,7 @@ import {
   startTunnel,
 } from './lifecycle.js';
 import { IS_REMOTE, getPort, setPort, TRANSPORT_IDLE_TIMEOUT_S } from './config.js';
+import { loadLocalTlsCert, setLocalTlsEndpoint, LOCAL_TLS_PORT_OFFSET } from './http/local-tls.js';
 
 const MAX_PORT_ATTEMPTS = 20;
 
@@ -26,6 +29,7 @@ function serveFromFirstFreePort(
   hostname: string,
   fetch: ReturnType<typeof createFetchHandler>,
   websocket: ReturnType<typeof createWsHandlers>,
+  tls?: { key: string; cert: string },
 ): { server: ReturnType<typeof Bun.serve<WsData>>; port: number } {
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
@@ -39,6 +43,9 @@ function serveFromFirstFreePort(
         idleTimeout: TRANSPORT_IDLE_TIMEOUT_S,
         fetch,
         websocket,
+        // TLS lets a browser negotiate h2 (ALPN); HTTP/1.1 clients and WebSocket
+        // upgrades still work on the same socket. See http/local-tls.ts.
+        ...(tls ? { tls, http2: true } : {}),
       });
       return { server, port };
     } catch (err) {
@@ -55,6 +62,30 @@ function serveFromFirstFreePort(
   throw new Error(
     `Could not find a free port in range ${preferredPort}–${preferredPort + MAX_PORT_ATTEMPTS - 1}: ${lastError}`,
   );
+}
+
+/** Bind the local TLS socket, or return null when there is no certificate or no port. */
+async function startLocalTls(
+  desktopPort: number,
+  websocket: ReturnType<typeof createWsHandlers>,
+): Promise<ReturnType<typeof Bun.serve<WsData>> | null> {
+  const cert = await loadLocalTlsCert();
+  if (!cert) return null;
+  try {
+    const { server, port } = serveFromFirstFreePort(
+      desktopPort + LOCAL_TLS_PORT_OFFSET,
+      '127.0.0.1',
+      createFetchHandler(),
+      websocket,
+      { key: cert.key, cert: cert.cert },
+    );
+    setLocalTlsEndpoint({ port, spki: cert.spki });
+    console.log(`[local-tls] HTTPS + HTTP/2 on https://localhost:${port}`);
+    return server;
+  } catch (err) {
+    console.warn(`[local-tls] Could not bind the TLS socket — plain HTTP only: ${err}`);
+    return null;
+  }
 }
 
 async function startup() {
@@ -87,6 +118,9 @@ async function startup() {
         websocket,
       )
     : null;
+
+  // The local HTTPS + HTTP/2 socket for the launched Chrome (http/local-tls.ts).
+  const localTls = await startLocalTls(port, websocket);
 
   // Bring the tunnel up now that both sockets are listening — a serve rule can only
   // point at a port that is already accepting.
@@ -125,7 +159,11 @@ async function startup() {
   function handleShutdown() {
     if (shutdownInProgress) return;
     shutdownInProgress = true;
-    shutdown(server, ...(appOrigin ? [appOrigin.server] : [])).catch((err) => {
+    shutdown(
+      server,
+      ...(appOrigin ? [appOrigin.server] : []),
+      ...(localTls ? [localTls] : []),
+    ).catch((err) => {
       console.error('Shutdown error:', err);
       process.exit(1);
     });

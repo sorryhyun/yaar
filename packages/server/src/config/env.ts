@@ -248,6 +248,7 @@ export const IS_REMOTE = process.env.REMOTE === '1';
  */
 export const IS_FREEDPI = process.env.YAAR_FREEDPI !== '0';
 
+
 /**
  * Fable mode — `FABLE=1` runs the monitor agent on Fable and pins every other agent
  * (session, app, sub-agent) to Opus. The tier mapping lives in

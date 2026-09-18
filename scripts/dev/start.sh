@@ -147,8 +147,6 @@ launch_chrome_when_ready() {
   # the connection dialog. Always localhost, never the tunnel/LAN address — this browser is
   # on the same machine as the server.
   local url="http://localhost:${PORT:-8000}"
-  local open_url="$url"
-  [ -n "${YAAR_REMOTE_TOKEN:-}" ] && open_url="${url}/#remote=${YAAR_REMOTE_TOKEN}"
 
   # WebGPU is off by default in Linux Chrome (its Vulkan backend is
   # soft-blocklisted), which breaks yaar-ml/anima inference with "Failed to get
@@ -179,6 +177,25 @@ launch_chrome_when_ready() {
       curl -s --max-time 1 "${url}" >/dev/null 2>&1 && break
       sleep 0.5
     done
+    # Open the HTTP/2 socket (packages/server/src/http/local-tls.ts), trusting its key.
+    local health tls_port tls_spki tls_flags=()
+    health="$(curl -s --max-time 2 "${url}/health" 2>/dev/null || true)"
+    tls_port="$(printf '%s' "$health" | sed -n 's/.*"tls":{[^}]*"port":\([0-9][0-9]*\).*/\1/p')"
+    tls_spki="$(printf '%s' "$health" | sed -n 's/.*"tls":{[^}]*"spki":"\([A-Za-z0-9+/=]*\)".*/\1/p')"
+    # Flags apply only at Chrome start: a Chrome already on this profile without the SPKI
+    # flag would just get a tab and a certificate error, so stay on HTTP for it.
+    local running
+    running="$(ps -axo command= | grep -F -- "--user-data-dir=${profile}" | grep -v -e grep -e "--type=" || true)"
+    if [ -n "$running" ] && [[ "$running" != *"spki-list=${tls_spki}"* ]]; then
+      echo "[chrome] Chrome on ${profile} was started without the local-TLS flag — using HTTP/1.1. Quit it and re-run for HTTP/2."
+      tls_port=""
+    fi
+    if [ -n "$tls_port" ] && [ -n "$tls_spki" ]; then
+      url="https://localhost:${tls_port}"
+      tls_flags=(--ignore-certificate-errors-spki-list="${tls_spki}")
+    fi
+    local open_url="$url"
+    [ -n "${YAAR_REMOTE_TOKEN:-}" ] && open_url="${url}/#remote=${YAAR_REMOTE_TOKEN}"
     echo "[chrome] Opening ${url} (port ${port}, profile ${profile})"
     # If a Chrome with this profile is already running, this just opens a tab in
     # it and exits; otherwise it starts a fresh instance with the debug port.
@@ -190,7 +207,7 @@ launch_chrome_when_ready() {
     # deliberate for now: we are measuring, not shipping. Remove once the pointer-lock
     # path is understood.
     exec "$bin" --remote-debugging-port="${port}" --user-data-dir="${profile}" \
-      --no-first-run --no-default-browser-check "${gpu_flags[@]}" \
+      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${tls_flags[@]}" \
       --app="${open_url}" >/dev/null 2>&1
   ) &
   CHROME_PID=$!

@@ -6,6 +6,7 @@
  * to signal to the caller that server.upgrade() should be called instead.
  */
 
+import { getLocalTlsEndpoint } from './local-tls.js';
 import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
@@ -224,6 +225,13 @@ function createFetchHandlerInner() {
       // socket, so widening the allowlist to the sibling adds no new reachability.
       if (APP_ORIGIN_ISOLATION) {
         allowedOrigins.push(`http://127.0.0.1:${getPort()}`);
+      }
+      // The same pair again on the local TLS socket (http/local-tls.ts) — same server,
+      // same handlers, reached over h2.
+      const tls = getLocalTlsEndpoint();
+      if (tls) {
+        allowedOrigins.push(`https://localhost:${tls.port}`);
+        if (APP_ORIGIN_ISOLATION) allowedOrigins.push(`https://127.0.0.1:${tls.port}`);
       }
       if (origin && allowedOrigins.includes(origin)) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;

@@ -132,7 +132,13 @@ export function appHtmlCsp(req: Request): string {
       return policy([]);
     case 'loopback-alias': {
       const port = servingPort(req);
-      return policy([`http://${DESKTOP_ORIGIN_HOST}:${port}`, `http://${APP_ORIGIN_HOST}:${port}`]);
+      // The scheme of the socket this arrived on: plain HTTP on PORT, or the local TLS
+      // socket (http/local-tls.ts), whose req.url is https.
+      const scheme = new URL(req.url).protocol === 'https:' ? 'https' : 'http';
+      return policy([
+        `${scheme}://${DESKTOP_ORIGIN_HOST}:${port}`,
+        `${scheme}://${APP_ORIGIN_HOST}:${port}`,
+      ]);
     }
     case 'proxy-port':
       // Both origins are published addresses the server itself chose — no Host to

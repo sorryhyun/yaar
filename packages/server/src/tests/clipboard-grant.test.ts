@@ -10,6 +10,7 @@
  * a debuggable Chrome must not change the result (see the "never depends on the machine
  * it runs on" rule in packages/server/CLAUDE.md).
  */
+import { setLocalTlsEndpoint } from '../http/local-tls.js';
 import { describe, it, expect, afterEach } from 'bun:test';
 import type { Server, ServerWebSocket } from 'bun';
 
@@ -115,6 +116,18 @@ describe('clipboard grant', () => {
     expect(grant.params.permissions).toContain('clipboardReadWrite');
     expect(grant.params.permissions).toContain('clipboardSanitizedWrite');
     expect(clipboardGrantStatus()).toEqual({ held: true, origin: 'http://localhost:8000' });
+  });
+
+  it('follows the desktop onto the local TLS socket, which is what the launched Chrome opens', async () => {
+    setLocalTlsEndpoint({ port: 8443, spki: 'x' });
+    try {
+      fake = startFakeChrome();
+      startClipboardGrant(8000, { debugPort: fake.server.port, intervalMs: 50 });
+      await waitFor(heldAfter(fake, 1));
+      expect(grants(fake)[0]!.params.origin).toBe('https://localhost:8443');
+    } finally {
+      setLocalTlsEndpoint(null);
+    }
   });
 
   it('never grants to the app origin — that would hand every installed app the clipboard', async () => {

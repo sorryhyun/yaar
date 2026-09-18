@@ -37,6 +37,7 @@ direction is one-way forever.
 | `fonts/` | OpenType/CFF/glyf subsetting — the byte-level half. The catalog of served faces is the server's `features/fonts/` |
 | `freedpi/` | Loopback CONNECT proxy that fragments TLS past SNI-matching DPI. On by default; `YAAR_FREEDPI=0` turns it off |
 | `pdf/` | PDF rasterization and text extraction via poppler |
+| `tls/` | Self-signed loopback certificate (via `openssl`) + its Chromium SPKI hash, for a local h2 socket |
 | `tunnel/` | Tailscale Serve tunnel driver and `config/tunnel.json` parsing |
 | `ytdlp/` | Optional yt-dlp binary wrapper — discovered on PATH, never bundled |
 | `errors.ts` | `errMessage(unknown)` |

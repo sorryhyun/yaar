@@ -31,6 +31,10 @@
       "types": "./dist/pdf/index.d.ts",
       "import": "./dist/pdf/index.js"
     },
+    "./tls": {
+      "types": "./dist/tls/index.d.ts",
+      "import": "./dist/tls/index.js"
+    },
     "./tunnel": {
       "types": "./dist/tunnel/index.d.ts",
       "import": "./dist/tunnel/index.js"

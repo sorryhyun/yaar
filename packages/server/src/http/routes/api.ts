@@ -3,6 +3,7 @@
  * iframe-token, pick-directory, embeddable, hooks/link.
  */
 
+import { getLocalTlsEndpoint } from '../local-tls.js';
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../features/apps/discovery.js';
@@ -39,7 +40,10 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
   // and the WS upgrade was refused, with no dialog to recover through. The flag is the
   // one bit a caller with no token is allowed to learn, and it names nothing secret.
   if (url.pathname === '/health' && req.method === 'GET') {
-    return jsonResponse({ status: 'ok', remote: IS_REMOTE });
+    // `tls` is the local h2 socket (http/local-tls.ts): the launcher reads its port and
+    // the SPKI to trust from here. Both are public — a port number and a public-key hash.
+    const tls = getLocalTlsEndpoint();
+    return jsonResponse({ status: 'ok', remote: IS_REMOTE, ...(tls ? { tls } : {}) });
   }
 
   // What is running, and in which shape. Deliberately a REST route rather than a

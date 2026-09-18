@@ -180,7 +180,7 @@ export function desktopRedirectTarget(url: URL): string | null {
     case 'loopback-alias': {
       if (url.hostname !== APP_ORIGIN_HOST) return null;
       const port = url.port ? `:${url.port}` : '';
-      return `http://${DESKTOP_ORIGIN_HOST}${port}${url.pathname}${url.search}`;
+      return `${url.protocol}//${DESKTOP_ORIGIN_HOST}${port}${url.pathname}${url.search}`;
     }
     case 'proxy-port':
       if (!isAppOriginSocketRequest()) return null;

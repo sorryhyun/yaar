@@ -51,6 +51,17 @@ describe('appHtmlCsp', () => {
     expect(csp('localhost:5173')).toContain('http://127.0.0.1:5173');
   });
 
+  it.if(APP_ORIGIN_ISOLATION)('keeps the scheme of the socket it was served on', () => {
+    // The local TLS socket (http/local-tls.ts) serves the same pages over https. An
+    // `http://` pair there would be blocked mixed content for every SDK call.
+    const policy = appHtmlCsp(
+      new Request('https://127.0.0.1:8443/x.html', { headers: { host: '127.0.0.1:8443' } }),
+    );
+    expect(policy).toContain('https://localhost:8443');
+    expect(policy).toContain('https://127.0.0.1:8443');
+    expect(policy).not.toContain('http://localhost');
+  });
+
   it.if(!APP_ORIGIN_ISOLATION)('names no host beyond self when isolation is off', () => {
     for (const d of ['connect-src', 'script-src', 'worker-src']) {
       const directive = directiveOf(csp('localhost:8000'), d);

@@ -15,6 +15,7 @@ import { join } from 'path';
 import { ready } from './main.js';
 
 import { getRemoteToken } from './http/auth.js';
+import { getLocalTlsEndpoint } from './http/local-tls.js';
 import { getPort } from './config.js';
 import { LINUX_WEBGPU_FLAGS } from './lib/browser/webgpu-flags.js';
 import { hideConsole } from './hide-console.js';
@@ -68,8 +69,7 @@ function getBaseUrl(): string {
   return `http://127.0.0.1:${getPort()}`;
 }
 
-function getAppUrl(): string {
-  const base = getBaseUrl();
+function getAppUrl(base = getBaseUrl()): string {
   const token = getRemoteToken();
   return token ? `${base}/#remote=${token}` : base;
 }
@@ -83,6 +83,11 @@ function openAppWindow() {
   const chromium = findChromiumBrowser();
 
   if (chromium) {
+    // The Chromium we launch can trust the local TLS socket's self-signed key by its
+    // SPKI, so it gets h2 instead of HTTP/1.1's six connections per host (see
+    // http/local-tls.ts). The default-browser fallback below cannot, so it keeps HTTP.
+    const tls = getLocalTlsEndpoint();
+    const appUrl = tls ? getAppUrl(`https://localhost:${tls.port}`) : url;
     // Use a unique user-data-dir per launch so Chrome always starts a fresh
     // process.  A shared profile causes Chrome to delegate to the already-
     // running instance and exit immediately, which triggers the shutdown handler.
@@ -94,7 +99,8 @@ function openAppWindow() {
     }
 
     const args = [
-      `--app=${url}`,
+      `--app=${appUrl}`,
+      ...(tls ? [`--ignore-certificate-errors-spki-list=${tls.spki}`] : []),
       `--user-data-dir=${userDataDir}`,
       '--disable-background-networking',
       '--disable-default-apps',

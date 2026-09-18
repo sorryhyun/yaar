@@ -79,6 +79,16 @@ describe('proxy-port origin boundary', () => {
     expect(isHost(resolve('http://127.0.0.1:8000/api/settings'))).toBe(false);
   });
 
+  it('redirects a desktop off the app alias without dropping to plain HTTP', () => {
+    // On the local TLS socket an https→http redirect would leave h2 behind (and the
+    // plain socket is a different port's origin besides).
+    installLoopbackAliasBoundary();
+    expect(desktopRedirectTarget(new URL('https://127.0.0.1:8443/?x=1'))).toBe(
+      'https://localhost:8443/?x=1',
+    );
+    expect(desktopRedirectTarget(new URL('http://127.0.0.1:8000/'))).toBe('http://localhost:8000/');
+  });
+
   it('states the app origin, because the client cannot derive it', () => {
     // Locally the frontend computes the sibling loopback alias itself (only the browser
     // knows which port served the document). `https://host:8443` is not computable from

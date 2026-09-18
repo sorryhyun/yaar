@@ -41,6 +41,7 @@
  */
 
 import { CDPClient } from './cdp.js';
+import { localTlsDesktopOrigin } from '../../http/local-tls.js';
 import { CHROME_DEBUG_PORT, isClipboardGrantEnabled, DESKTOP_ORIGIN_HOST } from '../../config.js';
 
 /**
@@ -67,9 +68,16 @@ let grantedOrigin: string | null = null;
 /** Log the "no Chrome yet" case once, not every 10 seconds, forever. */
 let announcedUnavailable = false;
 
-/** The one origin this may ever grant. See `attempt()` for why it is not a parameter. */
+/**
+ * The one origin this may ever grant. See `attempt()` for why it is not a parameter.
+ *
+ * When the local TLS socket is up, the Chrome this grant targets is the one YAAR
+ * launched, and that Chrome opens the desktop over it (`http/local-tls.ts`) — so the
+ * grant follows. Read per attempt: the socket binds before this starts, but a
+ * re-grant after a reconnect must name whatever is live then.
+ */
 function desktopOrigin(port: number): string {
-  return `http://${DESKTOP_ORIGIN_HOST}:${port}`;
+  return localTlsDesktopOrigin() ?? `http://${DESKTOP_ORIGIN_HOST}:${port}`;
 }
 
 async function browserWebSocketUrl(debugPort: number): Promise<string | null> {

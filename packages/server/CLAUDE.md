@@ -65,6 +65,7 @@ src/
 │   ├── auth.ts           # checkHttpAuth(), generateRemoteToken(), isStaticAsset(), hasValidIframeToken()
 │   ├── iframe-tokens.ts  # generateIframeToken(), validateIframeToken()
 │   ├── origin-boundary.ts # THE ORIGIN BOUNDARY — which two origins, and which side a request is on
+│   ├── local-tls.ts      # Loopback HTTPS + h2 socket: cert (via @yaar/lib/tls), endpoint advertised on /health
 │   ├── subscriptions.ts  # subscriptionRegistry — reactive verb URI subscriptions
 │   └── routes/           # api.ts (REST), verb.ts (iframe verb proxy), files.ts, browser.ts, proxy.ts, static.ts
 ├── session/              # LiveSession (aggregate root), SessionHub, BroadcastCenter, ActionEmitter, SessionEventRouter, WindowStateRegistry, types
@@ -158,7 +159,7 @@ src/
 could be described without the word "YAAR" moved there so that the boundary this directory's
 header claims — "no server internal imports" — is enforced by the module graph rather than by
 reviewers remembering it: `fonts/`, `pdf/`, `tunnel/`, `download/`, `ytdlp/`, `freedpi/`,
-`ssrf.ts`, `image.ts`, `ids.ts`, `errors.ts`, `open-url.ts`, `pick-directory.ts`. Import them
+`ssrf.ts`, `image.ts`, `ids.ts`, `errors.ts`, `open-url.ts`, `pick-directory.ts`, `tls/`. Import them
 by subpath (`@yaar/lib/ssrf`, `@yaar/lib/fonts`, …).
 
 Two of them take as a parameter what they used to read from `config.js`, which is the shape
