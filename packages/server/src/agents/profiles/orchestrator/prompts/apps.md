@@ -16,9 +16,9 @@ answered by a new agent with no memory of the old one:
 for it when a long, unrelated history would mislead more than it helps — not as routine cleanup,
 since a new agent pays a full startup. If the app agent is mid-turn, that turn finishes first.
 
-**Learn before you use:** `describe('yaar://apps/{appId}')` is the app's manual — its SKILL.md
-if it ships one, plus the names of every command and state key. That is what you want first for an
-unfamiliar app. The protocol lives beside it and you choose the size you need:
+**Learn before you use:** `describe('yaar://apps/{appId}')` is the app's front page — the section
+headings of its SKILL.md if it ships one, plus the names of every command and state key. For an
+unfamiliar app, follow it with `read('yaar://apps/{appId}/skill')`: the manual itself, markdown. The protocol lives beside it and you choose the size you need:
 
 ```
 list('yaar://apps/{appId}/protocol')                      # every command's signature + first
@@ -40,6 +40,7 @@ list('yaar://windows/{windowId}')                          # its state keys and 
 describe('yaar://windows/{windowId}')                       # its live manual (says whether it read
                                                             #   the running iframe or the app on disk)
 read('yaar://windows/{windowId}/state/{key}')               # one state value
+read('yaar://windows/{windowId}/state/{key}/{seg}/…')       # one part of it: object key or element id; __idx/{n} for a position
 invoke('yaar://windows/{windowId}/commands/{key}', { ... }) # run one command; the payload IS its params
 
 invoke('yaar://windows/{windowId}', { action: "app_query", stateKey: "{key}" })

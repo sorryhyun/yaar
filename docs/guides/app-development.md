@@ -511,7 +511,7 @@ Each app gets its own **app agent** when a user interacts with it. Three files i
 |------|------|-------------|
 | `agent/prompt.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
 | `agent/hint.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
-| `agent/SKILL.md` | Returned by `describe('yaar://apps/{appId}')` | The manual for *whoever asks* — workflows and ordering constraints the protocol can't state |
+| `agent/SKILL.md` | Served by `read('yaar://apps/{appId}/skill')`; `describe` lists its `##` headings | The manual for *whoever asks* — workflows and ordering constraints the protocol can't state |
 
 Only the first two are injected into a prompt; `SKILL.md` is read on demand or not at all. There is no append tier — **one file, one meaning.**
 
@@ -535,7 +535,7 @@ The app agent's entire system prompt is replaced with this file. Use it when the
 
 ### agent/SKILL.md (the manual anyone can ask for)
 
-`describe('yaar://apps/{appId}')` returns identity, `SKILL.md`, and the protocol's table of contents. Write in `SKILL.md` only what a generated protocol cannot say: the order commands must run in, the workflow that ties three of them together, when *not* to reach for this app.
+`describe('yaar://apps/{appId}')` returns identity, `SKILL.md`'s `##` headings (the manual itself is `read('yaar://apps/{appId}/skill')`), and the protocol's table of contents. Those headings are all a caller sees before deciding to read on, so name sections for what they help with. Write in `SKILL.md` only what a generated protocol cannot say: the order commands must run in, the workflow that ties three of them together, when *not* to reach for this app.
 
 Never restate a command or state name as a heading or a bullet subject — the protocol is served from `yaar://apps/{appId}/protocol` and regenerated on every deploy, so a restatement is a sentence that will disagree with the schema next to it. `bun run check:apps` warns on it (`skill-restates-protocol`, advisory — a name inside a workflow sentence like "run `compile` before `deploy`" is exactly what the file is for, so the check names what it matched and lets you judge).
 
@@ -555,7 +555,7 @@ apps/my-app/
 ├── agent/
 │   ├── prompt.md    # Full custom agent prompt (optional, advanced)
 │   ├── hint.md      # Monitor agent routing hint (optional)
-│   └── SKILL.md     # Manual returned by describe('yaar://apps/my-app') (optional)
+│   └── SKILL.md     # Manual served at yaar://apps/my-app/skill (optional)
 ├── app.json         # Metadata, permissions, protocol manifest
 ├── index.html       # Compiled app (if compiled)
 └── src/             # Source code (if compiled)

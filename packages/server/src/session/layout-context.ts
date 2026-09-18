@@ -34,6 +34,21 @@ interface WindowLayoutSnapshot {
 }
 
 /**
+ * One layout delta, in both spellings a tool result needs.
+ *
+ * `text` is the `[layout]` block for the result's text content — what the session log
+ * records, and what a model reads when the result has no `structuredContent`. `data` is
+ * the same facts for the `_layout` key inside `structuredContent`, which is what a model
+ * reads when there is one (see `okJson`). It is not `text` stuffed into a string: the
+ * client serializes `structuredContent` as JSON, so a multi-line string arrived as one
+ * line of `\n` and `\"` escapes. Each window is one key → one flat line instead.
+ */
+export interface LayoutNote {
+  text: string;
+  data: Record<string, unknown>;
+}
+
+/**
  * Per-agent record of what layout state was last reported.
  */
 interface AgentLayoutState {
@@ -67,10 +82,10 @@ export class LayoutContext {
   // ── Delta computation ──
 
   /**
-   * Get layout context string for a monitor agent's tool result.
+   * Get layout context for a monitor agent's tool result.
    * Returns null if nothing changed since last call for this agent.
    */
-  getMonitorAgentContext(agentId: string, monitorId: string): string | null {
+  getMonitorAgentContext(agentId: string, monitorId: string): LayoutNote | null {
     const current = this.buildMonitorSnapshot(monitorId);
     const prev = this.agentStates.get(agentId)?.monitorSnapshot;
 
@@ -87,10 +102,10 @@ export class LayoutContext {
   }
 
   /**
-   * Get layout context string for a window/app agent's tool result.
+   * Get layout context for a window/app agent's tool result.
    * Returns null if nothing changed since last call for this agent.
    */
-  getWindowAgentContext(agentId: string, windowId: string): string | null {
+  getWindowAgentContext(agentId: string, windowId: string): LayoutNote | null {
     const win = this.windowState.getWindow(windowId);
     if (!win) return null;
 
@@ -107,7 +122,8 @@ export class LayoutContext {
     state.windowSnapshot = current;
     this.agentStates.set(agentId, state);
 
-    return `[layout] window: ${current.bounds.w}×${current.bounds.h}`;
+    const size = `${current.bounds.w}×${current.bounds.h}`;
+    return { text: `[layout] window: ${size}`, data: { window: size } };
   }
 
   /**
@@ -156,26 +172,31 @@ export class LayoutContext {
 
   // ── Formatting ──
 
-  private formatMonitorContext(snapshot: MonitorLayoutSnapshot): string {
+  private formatMonitorContext(snapshot: MonitorLayoutSnapshot): LayoutNote {
     const parts: string[] = [];
+    const data: Record<string, unknown> = {};
+    const place = (w: WindowSnapshot) =>
+      `at (${w.bounds.x},${w.bounds.y}) ${w.bounds.w}×${w.bounds.h}`;
 
     if (snapshot.viewport) {
-      parts.push(`monitor: ${snapshot.viewport.w}×${snapshot.viewport.h}`);
+      const size = `${snapshot.viewport.w}×${snapshot.viewport.h}`;
+      parts.push(`monitor: ${size}`);
+      data.monitor = size;
     }
 
     if (snapshot.windows.length > 0) {
       const windowList = snapshot.windows
-        .map(
-          (w) =>
-            `  ${w.rawId} "${w.title}" at (${w.bounds.x},${w.bounds.y}) ${w.bounds.w}×${w.bounds.h}`,
-        )
+        .map((w) => `  ${w.rawId} "${w.title}" ${place(w)}`)
         .join('\n');
       parts.push(`windows:\n${windowList}`);
     } else {
       parts.push('windows: (none)');
     }
+    data.windows = Object.fromEntries(
+      snapshot.windows.map((w) => [w.rawId, `${w.title} ${place(w)}`]),
+    );
 
-    return `[layout]\n${parts.join('\n')}`;
+    return { text: `[layout]\n${parts.join('\n')}`, data };
   }
 
   // ── Change detection ──

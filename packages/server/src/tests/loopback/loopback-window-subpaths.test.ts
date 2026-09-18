@@ -364,6 +364,24 @@ describe('S10 — a window sub-path addresses one state key or one command', () 
     expect(textOf(viaSubPath)).toBe(textOf(viaAction));
   });
 
+  it('a path past the key walks into its value, and the app is asked for the key alone', async () => {
+    const { h, call } = await bootTwoAppWindows();
+
+    const title = await call('read', 'yaar://windows/memo/state/drafts/d-1/title');
+    expect(title.isError).toBeUndefined();
+    expect(textOf(title)).toBe('half a thought');
+
+    const queried = h.client
+      .framesOf(ServerEventType.APP_PROTOCOL_REQUEST)
+      .flatMap((frame) => (frame.request.kind === 'query' ? [frame.request.stateKey] : []));
+    expect(queried).toContain('drafts');
+    expect(queried).not.toContain('drafts/d-1/title');
+
+    const miss = await call('read', 'yaar://windows/memo/state/drafts/d-9');
+    expect(miss.isError).toBe(true);
+    expect(textOf(miss)).toContain('by id: d-1');
+  });
+
   it('invoke of a command runs it, with the payload as its params', async () => {
     const { h, call, memo } = await bootTwoAppWindows();
 

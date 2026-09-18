@@ -129,9 +129,21 @@ describe('describe on an app', () => {
     expect(body.protocol.stateKeys).toEqual(Object.keys(PROTOCOL.state));
     expect(body.protocol.state).toBeUndefined();
 
-    // SKILL.md is what this door is *for*, and it is unabridged.
-    expect(body.skill).toBe(SKILL);
+    // SKILL.md is named, not carried: inline it reached the model as one escaped JSON
+    // string. Its headings are the table of contents; /skill serves the markdown.
+    expect(body.skill).toEqual({
+      uri: `yaar://apps/${APP_ID}/skill`,
+      sections: [],
+      read: expect.stringContaining(`read("yaar://apps/${APP_ID}/skill")`),
+    });
     expect(body.permissions).toEqual(['yaar://apps/self/db/']);
+  });
+
+  it('the named skill URI answers with SKILL.md verbatim, as markdown', async () => {
+    const result = await initRegistry().execute('read', `yaar://apps/${APP_ID}/skill`);
+    expect(text(result)).toBe(SKILL);
+    const listed = await initRegistry().execute('list', `yaar://apps/${APP_ID}/skill`);
+    expect(listed.isError).toBe(true);
   });
 
   it('the named protocol URI answers with the manifest verbatim', async () => {

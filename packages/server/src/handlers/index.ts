@@ -30,6 +30,7 @@ import { resolveShorthandUri } from '../http/uri-match.js';
 import { LARGE_RESULT_META } from '../mcp/result-size.js';
 import { spillOversizedResult } from '../mcp/result-spill.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
+import type { LayoutNote } from '../session/layout-context.js';
 
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',
@@ -88,25 +89,26 @@ function appendLayoutContext(result: VerbResult): VerbResult {
     const monitorId = getMonitorId();
     const windowId = getWindowId();
 
-    let contextText: string | null = null;
+    let note: LayoutNote | null = null;
 
     if (windowId) {
       // Window/app agent — only own window bounds
-      contextText = ctx.getWindowAgentContext(agentId, windowId);
+      note = ctx.getWindowAgentContext(agentId, windowId);
     } else if (monitorId) {
       // Monitor agent — viewport + all windows on this monitor
-      contextText = ctx.getMonitorAgentContext(agentId, monitorId);
+      note = ctx.getMonitorAgentContext(agentId, monitorId);
     }
 
-    if (contextText) {
+    if (note) {
       return {
         ...result,
-        content: [...result.content, { type: 'text' as const, text: contextText }],
+        content: [...result.content, { type: 'text' as const, text: note.text }],
         // Beside a `structuredContent` the text block never reaches a model (see `okJson`
-        // in utils.ts), so the layout rides inside the object too. MCP-only, so the app's
+        // in utils.ts), so the layout rides inside the object too — as data, not as the
+        // text block, which would arrive as one escaped line. MCP-only, so the app's
         // `POST /api/verb` data never sees the key.
         ...(result.structuredContent
-          ? { structuredContent: { ...result.structuredContent, _layout: contextText } }
+          ? { structuredContent: { ...result.structuredContent, _layout: note.data } }
           : {}),
       };
     }

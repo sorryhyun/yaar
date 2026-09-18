@@ -547,7 +547,9 @@ export function registerWindowHandlers(
       "Describe for this window's manual (its live protocol), read to view content, list for its " +
       'addressable state keys and commands, invoke to create (on bare yaar://windows/), update, ' +
       'manage; delete to close. ' +
-      'Sub-paths: read yaar://windows/{windowId}/state/{key} for one state value, invoke ' +
+      'Sub-paths: read yaar://windows/{windowId}/state/{key} for one state value — append ' +
+      '/{seg}/… to read one part of it (object key or array element id; __idx/{n} for a position), e.g. ' +
+      'state/scene/nodes/{nodeId}/geometry; invoke ' +
       'yaar://windows/{windowId}/commands/{key} to run one command (payload = its params; ' +
       'pass an ARRAY of params to run it once per element, in order, as one call); ' +
       'list/read yaar://windows/{windowId}/history for every app_command sent to the window ' +

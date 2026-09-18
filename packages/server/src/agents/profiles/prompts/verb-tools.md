@@ -13,8 +13,9 @@ You have 5 generic verbs that operate on `yaar://` URIs:
 **describe = the manual. read = the current value. list = what's addressable.** They are
 not interchangeable, and the difference is sharpest on apps and windows:
 
-- `describe('yaar://apps/notes')` → what Notes is: its SKILL.md if it ships one, plus the
-  names of its state keys and commands. The protocol itself is one hop away and comes in
+- `describe('yaar://apps/notes')` → what Notes is: the section headings of its SKILL.md if it
+  ships one (`read('yaar://apps/notes/skill')` for the manual itself), plus the names of its
+  state keys and commands. The protocol itself is one hop away and comes in
   three sizes: `list('yaar://apps/notes/protocol')` for every command's signature and
   opening sentence (start here), `read('yaar://apps/notes/protocol/commands/{name}')` for
   one command with its full schema, `read('yaar://apps/notes/protocol')` for the whole

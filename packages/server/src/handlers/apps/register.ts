@@ -40,6 +40,7 @@ import {
   rejectProtocolMutation,
 } from './protocol-resource.js';
 import { describeAppDocs, readAppDocs, listAppDocs, rejectDocsMutation } from './docs-resource.js';
+import { describeAppSkill, readAppSkill, rejectSkillVerb } from './skill-resource.js';
 import {
   appActions,
   appsListHandler,
@@ -80,7 +81,7 @@ function rejectInstanceSubPath(uri: string): VerbResult | null {
 }
 
 /** Every sub-path under `yaar://apps/{id}` that some resource module owns. */
-const KNOWN_SUBPATHS = ['storage', 'db', 'agents', 'protocol', 'docs'] as const;
+const KNOWN_SUBPATHS = ['storage', 'db', 'agents', 'protocol', 'docs', 'skill'] as const;
 
 /**
  * The refusal for any sub-path that reached the terminal — `yaar://apps/notes/hamsters`.
@@ -119,14 +120,15 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   // ── yaar://apps/{appId} — per-app operations + app-scoped storage/db ──
   registry.register('yaar://apps/*', {
     description:
-      'A specific app — the *installed* app, not a running one. Describe for its manual ' +
-      '(SKILL.md, permissions, and the names of its state keys and commands), read for its ' +
+      'A specific app — the *installed* app, not a running one. Describe for its front page ' +
+      '(SKILL.md section headings, permissions, and the names of its state keys and commands), read for its ' +
       `effective manifest, invoke to ${appActions.names.join('/')}, delete to uninstall. ` +
       'Sub-path /protocol is the compiled protocol: list it for an index of command ' +
       'signatures, read it for the manifest in full, read /protocol/commands/{name} for one ' +
       'command self-contained. ' +
       'Sub-path /docs is the app’s topic docs: list it for an index of topics and their ' +
       'triggers, read /docs/{name} for one topic. ' +
+      'Sub-path /skill is the app’s SKILL.md manual: read it for the markdown in full. ' +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
       'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search). ' +
       "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents. " +
@@ -191,6 +193,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const docsResult = await describeAppDocs(resolved.sourceUri);
       if (docsResult) return docsResult;
 
+      const skillResult = await describeAppSkill(resolved.sourceUri);
+      if (skillResult) return skillResult;
+
       return rejectUnhandledSubPath(resolved.sourceUri) ?? describeApplication(resolved);
     },
 
@@ -212,6 +217,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       const docsResult = await readAppDocs(resolved.sourceUri);
       if (docsResult) return docsResult;
+
+      const skillResult = await readAppSkill(resolved.sourceUri);
+      if (skillResult) return skillResult;
 
       return rejectUnhandledSubPath(resolved.sourceUri) ?? readApplication(resolved);
     },
@@ -235,6 +243,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const docsResult = await listAppDocs(resolved.sourceUri);
       if (docsResult) return docsResult;
 
+      const skillResult = rejectSkillVerb(resolved.sourceUri, 'list');
+      if (skillResult) return skillResult;
+
       return rejectUnhandledSubPath(resolved.sourceUri) ?? listApplication();
     },
 
@@ -257,6 +268,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const docsResult = rejectDocsMutation(resolved.sourceUri, 'invoke');
       if (docsResult) return docsResult;
 
+      const skillResult = rejectSkillVerb(resolved.sourceUri, 'invoke');
+      if (skillResult) return skillResult;
+
       return rejectUnhandledSubPath(resolved.sourceUri) ?? invokeApplication(resolved, payload);
     },
 
@@ -278,6 +292,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       const docsResult = rejectDocsMutation(resolved.sourceUri, 'delete');
       if (docsResult) return docsResult;
+
+      const skillResult = rejectSkillVerb(resolved.sourceUri, 'delete');
+      if (skillResult) return skillResult;
 
       return rejectUnhandledSubPath(resolved.sourceUri) ?? deleteApplication(resolved);
     },

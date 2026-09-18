@@ -2,8 +2,9 @@
  * What one app looks like to another agent — the facts behind
  * `describe('yaar://apps/{appId}')`.
  *
- * `describe` is the manual. It answers with the app's identity, its hand-written
- * `agent/SKILL.md` when it ships one, and a **table of contents** for its protocol: the
+ * `describe` is the manual's front page. It answers with the app's identity, the section
+ * headings of its hand-written `agent/SKILL.md` (served whole at `yaar://apps/{id}/skill`),
+ * and a **table of contents** for its protocol: the
  * names of every state key and command, and the URI that serves each in full. It is not
  * the app's current state — that is `read`, which returns the effective manifest
  * (`handlers/apps/app-resource.ts`).
@@ -86,10 +87,48 @@ export async function describeApp(
     // sub-agent's half of the protocol and are described to it in its own voice at
     // spawn, so an operator reading them reads the wrong script (`persona-commands.ts`).
     ...(app.protocol ? protocolSection(appId, app.protocol, options.protocol ?? 'names') : {}),
-    ...(skill ? { skill } : {}),
+    ...(skill ? { skill: skillSection(appId, skill, options.protocol ?? 'names') } : {}),
     ...docsSection(appId, docs, options.protocol ?? 'names'),
     ...(app.permissions?.length ? { permissions: app.permissions } : {}),
   };
+}
+
+/**
+ * The `skill` entry of a describe payload: the manual's section headings and the URI that
+ * serves it, or — for a caller that holds no verbs — the manual itself.
+ *
+ * Carried whole, SKILL.md reached a verbs caller as one JSON string: the CLI hands the
+ * model `JSON.stringify(structuredContent)`, so every newline and quote in the markdown
+ * arrived escaped. Named, it arrives through `read("yaar://apps/{id}/skill")` as a
+ * `text/markdown` resource, formatted, and only when the caller actually wants it. The
+ * app agent's `describe` tool keeps the inline string for the same reason `protocolSection`
+ * inlines the index for it: a URI is a dead end for a caller with no `read`.
+ */
+function skillSection(appId: string, skill: string, detail: ProtocolDetail): unknown {
+  if (detail === 'index') return skill;
+  const uri = `yaar://apps/${appId}/skill`;
+  return {
+    uri,
+    sections: skillSections(skill),
+    read: `read("${uri}") — the manual in full, markdown. Read it before driving the app.`,
+  };
+}
+
+/**
+ * The `##`-level headings of a SKILL.md, in order — its table of contents. Headings inside
+ * a fenced code block are not headings, so fences are tracked.
+ */
+export function skillSections(skill: string): string[] {
+  const sections: string[] = [];
+  let inFence = false;
+  for (const line of skill.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    else if (!inFence) {
+      const match = line.match(/^##\s+(.+?)\s*#*\s*$/);
+      if (match) sections.push(match[1]);
+    }
+  }
+  return sections;
 }
 
 /**

@@ -114,11 +114,11 @@ describe('S9 — the verb deletes the monitor, not only its agent', () => {
 
     // The state is only observable through the delta: the first ask reports, the second
     // says "nothing changed". A forgotten agent reports again.
-    expect(layout.getMonitorAgentContext(agentId!, '1')).toBeString();
+    expect(layout.getMonitorAgentContext(agentId!, '1')?.text).toBeString();
     expect(layout.getMonitorAgentContext(agentId!, '1')).toBeNull();
 
     await disposeMonitor(h.session, '1');
-    expect(layout.getMonitorAgentContext(agentId!, '1')).toBeString();
+    expect(layout.getMonitorAgentContext(agentId!, '1')?.text).toBeString();
   });
 
   it('forgets the removed monitor’s viewport, so its successor does not inherit it', async () => {

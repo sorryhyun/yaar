@@ -29,6 +29,7 @@ import {
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
+import { splitStatePath, selectStatePath } from './state-path.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
@@ -254,7 +255,15 @@ export async function handleAppQuery(
   // caller passed: the frontend routes a raw id by whichever monitor the *user* is
   // looking at, which is not necessarily the monitor of the agent that asked.
   const key = win.id;
-  const stateKey = (payload.stateKey as string) || 'manifest';
+  const requested = (payload.stateKey as string) || 'manifest';
+  // `scene/nodes/abc/geometry` asks the app for `scene` and walks the rest here — see
+  // state-path.ts. `requested` stays the label, so a filtered read names what it filtered.
+  const { key: stateKey, path } = splitStatePath(requested);
+  const answer = (value: unknown): VerbResult => {
+    if (path.length === 0) return wrapAppValue(value, read);
+    const selected = selectStatePath(value, stateKey, path);
+    return selected.ok ? wrapAppValue(selected.value, read) : error(selected.message);
+  };
 
   // '__console' is a built-in state key answered by the injected app-protocol
   // script (reads the console-capture buffer) — it works even when the app
@@ -264,7 +273,10 @@ export async function handleAppQuery(
     if (readyErr) return readyErr;
   }
 
-  const read = { label: buildWindowResourceUri(windowId, 'state', stateKey), options: readOptions };
+  const read = {
+    label: buildWindowResourceUri(windowId, 'state', requested),
+    options: readOptions,
+  };
 
   if (stateKey === 'manifest') {
     const outcome = await request(key, { kind: 'manifest' }, deadlines.appQueryMs);
@@ -277,7 +289,7 @@ export async function handleAppQuery(
     // `discovery.ts` never saw it: strip persona-audience commands here too, for the
     // same reason — they are described to the sub-agent in character voice at spawn,
     // and an app agent reading that description reads the wrong script.
-    return wrapAppValue(response.manifest ? withoutPersonaCommands(response.manifest) : null, read);
+    return answer(response.manifest ? withoutPersonaCommands(response.manifest) : null);
   }
 
   const outcome = await request(key, { kind: 'query', stateKey }, deadlines.appQueryMs);
@@ -285,7 +297,7 @@ export async function handleAppQuery(
   const response = outcome.value;
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
-  return wrapAppValue(response.data, read);
+  return answer(response.data);
 }
 
 /**

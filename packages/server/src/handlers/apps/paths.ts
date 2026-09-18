@@ -112,6 +112,15 @@ export function parseAppDocsPath(uri: string): { appId: string; rest: string } |
   return { appId: match[1], rest: (match[2] ?? '').replace(/\/+$/, '') };
 }
 
+/**
+ * Parse `yaar://apps/{appId}/skill` → { appId } or null. One document, so no tail: a
+ * `/skill/x` is not this resource and falls through to the composite's sub-path refusal.
+ */
+export function parseAppSkillPath(uri: string): { appId: string } | null {
+  const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/skill\/?$/);
+  return match ? { appId: match[1] } : null;
+}
+
 /** Parse `yaar://apps/{appId}/db[/{collection}[/{docId}]]` or null. */
 export function parseAppDbPath(
   uri: string,

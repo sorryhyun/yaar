@@ -26,7 +26,7 @@ import { join } from 'path';
 
 import { USER_APPS_DIR } from '../features/apps/roots.js';
 import { invalidateAppsCache } from '../features/apps/discovery.js';
-import { describeApp } from '../features/apps/describe.js';
+import { describeApp, skillSections } from '../features/apps/describe.js';
 import { registerAppsHandlers } from '../handlers/apps/register.js';
 import { ResourceRegistry, type VerbResult } from '../handlers/uri-registry.js';
 import type { ResolvedUri } from '../handlers/uri-resolve.js';
@@ -159,8 +159,8 @@ describe('describe on the app names the protocol instead of carrying it', () => 
     expect(protocol.stateKeys).toEqual(['selection']);
     expect(protocol.uri).toBe(`yaar://apps/${APP_ID}/protocol`);
 
-    // SKILL.md is what describe is *for*, and it stays whole.
-    expect(facts?.skill).toBe(SKILL);
+    // SKILL.md is named by its headings; the markdown lives at /skill.
+    expect((facts?.skill as Record<string, unknown>).uri).toBe(`yaar://apps/${APP_ID}/skill`);
 
     // Each follow-up door is named with the verb that opens it.
     expect(String(protocol.index)).toContain(`list("yaar://apps/${APP_ID}/protocol")`);
@@ -320,5 +320,18 @@ describe('the invariants the split had to not break', () => {
     const result = await handler().read!(at(`yaar://apps/${APP_ID}?file=yaar://storage/x.txt`));
     expect(textOf(result)).not.toContain('not addressable');
     expect(textOf(result)).toContain('not found');
+  });
+});
+
+describe('describe names SKILL.md by its headings', () => {
+  test('the app agent door, which holds no read, still gets the manual whole', async () => {
+    const facts = await describeApp(APP_ID, { protocol: 'index' });
+    expect(facts?.skill).toBe(SKILL);
+  });
+
+  test('sections are the ## headings, skipping any inside a code fence', () => {
+    const md =
+      '# Title\n\n## Launch\n\n```md\n## not a heading\n```\n\n## When not to use it ##\n### deeper\n';
+    expect(skillSections(md)).toEqual(['Launch', 'When not to use it']);
   });
 });

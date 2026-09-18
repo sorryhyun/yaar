@@ -41,7 +41,7 @@ Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 |---|---|
 | `agent/prompt.md` | Appended after the shared intro (`profiles/app-agent/prompts/intro.md`), which is always first and already states what YAAR is and the agent's role — so write about the app and how to drive it, never "You are …". Either way the `protocol.json` manifest is appended as rendered call signatures. |
 | `agent/hint.md` | The **monitor agent's** system prompt — orchestration hints, auto-synced with install/uninstall |
-| `agent/SKILL.md` | No prompt. It is the hand-written manual `describe('yaar://apps/{id}')` returns — workflows, ordering, when *not* to use the app. `scripts/check/apps.ts` warns when it restates the protocol, which is served separately at `yaar://apps/{id}/protocol`. |
+| `agent/SKILL.md` | No prompt. It is the hand-written manual served at `read('yaar://apps/{id}/skill')` — `describe` lists only its `##` headings — workflows, ordering, when *not* to use the app. `scripts/check/apps.ts` warns when it restates the protocol, which is served separately at `yaar://apps/{id}/protocol`. |
 | `agent/docs/*.md` | Nobody, until pulled. One topic per file, frontmatter-indexed (`name`, a trigger-shaped `description`, `audience: agent\|dev\|both`); only the **index** is generated into the app agent's prompt and `describe` payloads. Served at `yaar://apps/{id}/docs/{name}`, via `describe({ topic })` on the app agent's tool, and as plain files in a clone. `features/apps/docs.ts` owns the tier; `scripts/check/apps.ts` validates frontmatter and warns when `prompt.md` restates a topic. |
 
 Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (`AGENT_DOCS` in
