@@ -29,8 +29,8 @@ export async function start(opts: StartOptions): Promise<RemoteControlStatus> {
   setLastError('');
   try {
     const started = await startRemote(opts);
-    // `start`'s status carries no `callerMonitorId`; a read does.
-    return (await refreshStatus()) ?? started;
+    setStatus(started);
+    return started;
   } finally {
     setBusy(false);
   }

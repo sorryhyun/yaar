@@ -1,8 +1,10 @@
-import { del, invoke, read } from '@bundled/yaar';
+// YAAR's own REST routes (http/routes/remote-control.ts), not a `yaar://` verb: there is none,
+// so an agent can only reach Remote Control through this app's commands. The fetch proxy
+// attaches this window's iframe token, which is how the server learns the monitor, and the
+// routes answer only the bundled Remote Control app.
+const BASE = '/api/remote-control';
 
-export const REMOTE_CONTROL_URI = 'yaar://system/remote-control';
-
-/** `status()` in the server's handlers/remote-control.ts. */
+/** `remoteControlStatus()` in the server's features/remote-control.ts. */
 export interface RemoteControlStatus {
   running: boolean;
   state: 'ready' | null;
@@ -10,23 +12,34 @@ export interface RemoteControlStatus {
   monitorId: string | null;
   sessionUrl: string | null;
   name: string | null;
-  /** The monitor of whoever read this — for the app, its own window's. Absent on `start`. */
-  callerMonitorId?: string | null;
+  /** This window's own monitor. */
+  callerMonitorId: string | null;
 }
 
 export interface StartOptions {
   name?: string;
 }
 
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(BASE + path, init);
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) throw new Error(body?.error ?? `${init?.method ?? 'GET'} ${path} → ${res.status}`);
+  return body as T;
+}
+
 export function fetchStatus(): Promise<RemoteControlStatus> {
-  return read<RemoteControlStatus>(REMOTE_CONTROL_URI);
+  return call<RemoteControlStatus>('');
 }
 
 /** Resolves after the user answers the permission dialog and the conversation is on claude.ai. */
 export function startRemote(opts: StartOptions): Promise<RemoteControlStatus> {
-  return invoke<RemoteControlStatus>(REMOTE_CONTROL_URI, { action: 'start', ...opts });
+  return call<RemoteControlStatus>('/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
 }
 
 export async function stopRemote(): Promise<void> {
-  await del(REMOTE_CONTROL_URI);
+  await call('/stop', { method: 'POST' });
 }

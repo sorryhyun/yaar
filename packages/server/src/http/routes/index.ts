@@ -7,6 +7,7 @@ export { handleFileRoutes } from './files.js';
 export { handleMediaProxyRoutes } from './media-proxy.js';
 export { handleMlRuntimeRoutes } from './ml-runtime.js';
 export { handleProxyRoutes } from './proxy.js';
+export { handleRemoteControlRoutes } from './remote-control.js';
 export { handleSessionRoutes } from './sessions.js';
 export { handleSettingsRoutes } from './settings.js';
 export { handleShortcutRoutes } from './shortcuts.js';

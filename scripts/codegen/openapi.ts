@@ -25,6 +25,7 @@ import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from '../../packages/server/src/http
 import { PUBLIC_ENDPOINTS as MEDIA_PROXY_PUBLIC } from '../../packages/server/src/http/routes/media-proxy.js';
 import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from '../../packages/server/src/http/routes/ml-runtime.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from '../../packages/server/src/http/routes/proxy.js';
+import { PUBLIC_ENDPOINTS as REMOTE_CONTROL_PUBLIC } from '../../packages/server/src/http/routes/remote-control.js';
 import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from '../../packages/server/src/http/routes/sessions.js';
 import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from '../../packages/server/src/http/routes/settings.js';
 import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from '../../packages/server/src/http/routes/shortcuts.js';
@@ -40,6 +41,7 @@ const ALL_ENDPOINTS: EndpointMeta[] = [
   ...MEDIA_PROXY_PUBLIC,
   ...ML_RUNTIME_PUBLIC,
   ...PROXY_PUBLIC,
+  ...REMOTE_CONTROL_PUBLIC,
   ...SESSIONS_PUBLIC,
   ...SETTINGS_PUBLIC,
   ...SHORTCUTS_PUBLIC,
@@ -59,6 +61,7 @@ const WIRED_ROUTE_FILES = new Set([
   'media-proxy.ts',
   'ml-runtime.ts',
   'proxy.ts',
+  'remote-control.ts',
   'sessions.ts',
   'settings.ts',
   'shortcuts.ts',

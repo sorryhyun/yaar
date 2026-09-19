@@ -1,8 +1,8 @@
 # Remote Control — the monitor agent on claude.ai
 
-A switch for `yaar://system/remote-control`. Turning it on puts **the monitor this window is
-on** — its agent's conversation — on claude.ai, so the user can talk to that agent from
-claude.ai/code or the Claude mobile app. It is not a second agent: a claude.ai message runs as
+The only way to Claude Remote Control — there is no `yaar://` verb for it. Turning it on
+puts **the monitor this window is on** — its agent's conversation — on claude.ai, so the user
+can talk to that agent from claude.ai/code or the Claude mobile app. It is not a second agent: a claude.ai message runs as
 a turn of the monitor agent, with its tools, timeline and history, and the desktop's own turns
 show up on claude.ai too. Open the app on the monitor the user wants to reach.
 

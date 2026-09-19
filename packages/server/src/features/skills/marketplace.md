@@ -1,42 +1,43 @@
 # Marketplace
 
-Browse and install apps from the YAAR marketplace.
+Manage apps that are already known by id: install, reinstall, update, uninstall. These are
+plain verbs on `yaar://apps/{appId}` — no window needed.
 
-## Marketplace API
+**Browsing the catalog and publishing are not here.** Open the **Market Apps** app
+(`yaar://apps/market-apps`) and drive it through its protocol — its hint and
+`describe('yaar://apps/market-apps')` cover `refresh`, search, `updateAll` and `publish`.
+Publishing needs the user's publisher sign-in and Publisher Terms acceptance, both of which
+live in that app's UI.
 
-Base URL: `{{MARKET_URL}}`
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/apps` | List all available apps (returns `{ apps: [...] }`) |
-| `GET /api/apps/{appId}` | Get details for a specific app |
-
-## Browsing Apps
-
-Use `yaar://http` to query the marketplace API:
-
-```
-invoke('yaar://http', { url: '{{MARKET_URL}}/api/apps' })
-```
-
-Each app in the response has: `id`, `name`, `icon`, `description`, `version`, `author`.
-
-## Installing Apps
+## Installing, reinstalling, updating
 
 ```
 invoke('yaar://apps/{appId}', { action: 'install' })
 ```
 
-This downloads the app from the marketplace, checks permissions, and installs it locally.
+Downloads the marketplace's current version, checks permissions, and installs it. The same call
+on an app that is already installed replaces the local copy with the marketplace one — that is
+how you reinstall a broken app or update an outdated one. Anything changed locally in that app
+is overwritten, so say so before doing it on an app the user has been editing.
 
-## Uninstalling Apps
+## Uninstalling
 
 ```
 delete('yaar://apps/{appId}')
 ```
 
-## Listing Installed Apps
+## Checking what is installed
 
 ```
-list('yaar://apps')
+list('yaar://apps')                # installed apps
+read('yaar://apps/{appId}')        # one app's version, source, and granted permissions
 ```
+
+Compare the installed `version` against the marketplace's with a single lookup when you only
+need one app:
+
+```
+invoke('yaar://http', { url: '{{MARKET_URL}}/api/apps/{appId}' })
+```
+
+For "what can I update?" across everything, use Market Apps' `outdatedApps` state instead.

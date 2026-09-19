@@ -1,30 +1,21 @@
 import { Show, onCleanup, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { subscribe } from '@bundled/yaar';
 import { copyLink, openLink, refreshStatus, toggle } from '../actions';
-import { REMOTE_CONTROL_URI } from '../gateway';
 import { busy, lastError, running, sessionName, setSessionName, status } from '../store';
 
 /**
- * The server pings the URI on start and stop, so the window follows it without polling.
- * `subscribe` resolves after mount, hence the `disposed` flag.
+ * No push channel for this state, and it changes from outside this window — another monitor's
+ * Remote Control window, a monitor reset, shutdown — so poll while the window is visible.
  */
+const POLL_MS = 5000;
+
 function watchRemote(): void {
-  let unsubscribe: (() => void) | undefined;
-  let disposed = false;
-  subscribe(REMOTE_CONTROL_URI, () => void refreshStatus())
-    .then((fn) => {
-      if (disposed) fn();
-      else unsubscribe = fn;
-    })
-    .catch((err) => console.error('[remote-control] subscription failed', err));
-  onCleanup(() => {
-    disposed = true;
-    unsubscribe?.();
-  });
+  const timer = setInterval(() => {
+    if (document.visibilityState === 'visible') void refreshStatus();
+  }, POLL_MS);
+  onCleanup(() => clearInterval(timer));
 }
 
-/** `start` returns a status without `callerMonitorId`, so this can briefly be unknown. */
 function elsewhere(): boolean {
   const s = status();
   return !!s?.running && s.callerMonitorId != null && s.monitorId !== s.callerMonitorId;

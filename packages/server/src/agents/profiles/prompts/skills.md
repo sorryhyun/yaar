@@ -10,5 +10,5 @@ read('yaar://skills/components')   # load a specific skill
 Available skills:
 - **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)
-- **marketplace** — App marketplace API for browsing and installing apps
+- **marketplace** — Install, reinstall, update or uninstall an app by id. Browsing and publishing go through the Market Apps app instead
 - **remote** — REQUIRED before helping a user reach YAAR from a phone or another computer. Tailscale install walkthrough (both devices) and remote-mode setup

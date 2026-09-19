@@ -1,6 +1,6 @@
 // Entry point.
 //
-//   gateway.ts   yaar://system/remote-control — read, start, stop
+//   gateway.ts   /api/remote-control — status, start, stop
 //   store.ts     the status signal and the name field
 //   actions.ts   every mutation, shared by the UI and the protocol
 //   protocol.ts  the agent-facing surface

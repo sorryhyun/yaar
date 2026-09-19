@@ -22,7 +22,6 @@ import { registerSkillsHandlers } from './skills.js';
 import { registerSystemHandlers } from './system.js';
 import { registerFontHandlers } from './fonts.js';
 import { registerYtDlpHandlers } from './ytdlp.js';
-import { registerRemoteControlHandlers } from './remote-control.js';
 import { registerHttpHandlers } from './http.js';
 import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
@@ -65,7 +64,6 @@ export function initRegistry(): ResourceRegistry {
   registerSystemHandlers(registry);
   registerFontHandlers(registry);
   registerYtDlpHandlers(registry);
-  registerRemoteControlHandlers(registry);
   registerHttpHandlers(registry);
   registerMcpGatewayHandlers(registry);
 

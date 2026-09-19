@@ -30,6 +30,7 @@ import {
   handleMediaProxyRoutes,
   handleMlRuntimeRoutes,
   handleProxyRoutes,
+  handleRemoteControlRoutes,
   handleSessionRoutes,
   handleSettingsRoutes,
   handleShortcutRoutes,
@@ -47,6 +48,7 @@ import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
 import { PUBLIC_ENDPOINTS as MEDIA_PROXY_PUBLIC } from './routes/media-proxy.js';
 import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from './routes/ml-runtime.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from './routes/proxy.js';
+import { PUBLIC_ENDPOINTS as REMOTE_CONTROL_PUBLIC } from './routes/remote-control.js';
 import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from './routes/sessions.js';
 import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from './routes/settings.js';
 import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from './routes/shortcuts.js';
@@ -72,6 +74,7 @@ function buildPublicRoutes(): PublicRoute[] {
     ...MEDIA_PROXY_PUBLIC,
     ...ML_RUNTIME_PUBLIC,
     ...PROXY_PUBLIC,
+    ...REMOTE_CONTROL_PUBLIC,
     ...SESSIONS_PUBLIC,
     ...SETTINGS_PUBLIC,
     ...SHORTCUTS_PUBLIC,
@@ -324,6 +327,9 @@ function createFetchHandlerInner() {
 
     const googleAuthResponse = await handleAuthRoutes(req, url);
     if (googleAuthResponse) return withCors(googleAuthResponse, corsHeaders);
+
+    const remoteControlResponse = await handleRemoteControlRoutes(req, url);
+    if (remoteControlResponse) return withCors(remoteControlResponse, corsHeaders);
 
     const shortcutResponse = await handleShortcutRoutes(req, url);
     if (shortcutResponse) return withCors(shortcutResponse, corsHeaders);

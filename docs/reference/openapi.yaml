@@ -358,6 +358,36 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/remote-control:
+    get:
+      summary: Remote Control status (host + the Remote Control app only).
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/remote-control/start:
+    post:
+      summary: "Put the caller's monitor agent on claude.ai after the user confirms (host + the Remote Control app only)."
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/remote-control/stop:
+    post:
+      summary: Turn Remote Control off (host + the Remote Control app only).
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
   /api/storage:
     get:
       summary: Storage root (list/read)

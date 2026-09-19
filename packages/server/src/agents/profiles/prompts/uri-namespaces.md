@@ -10,5 +10,5 @@
 | `yaar://user/` | `yaar://user/notifications`, `yaar://user/prompts`, `yaar://user/clipboard` | invoke, delete |
 | `yaar://skills/` | `yaar://skills/components`, `yaar://skills/config` | list, read |
 | `yaar://http` | `yaar://http` | invoke ({ url, method?, headers?, body? }) |
-| `yaar://system/` | `yaar://system`, `yaar://system/remote-control`, `yaar://system/update` | list, describe, read, invoke, delete |
+| `yaar://system/` | `yaar://system`, `yaar://system/update` | list, describe, read, invoke, delete |
 | `yaar://mcp/` | `yaar://mcp/github`, `yaar://mcp/github/create_issue` | list, describe, invoke |

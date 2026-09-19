@@ -13,29 +13,31 @@ its agent from the Claude app, with no tunnel and no second browser.
 reattach), `packages/server/src/providers/claude/turn-router.ts` (whose frame is whose),
 `packages/server/src/agents/context-pool.ts` (`enableRemoteControl`, `remotePromptContext`),
 `packages/server/src/agents/monitor-task-processor.ts` (`remote` tasks),
-`packages/server/src/handlers/remote-control.ts`, `apps/remote-control/`
+`packages/server/src/features/remote-control.ts`, `packages/server/src/http/routes/remote-control.ts`,
+`apps/remote-control/`
 
 ## Using it
 
 **From the app.** Open **Remote Control** (📡) on the monitor you want to reach and flip the
 switch. After the permission dialog it shows the session link with Open and Copy. The link
 belongs to the monitor of the window that started it. A window on another monitor shows where it
-is on and can turn it off. The app follows the state through a subscription on
-`yaar://system/remote-control`. `read` also returns `callerMonitorId`, which is how a window
-learns its own monitor.
+is on and can turn it off. The app polls its state every few seconds while visible; the status
+also carries `callerMonitorId`, which is how a window learns its own monitor.
 
-**From the monitor agent.** Ask: "claude remote 켜줘" / "start remote control". It calls
-`invoke('yaar://system/remote-control', { action: "start" })`. **You get a permission dialog
-first, every time.** The call returns the `sessionUrl` (`https://claude.ai/code/session_…`).
+**From the monitor agent.** Ask: "claude remote 켜줘" / "start remote control". There is no
+`yaar://` verb for this: the agent opens the Remote Control app and runs its `start` command, so
+whatever turned it on, a window on screen shows that it is on. **You get a permission dialog first, every time.** The command returns the `sessionUrl`
+(`https://claude.ai/code/session_…`). "remote control 꺼줘" runs the app's `stop`. Shutting YAAR
+down or resetting the monitor stops it too.
 
-Stop it with "remote control 꺼줘", which calls `delete('yaar://system/remote-control')`.
-Shutting YAAR down or resetting the monitor stops it too.
+The app talks to the server over REST, open only to the desktop and the bundled Remote Control
+app (`kind: "system"`, which cannot be self-granted):
 
-| Verb | Payload | Does |
+| Route | Body | Does |
 |---|---|---|
-| `read` | — | `running`, `state` (`ready` or null), `monitorId`, `sessionUrl`, `name`, `callerMonitorId` |
-| `invoke` | `{ action: "start", name? }` | User-confirmed. Bridges the caller's monitor agent and returns the status with `sessionUrl` |
-| `delete` | — | Takes the conversation off claude.ai |
+| `GET /api/remote-control` | — | `running`, `state` (`ready` or null), `monitorId`, `sessionUrl`, `name`, `callerMonitorId` |
+| `POST /api/remote-control/start` | `{ name? }` | User-confirmed. Bridges the caller's monitor agent and returns the status with `sessionUrl` |
+| `POST /api/remote-control/stop` | — | Takes the conversation off claude.ai |
 
 It works on one monitor at a time, and only with the Claude provider.
 
