@@ -690,6 +690,28 @@ describe('createCollapsiblePanel', () => {
     panel.togglePin();
     expect(panel.expanded()).toBe(true);
   });
+
+  test('a drawer ignores the pin, and the pin returns when the window widens', () => {
+    let narrow = false;
+    const panel = createCollapsiblePanel({ drawer: () => narrow });
+    panel.setPin(true);
+    narrow = true;
+    panel.close();
+    expect(panel.expanded()).toBe(false);
+    expect(panel.pinned()).toBe(true);
+    narrow = false;
+    expect(panel.expanded()).toBe(true);
+  });
+
+  test('a drawer does not fold on mouseleave — only close() moves it', async () => {
+    const panel = createCollapsiblePanel({ closeDelayMs: 5, drawer: () => true });
+    panel.open();
+    panel.scheduleClose();
+    await settle(20);
+    expect(panel.expanded()).toBe(true);
+    panel.close();
+    expect(panel.expanded()).toBe(false);
+  });
 });
 
 describe('createProtocolContext', () => {

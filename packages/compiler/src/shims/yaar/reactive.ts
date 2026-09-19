@@ -139,6 +139,43 @@ export function createPersistedSignal<T>(
 }
 
 /**
+ * A signal that tracks a CSS media query inside this app's frame.
+ *
+ * In an iframe, width queries answer the *window's* width, not the device's —
+ * which is what a layout decision wants: a phone card and a narrow desktop
+ * window both lack room for a side panel. `false` where `matchMedia` is missing.
+ */
+export function createMediaQuery(query: string): () => boolean {
+  const mql = typeof matchMedia === 'function' ? matchMedia(query) : null;
+  const [matches, setMatches] = createSignal(mql?.matches ?? false);
+  mql?.addEventListener('change', (e) => setMatches(e.matches));
+  return matches;
+}
+
+/**
+ * The injected stylesheet's two phone queries. Keep these strings identical to the
+ * `@media` rules in shared's app-css.ts — JS deciding what is in the DOM and CSS
+ * deciding how it looks must never disagree about which layout is on screen.
+ */
+export const NARROW_QUERY = '(max-width:768px)';
+export const TOUCH_QUERY = '(pointer:coarse)';
+
+let narrowSignal: (() => boolean) | null = null;
+let touchSignal: (() => boolean) | null = null;
+
+/** No room for a side panel (window ≤ 768px wide): use a drawer, one column. */
+export function isNarrow(): boolean {
+  narrowSignal ??= createMediaQuery(NARROW_QUERY);
+  return narrowSignal();
+}
+
+/** The primary pointer is a finger: no hover, no mouseleave, 44px targets. */
+export function isTouch(): boolean {
+  touchSignal ??= createMediaQuery(TOUCH_QUERY);
+  return touchSignal();
+}
+
+/**
  * The hover-expand + pin sidebar/overlay state machine.
  *
  * The panel is visible when pinned, or while the cursor is over it. A grace
@@ -162,6 +199,14 @@ export function createPersistedSignal<T>(
  *
  * Both default to the unguarded behavior, so existing callers are unaffected.
  *
+ * `drawer` switches the panel to a modal drawer while it returns true (pass
+ * `isNarrow`). A drawer has no hover and no pin: `expanded()` ignores the pin, so a
+ * panel pinned while the window was wide does not arrive stuck open over a phone's
+ * only column; `scheduleClose()` is inert, because a tap synthesises mouse events
+ * and nothing would ever re-open what they folded. It is driven by `open()` and
+ * `close()` alone — the hamburger, the backdrop, the ✕, and picking an item. The
+ * stored pin is left untouched and applies again once the window is wide.
+ *
  * Headless: the app owns the markup and pointer wiring; only the state is shared.
  */
 export function createCollapsiblePanel(opts?: {
@@ -170,9 +215,11 @@ export function createCollapsiblePanel(opts?: {
   pinLabel?: string; // toast label on a failed pin persist
   canOpen?: () => boolean; // false → `open()` only cancels the pending fold
   holdOpen?: () => boolean; // true → the fold is skipped when it fires
+  drawer?: () => boolean; // true → modal drawer: pin ignored, no hover fold
 }): {
-  expanded: () => boolean; // pinned() || hovering()
+  expanded: () => boolean; // pinned() || hovering(); drawer: hovering() only
   pinned: () => boolean;
+  drawer: () => boolean;
   open(): void; // cancel close + show
   scheduleClose(): void; // arm the delayed fold (no-op while resizing)
   close(): void; // fold now; pinned still wins
@@ -187,8 +234,10 @@ export function createCollapsiblePanel(opts?: {
   const [hovering, setHovering] = createSignal(false);
   const [pinned, setPinned] = createSignal(false);
 
-  /** The panel is expanded when pinned, or while the cursor is over it. */
-  const expanded = () => pinned() || hovering();
+  const drawer = () => opts?.drawer?.() ?? false;
+
+  /** Expanded when pinned or while the cursor is over it; a drawer only while opened. */
+  const expanded = () => (drawer() ? hovering() : pinned() || hovering());
 
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
   const cancelClose = () => {
@@ -212,7 +261,7 @@ export function createCollapsiblePanel(opts?: {
 
   const scheduleClose = () => {
     cancelClose();
-    if (resizing) return;
+    if (resizing || drawer()) return;
     closeTimer = setTimeout(() => {
       closeTimer = null;
       if (opts?.holdOpen?.()) return;
@@ -234,7 +283,9 @@ export function createCollapsiblePanel(opts?: {
     void appStorage.readJsonOr<boolean>(pinKey, false).then((stored) => {
       if (!pinTouched && stored === true) {
         setPinned(true);
-        open();
+        // A drawer ignores the pin; opening it here would cover a phone's only
+        // column on every mount.
+        if (!drawer()) open();
       }
       pinLoaded = true;
     });
@@ -263,6 +314,7 @@ export function createCollapsiblePanel(opts?: {
   return {
     expanded,
     pinned,
+    drawer,
     open,
     scheduleClose,
     close,

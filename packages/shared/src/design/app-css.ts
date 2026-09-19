@@ -308,6 +308,32 @@ body.nav-resizing .y-nav-panel{transition:none}
 .y-nav-pin{border:1px solid transparent;background:transparent;border-radius:var(--yaar-radius-sm);padding:2px 6px;cursor:pointer;font-size:var(--yaar-text-base);line-height:1;transition:background var(--yaar-ease),border-color var(--yaar-ease)}
 .y-nav-pin:hover{background:var(--yaar-bg-surface-hover)}
 .y-nav-pin-active{border-color:var(--yaar-accent)}
+/* ── Phone / narrow window ─────────────────────────────────────────────
+   Two separate questions, two queries. WIDTH decides layout: at or below
+   768px there is no room for a side panel, so the nav panel becomes a
+   full-bleed drawer over a backdrop, and the hover rail and width handle go
+   (a 360px desktop window gets the drawer too, which is right). POINTER
+   decides size: a finger needs 44px targets whether or not the screen is
+   narrow. isNarrow() / isTouch() in @bundled/yaar read the same two
+   queries, so an app's JS and this sheet always agree. Backdrop and close
+   button are hidden until the drawer exists; the app renders them always. */
+.y-nav-backdrop{display:none}
+.y-nav-close{display:none;align-items:center;justify-content:center;border:none;background:transparent;color:var(--yaar-text-muted);font-size:var(--yaar-text-lg);cursor:pointer;padding:0 var(--yaar-sp-1)}
+@media (max-width:768px){
+.y-appbar{gap:var(--yaar-sp-2);padding:0 var(--yaar-sp-2)}
+.y-brand{flex-shrink:1;min-width:0;overflow:hidden}
+.y-brand-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.y-nav-panel{width:100%;max-width:100%;border-right:none}
+.y-nav-hover-zone,.y-nav-resizer{display:none}
+.y-nav-backdrop{display:block;position:absolute;inset:0;background:${O.modalBackdrop};pointer-events:auto}
+.y-nav-close{display:flex}
+}
+@media (pointer:coarse){
+.y-appbar{height:56px}
+.y-appbar-actions .y-btn,.y-appbar-actions .y-tbtn{min-width:44px;min-height:44px}
+.y-nav-hamburger{width:44px;height:44px;font-size:var(--yaar-text-xl);opacity:1}
+.y-nav-close{min-width:44px;min-height:44px}
+}
 pre[class*="language-"],code[class*="language-"]{color:${P.plain};background:var(--yaar-bg-surface);font-family:var(--yaar-font-mono);font-size:var(--yaar-text-sm);border-radius:var(--yaar-radius)}
 pre[class*="language-"]{padding:var(--yaar-sp-3);overflow:auto;margin:var(--yaar-sp-2) 0}
 .token.comment,.token.prolog,.token.doctype,.token.cdata{color:${P.comment};font-style:italic}

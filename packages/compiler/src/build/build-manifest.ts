@@ -139,8 +139,13 @@ import { join, basename } from 'path';
  * dropped the `scrollbar-color` that was switching Chromium's pseudo-element styling off
  * for it. The stylesheet is inlined into `dist/`, so without a bump only apps that
  * happened to go stale would pick up the new scrollbar.
+ *
+ * '32': the injected stylesheet gained the narrow-window and touch rules for the app bar
+ * and the `y-nav-*` family (full-bleed drawer, backdrop, 44px targets), and `@bundled/yaar`
+ * gained `isNarrow`/`isTouch` and the collapsible panel's `drawer` mode. The stylesheet is
+ * inlined into `dist/`, so an unrebuilt app keeps a desktop-only sheet on a phone.
  */
-export const COMPILER_VERSION = '31';
+export const COMPILER_VERSION = '32';
 
 export interface BuildManifest {
   sourceHash: string;

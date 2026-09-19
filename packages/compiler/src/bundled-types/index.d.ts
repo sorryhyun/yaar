@@ -2318,6 +2318,22 @@ declare module '@bundled/yaar' {
     },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>];
 
+  /** A signal tracking a CSS media query in this app's frame (false without matchMedia). */
+  export function createMediaQuery(query: string): () => boolean;
+
+  /**
+   * Window ≤ 768px wide — no room for a side panel. Same query as the injected
+   * stylesheet's narrow rules (full-bleed `y-nav-panel`, `y-nav-backdrop`), so JS and
+   * CSS agree on the layout. Reactive; follows rotation and resizes.
+   */
+  export function isNarrow(): boolean;
+
+  /** The primary pointer is coarse (a finger): no hover, 44px targets. Reactive. */
+  export function isTouch(): boolean;
+
+  export const NARROW_QUERY: string;
+  export const TOUCH_QUERY: string;
+
   /**
    * The hover-expand + pin sidebar/overlay state machine.
    *
@@ -2335,9 +2351,16 @@ declare module '@bundled/yaar' {
     canOpen?: () => boolean;
     /** Consulted when the fold fires. True keeps the panel open (re-arm to retry). */
     holdOpen?: () => boolean;
+    /**
+     * True → a modal drawer (pass `isNarrow`): `expanded()` ignores the pin and
+     * `scheduleClose()` is inert, so only `open()` / `close()` move it.
+     */
+    drawer?: () => boolean;
   }): {
     expanded: () => boolean;
     pinned: () => boolean;
+    /** Whether the panel is currently in drawer mode. */
+    drawer: () => boolean;
     open(): void;
     scheduleClose(): void;
     close(): void;
