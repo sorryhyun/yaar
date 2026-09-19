@@ -47,14 +47,28 @@ export async function refreshAccount(): Promise<void> {
  * Sign-in is a human gesture (agents publish against the already-signed-in
  * identity, they don't summon consent), so it lives on a button here and reports
  * back by polling rather than by holding the request open across the consent screen.
+ *
+ * The consent screen opens as a real browser tab, from here. The server used to
+ * launch it with `xdg-open`, which on Android (Termux) opens nothing — and on any
+ * machine it lands wherever the server runs, not where the user is clicking. The tab
+ * is opened blank *before* the first await, while the click's user activation is
+ * still live (a popup opened after a round trip is blocked on mobile), and pointed at
+ * Google once the server has minted the URL. A blank `window.open` is one the windows
+ * SDK passes through to the browser; a URL would be routed into a YAAR window, which
+ * Google refuses to be framed in.
  */
 export async function signIn(): Promise<void> {
   if (authBusy()) return;
+  const tab = window.open('', '_blank');
   await withLoading(
     setAuthBusy,
     async () => {
-      await yaarPost('/api/auth/google/login', AuthLoginSchema);
-      setStatus('Complete sign-in in the browser window that just opened…', false);
+      const { authUrl } = (await yaarPost('/api/auth/google/login', AuthLoginSchema)) ?? {};
+      if (!authUrl) throw new Error('the server returned no sign-in URL');
+      if (!tab) throw new Error('the browser blocked the sign-in tab — allow pop-ups and retry');
+      tab.opener = null;
+      tab.location.href = authUrl;
+      setStatus('Complete sign-in in the browser tab that just opened…', false);
 
       for (let i = 0; i < SIGN_IN_POLL_ATTEMPTS; i++) {
         await wait(SIGN_IN_POLL_INTERVAL_MS);
@@ -68,7 +82,10 @@ export async function signIn(): Promise<void> {
       }
       if (!account().signedIn) setStatus('Sign-in did not complete. Try again.');
     },
-    (msg) => setStatus(`Sign-in failed: ${msg}`),
+    (msg) => {
+      tab?.close();
+      setStatus(`Sign-in failed: ${msg}`);
+    },
   );
 }
 

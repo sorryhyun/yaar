@@ -40,7 +40,7 @@ paths:
                 type: object
   /api/auth/google/login:
     post:
-      summary: Start Google sign-in — opens the consent screen (host + system apps only).
+      summary: Start Google sign-in — returns the consent URL to open (host + system apps only).
       responses:
         '200':
           description: JSON

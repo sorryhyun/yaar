@@ -2,7 +2,7 @@
  * Google auth routes — marketplace publisher identity.
  *
  * GET  /api/auth/google/status    — { configured, signedIn, email, pending }
- * POST /api/auth/google/login     — open the browser at Google's consent screen
+ * POST /api/auth/google/login     — mint Google's consent URL for the caller to open
  * GET  /api/auth/google/callback  — Google's redirect target (browser-facing HTML)
  * POST /api/auth/google/logout    — forget the local session
  * GET  /api/auth/google/me        — { email, apps } from the marketplace (server-side)
@@ -50,7 +50,8 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     method: 'POST',
     path: '/api/auth/google/login',
     response: 'JSON',
-    description: 'Start Google sign-in — opens the consent screen (host + system apps only).',
+    description:
+      'Start Google sign-in — returns the consent URL to open (host + system apps only).',
   },
   {
     method: 'POST',

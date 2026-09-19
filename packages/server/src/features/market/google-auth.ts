@@ -1,8 +1,8 @@
 /**
  * Google OAuth — the publisher identity YAAR presents to the marketplace.
  *
- * Desktop-app flow with PKCE over a loopback redirect: YAAR opens the system
- * browser at Google's consent screen, Google redirects back to
+ * Desktop-app flow with PKCE over a loopback redirect: the caller (market-apps)
+ * opens a browser tab at Google's consent screen, Google redirects back to
  * `/api/auth/google/callback` on this very server, and the code is exchanged for
  * tokens here. No second listener — a Desktop client accepts any loopback port,
  * so the server we already run is the redirect target.
@@ -30,7 +30,6 @@
 import { join, dirname } from 'path';
 import { mkdir, readFile, writeFile, unlink, chmod } from 'fs/promises';
 import { getConfigDir, getPort, GOOGLE_CLIENT_ID, MARKET_URL } from '../../config.js';
-import { openUrl } from '@yaar/lib/open-url';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('market');
@@ -201,7 +200,12 @@ function sweepPendingLogins(): void {
 }
 
 /**
- * Start a login: mint PKCE + state, open the browser, return the URL.
+ * Start a login: mint PKCE + state, return the consent URL for the caller to open.
+ *
+ * Not opened from here: a server-side `openUrl` lands on whatever machine the server
+ * runs on, with whatever opener it has — `xdg-open` does nothing on Android (Termux),
+ * and in remote mode the tab appears on a screen the user is not looking at. The
+ * user is at a browser already; the app that took the click opens it there.
  *
  * Returns rather than awaits — the caller polls `getAuthStatus()`. The browser
  * round-trip is a human at a consent screen, which is not a wait an HTTP request
@@ -238,9 +242,7 @@ export async function beginLogin(): Promise<{ authUrl: string }> {
     prompt: 'consent',
   });
 
-  const authUrl = `${AUTH_ENDPOINT}?${params}`;
-  openUrl(authUrl);
-  return { authUrl };
+  return { authUrl: `${AUTH_ENDPOINT}?${params}` };
 }
 
 /**

@@ -72,7 +72,7 @@ export async function fetchGithubStatus(): Promise<z.infer<typeof GithubStatusSu
 //
 // These hit YAAR's *own* origin (relative paths), not the marketplace domain — the
 // fetch proxy attaches this app's iframe token automatically, and the server only
-// answers because market-apps is a bundled system app. `login` opens a real Google
+// answers because market-apps is a bundled system app. `login` mints a real Google
 // consent screen, which is why the routes are closed to ordinary apps.
 
 export async function yaarGet<S extends z.ZodMiniType>(
