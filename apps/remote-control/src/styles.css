@@ -93,13 +93,6 @@
   gap: var(--yaar-sp-1);
 }
 
-.rc-check {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
-  font-size: var(--yaar-text-sm);
-}
-
 .rc-link {
   padding: var(--yaar-sp-3);
   display: flex;
@@ -118,17 +111,4 @@
 .rc-link-actions {
   display: flex;
   gap: var(--yaar-sp-2);
-}
-
-.rc-terminal pre {
-  margin: var(--yaar-sp-2) 0 0;
-  padding: var(--yaar-sp-2);
-  max-height: 240px;
-  overflow: auto;
-  background: var(--yaar-bg-surface);
-  border: 1px solid var(--yaar-border);
-  border-radius: 6px;
-  font-family: var(--yaar-font-mono);
-  font-size: var(--yaar-text-xs);
-  white-space: pre-wrap;
 }

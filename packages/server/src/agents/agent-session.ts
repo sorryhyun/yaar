@@ -7,7 +7,10 @@
 
 import type {
   AITransport,
+  ExternalTurn,
+  ExternalTurnHandlers,
   InterruptReceipt,
+  RemoteControlInfo,
   TransportOptions,
   TokenUsage,
 } from '../providers/types.js';
@@ -76,6 +79,12 @@ export interface HandleMessageOptions {
    * answer would silently fire someone else's hook.
    */
   appId?: string;
+  /**
+   * A turn already running in the provider that this call only follows — a claude.ai
+   * message on a Remote Control conversation. Its messages are read instead of starting
+   * a query; everything else about the turn (events, logs, the busy flag) is the same.
+   */
+  external?: ExternalTurn;
 }
 
 export class AgentSession {
@@ -91,6 +100,8 @@ export class AgentSession {
    * post-turn side effects (response hooks, relays) check this instead.
    */
   private interrupted = false;
+  /** True while the running turn is one claude.ai started (`HandleMessageOptions.external`). */
+  private followingExternal = false;
   private sessionLogger: SessionLogger | null = null;
   private unsubscribeAction: (() => void) | null = null;
   private instanceId: string;
@@ -263,6 +274,11 @@ export class AgentSession {
     notifyAgentsChanged(this.liveSessionId);
   }
 
+  /** Whether the running turn is a claude.ai turn this session is only following. */
+  isFollowingExternal(): boolean {
+    return this.running && this.followingExternal;
+  }
+
   /** True if the most recent turn was interrupted (stays true through the post-turn callbacks). */
   wasInterrupted(): boolean {
     return this.interrupted;
@@ -424,6 +440,7 @@ export class AgentSession {
       return;
     }
 
+    this.followingExternal = !!options.external;
     this.setRunning(true);
     this.interrupted = false;
     // A new turn is not the interrupted one: lift the emitter's block, or this
@@ -542,7 +559,9 @@ export class AgentSession {
         },
         async () => {
           log.debug('entered agent context', { role });
-          for await (const message of this.provider!.query(fullContent, transportOptions)) {
+          const messages =
+            options.external?.messages ?? this.provider!.query(fullContent, transportOptions);
+          for await (const message of messages) {
             if (!this.running) break;
             await turnMapper.map(message);
           }
@@ -584,6 +603,44 @@ export class AgentSession {
       this.currentMessageId = null;
       this.currentRole = null;
     }
+  }
+
+  /**
+   * Put this agent's conversation on claude.ai. Opens the provider stream first with the
+   * options this agent's turns use (a no-op if it is already open), since the bridge is a
+   * property of a running CLI.
+   */
+  async enableRemoteControl(
+    name: string | undefined,
+    warm: {
+      role: string;
+      monitorId?: string;
+      allowedTools?: string[];
+      model?: string;
+    },
+    handlers: ExternalTurnHandlers,
+  ): Promise<RemoteControlInfo> {
+    const provider = this.provider;
+    if (!provider?.enableRemoteControl || !provider.setExternalTurnHandlers) {
+      throw new Error('Remote Control needs the Claude provider.');
+    }
+    await this.prewarm(warm.role, warm);
+    provider.setExternalTurnHandlers(handlers);
+    try {
+      return await provider.enableRemoteControl(name);
+    } catch (err) {
+      provider.setExternalTurnHandlers(null);
+      throw err;
+    }
+  }
+
+  async disableRemoteControl(): Promise<void> {
+    await this.provider?.disableRemoteControl?.();
+    this.provider?.setExternalTurnHandlers?.(null);
+  }
+
+  getRemoteControl(): RemoteControlInfo | null {
+    return this.provider?.getRemoteControl?.() ?? null;
   }
 
   async steer(content: string): Promise<boolean> {

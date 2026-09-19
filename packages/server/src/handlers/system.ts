@@ -69,7 +69,8 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
         {
           uri: 'yaar://system/remote-control',
           name: 'remote-control',
-          description: 'Host Claude Remote Control so claude.ai/code can drive this machine',
+          description:
+            "Put a monitor agent's conversation on claude.ai/code (Claude Remote Control)",
         },
       ]);
     },

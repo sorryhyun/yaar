@@ -4,10 +4,6 @@
  * Replaces CallbackQueue with a chronological timeline that interleaves
  * user-originated events (close, focus, move, resize) with AI agent summaries.
  * The main agent drains the timeline on its next turn to see everything that happened.
- *
- * A timeline is drained by exactly one reader. Another reader of the same desktop — the
- * hosted Remote Control agent, which takes its turns outside the pool — gets its own
- * timeline as a *follower*: every push is copied into it, and each drains on its own.
  */
 
 import type { OSAction, UserInteraction } from '@yaar/shared';
@@ -24,19 +20,12 @@ export class InteractionTimeline {
   private entries: TimelineEntry[] = [];
 
   /**
-   * @param followers Timelines every push is copied into, read at push time so a follower
-   *   attached later starts receiving from then on.
-   */
-  constructor(private readonly followers: () => Iterable<InteractionTimeline> = () => []) {}
-
-  /**
    * Push a user interaction into the timeline.
    * Deduplicates redundant interactions:
    * - Consecutive focus on the same window is collapsed
    * - Focus immediately before move/resize on the same window is removed
    */
   pushUser(interaction: UserInteraction): void {
-    for (const f of this.followers()) f.pushUser(interaction);
     const content = formatCompactInteraction(interaction);
     const windowId = interaction.windowId;
     const verb = interaction.type.split('.')[1]; // 'close', 'focus', 'move', etc.
@@ -77,7 +66,6 @@ export class InteractionTimeline {
     windowId?: string,
     responseText?: string,
   ): void {
-    for (const f of this.followers()) f.pushAI(role, _task, actions, windowId, responseText);
     let summary = this.summarizeActions(actions, windowId);
     if (responseText) {
       summary += ` Response: ${responseText}`;
@@ -96,7 +84,6 @@ export class InteractionTimeline {
    * turn without waking it.
    */
   pushRaw(content: string): void {
-    for (const f of this.followers()) f.pushRaw(content);
     this.entries.push({ type: 'raw', content, timestamp: Date.now() });
   }
 

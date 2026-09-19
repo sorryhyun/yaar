@@ -1,22 +1,12 @@
 import { showToast } from '@bundled/yaar';
 import {
   fetchStatus,
-  startHost,
-  stopHost,
-  writeHost,
+  startRemote,
+  stopRemote,
   type RemoteControlStatus,
   type StartOptions,
 } from './gateway';
-import {
-  busy,
-  permissionMode,
-  reattach,
-  running,
-  sessionName,
-  setBusy,
-  setLastError,
-  setStatus,
-} from './store';
+import { busy, running, sessionName, setBusy, setLastError, setStatus } from './store';
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -38,7 +28,7 @@ export async function start(opts: StartOptions): Promise<RemoteControlStatus> {
   setBusy(true);
   setLastError('');
   try {
-    const started = await startHost(opts);
+    const started = await startRemote(opts);
     // `start`'s status carries no `callerMonitorId`; a read does.
     return (await refreshStatus()) ?? started;
   } finally {
@@ -50,15 +40,11 @@ export async function stop(): Promise<void> {
   setBusy(true);
   setLastError('');
   try {
-    await stopHost();
+    await stopRemote();
     await refreshStatus();
   } finally {
     setBusy(false);
   }
-}
-
-export async function pressEnter(): Promise<void> {
-  await writeHost('\r');
 }
 
 /** The switch in the UI: reports its own failure instead of throwing. */
@@ -68,10 +54,9 @@ export async function toggle(): Promise<void> {
     if (running()) {
       await stop();
     } else {
-      const opts: StartOptions = { permissionMode: permissionMode() };
+      const opts: StartOptions = {};
       const name = sessionName().trim();
       if (name) opts.name = name;
-      if (reattach()) opts.continue = true;
       await start(opts);
     }
   } catch (err) {

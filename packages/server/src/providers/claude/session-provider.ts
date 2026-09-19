@@ -5,17 +5,26 @@
  * Sessions are created on first real query and resumed for subsequent ones.
  */
 
-import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
+import {
+  query as sdkQuery,
+  type HookCallback,
+  type Options as SDKOptions,
+  type SDKMessage,
+} from '@anthropic-ai/claude-agent-sdk';
+import { randomUUID } from 'crypto';
 import { BaseTransport } from '../base-transport.js';
 import type {
   EscapeGuardRecord,
+  ExternalTurnHandlers,
   InterruptReceipt,
+  RemoteControlInfo,
   StreamMessage,
   TransportOptions,
   ProviderType,
 } from '../types.js';
 import { mapClaudeMessage, TurnUsageTracker } from './message-mapper.js';
 import { createInputChannel, type InputChannel } from './input-channel.js';
+import { TurnRouter, type DetachedTurn } from './turn-router.js';
 import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tripwire.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -93,6 +102,35 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/** First wait before reopening a bridged stream whose process went away; doubles per failure. */
+const REMOTE_REOPEN_MS = 2000;
+const REMOTE_REOPEN_MAX_MS = 60_000;
+
+/** Own prompts remembered for the `UserPromptSubmit` hook to recognise. */
+const OWN_PROMPT_LIMIT = 32;
+
+/**
+ * `Query.enableRemoteControl` — the control request Claude's IDE extensions use to put a
+ * headless session on claude.ai. Present on the SDK's `Query` at runtime but not in its
+ * published typings, so it is reached through this shape and checked before use.
+ */
+interface RemoteControlQuery {
+  enableRemoteControl?(
+    enabled: boolean,
+    name?: string,
+    opts?: { reattachSessionId?: string },
+  ): Promise<{ session_url?: string; bridge_session_id?: string } | null | undefined>;
+}
+
+/** The text an SDK user message carries, as the CLI will hand it to `UserPromptSubmit`. */
+function contentText(content: string | ContentBlock[]): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((b): b is TextContentBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n');
+}
+
 /**
  * Separator joining a turn's fingerprint fields. NUL cannot occur in a prompt,
  * tool name, agent id, or model, so no combination of field values can spell a
@@ -139,6 +177,12 @@ interface PersistentSession {
   /** Resolves once this turn's own message is on the wire; null while idle. */
   turnStarted: Promise<void> | null;
   busy: boolean;
+  /** Where each frame the pump reads goes — see `turn-router.ts`. */
+  router: TurnRouter;
+  /** Set when the pump has stopped: the process is gone and the stream with it. */
+  pumpDone: boolean;
+  /** What stopped the pump, if it threw rather than ended. */
+  pumpError: unknown;
 }
 
 export class ClaudeSessionProvider extends BaseTransport {
@@ -148,6 +192,21 @@ export class ClaudeSessionProvider extends BaseTransport {
 
   private sessionId: string | null = null;
   private persistentSession: PersistentSession | null = null;
+  private disposed = false;
+
+  /**
+   * Remote Control, while it is wanted. Outlives the stream: a reopen — new prompt, a
+   * crashed process — reattaches to the same claude.ai conversation (`attachRemote`),
+   * which is what makes the bridge belong to the agent rather than to one process.
+   */
+  private remote: { name?: string; info: RemoteControlInfo | null } | null = null;
+  private externalHandlers: ExternalTurnHandlers | null = null;
+  /** The options the stream was last opened with, so a bridged stream can reopen by itself. */
+  private lastOptions: TransportOptions | null = null;
+  private reopenTimer: ReturnType<typeof setTimeout> | null = null;
+  private reopenDelayMs = REMOTE_REOPEN_MS;
+  /** Prompts YAAR pushed, so the prompt hook leaves them alone. Oldest first. */
+  private ownPrompts: string[] = [];
 
   constructor() {
     super();
@@ -163,12 +222,67 @@ export class ClaudeSessionProvider extends BaseTransport {
    * the resulting options will spawn (see sdk-options.ts for the options).
    */
   private getSDKOptions({ resumeSession, options }: TurnOptionsRequest): SDKOptions {
-    return buildSDKOptions({
+    const sdkOptions = buildSDKOptions({
       resumeSession,
       options,
       defaultSystemPrompt: this.systemPrompt,
       abortController: this.createAbortController(),
       onEscapeGuard: (record) => this.escapeGuardQueue.push(record),
+    });
+    // Both are for Remote Control, and both are fixed when the process starts — which is
+    // before anyone knows the bridge will be wanted. The replay is how a claude.ai turn's
+    // question reaches YAAR (it arrives as input on the CLI's side, never on ours); the
+    // hook is how that question gets the desktop context a YAAR-built prompt carries.
+    // Off the bridge the hook returns at once and the replayed user frames map to nothing.
+    sdkOptions.extraArgs = { ...sdkOptions.extraArgs, 'replay-user-messages': null };
+    sdkOptions.hooks = {
+      ...sdkOptions.hooks,
+      UserPromptSubmit: [{ hooks: [this.promptHook] }],
+    };
+    return sdkOptions;
+  }
+
+  /**
+   * Attach the monitor's desktop context to a prompt YAAR did not write.
+   *
+   * A YAAR turn's prompt is built with `<timeline>` and `<open_windows>` in it. A
+   * claude.ai message goes from the browser into the CLI untouched, and this hook is the
+   * one point where the CLI asks before the model sees it.
+   */
+  private readonly promptHook: HookCallback = async (input) => {
+    if (input.hook_event_name !== 'UserPromptSubmit' || !this.remote) return {};
+    const own = this.ownPrompts.indexOf(input.prompt);
+    if (own !== -1) {
+      this.ownPrompts.splice(own, 1);
+      return {};
+    }
+    const context = this.externalHandlers?.promptContext?.();
+    if (!context) return {};
+    return {
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
+    };
+  };
+
+  /**
+   * Push a user message into the stream as YAAR's own. The uuid is how the turn it starts
+   * is told apart from one somebody else started (`TurnRouter`); the text is how the
+   * prompt hook tells it apart from theirs.
+   */
+  private send(
+    session: PersistentSession,
+    content: string | ContentBlock[],
+    uuid: string = randomUUID(),
+  ): void {
+    session.router.markOwn(uuid);
+    if (this.remote) {
+      this.ownPrompts.push(contentText(content));
+      if (this.ownPrompts.length > OWN_PROMPT_LIMIT) this.ownPrompts.shift();
+    }
+    session.channel.push({
+      type: 'user',
+      uuid,
+      message: { role: 'user', content },
+      parent_tool_use_id: null,
     });
   }
 
@@ -194,9 +308,9 @@ export class ClaudeSessionProvider extends BaseTransport {
    * Adopt the session id the SDK reports, unless the caller pinned one — a
    * pinned id is the conversation we were told to speak into, not one to learn.
    */
-  private captureSessionId(msg: unknown, options: TransportOptions): void {
+  private captureSessionId(msg: unknown, pinnedSessionId: string | undefined): void {
     if (msg && typeof msg === 'object' && 'session_id' in msg && msg.session_id) {
-      if (!options.sessionId) {
+      if (!pinnedSessionId) {
         this.sessionId = msg.session_id as string;
       }
     }
@@ -241,7 +355,15 @@ export class ClaudeSessionProvider extends BaseTransport {
    */
   async steer(content: string): Promise<boolean> {
     const session = this.persistentSession;
-    if (!session || !session.busy) return false;
+    if (!session) return false;
+    // A claude.ai turn is running and no YAAR turn is: it is the turn there is to steer.
+    // The CLI folds the message into it; if the turn ends first, the message runs as a
+    // turn of its own and the router hands it to the external-turn path, not to silence.
+    if (!session.busy && session.router.detachedActive) {
+      this.send(session, content);
+      return true;
+    }
+    if (!session.busy) return false;
 
     const turnId = session.turnId;
     const started = session.turnStarted;
@@ -258,10 +380,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       return false;
     }
 
-    session.channel.push({
-      type: 'user',
-      message: { role: 'user', content },
-    });
+    this.send(session, content);
     return true;
   }
 
@@ -378,9 +497,16 @@ export class ClaudeSessionProvider extends BaseTransport {
           this.sessionId !== null &&
           options.sessionId !== this.sessionId
       : false;
-    if (existing && (existing.busy || existing.fingerprint !== fingerprint || wrongConversation)) {
+    if (
+      existing &&
+      (existing.busy ||
+        existing.pumpDone ||
+        existing.fingerprint !== fingerprint ||
+        wrongConversation)
+    ) {
       await this.closePersistentSession();
     }
+    this.lastOptions = options;
     if (!this.persistentSession) {
       const sdkOptions = this.getSDKOptions({ resumeSession, options });
       this.openPersistentSession(sdkOptions, fingerprint, resumeSession);
@@ -404,18 +530,20 @@ export class ClaudeSessionProvider extends BaseTransport {
     // Set between "we interrupted" and "the interrupted turn's terminal arrived",
     // which is the one result message this turn must swallow rather than yield.
     let awaitingEscapeRetry = false;
+    let inbox: InputChannel | null = null;
     try {
       await session.mcpReady;
       session.turnsProcessed++;
-      session.channel.push({
-        type: 'user',
-        message: { role: 'user', content: messageContent },
-      });
+      const uuid = randomUUID();
+      // Reading before writing: the first frame of the answer must find its reader.
+      inbox = session.router.openTurn(uuid);
+      this.send(session, messageContent, uuid);
       markTurnStarted();
 
       for (;;) {
-        const { value: msg, done } = await session.stream.next();
+        const { value: msg, done } = await inbox.iterable.next();
         if (done) {
+          if (session.pumpError !== undefined) throw session.pumpError;
           // Process exited (crash or abort) — the stream is gone.
           await this.closePersistentSession();
           // An escape-retry that lost its stream has already had this turn's
@@ -442,7 +570,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         // schedule, between reads.
         yield* this.drainEscapeGuards();
 
-        this.captureSessionId(msg, options);
+        this.captureSessionId(msg, options.sessionId);
 
         // Cancel a tool call whose arguments are being written as escape
         // sequences, before the rest of them are generated. The correction is
@@ -471,15 +599,12 @@ export class ClaudeSessionProvider extends BaseTransport {
               // correction queued; the turn either ends on its own or the outer
               // abort path takes it. Nothing useful to do here.
             });
-            session.channel.push({
-              type: 'user',
-              message: { role: 'user', content: escapeCorrection(tripped.toolName) },
-            });
+            this.send(session, escapeCorrection(tripped.toolName));
             continue;
           }
         }
 
-        const mapped = mapClaudeMessage(msg, turnUsage);
+        const mapped = mapClaudeMessage(msg as SDKMessage, turnUsage);
         if (!mapped) continue;
 
         // Detect stale session error and retry without resume
@@ -517,6 +642,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         yield this.createErrorMessage(err);
       }
     } finally {
+      if (inbox) session.router.closeTurn(inbox);
       session.busy = false;
       session.turnStarted = null;
       // Wake a steer still waiting on a turn that ended, or that never started
@@ -537,7 +663,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       prompt: channel.iterable as AsyncIterable<any>,
       options: sdkOptions,
     });
-    this.persistentSession = {
+    const session: PersistentSession = {
       stream,
       channel,
       fingerprint,
@@ -551,7 +677,68 @@ export class ClaudeSessionProvider extends BaseTransport {
       turnId: 0,
       turnStarted: null,
       busy: false,
+      router: new TurnRouter({
+        detachable: () => this.remote !== null,
+        onDetached: (turn) => this.announceExternalTurn(session, turn),
+      }),
+      pumpDone: false,
+      pumpError: undefined,
     };
+    this.persistentSession = session;
+    void this.pump(session);
+    if (this.remote) void this.attachRemote(session);
+  }
+
+  /**
+   * Read the stream for as long as the process lives, and hand each frame to its owner.
+   *
+   * The stream used to be read by the turn that was waiting for it, which left it unread
+   * between turns — harmless while only YAAR could start one. See `turn-router.ts`.
+   */
+  private async pump(session: PersistentSession): Promise<void> {
+    try {
+      for (;;) {
+        const { value, done } = await session.stream.next();
+        if (done) break;
+        session.router.route(value);
+      }
+    } catch (err) {
+      if (!this.isAbortError(err)) session.pumpError = err;
+    } finally {
+      session.pumpDone = true;
+      session.router.end();
+      // A process that exits under a running turn is that turn's to handle — it reads the
+      // end and retries. One that exits while idle on the bridge would otherwise leave
+      // claude.ai talking to nobody until the desktop's next turn happened to reopen it.
+      if (this.persistentSession === session && !session.busy && this.remote) {
+        log.warn('bridged stream ended while idle; reopening', { error: session.pumpError });
+        void this.closePersistentSession();
+      }
+    }
+  }
+
+  /** Hand a turn nobody in YAAR started to whoever listens for them, mapped like our own. */
+  private announceExternalTurn(session: PersistentSession, turn: DetachedTurn): void {
+    // The stream now carries a conversation. Left at zero, the next YAAR turn would take
+    // it for a virgin prewarm opened on the wrong resume, reopen it, and cut claude.ai off.
+    session.turnsProcessed++;
+    const handlers = this.externalHandlers;
+    if (!handlers) {
+      log.warn('external turn with no handler; its output is not shown in YAAR');
+      return;
+    }
+    handlers.onTurn({ prompt: turn.prompt, messages: this.mapExternal(turn.frames) });
+  }
+
+  private async *mapExternal(frames: AsyncIterable<unknown>): AsyncIterable<StreamMessage> {
+    const usage = new TurnUsageTracker();
+    for await (const msg of frames) {
+      yield* this.drainEscapeGuards();
+      // The conversation is the one this stream carries; nothing pins a different one.
+      this.captureSessionId(msg, undefined);
+      const mapped = mapClaudeMessage(msg as SDKMessage, usage);
+      if (mapped) yield mapped;
+    }
   }
 
   /**
@@ -561,6 +748,7 @@ export class ClaudeSessionProvider extends BaseTransport {
    */
   async prewarm(options: TransportOptions): Promise<void> {
     if (this.persistentSession) return;
+    this.lastOptions = options;
     const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
     const sdkOptions = this.getSDKOptions({ resumeSession, options });
     this.openPersistentSession(sdkOptions, this.turnFingerprint(options), resumeSession);
@@ -576,10 +764,121 @@ export class ClaudeSessionProvider extends BaseTransport {
     session.channel.close();
     session.abortController.abort();
     try {
-      await session.stream.return(undefined);
+      // Bounded: the pump has a `next()` outstanding, and a generator's `return` can queue
+      // behind it. The abort is what actually ends the process.
+      await withDeadline(session.stream.return(undefined), INTERRUPT_ACK_MS);
     } catch {
       // Teardown errors of a dying process are irrelevant.
     }
+    // The next turn would reopen it; on the bridge, claude.ai may be the only one talking.
+    if (this.remote) this.scheduleRemoteReopen();
+  }
+
+  /**
+   * Reattach a freshly opened stream to the claude.ai conversation it replaces.
+   *
+   * `reattachSessionId` keeps the conversation's link: the claude.ai page carries on with
+   * the new process (after a reload) rather than the user being handed a new session.
+   */
+  private async attachRemote(session: PersistentSession): Promise<void> {
+    const remote = this.remote;
+    if (!remote) return;
+    try {
+      const info = await this.requestRemoteControl(
+        session,
+        true,
+        remote.name,
+        remote.info?.bridgeSessionId,
+      );
+      if (this.remote === remote) remote.info = info;
+      this.reopenDelayMs = REMOTE_REOPEN_MS;
+      log.info('remote control attached', { sessionUrl: info.sessionUrl });
+    } catch (err) {
+      log.warn('could not reattach remote control', { err });
+    }
+  }
+
+  private scheduleRemoteReopen(): void {
+    if (!this.remote || this.disposed || this.reopenTimer) return;
+    const delay = this.reopenDelayMs;
+    this.reopenDelayMs = Math.min(delay * 2, REMOTE_REOPEN_MAX_MS);
+    this.reopenTimer = setTimeout(() => {
+      this.reopenTimer = null;
+      // A turn may have reopened it in the meantime; then there is nothing to do.
+      if (!this.remote || this.disposed || this.persistentSession || !this.lastOptions) return;
+      const resume = this.sessionId ?? undefined;
+      this.openPersistentSession(
+        this.getSDKOptions({ resumeSession: resume, options: this.lastOptions }),
+        this.turnFingerprint(this.lastOptions),
+        resume,
+      );
+    }, delay);
+  }
+
+  private async requestRemoteControl(
+    session: PersistentSession,
+    enabled: boolean,
+    name?: string,
+    reattachSessionId?: string,
+  ): Promise<RemoteControlInfo> {
+    const stream = session.stream as unknown as RemoteControlQuery;
+    if (typeof stream.enableRemoteControl !== 'function') {
+      throw new Error('This Claude Agent SDK cannot enable Remote Control.');
+    }
+    const res = await stream.enableRemoteControl(
+      enabled,
+      name,
+      reattachSessionId ? { reattachSessionId } : undefined,
+    );
+    if (!enabled) return { sessionUrl: '', bridgeSessionId: '' };
+    if (!res?.session_url || !res.bridge_session_id) {
+      throw new Error('Remote Control was enabled but the CLI returned no session link.');
+    }
+    return { sessionUrl: res.session_url, bridgeSessionId: res.bridge_session_id, name };
+  }
+
+  /**
+   * Put this conversation on claude.ai. Needs the stream open (the caller prewarms); the
+   * bridge then follows the agent across reopens until {@link disableRemoteControl}.
+   */
+  async enableRemoteControl(name?: string): Promise<RemoteControlInfo> {
+    if (this.remote?.info) return this.remote.info;
+    const session = this.persistentSession;
+    if (!session) throw new Error('No open conversation to put on claude.ai.');
+    const remote: NonNullable<typeof this.remote> = { name, info: null };
+    this.remote = remote;
+    try {
+      remote.info = await this.requestRemoteControl(session, true, name);
+      return remote.info;
+    } catch (err) {
+      if (this.remote === remote) this.remote = null;
+      throw err;
+    }
+  }
+
+  async disableRemoteControl(): Promise<void> {
+    if (!this.remote) return;
+    this.remote = null;
+    this.ownPrompts = [];
+    if (this.reopenTimer) {
+      clearTimeout(this.reopenTimer);
+      this.reopenTimer = null;
+    }
+    const session = this.persistentSession;
+    if (!session || session.pumpDone) return;
+    try {
+      await withDeadline(this.requestRemoteControl(session, false), INTERRUPT_ACK_MS);
+    } catch (err) {
+      log.warn('could not disable remote control cleanly', { err });
+    }
+  }
+
+  getRemoteControl(): RemoteControlInfo | null {
+    return this.remote?.info ?? null;
+  }
+
+  setExternalTurnHandlers(handlers: ExternalTurnHandlers | null): void {
+    this.externalHandlers = handlers;
   }
 
   /** Dedicated single-turn process, used for session forks. */
@@ -615,7 +914,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         messageCount++;
         if (this.isAborted()) break;
 
-        this.captureSessionId(msg, options);
+        this.captureSessionId(msg, options.sessionId);
 
         const mapped = mapClaudeMessage(msg, turnUsage);
         if (mapped) {
@@ -703,7 +1002,21 @@ export class ClaudeSessionProvider extends BaseTransport {
   async interrupt(): Promise<InterruptReceipt> {
     const session = this.persistentSession;
     if (!session) return super.interrupt();
+    if (!session.busy && session.router.detachedActive) {
+      // A claude.ai turn is the one running. Stop it the soft way: killing the process
+      // would take the bridge down with it.
+      try {
+        await withDeadline(session.stream.interrupt(), INTERRUPT_ACK_MS);
+        return { outcome: 'acknowledged' };
+      } catch (err) {
+        log.warn('control interrupt of an external turn failed; killing process', { err });
+        await this.closePersistentSession();
+        return { outcome: 'escalated' };
+      }
+    }
     if (!session.busy) {
+      // Idle on the bridge: nothing to stop, and closing would disconnect claude.ai.
+      if (this.remote) return { outcome: 'idle' };
       await this.closePersistentSession();
       return { outcome: 'idle' };
     }
@@ -725,6 +1038,13 @@ export class ClaudeSessionProvider extends BaseTransport {
   }
 
   async dispose(): Promise<void> {
+    this.disposed = true;
+    this.remote = null;
+    if (this.reopenTimer) {
+      clearTimeout(this.reopenTimer);
+      this.reopenTimer = null;
+    }
+    this.externalHandlers = null;
     await this.closePersistentSession();
     this.sessionId = null;
     await super.dispose();

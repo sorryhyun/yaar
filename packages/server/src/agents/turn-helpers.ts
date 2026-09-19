@@ -14,6 +14,7 @@ import type { MonitorBudgetPolicy } from './context-pool-policies/index.js';
 import type { TurnContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-roster.js';
 import type { Fingerprint } from '../reload/types.js';
+import type { ExternalTurn } from '../providers/types.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('TurnHelpers');
@@ -76,6 +77,8 @@ export interface AgentTurnOptions {
   onFinally?: () => Promise<void> | void;
   /** Called with the assistant's response text when the turn completes. */
   onAssistantResponse?: (responseText: string) => void;
+  /** Follow a turn already running in the provider instead of starting one. */
+  external?: ExternalTurn;
 }
 
 /**
@@ -116,6 +119,7 @@ export async function runAgentTurn(ctx: TurnContext, opts: AgentTurnOptions): Pr
       model: opts.model,
       windowId: opts.windowId,
       appId: opts.appId,
+      external: opts.external,
       onContextMessage: (msgRole, content) => {
         if (msgRole === 'assistant') {
           ctx.contextAssembly.appendAssistantMessage(ctx.contextTape, content, source);

@@ -8,8 +8,8 @@ Remote mode lets you access YAAR from other devices on your network (phone, tabl
 > `yaar://skills/remote` and walks you through installing Tailscale on both devices step by step.
 > This page is the reference; that skill is the walkthrough.
 
-> **Want a YAAR agent in the Claude app instead of the desktop on another screen?** That is
-> [Claude Remote](./claude_remote.md) — hosted `claude remote-control`, no tunnel.
+> **Want to talk to a YAAR agent from the Claude app instead of the desktop on another screen?**
+> That is [Claude Remote](./claude_remote.md) — the monitor agent on claude.ai, no tunnel.
 
 ## Quick Start
 

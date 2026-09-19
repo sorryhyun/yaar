@@ -16,7 +16,11 @@ export {
 
 export { composePrompt } from './compose.js';
 
-export { ORCHESTRATOR_PROMPT, getOrchestratorPrompt } from './orchestrator/index.js';
+export {
+  ORCHESTRATOR_PROMPT,
+  REMOTE_MESSAGE_CONTEXT,
+  getOrchestratorPrompt,
+} from './orchestrator/index.js';
 export { SESSION_AGENT_PROFILE } from './session-agent/index.js';
 export { buildAppAgentProfile } from './app-agent/index.js';
 export { DEVELOPER_PROFILE, getDeveloperAllowedTools } from './developer.js';

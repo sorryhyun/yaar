@@ -32,6 +32,15 @@ export class MonitorQueuePolicy {
     return this.queue.length;
   }
 
+  /**
+   * Put a task ahead of everything waiting, past the size limit. For a turn that is
+   * already running in the provider (a Remote Control turn): the queue cannot decide
+   * whether it happens, only when YAAR shows it, and that is next.
+   */
+  enqueueFront(task: Task): void {
+    this.queue.unshift({ task, timestamp: Date.now() });
+  }
+
   dequeue(): QueuedTask | undefined {
     if (this.suspended) return undefined;
     return this.queue.shift();

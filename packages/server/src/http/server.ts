@@ -8,10 +8,6 @@
 
 import { getLocalTlsEndpoint } from './local-tls.js';
 import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
-import {
-  TURN_CONTEXT_PATH,
-  handleTurnContextRequest,
-} from '../features/remote-control/turn-context.js';
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
 
@@ -306,11 +302,6 @@ function createFetchHandlerInner() {
           );
         }
       }
-    }
-
-    // The hosted Remote Control session's UserPromptSubmit hook (features/remote-control).
-    if (url.pathname === TURN_CONTEXT_PATH) {
-      return withCors(await handleTurnContextRequest(req), corsHeaders);
     }
 
     // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/apps, /mcp/basic, ...)

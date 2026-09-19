@@ -41,7 +41,7 @@
  */
 
 import { ContextTape, type ContextMessage } from './context.js';
-import { getMonitorTurnOptions } from './profiles/index.js';
+import { getMonitorTurnOptions, REMOTE_MESSAGE_CONTEXT } from './profiles/index.js';
 import { monitorRole } from './roles.js';
 import { AgentPool } from './agent-pool.js';
 import type { PooledAgent, AgentEntry } from './agent-roster.js';
@@ -52,7 +52,12 @@ import {
   type ServerEvent,
   type UserInteraction,
 } from '@yaar/shared';
-import type { AITransport, ProviderType } from '../providers/types.js';
+import type {
+  AITransport,
+  ExternalTurn,
+  ProviderType,
+  RemoteControlInfo,
+} from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
@@ -136,12 +141,6 @@ export class ContextPool implements PoolContext {
     string,
     { queue: MonitorQueuePolicy; timeline: InteractionTimeline }
   >();
-  /**
-   * Timelines of readers outside the pool, per monitor and keyed by agent id — see
-   * {@link followTimeline}. Held apart from `monitors` so a monitor reset, which drops and
-   * recreates that record, does not silently detach them.
-   */
-  private timelineFollowers = new Map<string, Map<string, InteractionTimeline>>();
   private resetting = false;
   /**
    * The monitors a `resetMonitor()` is currently tearing down.
@@ -231,7 +230,7 @@ export class ContextPool implements PoolContext {
     if (!state) {
       state = {
         queue: new MonitorQueuePolicy(MAX_QUEUE_SIZE),
-        timeline: new InteractionTimeline(() => this.followersOf(monitorId)),
+        timeline: new InteractionTimeline(),
       };
       this.monitors.set(monitorId, state);
     }
@@ -241,58 +240,6 @@ export class ContextPool implements PoolContext {
   /** The timeline for one monitor, created on first use. */
   timelineFor(monitorId: string): InteractionTimeline {
     return this.monitorState(monitorId).timeline;
-  }
-
-  /**
-   * A second reader's timeline for one monitor: everything pushed onto the monitor's own
-   * timeline from now on is copied here, and this one is drained independently — so the
-   * follower never takes an entry away from the monitor agent. Stable per agent id.
-   *
-   * For an agent that takes turns outside the pool (the hosted Remote Control session),
-   * which cannot share the monitor agent's drain-on-read timeline.
-   */
-  followTimeline(monitorId: string, agentId: string): InteractionTimeline {
-    let byAgent = this.timelineFollowers.get(monitorId);
-    if (!byAgent) {
-      byAgent = new Map();
-      this.timelineFollowers.set(monitorId, byAgent);
-    }
-    let timeline = byAgent.get(agentId);
-    if (!timeline) {
-      timeline = new InteractionTimeline();
-      byAgent.set(agentId, timeline);
-    }
-    return timeline;
-  }
-
-  /** Stop copying into an agent's follower timelines, on every monitor. */
-  unfollowTimeline(agentId: string): void {
-    for (const [monitorId, byAgent] of this.timelineFollowers) {
-      byAgent.delete(agentId);
-      if (byAgent.size === 0) this.timelineFollowers.delete(monitorId);
-    }
-  }
-
-  /**
-   * What a follower's next turn should be told, the way a monitor turn is: the timeline
-   * since its last turn, drained, then the desktop's windows. Empty when there is neither.
-   */
-  followerTurnContext(monitorId: string, agentId: string): string {
-    const timeline = this.followTimeline(monitorId, agentId).drainAndFormat();
-    const openWindows = this.contextAssembly.formatOpenWindows(
-      this.windowState.stackOrder(monitorId),
-      {
-        monitorId,
-        getRawWindowId: (handle) => this.windowState.handleMap.getRawWindowId(handle),
-        focusedWindowId: this.windowState.getFocusedWindowId(),
-      },
-    );
-    return timeline + openWindows;
-  }
-
-  /** The follower timelines of one monitor. */
-  followersOf(monitorId: string): Iterable<InteractionTimeline> {
-    return this.timelineFollowers.get(monitorId)?.values() ?? [];
   }
 
   /** Whether this monitor's main queue is occupied. Never creates one. */
@@ -406,6 +353,78 @@ export class ContextPool implements PoolContext {
       monitorId,
       ...getMonitorTurnOptions(this.providerType ?? ''),
     });
+  }
+
+  /**
+   * Put a monitor agent's conversation on claude.ai (Remote Control).
+   *
+   * The monitor agent itself is what claude.ai talks to — the same conversation, tools and
+   * timeline as the desktop's. A claude.ai message becomes a `remote` task on this
+   * monitor (`handleExternalTurn`), and the desktop news a built prompt would carry is
+   * attached to it on the way in (`remotePromptContext`).
+   */
+  async enableRemoteControl(monitorId: string, name?: string): Promise<RemoteControlInfo> {
+    if (!this.agentPool.getMonitorAgent(monitorId) && !(await this.createMonitorAgent(monitorId))) {
+      throw new Error(`Monitor ${monitorId} has no agent to put on claude.ai.`);
+    }
+    const agent = this.agentPool.getMonitorAgent(monitorId)!;
+    return agent.session.enableRemoteControl(
+      name,
+      {
+        role: monitorRole(monitorId),
+        monitorId,
+        ...getMonitorTurnOptions(this.providerType ?? ''),
+      },
+      {
+        onTurn: (turn) => this.handleExternalTurn(monitorId, turn),
+        promptContext: () => this.remotePromptContext(monitorId),
+      },
+    );
+  }
+
+  async disableRemoteControl(monitorId: string): Promise<void> {
+    await this.agentPool.getMonitorAgent(monitorId)?.session.disableRemoteControl();
+  }
+
+  /** The monitors whose agent is on claude.ai, with their links. */
+  listRemoteControl(): Array<{ monitorId: string } & RemoteControlInfo> {
+    const out: Array<{ monitorId: string } & RemoteControlInfo> = [];
+    for (const monitorId of this.agentPool.getMonitorAgentIds()) {
+      const info = this.agentPool.getMonitorAgent(monitorId)?.session.getRemoteControl();
+      if (info) out.push({ monitorId, ...info });
+    }
+    return out;
+  }
+
+  private handleExternalTurn(monitorId: string, turn: ExternalTurn): void {
+    this.handleTask({
+      requestedType: 'monitor',
+      kind: 'remote',
+      messageId: genId('remote'),
+      monitorId,
+      content: turn.prompt ?? '(message from claude.ai)',
+      external: turn,
+    }).catch((err) => {
+      log.error('remote turn delivery failed', { monitorId, err });
+    });
+  }
+
+  /**
+   * What a claude.ai message is told before the model sees it: that it came from
+   * claude.ai, then what a desktop turn's prompt would have said — the timeline since the
+   * agent's last turn (drained, as a turn drains it) and the windows now open.
+   */
+  private remotePromptContext(monitorId: string): string {
+    const timeline = this.timelineFor(monitorId).drainAndFormat();
+    const openWindows = this.contextAssembly.formatOpenWindows(
+      this.windowState.stackOrder(monitorId),
+      {
+        monitorId,
+        getRawWindowId: (handle) => this.windowState.handleMap.getRawWindowId(handle),
+        focusedWindowId: this.windowState.getFocusedWindowId(),
+      },
+    );
+    return REMOTE_MESSAGE_CONTEXT + timeline + openWindows;
   }
 
   /** Every live agent, for the reconnect snapshot's "who is actually still running". */

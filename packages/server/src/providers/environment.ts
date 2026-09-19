@@ -114,19 +114,7 @@ export function buildAppSections(
   return lines;
 }
 
-export interface EnvironmentSectionOptions {
-  /**
-   * Include the onboarding section while onboarding is unfinished (default true). Off
-   * for an agent that never receives the desktop's `<ui:click>` that starts it — the
-   * hosted Remote Control session.
-   */
-  onboarding?: boolean;
-}
-
-export async function buildEnvironmentSection(
-  provider: ProviderType,
-  { onboarding = true }: EnvironmentSectionOptions = {},
-): Promise<string> {
+export async function buildEnvironmentSection(provider: ProviderType): Promise<string> {
   const [apps, settings, appHints] = await Promise.all([
     listApps().catch(() => []),
     readSettings(),
@@ -151,7 +139,7 @@ export async function buildEnvironmentSection(
   // sections — see
   // `agents/profiles/prompts/provider-codex.md`, selected by `agents/system-prompt.ts`.
 
-  if (onboarding && !settings.onboardingCompleted) {
+  if (!settings.onboardingCompleted) {
     result += `\n\n## Onboarding
 
 The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<ui:click>app: onboarding</ui:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:

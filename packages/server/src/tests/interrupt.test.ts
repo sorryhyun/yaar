@@ -15,11 +15,15 @@
  *    at a dead process, and the next turn would push into it and answer nothing.
  * 3. An interrupted agent's in-flight tools stop reaching the screen.
  * 4. Stopping skips idle agents entirely, so a warm process survives a stop-all.
+ * 5. On Remote Control, a claude.ai turn running with no YAAR turn is stopped softly,
+ *    and an idle bridged stream is left alone — killing either process would take the
+ *    claude.ai conversation down with it.
  */
 import { describe, expect, it, mock } from 'bun:test';
 
 import { AgentPool } from '../agents/agent-pool.js';
 import { ClaudeSessionProvider } from '../providers/claude/session-provider.js';
+import { TurnRouter } from '../providers/claude/turn-router.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
 import type { OSAction } from '@yaar/shared';
@@ -35,6 +39,7 @@ import type { SessionId } from '../session/types.js';
 function fakePersistentSession(overrides: {
   busy: boolean;
   interrupt?: () => Promise<{ still_queued: string[] } | undefined>;
+  detachable?: boolean;
 }) {
   const closed = { channel: false, aborted: false, returned: false };
   const abortController = new AbortController();
@@ -56,6 +61,7 @@ function fakePersistentSession(overrides: {
         closed.returned = true;
       },
     },
+    router: new TurnRouter({ detachable: () => !!overrides.detachable, onDetached: () => {} }),
   };
   abortController.signal.addEventListener('abort', () => {
     closed.aborted = true;
@@ -141,6 +147,37 @@ describe('ClaudeSessionProvider.interrupt()', () => {
     expect(receipt.outcome).toBe('idle');
     expect(closed.channel).toBe(true);
     expect(persistentSessionOf(provider)).toBeNull();
+  });
+
+  it('stops a claude.ai turn softly, keeping the bridged process', async () => {
+    const provider = new ClaudeSessionProvider();
+    let interrupted = 0;
+    const { session, closed } = fakePersistentSession({
+      busy: false,
+      detachable: true,
+      interrupt: async () => {
+        interrupted++;
+        return { still_queued: [] };
+      },
+    });
+    setPersistentSession(provider, session);
+    session.router.route({ type: 'command_lifecycle', state: 'started', command_uuid: 'remote' });
+
+    expect((await provider.interrupt()).outcome).toBe('acknowledged');
+    expect(interrupted).toBe(1);
+    expect(closed.aborted).toBe(false);
+    expect(persistentSessionOf(provider)).toBe(session);
+  });
+
+  it('leaves an idle bridged stream open', async () => {
+    const provider = new ClaudeSessionProvider();
+    const { session, closed } = fakePersistentSession({ busy: false, detachable: true });
+    setPersistentSession(provider, session);
+    (provider as unknown as { remote: unknown }).remote = { info: null };
+
+    expect((await provider.interrupt()).outcome).toBe('idle');
+    expect(closed.channel).toBe(false);
+    expect(persistentSessionOf(provider)).toBe(session);
   });
 });
 

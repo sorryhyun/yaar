@@ -14,7 +14,7 @@ import type { AgentPool } from './agent-pool.js';
 import type { InteractionTimeline } from './interaction-timeline.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { SessionLogger } from '../logging/index.js';
-import type { ProviderType, TokenUsage } from '../providers/types.js';
+import type { ExternalTurn, ProviderType, TokenUsage } from '../providers/types.js';
 import type { SessionId } from '../session/types.js';
 import type {
   MonitorQueuePolicy,
@@ -40,11 +40,15 @@ import type {
  * - `hook` — an app agent's answer coming back to the agent that asked for it.
  * - `notify` — a subscription or app-event wake.
  *
+ * - `remote` — a turn claude.ai started on the monitor agent's conversation (Remote
+ *   Control). Already running in the CLI when the task is made; the task only gives it a
+ *   place on the monitor's queue and a path to the screen. Carries `external`.
+ *
  * `relay` and `hook` are the two that must not be steered into a running turn: steering
  * can report success without the model ever processing the injected message, and unlike a
  * user who is watching, nothing behind these will ask again. They interrupt and queue.
  */
-export type TaskKind = 'user' | 'relay' | 'hook' | 'notify';
+export type TaskKind = 'user' | 'relay' | 'hook' | 'notify' | 'remote';
 
 /**
  * A task to be processed by the pool.
@@ -76,6 +80,8 @@ export interface Task {
    * nothing to be fresh from.
    */
   fresh?: boolean;
+  /** The running turn a `remote` task stands for. Present exactly when `kind` is `remote`. */
+  external?: ExternalTurn;
 }
 
 /**
@@ -163,8 +169,6 @@ export interface TurnContext {
  */
 export interface TimelineAccess {
   timelineFor(monitorId: string): InteractionTimeline;
-  /** Readers of the monitor outside the pool (`ContextPool.followTimeline`). */
-  followersOf(monitorId: string): Iterable<InteractionTimeline>;
 }
 
 /** What `MonitorTaskProcessor` needs: the monitor queues, the background budget, threads. */

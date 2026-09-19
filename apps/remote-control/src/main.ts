@@ -1,7 +1,7 @@
 // Entry point.
 //
-//   gateway.ts   yaar://system/remote-control — read, start, write, stop
-//   store.ts     the host status signal and form fields
+//   gateway.ts   yaar://system/remote-control — read, start, stop
+//   store.ts     the status signal and the name field
 //   actions.ts   every mutation, shared by the UI and the protocol
 //   protocol.ts  the agent-facing surface
 //   ui/App.ts    the view

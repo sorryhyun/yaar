@@ -1,174 +1,172 @@
-# Claude Remote (hosted Remote Control)
+# Claude Remote (the monitor agent on claude.ai)
 
-YAAR can host `claude remote-control` and make every session it spawns a **YAAR monitor agent**.
-Open claude.ai/code or the Claude mobile app, and the Claude you talk to there works on your YAAR
-desktop: it opens apps, reads windows, and takes screenshots, and all of it shows up live on the
-monitor that started it.
+YAAR can put a monitor agent's conversation on claude.ai through Claude Remote Control. Open
+claude.ai/code or the Claude mobile app and you are talking to **that monitor's agent**, the
+same one the desktop talks to, with the same conversation, tools and desktop. What you ask
+there, it does on the desktop. What the desktop asks it shows up there too.
 
 This is different from [Remote Mode](./remote_mode.md). Remote Mode sends the YAAR *desktop* to
-another device over Tailscale. Claude Remote leaves the desktop where it is and gives you a YAAR
-*agent* in the Claude app, with no tunnel and no second browser.
+another device over Tailscale. Claude Remote leaves the desktop where it is and lets you talk to
+its agent from the Claude app, with no tunnel and no second browser.
 
-**Source:** `apps/remote-control/`, `packages/server/src/features/remote-control/host.ts`, `packages/server/src/features/remote-control/agent-config.ts`, `packages/server/src/handlers/remote-control.ts`, `packages/server/src/mcp/external-principals.ts`, `packages/server/src/session/live-session.ts`
+**Source:** `packages/server/src/providers/claude/session-provider.ts` (bridge, pump,
+reattach), `packages/server/src/providers/claude/turn-router.ts` (whose frame is whose),
+`packages/server/src/agents/context-pool.ts` (`enableRemoteControl`, `remotePromptContext`),
+`packages/server/src/agents/monitor-task-processor.ts` (`remote` tasks),
+`packages/server/src/handlers/remote-control.ts`, `apps/remote-control/`
 
 ## Using it
 
-**From the app.** Open **Remote Control** (📡) on the monitor you want the remote Claude to
-drive and flip the switch. After the permission dialog it shows `starting`, then the session link
-with Open / Copy once the CLI prints it, and the terminal tail while it waits (Press Enter answers
-a prompt). The host is bound to the monitor of the window that started it. A window on another
-monitor shows where it is running and can turn it off. The app follows the host through a
-subscription on `yaar://system/remote-control`: `host.ts` pings it on start, on the link, on exit,
-and (throttled) on terminal output. `read` also returns `callerMonitorId`, which is how a window
+**From the app.** Open **Remote Control** (📡) on the monitor you want to reach and flip the
+switch. After the permission dialog it shows the session link with Open and Copy. The link
+belongs to the monitor of the window that started it. A window on another monitor shows where it
+is on and can turn it off. The app follows the state through a subscription on
+`yaar://system/remote-control`. `read` also returns `callerMonitorId`, which is how a window
 learns its own monitor.
 
-**From the monitor agent.** Ask: "claude remote 켜줘" / "start remote control". It will:
+**From the monitor agent.** Ask: "claude remote 켜줘" / "start remote control". It calls
+`invoke('yaar://system/remote-control', { action: "start" })`. **You get a permission dialog
+first, every time.** The call returns the `sessionUrl` (`https://claude.ai/code/session_…`).
 
-1. Call `invoke('yaar://system/remote-control', { action: "start" })`. **You get a permission
-   dialog first, every time.**
-2. Poll `read('yaar://system/remote-control')` until `state` is `"ready"`.
-3. Show you the `sessionUrl`, a `https://claude.ai/code?environment=env_…` link. Open it, or pick
-   the environment (named after this machine) in the Claude app.
-
-Stop it with "remote control 꺼줘", which calls `delete('yaar://system/remote-control')`. Shutting
-YAAR down stops it too.
+Stop it with "remote control 꺼줘", which calls `delete('yaar://system/remote-control')`.
+Shutting YAAR down or resetting the monitor stops it too.
 
 | Verb | Payload | Does |
 |---|---|---|
-| `read` | — | `state` (`starting`/`ready`/`exited`), `sessionUrl`, `monitorId`, `pid`, `tail` (ANSI-stripped terminal output) |
-| `invoke` | `{ action: "start", name?, permissionMode?, spawn?, continue? }` | User-confirmed spawn. The flags pass through to the CLI, plus `--no-chrome`. `spawn` is `same-dir` (default, always passed so the CLI never asks) or `session`; `worktree` is refused, because a worktree checkout lacks the git-ignored generated config. `continue` reattaches to the last session (the CLI keeps it for about 4h) and can't be combined with `spawn` |
-| `invoke` | `{ action: "write", data }` | Types into the host terminal, e.g. `"\r"` for a prompt the `tail` shows it waiting on |
-| `delete` | — | SIGINT, then SIGKILL after 3s |
+| `read` | — | `running`, `state` (`ready` or null), `monitorId`, `sessionUrl`, `name`, `callerMonitorId` |
+| `invoke` | `{ action: "start", name? }` | User-confirmed. Bridges the caller's monitor agent and returns the status with `sessionUrl` |
+| `delete` | — | Takes the conversation off claude.ai |
 
-There is one host at a time. POSIX only, since Windows has no PTY here.
+It works on one monitor at a time, and only with the Claude provider.
 
 ## How it works
 
-Four pieces are needed, and leaving out any one of them breaks the feature in a different way.
+### The bridge is the SDK session's own
 
-### 1. A PTY host (`host.ts`)
+Claude's IDE extensions put a headless session on claude.ai with a control request, and the
+Agent SDK's `Query` has the same method: `enableRemoteControl(enabled, name?,
+{ reattachSessionId? })`. It is there at runtime but missing from the SDK's published typings,
+so the provider reaches it through a local interface and checks for it first
+(`RemoteControlQuery`). It answers with `session_url` and `bridge_session_id`. After that,
+turns YAAR pushes into the stream are mirrored to claude.ai, and messages typed on claude.ai
+arrive in the CLI as turns of the same conversation.
 
-`remote-control` is a TTY program, so it runs under Bun's built-in PTY (`Bun.spawn({ terminal })`)
-instead of a pipe. Bun 1.4 ships this, so there is no `node-pty`. The terminal bytes are kept in a
-64 KB ring buffer. The link is matched against the **raw** bytes, because the CLI prints it as an
-OSC 8 hyperlink and `Bun.stripANSI` would delete the URL along with the escape.
+So there is no second process and no second agent. The monitor agent's own CLI is bridged, and
+the monitor agent's tools, history, timeline and app-agent traffic come along. That includes an
+app agent's `hook: "response"` answer: it goes back to the monitor agent, which is now the agent
+claude.ai is talking to.
 
-### 2. The monitor agent's options, written where a plain CLI reads them (`agent-config.ts`)
+### One reader for the stream (`turn-router.ts`)
 
-`claude remote-control` takes no `--mcp-config`, `--system-prompt` or `--tools`. The sessions it
-spawns do read their working directory and inherit its environment, though. So on every start YAAR
-runs the **same `buildSDKOptions`** that a real monitor turn uses (monitor tool set, monitor model,
-env), and writes each field into `config/remote-control/`, which becomes the cwd:
+A YAAR turn used to read the stream itself: push a message, pull `stream.next()` until the
+`result`. That only works while YAAR is the only one that can start a turn. Now a **pump**
+reads the stream for as long as the process lives, and `TurnRouter` decides where each frame
+goes:
 
-| SDK option | Where the remote session gets it |
-|---|---|
-| `env` (`buildClaudeEnv`) | the spawn env of `remote-control` itself |
-| `mcpServers` + headers | `.mcp.json`, with header values as `${YAAR_MCP_HEADER_n}` refs. The bearer and the agent token live only in env, never on disk |
-| `systemPrompt` | `.claude/output-styles/yaar.md` with `keep-coding-instructions: false`, selected by `outputStyle`. It is the **remote** orchestrator prompt (below) |
-| `allowedTools` | `permissions.allow` in `.claude/settings.json` |
-| `tools` / `disallowedTools` | `permissions.deny`: every CLI built-in the SDK set leaves out (Bash, Edit, Read, …) |
-| `model` | `model` in the same settings |
-| per-turn `<timeline>` + `<open_windows>` | a `UserPromptSubmit` **HTTP hook** in the same settings, pointed at `/mcp/hooks/user-prompt-submit` with the MCP headers' `${VAR}` refs (listed in `allowedEnvVars`) |
+- Every message YAAR pushes carries a `uuid`. The CLI announces each turn with
+  `command_lifecycle: started` naming the command it runs. A command YAAR pushed while one of
+  its turns is reading belongs to that turn. Anything else is **detached**, meaning a
+  claude.ai message, or a YAAR steer that missed its turn.
+- Ownership moves only at a `result`. A message the CLI folds into a running turn also gets a
+  `started`, and it must not split that turn's frames in two.
+- When a YAAR message is folded into a claude.ai turn, that turn's `result` lists it in
+  `user_message_uuids`. The waiting YAAR reader is released instead of waiting forever.
+- With the bridge off, nothing is ever detached. Frames with no reader wait for the next
+  turn, which is what reading the stream from inside the turn used to do with them.
 
-Three things deliberately differ from a local monitor turn:
+The CLI runs with `--replay-user-messages`, so a claude.ai turn's text arrives as a replayed
+`user` frame (`isReplay`, `origin.kind: "human"`). The detached turn is announced with that
+text.
 
-- **Prompt.** `REMOTE_ORCHESTRATOR_PROMPT` swaps the intro and Visibility for remote ones: the user
-  reads the chat reply, not the desktop. It also says the session runs on the user's machine,
-  which overrides the "cloud container, git push" section claude.ai adds to the base prompt. The
-  timeline gets a remote section (Desktop Changes) with no relays in it. It leaves out what a
-  remote session never receives (Action Reload Cache, User Drawings), user-prompt dialogs nobody
-  may be at the desktop to answer, its own Remote Control section, and onboarding.
-- **Tools.** `reload_cached` / `list_reload_options` are dropped, since only local turns get
-  `<reload_options>`, so `.mcp.json` lists just `verbs` and `messaging`.
-- **Env.** `ENABLE_TOOL_SEARCH=false`. The CLI otherwise defers MCP tools behind ToolSearch, which
-  cost the first remote turn a round trip just to load the verbs. An explicit off also beats the
-  service-side force flag.
+### A claude.ai turn is a `remote` task
 
-Because the directory is regenerated from `buildSDKOptions` on each start, a change to the monitor
-agent's prompt, tools or env reaches remote sessions automatically. **Don't hand-edit
-`config/remote-control/`. It is overwritten.**
+The provider hands a detached turn to `ContextPool`, which makes it a monitor task of kind
+`remote` that carries the running turn (`Task.external`). `MonitorTaskProcessor` runs it
+through the usual `runAgentTurn`, so it gets agent status on the desktop, the session log, the
+context tape and the stream events. `AgentSession` reads the turn's messages instead of starting
+a query. The one thing that differs from other tasks: the turn is already running in the CLI
+and runs whether YAAR shows it or not. So a `remote` task is never refused, steered, or given to
+an ephemeral agent. If the monitor agent is busy, it goes to the **front** of the queue, past the
+size limit (`MonitorQueuePolicy.enqueueFront`), and its frames buffer until then.
 
-### Per-turn context (`features/remote-control/turn-context.ts`)
+Stopping works both ways. `interrupt()` on an idle bridged agent with a claude.ai turn running
+sends the soft control interrupt. It does not kill the process, which would take the bridge
+down. A desktop message that arrives during a claude.ai turn is steered into it. A relay or an
+app agent's `hook: "response"` answer that arrives during a claude.ai turn is queued
+**without** interrupting it, unlike during a desktop turn.
+Often that answer is exactly what the claude.ai turn asked for. The turn ends by itself, and
+the answer runs as the next turn, which claude.ai shows.
 
-A local monitor turn is prefixed with `<timeline>` (what happened on the desktop since the last
-turn) and `<open_windows>`, because YAAR hands that turn to the provider. A remote turn goes from
-claude.ai straight into the CLI, so YAAR never sees it start. The CLI's `UserPromptSubmit` hook is
-the one place that runs before a turn. It POSTs to `/mcp/hooks/user-prompt-submit`, authenticated
-like MCP (bearer, then an agent token that must belong to an external principal). YAAR answers
-with the same prefix as `additionalContext`.
+### Desktop context for a claude.ai message
 
-The monitor agent's timeline is drained when it is read, so the remote session can't share it.
-Draining it here would take the entries away from the desktop's next turn. Instead
-`ContextPool.followTimeline` gives the remote agent a **follower** timeline: every push onto the
-monitor's timeline is copied into it, and each one drains independently. The desktop monitor
-agent's own turns also go to followers as `<ai>` entries (actions plus a 300-character reply
-excerpt), since those are other-agent activity from the remote side. The follower is created on
-the first hook call and detached when the host exits.
+A desktop turn's prompt is built by YAAR, with `<timeline>` and `<open_windows>`. A claude.ai
+message goes from the browser into the CLI untouched. The provider registers an SDK
+`UserPromptSubmit` hook, and for a prompt YAAR did not push it returns `additionalContext` from
+`ContextPool.remotePromptContext`. That context has three parts: the `<remote_control>` note
+(`orchestrator/prompts/remote-message.md`: reply in chat, don't ask through desktop dialogs),
+the monitor's timeline (drained, the same way a desktop turn drains it), and the open windows.
 
-### 3. An identity outside the agent pool (`mcp/external-principals.ts`)
+### Reopen and reattach
 
-`handleMcpRequest` maps `X-Agent-Token` to an agent id, then asks the `SessionHub` for that agent's
-session, monitor and role. Only the agent pool can answer that. The remote session is not pooled,
-so without extra help it would resolve to `'unknown'` with no monitor.
+The stream is fixed when the process starts, so a new system prompt, a crashed process or a
+stale resume means a reopen. The bridge belongs to the provider, not to one process. After a
+reopen, `attachRemote` sends the request again with `reattachSessionId`, and the claude.ai link
+stays the same. A claude.ai page that was open across the swap needs a reload. If the process
+exits while the agent is idle, the provider reopens it by itself (backing off to 60s). Otherwise
+claude.ai would be talking to nobody until the desktop's next turn.
 
-`start` mints a token for the agent id `remote-control` and registers it as an **external
-principal** bound to the caller's session and monitor. The MCP handler falls back to that table
-when the hub doesn't know the id. The role is fixed to `monitor` by type, so a remote session
-**never** gets `session-principal` access (`yaar://session/*`, the user's real browser). When the
-process exits, the token is revoked and the principal removed.
+## Verified live
 
-### 4. Delivery to the screen (`live-session.ts`)
+Against CLI 2.1.277 / SDK 0.3.268, with a probe that logged every frame of an SDK
+streaming query:
 
-Pooled agents reach the frontend through their `ToolActionBridge`. The remote agent has none. It
-used to fall through `LiveSession.handleEmittedAction`, whose direct broadcast only covered
-`iframe:` callers, and the result was confusing: the server's window registry held the window (the
-agent could `read` it and saw it in its layout), but no screen ever rendered it
-(`renderConfirmed: false`), and notifications went nowhere. External principals now take the same
-direct-broadcast path as iframe apps, `requestId` included, so render feedback and `__screenshot`
-work.
+- `enableRemoteControl(true, name)` on a headless stream-json session returned a
+  `claude.ai/code/session_…` link. A message typed there ran as a turn:
+  `command_lifecycle queued/started` with a claude.ai-minted `command_uuid`, the usual frames,
+  and a `result` whose `user_message_uuids` named it. There was no `user` frame for it until
+  `--replay-user-messages` was on.
+- A message pushed from the SDK side appeared on the claude.ai page, question and answer.
+- A new process opened with `resume` plus `reattachSessionId` got the same session back, and
+  answered the next claude.ai message after the page was reloaded.
 
-## Verified live (2026-09-17)
+A YAAR run against the Claude provider (2026-09-19), driven through the Remote Control
+app and a claude.ai tab:
 
-- The remote session loaded the `yaar` output style and `claude-opus-5`, and reached YAAR's
-  `verbs` server through the generated `.mcp.json`.
-- It opened `music-maker` as window `0/music-maker`, which appeared on the desktop.
-- It read `yaar://windows/music-maker/state/__screenshot` and described the rendered window in the
-  Claude app.
-- The CLI prints the environment link (`claude.ai/code?environment=env_…`), not a
-  `session_…` link. `host.ts` matches both.
+- The app's switch returned a `session_…` link titled "YAAR monitor 0". A claude.ai message
+  ("open Memo, tell me which windows are open") ran as a `remote` task (`following remote
+  turn` in the log). Memo opened on the desktop, the reply listed the right windows, and the
+  question was in the session log under the monitor's source.
+- A message typed at the desktop appeared on claude.ai with its `<timeline>` and
+  `<open_windows>` prefix and its answer.
+- From claude.ai, the agent sent Memo's agent a `message` with `hook: "response"`. The turn
+  ended by itself, and the `<agent-hook type="response" appId="memo">` answer arrived as the
+  next turn in the same claude.ai conversation, where the agent reported it.
 
 ## Debugging
 
-- **What the remote agent actually did:** its transcripts are plain Claude Code sessions under
-  `~/.claude/projects/-Users-kscnc-yaar-config-remote-control/`. Tool calls, results and the
-  loaded output style are all there. YAAR's own session log records the *actions* it emitted, not
-  its conversation.
-- **Stuck in `starting`:** read `tail`. The CLI is usually waiting on a prompt (folder trust on a
-  fresh cwd, for example). Answer it with `write`.
-- **Tools missing in the remote session:** `/mcp` in that session should list `system`, `verbs`
-  and `messaging` as connected. If they are missing, check that `.mcp.json` exists in the cwd and
-  that the process env carries the `YAAR_MCP_HEADER_*` vars.
-- **Windows exist but don't render:** that was the missing broadcast (piece 4). Check that the
-  agent id is still registered as an external principal.
+- **Nothing shows on the desktop for a claude.ai message:** look for `external turn with no
+  handler` in the log. The provider saw the turn, but the pool's handlers were never set, so
+  the bridge was probably enabled outside `ContextPool.enableRemoteControl`.
+- **The link stopped answering:** the process was replaced. Look for `remote control attached`
+  or `could not reattach remote control` in the log, then reload the claude.ai page.
+- **A desktop turn ended early or with someone else's answer:** that is a routing bug. The
+  frames' `command_lifecycle` / `user_message_uuids` in the CLI transcript show whose turn was
+  whose.
 
 ## Known gaps
 
-- **Separate histories, one direction bridged.** Remote turns are not in the monitor agent's
-  `ContextTape`. The remote agent does hear about the desktop through its follower timeline, but
-  its own actions are not pushed onto the monitor's timeline, so the desktop monitor agent still
-  doesn't know what the remote one did.
-- **Invisible to the desktop UI.** No status-bar chip, and not listed in `yaar://session/agents`.
-- **No YAAR-side hooks.** The escape-repair `PreToolUse` hook and per-turn session logging don't
-  apply.
-- **Deny list is hand-spelled.** Settings can only *deny* tools, so the SDK's allowlist becomes a
-  list of CLI built-in names (Cron*, worktree, plan mode, Monitor, SendMessage, … included). A
-  built-in the CLI adds later isn't denied until it is added there. Check the transcript's
-  `deferred_tools_delta` / tool list after a CLI upgrade.
-- **One monitor, one host.** The principal is bound to the monitor that ran `start`. A second host,
-  or one host per monitor, is not supported yet.
-
-## Next
-
-The reverse direction, **attaching to a Remote Control session from inside YAAR**, rests on the
-same PTY host. `claude --cloud <session id | URL>` in a PTY behind an xterm window is the likely
-shape.
+- **The question isn't shown on the desktop.** The agent's reply to a claude.ai message
+  streams onto the desktop like any turn's, but the claude.ai user's own text reaches only the
+  log and the context tape. No server event echoes a user message to the frontend.
+- **Out-of-order display at the seam.** If claude.ai and the desktop start a turn in the same
+  instant, the CLI runs them in order but the desktop may show them the other way round. Each
+  turn's frames still go to the right owner.
+- **A reattached page may say "archived".** When the process is really replaced (a crash, a
+  new prompt), the old process's teardown archives the claude.ai session while the new one
+  reattaches to it. The conversation keeps working after a reload, and the banner's unarchive
+  button clears it.
+- **Monitor reset drops it.** Reset replaces the monitor agent and its provider, so the bridge
+  goes with them. Start it again.
+- **Undocumented SDK surface.** `enableRemoteControl` is not in the SDK's typings. A version
+  that drops or renames it makes `start` fail with "This Claude Agent SDK cannot enable Remote
+  Control."

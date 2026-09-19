@@ -64,7 +64,6 @@ import { subscriptionRegistry } from '../http/subscriptions.js';
 import { revokeTokensForWindow } from '../http/iframe-tokens.js';
 import { storageDocumentUri } from '../features/window/helpers.js';
 import type { SessionLogger } from '../logging/index.js';
-import { getExternalPrincipal } from '../mcp/external-principals.js';
 import {
   normalizeAgentKey,
   mapActionToSubscriptionEvent,
@@ -390,13 +389,8 @@ export class LiveSession {
       }
     }
     // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
-    // ToolActionBridge to broadcast them to the frontend, so do it directly. Neither does
-    // an external principal (hosted Remote Control): it is an agent, but not a pooled
-    // one, and without this its windows existed in the registry and on no screen.
-    if (
-      event.agentId &&
-      (event.agentId.startsWith('iframe:') || getExternalPrincipal(event.agentId))
-    ) {
+    // ToolActionBridge to broadcast them to the frontend, so do it directly.
+    if (event.agentId?.startsWith('iframe:')) {
       const stamped = stampWindowHandle(event.action, windowHandle, event.requestId);
       this.broadcast({
         type: ServerEventType.ACTIONS,

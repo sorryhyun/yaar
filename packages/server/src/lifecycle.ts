@@ -491,14 +491,6 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
       // Never started — nothing to release.
     }
 
-    // Stop the hosted `claude remote-control`, which would otherwise outlive the server.
-    try {
-      const { stopRemoteControl } = await import('./features/remote-control/host.js');
-      await stopRemoteControl();
-    } catch {
-      // Never started — nothing to stop.
-    }
-
     // Close browser sessions — both doors (headless sandbox + the user's real
     // Chrome). The local provider never owns Chrome, so its shutdown only drops
     // our CDP connection.

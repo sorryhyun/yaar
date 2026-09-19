@@ -24,13 +24,18 @@
 import { describe, expect, it } from 'bun:test';
 
 import { ClaudeSessionProvider } from '../providers/claude/session-provider.js';
+import { TurnRouter } from '../providers/claude/turn-router.js';
 
 /**
  * Stand in for a live persistent session. The real one spawns a CLI, and the
  * field is private, so the field itself is the seam — what matters here is which
  * branch `steer()` takes and what it writes.
  */
-function fakePersistentSession(overrides: { busy: boolean; turnStarted?: Promise<void> | null }) {
+function fakePersistentSession(overrides: {
+  busy: boolean;
+  turnStarted?: Promise<void> | null;
+  detachable?: boolean;
+}) {
   const pushed: unknown[] = [];
   let streamInputCalls = 0;
   const session = {
@@ -53,6 +58,7 @@ function fakePersistentSession(overrides: { busy: boolean; turnStarted?: Promise
         streamInputCalls++;
       },
     },
+    router: new TurnRouter({ detachable: () => !!overrides.detachable, onDetached: () => {} }),
   };
   return { session, pushed, streamInput: () => streamInputCalls };
 }
@@ -70,7 +76,12 @@ describe('ClaudeSessionProvider.steer()', () => {
     expect(await provider.steer('also check the tests')).toBe(true);
 
     expect(pushed).toEqual([
-      { type: 'user', message: { role: 'user', content: 'also check the tests' } },
+      {
+        type: 'user',
+        uuid: expect.any(String),
+        message: { role: 'user', content: 'also check the tests' },
+        parent_tool_use_id: null,
+      },
     ]);
     // The whole point: `streamInput` would have closed stdin behind this write.
     expect(streamInput()).toBe(0);
@@ -83,6 +94,17 @@ describe('ClaudeSessionProvider.steer()', () => {
 
     expect(await provider.steer('hello')).toBe(false);
     expect(pushed).toEqual([]);
+  });
+
+  it('steers a claude.ai turn when no YAAR turn is running', async () => {
+    const provider = new ClaudeSessionProvider();
+    const { session, pushed } = fakePersistentSession({ busy: false, detachable: true });
+    setPersistentSession(provider, session);
+    // The CLI announces a command YAAR never pushed: a Remote Control turn is running.
+    session.router.route({ type: 'command_lifecycle', state: 'started', command_uuid: 'remote-1' });
+
+    expect(await provider.steer('the desktop has news')).toBe(true);
+    expect(pushed).toHaveLength(1);
   });
 
   it('refuses when there is no persistent session — a fork has no channel', async () => {

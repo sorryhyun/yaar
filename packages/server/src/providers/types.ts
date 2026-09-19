@@ -259,4 +259,38 @@ export interface AITransport {
    * No message is sent.
    */
   prewarm?(options: TransportOptions): Promise<void>;
+
+  /**
+   * Put this agent's conversation on claude.ai (Remote Control). Needs an open stream —
+   * prewarm first. Turns started from claude.ai reach the handlers set with
+   * {@link setExternalTurnHandlers}; YAAR's own turns show up there as well.
+   */
+  enableRemoteControl?(name?: string): Promise<RemoteControlInfo>;
+  disableRemoteControl?(): Promise<void>;
+  getRemoteControl?(): RemoteControlInfo | null;
+  setExternalTurnHandlers?(handlers: ExternalTurnHandlers | null): void;
+}
+
+export interface RemoteControlInfo {
+  /** The claude.ai/code link to this conversation. */
+  sessionUrl: string;
+  bridgeSessionId: string;
+  name?: string;
+}
+
+/** A turn somebody else started on this agent's conversation — a claude.ai message. */
+export interface ExternalTurn {
+  /** What was asked, when the provider could see it. */
+  prompt: string | undefined;
+  /** The turn as it streams, ending with its `complete` or `error`. */
+  messages: AsyncIterable<StreamMessage>;
+}
+
+export interface ExternalTurnHandlers {
+  onTurn(turn: ExternalTurn): void;
+  /**
+   * Context to attach to an external prompt before the model sees it — the desktop news a
+   * YAAR-built prompt would have carried. Called once per external prompt.
+   */
+  promptContext?(): string | undefined;
 }

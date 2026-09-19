@@ -7,6 +7,7 @@
 
 import { ServerEventType } from '@yaar/shared';
 import type { MonitorPoolContext, Task } from './pool-types.js';
+import type { ExternalTurn } from '../providers/types.js';
 import type { PooledAgent } from './agent-roster.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
@@ -15,16 +16,6 @@ import { monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
 import { enqueueOrReject } from './queue-refusal.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
-
-/** How much of a desktop turn's reply a follower is told. */
-const FOLLOWER_RESPONSE_CHARS = 300;
-
-function excerpt(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > FOLLOWER_RESPONSE_CHARS
-    ? flat.slice(0, FOLLOWER_RESPONSE_CHARS) + '…'
-    : flat;
-}
 
 const log = createLogger('MonitorTaskProcessor');
 
@@ -103,6 +94,11 @@ export class MonitorTaskProcessor {
   }
 
   private async queueMonitorTaskInner(task: Task, monitorId: string): Promise<void> {
+    if (task.kind === 'remote') {
+      await this.queueRemoteTask(task, monitorId);
+      return;
+    }
+
     // If monitor is suspended, just enqueue without attempting to process
     const suspendQueue = this.ctx.getOrCreateMonitorQueue(monitorId);
     if (suspendQueue.isSuspended()) {
@@ -141,7 +137,7 @@ export class MonitorTaskProcessor {
         monitorId,
         'Please wait for current operations to complete.',
         (position) =>
-          log.info('relay/hook arrived while monitor busy — interrupting and queuing', {
+          log.info('relay/hook arrived while monitor busy — queuing', {
             monitorId,
             messageId: task.messageId,
             position,
@@ -153,8 +149,12 @@ export class MonitorTaskProcessor {
       // This used to sit between the enqueue and the MESSAGE_QUEUED event; it is
       // ordered after now, which only changes when the client hears about a task
       // that is already on the queue either way.
+      //
+      // Not a claude.ai turn, though. Its reader is on claude.ai, where a stop reads as
+      // the user's own, and the answer this relay carries is often the very thing that
+      // turn asked for — it ends by itself, and the queue delivers this right after.
       const agent = this.ctx.agentPool.getMonitorAgent(monitorId);
-      if (agent?.session.isRunning()) {
+      if (agent?.session.isRunning() && !agent.session.isFollowingExternal()) {
         await agent.session.interrupt();
       }
       return;
@@ -197,6 +197,29 @@ export class MonitorTaskProcessor {
   }
 
   /**
+   * A claude.ai turn on the monitor agent's conversation.
+   *
+   * Unlike every other task, this one is not a request: the CLI is already running the
+   * turn, and it runs whether YAAR shows it or not. So nothing here may refuse it, steer it
+   * or hand it to an ephemeral agent — the only choice is when its frames reach the
+   * screen. Now, if the monitor agent is free; otherwise next, ahead of the queue and past
+   * its limit, with the frames buffering in the provider until then.
+   */
+  private async queueRemoteTask(task: Task, monitorId: string): Promise<void> {
+    const queue = this.ctx.getOrCreateMonitorQueue(monitorId);
+    const agent = this.ctx.agentPool.getMonitorAgent(monitorId);
+    if (agent && !queue.isSuspended() && !this.ctx.agentPool.isMonitorAgentBusy(monitorId)) {
+      await this.processMonitorTask(agent, task);
+      return;
+    }
+    queue.enqueueFront(task);
+    log.info('remote turn waiting for the monitor agent', {
+      monitorId,
+      messageId: task.messageId,
+    });
+  }
+
+  /**
    * Process a monitor task on the monitor agent (provider session continuity), then drain
    * whatever queued behind it.
    *
@@ -209,6 +232,10 @@ export class MonitorTaskProcessor {
   }
 
   private async runMonitorTurn(agent: PooledAgent, task: Task, monitorId: string): Promise<void> {
+    if (task.external) {
+      await this.runRemoteTurn(agent, task, monitorId, task.external);
+      return;
+    }
     const turnRole = monitorTurnRole(monitorId, task.messageId);
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
@@ -232,10 +259,6 @@ export class MonitorTaskProcessor {
     const resumeSessionId = this.ctx.savedThreadIds?.[canonicalMonitor];
     delete this.ctx.savedThreadIds?.[canonicalMonitor];
 
-    // The monitor agent does not read its own turns back from its timeline, but another
-    // reader of this desktop (a follower) has no other way to hear of them.
-    let response: string | undefined;
-
     await runAgentTurn(this.ctx, {
       agent,
       role: turnRole,
@@ -247,20 +270,45 @@ export class MonitorTaskProcessor {
       resumeSessionId,
       monitorId,
       ...getMonitorTurnOptions(this.ctx.providerType ?? ''),
-      onAssistantResponse: (content) => {
-        response = content;
+      onFinally: () => {
+        agent.session.setOutputCallback(null);
       },
-      onAfterRun: (recordedActions) => {
-        for (const follower of this.ctx.followersOf(monitorId)) {
-          follower.pushAI(
-            turnRole,
-            task.content,
-            recordedActions,
-            undefined,
-            response && excerpt(response),
-          );
-        }
-      },
+    });
+  }
+
+  /**
+   * Follow a claude.ai turn through the same turn lifecycle a desktop message gets, so it
+   * lands in the context tape, the session log and the desktop's agent status like one.
+   *
+   * No prompt is built: the model already has the message, and the desktop context a
+   * built prompt would carry went in through the provider's prompt hook
+   * (`ContextPool.remotePromptContext`). For the same reason nothing is recorded to the
+   * reload cache — a claude.ai message is not a desktop state it could be replayed from.
+   */
+  private async runRemoteTurn(
+    agent: PooledAgent,
+    task: Task,
+    monitorId: string,
+    external: ExternalTurn,
+  ): Promise<void> {
+    const turnRole = monitorTurnRole(monitorId, task.messageId);
+    agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
+    log.info('following remote turn', { messageId: task.messageId, agent: agent.id, monitorId });
+
+    this.ctx.contextAssembly.appendUserMessage(
+      this.ctx.contextTape,
+      task.content,
+      monitorSource(monitorId),
+    );
+    await runAgentTurn(this.ctx, {
+      agent,
+      role: turnRole,
+      source: monitorSource(monitorId),
+      task,
+      prompt: task.content,
+      canonicalAgent: monitorRole(monitorId),
+      monitorId,
+      external,
       onFinally: () => {
         agent.session.setOutputCallback(null);
       },

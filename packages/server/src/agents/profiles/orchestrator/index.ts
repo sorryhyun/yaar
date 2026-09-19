@@ -32,9 +32,7 @@ import drawings from './prompts/drawings.md' with { type: 'text' };
 import config from './prompts/config.md' with { type: 'text' };
 import reloadCache from './prompts/reload-cache.md' with { type: 'text' };
 import remoteControl from './prompts/remote-control.md' with { type: 'text' };
-import remoteIntro from './prompts/remote-intro.md' with { type: 'text' };
-import remoteTimeline from './prompts/remote-timeline.md' with { type: 'text' };
-import remoteVisibility from './prompts/remote-visibility.md' with { type: 'text' };
+import remoteMessage from './prompts/remote-message.md' with { type: 'text' };
 
 export const ORCHESTRATOR_PROMPT = composePrompt(
   intro,
@@ -59,44 +57,14 @@ export const ORCHESTRATOR_PROMPT = composePrompt(
 );
 
 /**
- * The monitor agent's prompt for a hosted Remote Control session
- * (`features/remote-control/agent-config.ts`).
- *
- * Same platform reference, different situation. The user reads the chat reply on
- * claude.ai/code rather than the desktop, and of the per-turn context the local monitor
- * is fed only the timeline and open windows arrive (through a hook — see
- * `features/remote-control/turn-context.ts`), with no relays in it. So the timeline gets
- * its own remote section, the parts describing context that never arrives —
- * `<reload_options>`, drawings — are left out rather than contradicted, and so is this
- * agent's own door to starting Remote Control. Visibility and user prompts both assume
- * someone at the desktop and are replaced by one remote section.
+ * Leads the context of every message that reaches the monitor agent from claude.ai
+ * (Remote Control). The agent's system prompt is the desktop's — it is the same agent, in
+ * the same conversation — so what differs about a claude.ai message is said with it.
  */
-export const REMOTE_ORCHESTRATOR_PROMPT = composePrompt(
-  remoteIntro,
-  verbTools,
-  payloadLiterals,
-  uriNamespaces,
-  remoteVisibility,
-  remoteTimeline,
-  taskList,
-  windows,
-  storage,
-  http,
-  mcp,
-  apps,
-  skills,
-  config,
-);
+export const REMOTE_MESSAGE_CONTEXT = remoteMessage;
 
 const customPrompt = loadCustomSystemPrompt();
 
 export function getOrchestratorPrompt(): string {
   return customPrompt ?? ORCHESTRATOR_PROMPT;
-}
-
-/** A custom prompt replaces the platform reference, so it still gets the remote framing. */
-export function getRemoteOrchestratorPrompt(): string {
-  return customPrompt
-    ? composePrompt(remoteIntro, customPrompt, remoteVisibility)
-    : REMOTE_ORCHESTRATOR_PROMPT;
 }
