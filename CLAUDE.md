@@ -23,6 +23,7 @@ make claude                      # Start with Claude provider (REMOTE=1, serves 
 make codex                       # Start with Codex provider (REMOTE=1, serves from port 8000)
 make claude-dev                  # Claude provider without MCP auth (local dev)
 make codex-dev                   # Codex provider without MCP auth (local dev)
+make termux                      # Claude provider on Android/Termux (unpacks claude to JS for Android Bun)
 make build                       # Build all packages
 bun run typecheck                # Type check all packages
 make lint                        # Lint all packages
