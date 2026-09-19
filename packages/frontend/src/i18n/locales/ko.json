@@ -99,6 +99,8 @@
     "lockedBy": "잠금: {{agent}}",
     "poolAgent": "풀 에이전트: {{agentId}} ({{status}})",
     "export": "내용 내보내기",
+    "fullscreen": "전체 화면",
+    "exitFullscreen": "전체 화면 종료",
     "changed": "변경됨"
   },
   "recentActions": {

@@ -99,6 +99,8 @@
     "lockedBy": "锁定者：{{agent}}",
     "poolAgent": "池代理：{{agentId}} ({{status}})",
     "export": "导出内容",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
     "changed": "已更新"
   },
   "recentActions": {

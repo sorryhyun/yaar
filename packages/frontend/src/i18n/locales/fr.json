@@ -99,6 +99,8 @@
     "lockedBy": "Verrouillé par : {{agent}}",
     "poolAgent": "Agent du pool : {{agentId}} ({{status}})",
     "export": "Exporter le contenu",
+    "fullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran",
     "changed": "Mis à jour"
   },
   "recentActions": {

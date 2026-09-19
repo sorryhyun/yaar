@@ -8,6 +8,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   restorePrompt: null,
   selectedWindowIds: [],
   formFactor: detectFormFactor(),
+  fullscreenWindowId: null,
 
   setRestorePrompt: (prompt) =>
     set((state) => {
@@ -27,5 +28,10 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   setFormFactor: (formFactor) =>
     set((state) => {
       state.formFactor = formFactor;
+    }),
+
+  toggleFullscreenWindow: (windowId) =>
+    set((state) => {
+      state.fullscreenWindowId = state.fullscreenWindowId === windowId ? null : windowId;
     }),
 });

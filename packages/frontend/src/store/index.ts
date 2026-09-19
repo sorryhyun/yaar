@@ -22,6 +22,7 @@ export {
   selectPanelWindows,
   selectHasMaximizedWindow,
   selectHasOpenStandardWindow,
+  selectFullscreenCardId,
   selectToasts,
   selectNotifications,
   selectDialogs,

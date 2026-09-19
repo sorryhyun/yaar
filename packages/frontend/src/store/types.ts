@@ -193,6 +193,11 @@ export interface UiSliceState {
   selectedWindowIds: string[];
   /** Shell layout: floating windows, or full-screen cards on a phone. See `lib/formFactor.ts`. */
   formFactor: FormFactor;
+  /**
+   * The phone card the user blew up to fill the whole screen, command palette and all.
+   * Only in effect while that card is the one on top — see `selectFullscreenCardId`.
+   */
+  fullscreenWindowId: string | null;
 }
 
 export interface UiSliceActions {
@@ -200,6 +205,7 @@ export interface UiSliceActions {
   dismissRestorePrompt: () => void;
   setSelectedWindows: (ids: string[]) => void;
   setFormFactor: (formFactor: FormFactor) => void;
+  toggleFullscreenWindow: (windowId: string) => void;
 }
 
 export type UiSlice = UiSliceState & UiSliceActions;

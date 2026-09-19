@@ -99,6 +99,8 @@
     "lockedBy": "ロック中: {{agent}}",
     "poolAgent": "プールエージェント: {{agentId}} ({{status}})",
     "export": "コンテンツをエクスポート",
+    "fullscreen": "全画面",
+    "exitFullscreen": "全画面を終了",
     "changed": "更新あり"
   },
   "recentActions": {

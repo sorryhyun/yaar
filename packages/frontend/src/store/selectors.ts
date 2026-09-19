@@ -103,6 +103,26 @@ export const selectHasOpenStandardWindow = (state: DesktopStore): boolean =>
       (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
 
+/**
+ * The phone card currently filling the whole screen, if any. The flag is only honoured
+ * while that card is the focused one on the active monitor, so minimizing it, closing it,
+ * or switching to another card brings the palette back without anyone clearing it.
+ */
+export const selectFullscreenCardId = (state: DesktopStore): string | null => {
+  const id = state.fullscreenWindowId;
+  if (state.formFactor !== 'mobile' || !id || id !== state.focusedWindowId) return null;
+  const w = state.windows[id];
+  if (
+    !w ||
+    w.minimized ||
+    w.windowStyle ||
+    (w.variant && w.variant !== 'standard') ||
+    (w.monitorId ?? DEFAULT_MONITOR_ID) !== state.activeMonitorId
+  )
+    return null;
+  return id;
+};
+
 export const selectToasts = (state: DesktopStore) => Object.values(state.toasts);
 
 export const selectNotifications = (state: DesktopStore) => Object.values(state.notifications);

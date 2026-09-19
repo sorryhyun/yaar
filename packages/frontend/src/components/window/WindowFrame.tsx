@@ -7,7 +7,12 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store';
+import {
+  useDesktopStore,
+  selectQueuedActionsCount,
+  selectWindowAgent,
+  selectFullscreenCardId,
+} from '@/store';
 import { useComponentAction } from '@/contexts/ComponentActionContext';
 import { WindowCallbackProvider } from '@/contexts/WindowCallbackContext';
 import type { WindowModel } from '@/types/state';
@@ -42,6 +47,8 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   // windowStyle windows position themselves (docks, overlays); they keep doing so.
   const isCard = isMobile && !isWidget && !isPanel && !window.windowStyle;
+  // A card blown up over the command palette too — the phone's stand-in for maximize.
+  const isFullscreen = useDesktopStore((s) => selectFullscreenCardId(s) === window.id);
 
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
@@ -221,7 +228,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       left: 0,
       width: '100%',
       // --palette-h is published by CommandPalette as it grows and shrinks.
-      height: 'calc(100% - var(--palette-h, 0px))',
+      height: isFullscreen ? '100%' : 'calc(100% - var(--palette-h, 0px))',
       zIndex: zIndex + 100,
     };
   } else if (window.windowStyle) {
@@ -279,6 +286,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       data-variant={variant}
       data-frameless={isFrameless || undefined}
       data-card={isCard || undefined}
+      data-fullscreen={isFullscreen || undefined}
       data-hidden={hidden || undefined}
       data-focused={isFocused}
       data-selected={isSelected}
@@ -356,6 +364,23 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             >
               −
             </button>
+            {isCard && (
+              <button
+                className={styles.controlBtn}
+                data-action="fullscreen"
+                aria-pressed={isFullscreen}
+                title={t(isFullscreen ? 'window.exitFullscreen' : 'window.fullscreen')}
+                aria-label={t(isFullscreen ? 'window.exitFullscreen' : 'window.fullscreen')}
+                onClick={() => {
+                  // Tapping a card's button doesn't route through the frame's mousedown
+                  // focus on every browser; fullscreen only holds for the focused card.
+                  userFocusWindow(window.id);
+                  useDesktopStore.getState().toggleFullscreenWindow(window.id);
+                }}
+              >
+                {isFullscreen ? '⤡' : '⤢'}
+              </button>
+            )}
             {!isCard && (
               <button
                 className={styles.controlBtn}

@@ -460,6 +460,10 @@
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+.frame[data-card][data-fullscreen] {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .frame[data-card] .titleBar {
   height: 44px;
   cursor: default;

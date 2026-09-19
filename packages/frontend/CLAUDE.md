@@ -50,7 +50,7 @@ src/
 
 ## Form Factor (phone layout)
 
-`lib/formFactor.ts` picks `formFactor` (`'mobile' | 'desktop'`, ui slice) by media query — coarse pointer + narrow viewport, never UA — and `?ui=mobile|desktop|auto` pins/unpins it. `useFormFactorSync` mirrors it to `<html data-form-factor>`, which CSS Modules branch on via `:global(html[data-form-factor='mobile'])`. On mobile a standard window renders as a full-screen *card* (`data-card`, no drag/resize) sized above the command palette via the `--palette-h` var the palette publishes. The server gets the form factor through `SUBSCRIBE_MONITOR` and tells the monitor agent with a `<device>` block each turn.
+`lib/formFactor.ts` picks `formFactor` (`'mobile' | 'desktop'`, ui slice) by media query — coarse pointer + narrow viewport, never UA — and `?ui=mobile|desktop|auto` pins/unpins it. `useFormFactorSync` mirrors it to `<html data-form-factor>`, which CSS Modules branch on via `:global(html[data-form-factor='mobile'])`. On mobile a standard window renders as a full-screen *card* (`data-card`, no drag/resize) sized above the command palette via the `--palette-h` var the palette publishes. A card's ⤢ title-bar button is the phone's maximize: it sets `fullscreenWindowId` (ui slice) and the card covers the palette (monitor/window tabs included) too; `selectFullscreenCardId` honours it only while that card is focused, so closing, minimizing or covering the card brings the palette back. The server gets the form factor through `SUBSCRIBE_MONITOR` and tells the monitor agent with a `<device>` block each turn.
 
 ## CLI Panel
 

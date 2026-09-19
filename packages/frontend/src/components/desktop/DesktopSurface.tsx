@@ -15,6 +15,7 @@ import {
   useDesktopStore,
   selectHasMaximizedWindow,
   selectHasOpenStandardWindow,
+  selectFullscreenCardId,
   selectPanelWindows,
 } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
@@ -53,6 +54,7 @@ export function DesktopSurface() {
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
   const hasMaximizedWindow = useDesktopStore(selectHasMaximizedWindow);
   const hasOpenStandardWindow = useDesktopStore(selectHasOpenStandardWindow);
+  const hasFullscreenCard = useDesktopStore((s) => selectFullscreenCardId(s) !== null);
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
   const cliMode = useDesktopStore((s) => s.cliMode);
@@ -455,8 +457,9 @@ export function DesktopSurface() {
 
       <DrawingOverlay />
       {/* A phone keeps the palette under every window — it is the only way to talk to the
-          agent, and there is no desktop edge to reach it from. */}
-      <div hidden={hasMaximizedWindow && !isMobile}>
+          agent, and there is no desktop edge to reach it from — unless the user put the top
+          card in full screen, whose title bar button is the way back. */}
+      <div hidden={isMobile ? hasFullscreenCard : hasMaximizedWindow}>
         <CommandPalette />
       </div>
       {/* Frontend-raised toasts (e.g. "Retry" on a failed app launch) carry no

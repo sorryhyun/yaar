@@ -99,6 +99,8 @@
     "lockedBy": "Bloqueado por: {{agent}}",
     "poolAgent": "Agente do pool: {{agentId}} ({{status}})",
     "export": "Exportar conteúdo",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
     "changed": "Atualizado"
   },
   "recentActions": {
