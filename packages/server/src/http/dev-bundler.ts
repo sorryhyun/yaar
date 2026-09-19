@@ -196,6 +196,10 @@ function generateDevHtml(jsFiles: string[], cssFiles: string[]): string {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="google" content="notranslate" />
+    <meta name="theme-color" content="#161b22" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>YAAR</title>
 ${cssLinks}
     <style>
