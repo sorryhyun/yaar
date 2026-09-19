@@ -82,10 +82,22 @@ export function onImeEnd(e: CompositionEvent): void {
  * Whatever the IME commits lands in the anchor's own value as well as going to
  * the remote page; left there it would accumulate a shadow copy of everything
  * ever typed, and the next composition would compose against it.
+ *
+ * It is also the only place a phone keyboard's plain text arrives. Android soft
+ * keyboards send every keydown as 229 / "Unidentified" — which `isImeKey` must
+ * leave alone — and insert Latin text with no composition at all, as a bare
+ * `insertText`. Nothing else forwards that, so it is sent here. A desktop key
+ * never reaches this branch: its printable keydown was forwarded and
+ * `preventDefault`ed, so the anchor saw no input to double it.
  */
-export function onImeInput(): void {
+export function onImeInput(e: InputEvent): void {
   const anchor = getAnchor();
   if (composing || !anchor) return;
+  if (e.inputType === 'insertText' && e.data && isLiveConnected()) {
+    markInput();
+    send({ t: 'text', text: e.data });
+    requestCaret(120);
+  }
   anchor.value = '';
 }
 
