@@ -19,7 +19,7 @@
  */
 
 import { MAX_MONITORS, DEFAULT_MONITOR_ID, ServerEventType, type MonitorInfo } from '@yaar/shared';
-import type { ServerEvent } from '@yaar/shared';
+import type { FormFactor, ServerEvent } from '@yaar/shared';
 import type { Viewport } from './layout-context.js';
 import type { ConnectionId } from './broadcast-center.js';
 import type { SessionId } from './types.js';
@@ -41,6 +41,8 @@ export interface MonitorRegistryDeps {
   unsubscribeMonitor(monitorId: string): void;
   /** Record a connection's viewport for layout. */
   setViewport(monitorId: string, viewport: Viewport): void;
+  /** Record a connection's shell layout — whether the monitor agent is designing for a phone. */
+  setFormFactor(monitorId: string, formFactor: FormFactor): void;
   /** Forget a removed monitor's viewport, so its id's successor does not inherit it. */
   clearLayout(monitorId: string): void;
   /** Tear down the monitor's agent. Absent before the pool is initialized. */
@@ -108,10 +110,20 @@ export class MonitorRegistry {
     return this.deps.connectionMonitor(connectionId);
   }
 
-  /** A tab reporting which monitor it is now looking at, and how big its viewport is. */
-  subscribe(connectionId: ConnectionId, monitorId: string, viewport?: Viewport): void {
+  /**
+   * A tab reporting which monitor it is now looking at, how big its viewport is, and
+   * which shell layout it renders. A report with a viewport but no form factor is from a
+   * desktop tab, so it clears a phone's earlier claim on the monitor.
+   */
+  subscribe(
+    connectionId: ConnectionId,
+    monitorId: string,
+    viewport?: Viewport,
+    formFactor?: FormFactor,
+  ): void {
     this.deps.subscribeConnection(connectionId, monitorId);
     if (viewport) this.deps.setViewport(monitorId, viewport);
+    if (viewport || formFactor) this.deps.setFormFactor(monitorId, formFactor ?? 'desktop');
   }
 
   /**

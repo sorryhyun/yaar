@@ -24,6 +24,7 @@ import {
   usePendingEventDrainer,
   drainPendingQueues,
   useMonitorSync,
+  monitorSubscription,
 } from './use-agent-connection';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 // Window IDs in the store are opaque handles — send as-is to server.
@@ -211,11 +212,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     wsManager.stopped = false;
     const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
       onOpen: () => {
-        const activeMonitorId = useDesktopStore.getState().activeMonitorId;
-        sendEvent(wsManager, {
-          type: ClientEventType.SUBSCRIBE_MONITOR,
-          monitorId: activeMonitorId,
-        });
+        sendEvent(wsManager, monitorSubscription(useDesktopStore.getState().activeMonitorId));
       },
       onMessage: handleMessage,
       onClose: () => {

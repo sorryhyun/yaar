@@ -82,6 +82,7 @@ import type { PoolContext, PoolStats, Task } from './pool-types.js';
 
 import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
+import { getSessionHub } from '../session/session-hub.js';
 
 const log = createLogger('ContextPool');
 
@@ -110,7 +111,12 @@ export class ContextPool implements PoolContext {
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
-  readonly contextAssembly = new ContextAssemblyPolicy();
+  readonly contextAssembly = new ContextAssemblyPolicy((monitorId) => {
+    const layout = getSessionHub().get(this.sessionId)?.layoutContext;
+    return layout
+      ? { formFactor: layout.getFormFactor(monitorId), viewport: layout.getViewport(monitorId) }
+      : undefined;
+  });
   readonly reloadPolicy: ReloadCachePolicy;
   readonly windowQueuePolicy = new WindowQueuePolicy();
   readonly budgetPolicy = new MonitorBudgetPolicy();

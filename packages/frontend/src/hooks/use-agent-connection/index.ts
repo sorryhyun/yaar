@@ -2,4 +2,4 @@ export * from './transport-manager';
 export * from './server-event-dispatcher';
 export * from './outbound-command-helpers';
 export { usePendingEventDrainer, drainPendingQueues } from './usePendingEventDrainer';
-export { useMonitorSync } from './useMonitorSync';
+export { useMonitorSync, monitorSubscription } from './useMonitorSync';

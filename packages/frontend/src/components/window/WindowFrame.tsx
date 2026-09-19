@@ -1,5 +1,9 @@
 /**
  * WindowFrame - Draggable, resizable window container.
+ *
+ * On a phone (`formFactor === 'mobile'`) a standard window is a *card* instead: it fills
+ * the screen above the command palette, cannot be dragged or resized, and z-order alone
+ * decides which one shows — the taskbar tabs are the app switcher.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +39,9 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   const isWidget = variant === 'widget';
   const isPanel = variant === 'panel';
   const isFrameless = !!window.frameless;
+  const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
+  // windowStyle windows position themselves (docks, overlays); they keep doing so.
+  const isCard = isMobile && !isWidget && !isPanel && !window.windowStyle;
 
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
@@ -208,7 +215,16 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
 
   // Determine position/size (handle maximized state and variants)
   let style: React.CSSProperties;
-  if (window.windowStyle) {
+  if (isCard) {
+    style = {
+      top: 0,
+      left: 0,
+      width: '100%',
+      // --palette-h is published by CommandPalette as it grows and shrinks.
+      height: 'calc(100% - var(--palette-h, 0px))',
+      zIndex: zIndex + 100,
+    };
+  } else if (window.windowStyle) {
     // Custom CSS positioning from app.json windowStyle
     style = {
       top: window.bounds.y,
@@ -262,6 +278,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       data-window-id={window.id}
       data-variant={variant}
       data-frameless={isFrameless || undefined}
+      data-card={isCard || undefined}
       data-hidden={hidden || undefined}
       data-focused={isFocused}
       data-selected={isSelected}
@@ -290,8 +307,8 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       {!isWidget && !isPanel && !isFrameless && (
         <div
           className={styles.titleBar}
-          onMouseDown={handleTitleBarDragStart}
-          onClick={handleTitleBarClick}
+          onMouseDown={isCard ? undefined : handleTitleBarDragStart}
+          onClick={isCard ? undefined : handleTitleBarClick}
         >
           <div className={styles.titleSection}>
             <div className={styles.title}>{window.title}</div>
@@ -322,14 +339,16 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             )}
           </div>
           <div className={styles.controls}>
-            <button
-              className={styles.controlBtn}
-              data-action="export"
-              title={t('window.export')}
-              onClick={() => exportContent(window.content, window.title, window.id)}
-            >
-              ↑
-            </button>
+            {!isCard && (
+              <button
+                className={styles.controlBtn}
+                data-action="export"
+                title={t('window.export')}
+                onClick={() => exportContent(window.content, window.title, window.id)}
+              >
+                ↑
+              </button>
+            )}
             <button
               className={styles.controlBtn}
               data-action="minimize"
@@ -337,18 +356,20 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             >
               −
             </button>
-            <button
-              className={styles.controlBtn}
-              data-action="maximize"
-              onClick={() => {
-                useDesktopStore.getState().applyAction({
-                  type: window.maximized ? 'window.restore' : 'window.maximize',
-                  windowId: window.id,
-                });
-              }}
-            >
-              □
-            </button>
+            {!isCard && (
+              <button
+                className={styles.controlBtn}
+                data-action="maximize"
+                onClick={() => {
+                  useDesktopStore.getState().applyAction({
+                    type: window.maximized ? 'window.restore' : 'window.maximize',
+                    windowId: window.id,
+                  });
+                }}
+              >
+                □
+              </button>
+            )}
             <button
               className={styles.controlBtn}
               data-action="close"
@@ -397,7 +418,9 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
           </RendererErrorBoundary>
         </WindowCallbackProvider>
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
-        {!isFocused && window.content.renderer === 'iframe' && (
+        {/* A card is only ever seen when it is on top, so there is nothing to raise —
+            the overlay would just eat the first tap. */}
+        {!isFocused && !isCard && window.content.renderer === 'iframe' && (
           <div className={styles.iframeFocusOverlay} />
         )}
         {isDragOver && <div className={styles.dropOverlay} />}
@@ -416,6 +439,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
 
       {/* Resize edges and corners */}
       {!window.maximized &&
+        !isCard &&
         !isPanel &&
         !isFrameless &&
         (isWidget ? (

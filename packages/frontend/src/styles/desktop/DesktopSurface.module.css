@@ -564,6 +564,52 @@
   transform: scale(0.9);
 }
 
+/* ============ Phone ============
+   The icon column that wraps sideways on a desktop becomes a home-screen grid: four
+   across, scrolling vertically, stopping above the palette. */
+:global(html[data-form-factor='mobile']) .statusBar {
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-2));
+  max-width: calc(100vw - 2 * var(--space-3));
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+:global(html[data-form-factor='mobile']) .desktopIcons {
+  --icon-size: 48px;
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: var(--palette-h, 0px);
+  max-height: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: var(--space-3) 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+:global(html[data-form-factor='mobile']) .desktopIcon {
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+}
+
+:global(html[data-form-factor='mobile']) .iconLabel {
+  width: 100%;
+  font-size: var(--text-sm);
+}
+
+/* An open folder takes its own row rather than stretching one grid cell downward. */
+:global(html[data-form-factor='mobile']) .folderContainer:has(.folderExpanded) {
+  grid-column: 1 / -1;
+}
+
+:global(html[data-form-factor='mobile']) .folderExpanded {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* Keyframes live in the module that names them: the CSS-modules pass scopes an
    animation name at both its definition and its references, so a name defined in a
    global stylesheet is unreachable from here. */

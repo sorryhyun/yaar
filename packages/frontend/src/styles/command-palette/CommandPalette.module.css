@@ -26,6 +26,9 @@
 .inputWrapper {
   position: relative;
   flex: 1;
+  /* Without this the bar's min-content (icons + the textarea's `cols` width + Send) sets
+     its floor, and on a narrow screen it runs off the right edge instead of shrinking. */
+  min-width: 0;
   display: flex;
   align-items: flex-end;
   gap: var(--space-1);
@@ -368,6 +371,42 @@
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent),
     var(--shadow-lg);
+}
+
+/* ============ Phone ============
+   Edge to edge along the bottom and lifted off the gesture bar. While typing the icon
+   cluster steps aside so the textarea gets the row. */
+:global(html[data-form-factor='mobile']) .container {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  max-width: none;
+  transform: none;
+  padding: 0 var(--space-2) calc(env(safe-area-inset-bottom, 0px) + var(--space-1));
+}
+
+:global(html[data-form-factor='mobile']) .container[data-expanded='true'] .actionButtons {
+  display: none;
+}
+
+:global(html[data-form-factor='mobile']) .qrButton,
+:global(html[data-form-factor='mobile']) .resetButton,
+:global(html[data-form-factor='mobile']) .closeAllButton,
+:global(html[data-form-factor='mobile']) .pencilButton {
+  width: 36px;
+  height: 36px;
+}
+
+/* 16px is the floor below which mobile browsers zoom the page on focus. */
+:global(html[data-form-factor='mobile']) .input {
+  font-size: max(16px, var(--text-base));
+  padding: var(--space-2);
+}
+
+:global(html[data-form-factor='mobile']) .sendButton {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
 }
 
 /* Keyframes live in the module that names them: the CSS-modules pass scopes an

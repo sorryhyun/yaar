@@ -266,11 +266,20 @@ export interface AppEventEvent {
   wakeAgent?: boolean;
 }
 
+/**
+ * Which shell layout a tab renders. `mobile` is the phone layout: every standard window
+ * is a full-screen card above the command palette, one visible at a time, and the bounds
+ * an agent gives a window are not what the user sees.
+ */
+export type FormFactor = 'mobile' | 'desktop';
+
 export interface SubscribeMonitorEvent {
   type: typeof ClientEventType.SUBSCRIBE_MONITOR;
   monitorId: string;
   /** Desktop viewport dimensions (reported by frontend on subscribe and resize). */
   viewport?: { w: number; h: number };
+  /** The tab's shell layout, reported alongside the viewport. Absent means desktop. */
+  formFactor?: FormFactor;
 }
 
 /**

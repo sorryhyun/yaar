@@ -11,8 +11,14 @@
  * - Composition of sub-components
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useDesktopStore, selectHasMaximizedWindow, selectPanelWindows } from '@/store';
+import {
+  useDesktopStore,
+  selectHasMaximizedWindow,
+  selectHasOpenStandardWindow,
+  selectPanelWindows,
+} from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { useFormFactorSync } from '@/hooks/useFormFactorSync';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
@@ -46,6 +52,8 @@ export function DesktopSurface() {
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
   const hasMaximizedWindow = useDesktopStore(selectHasMaximizedWindow);
+  const hasOpenStandardWindow = useDesktopStore(selectHasOpenStandardWindow);
+  const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
   const cliMode = useDesktopStore((s) => s.cliMode);
   const switchMonitor = useDesktopStore((s) => s.switchMonitor);
@@ -55,6 +63,7 @@ export function DesktopSurface() {
   const theme = useDesktopStore((s) => s.theme);
   const { sendMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } =
     useAgentConnection({ autoConnect: false });
+  useFormFactorSync();
 
   // Rubber-band selection state
   const [selectionRect, setSelectionRect] = useState<{
@@ -404,7 +413,8 @@ export function DesktopSurface() {
         onDragLeave={handleDesktopDragLeave}
         onDrop={handleDesktopDrop}
       >
-        <div hidden={hasMaximizedWindow}>
+        {/* On a phone any open window is a full-screen card, so it covers the pill too. */}
+        <div hidden={hasMaximizedWindow || (isMobile && hasOpenStandardWindow)}>
           <DesktopStatusBar interrupt={interrupt} interruptAgent={interruptAgent} />
         </div>
 
@@ -444,7 +454,9 @@ export function DesktopSurface() {
       </div>
 
       <DrawingOverlay />
-      <div hidden={hasMaximizedWindow}>
+      {/* A phone keeps the palette under every window — it is the only way to talk to the
+          agent, and there is no desktop edge to reach it from. */}
+      <div hidden={hasMaximizedWindow && !isMobile}>
         <CommandPalette />
       </div>
       {/* Frontend-raised toasts (e.g. "Retry" on a failed app launch) carry no

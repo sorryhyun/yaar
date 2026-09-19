@@ -194,7 +194,7 @@ function generateDevHtml(jsFiles: string[], cssFiles: string[]): string {
 <html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="google" content="notranslate" />
     <meta name="theme-color" content="#161b22" />
     <link rel="manifest" href="/manifest.json" />
@@ -205,6 +205,7 @@ ${cssLinks}
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; overflow: hidden; font-family: var(--font-sans); }
+      html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
       html.yaar-dragging iframe { pointer-events: none; }
       html.yaar-dragging, html.yaar-dragging * { user-select: none; }
     </style>

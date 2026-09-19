@@ -173,6 +173,45 @@ describe('ContextAssemblyPolicy', () => {
     expect(windows).toContain('monitor="0"');
     expect(windows).toContain('yaar://windows/chat — Chat (you)');
   });
+  describe('on a phone', () => {
+    const win = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      title: id.toUpperCase(),
+      content: { renderer: 'markdown' as const, data: '' },
+      bounds: { x: 100, y: 100, w: 640, h: 480 },
+      locked: false,
+      createdAt: 0,
+      updatedAt: 0,
+      ...extra,
+    });
+    const phone = new ContextAssemblyPolicy((monitorId) =>
+      monitorId === '0' ? { formFactor: 'mobile', viewport: { w: 412, h: 900 } } : undefined,
+    );
+
+    it('tells the agent every turn, even with nothing open', () => {
+      const text = phone.formatOpenWindows([], { monitorId: '0' });
+      expect(text).toContain('<device form_factor="mobile" screen="412×900">');
+      expect(text).not.toContain('</open_windows>');
+    });
+
+    it('names the card on screen instead of geometry the user cannot see', () => {
+      // Stack order, bottom first: `b` is the top visible card; `c` is put away.
+      const text = phone.formatOpenWindows([win('a'), win('b'), win('c', { minimized: true })], {
+        monitorId: '0',
+      });
+      expect(text).toContain('yaar://windows/a — A · behind');
+      expect(text).toContain('yaar://windows/b — B · on screen');
+      expect(text).toContain('yaar://windows/c — C · minimized');
+      expect(text).not.toContain('640×480');
+      expect(text).not.toContain('covers');
+    });
+
+    it('leaves a desktop monitor as it was', () => {
+      const text = phone.formatOpenWindows([win('a')], { monitorId: '1' });
+      expect(text).not.toContain('<device');
+      expect(text).toContain('640×480 at (100,100)');
+    });
+  });
 });
 
 describe('ReloadCachePolicy', () => {

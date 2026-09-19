@@ -1,11 +1,22 @@
 import { useEffect } from 'react';
 import { useDesktopStore } from '@/store';
 import { ClientEventType } from '@/types';
+import type { SubscribeMonitorEvent } from '@yaar/shared';
 import { wsManager, sendEvent } from './transport-manager';
 
-/** Get current desktop viewport dimensions. */
-function getViewport(): { w: number; h: number } {
-  return { w: window.innerWidth, h: window.innerHeight };
+/**
+ * The one spelling of "this tab is looking at `monitorId`": which monitor, how big the
+ * screen is, and which shell layout it renders. The server sizes new windows from the
+ * viewport and tells the monitor agent it is on a phone from the form factor, so every
+ * send carries both — including the one on (re)connect.
+ */
+export function monitorSubscription(monitorId: string): SubscribeMonitorEvent {
+  return {
+    type: ClientEventType.SUBSCRIBE_MONITOR,
+    monitorId,
+    viewport: { w: window.innerWidth, h: window.innerHeight },
+    formFactor: useDesktopStore.getState().formFactor,
+  };
 }
 
 /**
@@ -27,11 +38,7 @@ export function useMonitorSync() {
       resizeTimer = setTimeout(() => {
         const monitorId = useDesktopStore.getState().activeMonitorId;
         if (wsManager.ws?.readyState === WebSocket.OPEN) {
-          sendEvent(wsManager, {
-            type: ClientEventType.SUBSCRIBE_MONITOR,
-            monitorId,
-            viewport: getViewport(),
-          });
+          sendEvent(wsManager, monitorSubscription(monitorId));
         }
       }, 300);
     };
@@ -44,16 +51,16 @@ export function useMonitorSync() {
 
   useEffect(() => {
     let previousMonitorId = useDesktopStore.getState().activeMonitorId;
+    let previousFormFactor = useDesktopStore.getState().formFactor;
 
     const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.activeMonitorId !== previousMonitorId) {
+      // A form-factor flip (rotation, `?ui=`) re-reports on the same monitor — the agent's
+      // picture of the screen is wrong until it does.
+      if (state.activeMonitorId !== previousMonitorId || state.formFactor !== previousFormFactor) {
         previousMonitorId = state.activeMonitorId;
+        previousFormFactor = state.formFactor;
         if (wsManager.ws?.readyState === WebSocket.OPEN) {
-          sendEvent(wsManager, {
-            type: ClientEventType.SUBSCRIBE_MONITOR,
-            monitorId: state.activeMonitorId,
-            viewport: getViewport(),
-          });
+          sendEvent(wsManager, monitorSubscription(state.activeMonitorId));
           // Deliberately no RESYNC here. Window state and agent streams are delivered
           // session-wide (see LiveSession.broadcast), so a switch has nothing to catch
           // up on — and a snapshot is not free: it mints fresh iframe tokens, which

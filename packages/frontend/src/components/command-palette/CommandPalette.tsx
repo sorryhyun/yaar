@@ -70,6 +70,29 @@ export function CommandPalette() {
   const windows = useDesktopStore((state) => state.windows);
   const activeMonitorId = useDesktopStore((state) => state.activeMonitorId);
   const monitors = useDesktopStore((state) => state.monitors);
+  const isMobile = useDesktopStore((state) => state.formFactor === 'mobile');
+
+  // Publish how much of the bottom of the screen the palette occupies, so a phone's
+  // full-screen window cards can stop exactly above it — the palette grows with an
+  // expanded textarea, attachments, and a status line.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const root = document.documentElement.style;
+    const publish = () => {
+      const top = el.getBoundingClientRect().top;
+      root.setProperty('--palette-h', `${Math.max(0, globalThis.innerHeight - top)}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    globalThis.addEventListener('resize', publish);
+    return () => {
+      observer.disconnect();
+      globalThis.removeEventListener('resize', publish);
+      root.removeProperty('--palette-h');
+    };
+  }, []);
 
   // Open app windows for @mention dropdown
   const appWindows = useMemo(() => {
@@ -478,37 +501,40 @@ export function CommandPalette() {
                   />
                 </svg>
               </button>
-              <button
-                className={styles.folderButton}
-                onClick={async () => {
-                  try {
-                    const res = await apiFetch('/api/pick-directory', { method: 'POST' });
-                    const data = await res.json();
-                    if (data.path) {
-                      sendMessage(`<ui:click>mount: ${data.path}</ui:click>`);
+              {/* Opens a native folder picker on the server's machine — never the phone's. */}
+              {!isMobile && (
+                <button
+                  className={styles.folderButton}
+                  onClick={async () => {
+                    try {
+                      const res = await apiFetch('/api/pick-directory', { method: 'POST' });
+                      const data = await res.json();
+                      if (data.path) {
+                        sendMessage(`<ui:click>mount: ${data.path}</ui:click>`);
+                      }
+                    } catch {
+                      /* dialog failed or cancelled */
                     }
-                  } catch {
-                    /* dialog failed or cancelled */
-                  }
-                }}
-                title={t('commandPalette.tooltip.mountFolder')}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+                  }}
+                  title={t('commandPalette.tooltip.mountFolder')}
                 >
-                  <path
-                    d="M2.5 5.83333V15.8333C2.5 16.2754 2.67559 16.6993 2.98816 17.0118C3.30072 17.3244 3.72464 17.5 4.16667 17.5H15.8333C16.2754 17.5 16.6993 17.3244 17.0118 17.0118C17.3244 16.6993 17.5 16.2754 17.5 15.8333V8.33333C17.5 7.89131 17.3244 7.46738 17.0118 7.15482C16.6993 6.84226 16.2754 6.66667 15.8333 6.66667H10L8.33333 4.16667H4.16667C3.72464 4.16667 3.30072 4.34226 2.98816 4.65482C2.67559 4.96738 2.5 5.39131 2.5 5.83333Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M2.5 5.83333V15.8333C2.5 16.2754 2.67559 16.6993 2.98816 17.0118C3.30072 17.3244 3.72464 17.5 4.16667 17.5H15.8333C16.2754 17.5 16.6993 17.3244 17.0118 17.0118C17.3244 16.6993 17.5 16.2754 17.5 15.8333V8.33333C17.5 7.89131 17.3244 7.46738 17.0118 7.15482C16.6993 6.84226 16.2754 6.66667 15.8333 6.66667H10L8.33333 4.16667H4.16667C3.72464 4.16667 3.30072 4.34226 2.98816 4.65482C2.67559 4.96738 2.5 5.39131 2.5 5.83333Z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {mentionMatches.length > 0 && (

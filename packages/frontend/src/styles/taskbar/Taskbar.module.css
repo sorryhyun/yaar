@@ -235,3 +235,21 @@
     opacity: 1;
   }
 }
+
+/* ============ Phone ============
+   The tab row is the app switcher here. Centered overflow would clip the first tabs out
+   of reach, and there is no hover to reveal a close button, so the focused tab shows it. */
+:global(html[data-form-factor='mobile']) .windowTabs {
+  justify-content: flex-start;
+}
+
+:global(html[data-form-factor='mobile']) .tab {
+  max-width: 140px;
+  padding: 6px 10px;
+}
+
+:global(html[data-form-factor='mobile']) .tab[data-active] .tabClose {
+  opacity: 1;
+  width: 20px;
+  height: 20px;
+}

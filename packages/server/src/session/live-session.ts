@@ -230,6 +230,8 @@ export class LiveSession {
       unsubscribeMonitor: (monitorId) =>
         getBroadcastCenter().unsubscribeMonitor(sessionId, monitorId),
       setViewport: (monitorId, viewport) => this.layoutContext.setViewport(monitorId, viewport),
+      setFormFactor: (monitorId, formFactor) =>
+        this.layoutContext.setFormFactor(monitorId, formFactor),
       clearLayout: (monitorId) => this.layoutContext.clearMonitor(monitorId),
       removeMonitorAgent: (monitorId) => this.pool?.removeMonitorAgent(monitorId),
     });

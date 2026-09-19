@@ -48,6 +48,10 @@ src/
 - User interactions (focus, close, move, resize) logged and sent to server
 - Selectors: `selectWindowsInOrder`, `selectVisibleWindows`, `selectToasts`, etc. — grep `store/slices/` for the full list
 
+## Form Factor (phone layout)
+
+`lib/formFactor.ts` picks `formFactor` (`'mobile' | 'desktop'`, ui slice) by media query — coarse pointer + narrow viewport, never UA — and `?ui=mobile|desktop|auto` pins/unpins it. `useFormFactorSync` mirrors it to `<html data-form-factor>`, which CSS Modules branch on via `:global(html[data-form-factor='mobile'])`. On mobile a standard window renders as a full-screen *card* (`data-card`, no drag/resize) sized above the command palette via the `--palette-h` var the palette publishes. The server gets the form factor through `SUBSCRIBE_MONITOR` and tells the monitor agent with a `<device>` block each turn.
+
 ## CLI Panel
 
 `Shift+Tab` toggles `cliMode` (`store/slices/cliSlice.ts`), rendering `CliPanel` — a tmux-style grid of `TerminalPane`s streaming each monitor's agent. The panel also carries a **Monitor / Session ("act as me")** target toggle (`cliTarget` in the cli slice): `'session'` routes typed messages to the session agent — the user's deputy that can drive the real browser via `yaar://session/browser`. `sendMessage` (in `useAgentConnection`) attaches `target: 'session'` to `USER_MESSAGE` only while the CLI panel is open and the toggle is set; the main command palette always stays on the monitor agent.
@@ -57,7 +61,7 @@ src/
 `useAgentConnection` hook — singleton WebSocket with auto-reconnect (exponential backoff). Reconnects with `?sessionId=X` (rejoin) and `?token=X` (remote auth).
 - Decomposed into `hooks/use-agent-connection/`: `transport-manager`, `server-event-dispatcher`, `outbound-command-helpers`, `usePendingEventDrainer`, `useMonitorSync`
 - `usePendingEventDrainer` drains store queues (feedback, app protocol responses, interactions) over WS
-- `useMonitorSync` sends `SUBSCRIBE_MONITOR` (which monitor *this connection* is on) on active-monitor change and on viewport resize. It does **not** announce monitor creation/deletion: the monitor list is server state, so `monitorSlice` asks for changes directly (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the server's `MONITORS` answer. See `docs/architecture/monitor_and_windows_guide.md`.
+- `useMonitorSync` sends `SUBSCRIBE_MONITOR` (which monitor *this connection* is on, its viewport, and its `formFactor`) on connect, active-monitor change, form-factor change, and viewport resize — always built by `monitorSubscription()`. It does **not** announce monitor creation/deletion: the monitor list is server state, so `monitorSlice` asks for changes directly (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the server's `MONITORS` answer. See `docs/architecture/monitor_and_windows_guide.md`.
 - Event types defined in `@yaar/shared` — grep `events/client.ts` and `events/server.ts` for schemas
 
 ## Content Renderers

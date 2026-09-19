@@ -89,6 +89,20 @@ export const selectHasMaximizedWindow = (state: DesktopStore): boolean =>
       (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
 
+/**
+ * Whether a visible standard window is open on the active monitor, maximized or not —
+ * on a phone every such window is a full-screen card, so this is what covers the desktop.
+ */
+export const selectHasOpenStandardWindow = (state: DesktopStore): boolean =>
+  Object.values(state.windows).some(
+    (w) =>
+      w != null &&
+      !w.minimized &&
+      !w.windowStyle &&
+      (!w.variant || w.variant === 'standard') &&
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
+  );
+
 export const selectToasts = (state: DesktopStore) => Object.values(state.toasts);
 
 export const selectNotifications = (state: DesktopStore) => Object.values(state.notifications);

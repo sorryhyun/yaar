@@ -3,6 +3,7 @@
  * Each slice has its own state and actions interface.
  */
 import type { StateCreator } from 'zustand';
+import type { FormFactor } from '@/lib/formFactor';
 import type {
   DesktopState,
   DesktopActions,
@@ -190,12 +191,15 @@ export type AgentsSlice = AgentsSliceState & AgentsSliceActions;
 export interface UiSliceState {
   restorePrompt: RestorePrompt | null;
   selectedWindowIds: string[];
+  /** Shell layout: floating windows, or full-screen cards on a phone. See `lib/formFactor.ts`. */
+  formFactor: FormFactor;
 }
 
 export interface UiSliceActions {
   setRestorePrompt: (prompt: RestorePrompt | null) => void;
   dismissRestorePrompt: () => void;
   setSelectedWindows: (ids: string[]) => void;
+  setFormFactor: (formFactor: FormFactor) => void;
 }
 
 export type UiSlice = UiSliceState & UiSliceActions;

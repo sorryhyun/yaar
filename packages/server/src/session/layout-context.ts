@@ -6,9 +6,12 @@
  * - Monitor viewport + all window positions/sizes → monitor agent
  * - Window's own size → window/app agent
  * - Only sends delta (what changed since last tool result for that agent)
+ *
+ * On a phone (`formFactor: 'mobile'`) the stored bounds are not what the user sees —
+ * every standard window is a full-screen card — so both notes report the screen instead.
  */
 
-import type { WindowBounds } from '@yaar/shared';
+import { WINDOW_PLACEMENT, type FormFactor, type WindowBounds } from '@yaar/shared';
 import type { WindowStateRegistry } from './window-state.js';
 import type { WindowHandleMap } from './window-handle-map.js';
 
@@ -26,6 +29,7 @@ interface WindowSnapshot {
 
 interface MonitorLayoutSnapshot {
   viewport?: Viewport;
+  formFactor: FormFactor;
   windows: WindowSnapshot[];
 }
 
@@ -61,6 +65,8 @@ interface AgentLayoutState {
 export class LayoutContext {
   /** Monitor viewport dimensions (reported by frontend). */
   private viewports = new Map<string, Viewport>();
+  /** Monitor shell layout (reported by frontend). Absent means desktop. */
+  private formFactors = new Map<string, FormFactor>();
   /** Per-agent last-seen state. */
   private agentStates = new Map<string, AgentLayoutState>();
 
@@ -77,6 +83,25 @@ export class LayoutContext {
 
   getViewport(monitorId: string): Viewport | undefined {
     return this.viewports.get(monitorId);
+  }
+
+  setFormFactor(monitorId: string, formFactor: FormFactor): void {
+    this.formFactors.set(monitorId, formFactor);
+  }
+
+  getFormFactor(monitorId: string): FormFactor {
+    return this.formFactors.get(monitorId) ?? 'desktop';
+  }
+
+  /**
+   * What a full-screen card on a phone actually measures: the screen minus the palette
+   * strip. Undefined off a phone, or before the phone has reported its viewport.
+   */
+  private cardBounds(monitorId: string | undefined): WindowBounds | undefined {
+    if (!monitorId || this.getFormFactor(monitorId) !== 'mobile') return undefined;
+    const vp = this.viewports.get(monitorId);
+    if (!vp) return undefined;
+    return { x: 0, y: 0, w: vp.w, h: Math.max(0, vp.h - WINDOW_PLACEMENT.paletteInset) };
   }
 
   // ── Delta computation ──
@@ -109,8 +134,9 @@ export class LayoutContext {
     const win = this.windowState.getWindow(windowId);
     if (!win) return null;
 
+    const card = this.cardBounds(this.windowState.getMonitorForWindow(windowId));
     const current: WindowLayoutSnapshot = {
-      bounds: { ...win.bounds },
+      bounds: card ?? { ...win.bounds },
     };
     const prev = this.agentStates.get(agentId)?.windowSnapshot;
 
@@ -122,7 +148,7 @@ export class LayoutContext {
     state.windowSnapshot = current;
     this.agentStates.set(agentId, state);
 
-    const size = `${current.bounds.w}×${current.bounds.h}`;
+    const size = `${current.bounds.w}×${current.bounds.h}${card ? ' (phone, full-screen)' : ''}`;
     return { text: `[layout] window: ${size}`, data: { window: size } };
   }
 
@@ -147,6 +173,7 @@ export class LayoutContext {
    */
   clearMonitor(monitorId: string): void {
     this.viewports.delete(monitorId);
+    this.formFactors.delete(monitorId);
   }
 
   // ── Snapshot building ──
@@ -167,7 +194,7 @@ export class LayoutContext {
       });
     }
 
-    return { viewport, windows };
+    return { viewport, formFactor: this.getFormFactor(monitorId), windows };
   }
 
   // ── Formatting ──
@@ -175,11 +202,12 @@ export class LayoutContext {
   private formatMonitorContext(snapshot: MonitorLayoutSnapshot): LayoutNote {
     const parts: string[] = [];
     const data: Record<string, unknown> = {};
+    const mobile = snapshot.formFactor === 'mobile';
     const place = (w: WindowSnapshot) =>
-      `at (${w.bounds.x},${w.bounds.y}) ${w.bounds.w}×${w.bounds.h}`;
+      mobile ? 'full-screen' : `at (${w.bounds.x},${w.bounds.y}) ${w.bounds.w}×${w.bounds.h}`;
 
     if (snapshot.viewport) {
-      const size = `${snapshot.viewport.w}×${snapshot.viewport.h}`;
+      const size = `${snapshot.viewport.w}×${snapshot.viewport.h}${mobile ? ' (phone)' : ''}`;
       parts.push(`monitor: ${size}`);
       data.monitor = size;
     }
@@ -209,6 +237,7 @@ export class LayoutContext {
     if (prev.viewport?.w !== current.viewport?.w || prev.viewport?.h !== current.viewport?.h) {
       return true;
     }
+    if (prev.formFactor !== current.formFactor) return true;
     // Window count changed?
     if (prev.windows.length !== current.windows.length) return true;
     // Any window bounds changed?

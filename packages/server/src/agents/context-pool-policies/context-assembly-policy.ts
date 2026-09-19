@@ -1,4 +1,4 @@
-import type { UserInteraction, WindowBounds, WindowState } from '@yaar/shared';
+import type { FormFactor, UserInteraction, WindowBounds, WindowState } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
 import type { InteractionTimeline } from '../interaction-timeline.js';
 
@@ -12,7 +12,35 @@ function rectsOverlap(a: WindowBounds, b: WindowBounds): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
+/** What a monitor's screen is, as far as the prompt needs to know. */
+export interface MonitorDevice {
+  formFactor: FormFactor;
+  viewport?: { w: number; h: number };
+}
+
+/**
+ * Told every turn on a phone, not once: the monitor's tab can switch form factor
+ * mid-session (rotation, a desktop tab taking over), and an agent that saw "phone" ten
+ * turns ago in a compacted context has no reason to still believe it.
+ */
+function formatDevice(device: MonitorDevice): string {
+  const screen = device.viewport ? ` screen="${device.viewport.w}×${device.viewport.h}"` : '';
+  return (
+    `<device form_factor="mobile"${screen}>The user is on a phone. Every window is shown ` +
+    'full-screen, one at a time — the last visible window in <open_windows> is the one on ' +
+    'screen — so x/y/width/height and tiling are ignored. Lay content out as one narrow ' +
+    'column: no side-by-side panes, no fixed pixel widths, large tap targets, short titles.' +
+    '</device>\n\n'
+  );
+}
+
 export class ContextAssemblyPolicy {
+  /**
+   * @param deviceOf The screen behind a monitor. Absent (tests, or a pool with no
+   *   session) means every monitor is a desktop.
+   */
+  constructor(private readonly deviceOf?: (monitorId: string) => MonitorDevice | undefined) {}
+
   /**
    * The `<open_windows>` block, in stacking order — bottom of the screen's pile first, so
    * the last line is the window the user is looking at.
@@ -31,7 +59,15 @@ export class ContextAssemblyPolicy {
       focusedWindowId?: string | null;
     },
   ): string {
-    if (windows.length === 0) return '';
+    const device = options?.monitorId ? this.deviceOf?.(options.monitorId) : undefined;
+    const mobile = device?.formFactor === 'mobile';
+    const devicePrefix = mobile ? formatDevice(device) : '';
+    if (windows.length === 0) return devicePrefix;
+    // On a phone the card on top is the only thing the user can see; bounds and overlaps
+    // describe a layout that is not on screen.
+    const onScreen = mobile
+      ? [...windows].reverse().find((w) => !w.minimized && (!w.variant || w.variant === 'standard'))
+      : undefined;
     const getRaw =
       options?.getRawWindowId ??
       ((id: string) => {
@@ -47,6 +83,8 @@ export class ContextAssemblyPolicy {
       const facts: string[] = [];
       if (w.minimized) {
         facts.push('minimized');
+      } else if (mobile) {
+        facts.push(w === onScreen ? 'on screen' : 'behind');
       } else {
         facts.push(`${width}×${h} at (${x},${y})`);
         if (w.variant !== 'panel') facts.push(`z:${i}`);
@@ -69,7 +107,7 @@ export class ContextAssemblyPolicy {
       return `  yaar://windows/${rawId} — ${label}${current} · ${facts.join(' · ')}`;
     });
     const monitor = options?.monitorId ? ` monitor="${options.monitorId}"` : '';
-    return `<open_windows${monitor}>\n${lines.join('\n')}\n</open_windows>\n\n`;
+    return `${devicePrefix}<open_windows${monitor}>\n${lines.join('\n')}\n</open_windows>\n\n`;
   }
 
   /**

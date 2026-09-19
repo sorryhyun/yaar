@@ -21,6 +21,7 @@ export {
   selectWidgetWindows,
   selectPanelWindows,
   selectHasMaximizedWindow,
+  selectHasOpenStandardWindow,
   selectToasts,
   selectNotifications,
   selectDialogs,

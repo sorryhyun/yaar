@@ -109,7 +109,12 @@ export class ClientEventController {
       [ClientEventType.USER_INTERACTION]: (event, connectionId) =>
         this.handleUserInteraction(event, connectionId),
       [ClientEventType.SUBSCRIBE_MONITOR]: (event, connectionId) =>
-        this.deps.monitors.subscribe(connectionId, event.monitorId, event.viewport),
+        this.deps.monitors.subscribe(
+          connectionId,
+          event.monitorId,
+          event.viewport,
+          event.formFactor,
+        ),
       [ClientEventType.ADD_MONITOR]: (_event, connectionId) => this.deps.monitors.add(connectionId),
       [ClientEventType.REMOVE_MONITOR]: (event) => this.deps.monitors.remove(event.monitorId),
     };
