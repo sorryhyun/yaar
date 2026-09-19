@@ -257,6 +257,28 @@ declare module '@bundled/three/addons' {
   export * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 }
 
+declare module '@bundled/three/webgpu' {
+  // three's WebGPU build: `WebGPURenderer`, node materials, `PostProcessing`,
+  // compute. Requires `"three": "webgpu"` in app.json, and once that is set
+  // `@bundled/three` *is* this module — keep importing `* as THREE from
+  // '@bundled/three'` and use `THREE.WebGPURenderer`. An app runs one three.js,
+  // never both, so `WebGLRenderer`, `ShaderMaterial` GLSL and `onBeforeCompile`
+  // are gone there; write shaders as TSL node graphs instead.
+  //
+  // `WebGPURenderer` falls back to WebGL2 on its own where `navigator.gpu` is
+  // missing. Call `await renderer.init()` before the first `render()` (or drive
+  // frames with `renderer.setAnimationLoop`). There is no `preserveDrawingBuffer`:
+  // read pixels back with `await renderer.readRenderTargetPixelsAsync(...)`.
+  export * from 'three/webgpu';
+}
+
+declare module '@bundled/three/tsl' {
+  // Three Shading Language — build node materials in TypeScript
+  // (`positionLocal.add(normalLocal.mul(uniform(0.02)))` as a `positionNode`).
+  // Requires `"three": "webgpu"` in app.json.
+  export * from 'three/tsl';
+}
+
 declare module '@bundled/cannon-es' {
   export * from 'cannon-es';
 }

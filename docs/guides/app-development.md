@@ -196,6 +196,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | anime.js | `@bundled/anime` | Animation |
 | Three.js | `@bundled/three` | 3D graphics |
 | Three.js addons | `@bundled/three/addons` | Curated `examples/jsm`: `GLTFLoader`/`GLTFExporter` (glTF + GLB — never hand-roll a reader), `OBJLoader`/`MTLLoader`/`STLLoader`/`SVGLoader`, `FontLoader` + `TextGeometry`, `OrbitControls`/`MapControls`/`PointerLockControls`/`TransformControls`, `BufferGeometryUtils`/`SkeletonUtils`. The Draco/KTX2/meshopt loaders are deliberately absent — they fetch a decoder from a path a single-file app has nowhere to serve from |
+| Three.js WebGPU | `@bundled/three/webgpu`, `@bundled/three/tsl` | `WebGPURenderer` (falls back to WebGL2 by itself), node materials, TSL shaders. Needs `"three": "webgpu"` in `app.json`, and then `@bundled/three` itself resolves to the WebGPU build — keep importing `* as THREE from '@bundled/three'`. An app runs one three.js: `WebGLRenderer`, GLSL `ShaderMaterial` and `onBeforeCompile` are gone in a WebGPU app |
 | cannon-es | `@bundled/cannon-es` | 3D physics engine |
 | xlsx | `@bundled/xlsx` | Spreadsheet parsing/generation |
 | Chart.js | `@bundled/chart.js` | Charts and graphs |

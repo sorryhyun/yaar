@@ -26,6 +26,12 @@ import {
   resolveBrowserEntry,
   toForwardSlash,
 } from './registry.js';
+import {
+  THREE_WEBGPU_LIBS,
+  threeEntryFor,
+  threeWebGPUNotEnabledMessage,
+  type ThreeRenderer,
+} from './three-renderer.js';
 
 const DEBUG_BUNDLED_LIBRARIES = process.env.YAAR_DEBUG_BUNDLED_LIBS === '1';
 
@@ -91,8 +97,16 @@ function resolveNpmBrowserPath(npmName: string, label: string): string | null {
  * 2. **Disk**: Libraries read from `bundled-libs/` directory next to the exe (fallback).
  * 3. **node_modules** (dev): Resolves browser entry from package.json exports,
  *    falling back to Bun.resolveSync() for packages without conditional exports.
+ *
+ * `threeRenderer` is app.json's `three` (`three-renderer.ts`): under `'webgpu'`,
+ * `@bundled/three` and every bare `three` resolve to the `three/webgpu` build, so
+ * the app and its addons share one core; under `'webgl'` the WebGPU-only names
+ * are refused.
  */
-export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugin {
+export function bundledLibraryPluginBun(
+  allowedBundles?: string[],
+  threeRenderer: ThreeRenderer = 'webgl',
+): Bun.BunPlugin {
   // Log bundled libs state once at plugin creation time
   const embeddedLibsSnapshot = getEmbeddedLibs();
   debugBundledLibrary(
@@ -109,11 +123,19 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
       const NAMESPACE = 'bundled-lib';
 
       build.onResolve({ filter: /^@bundled\// }, (args: Bun.OnResolveArgs) => {
-        const libName = args.path.replace('@bundled/', '');
-        if (!(libName in BUNDLED_LIBRARIES)) {
+        const requested = args.path.replace('@bundled/', '');
+        if (!(requested in BUNDLED_LIBRARIES)) {
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
-          throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
+          throw new Error(`Unknown bundled library: "${requested}". Available: ${available}`);
         }
+        if (
+          threeRenderer !== 'webgpu' &&
+          (THREE_WEBGPU_LIBS as readonly string[]).includes(requested)
+        ) {
+          throw new Error(threeWebGPUNotEnabledMessage(requested));
+        }
+        // In a WebGPU app, `@bundled/three` *is* the WebGPU build.
+        const libName = requested === 'three' ? threeEntryFor(threeRenderer) : requested;
         // Gate yaar-* extended SDKs — require explicit declaration in app.json bundles
         if (GATED_BUNDLED_LIBRARIES.includes(libName)) {
           if (!allowedBundles?.includes(libName)) {
@@ -186,22 +208,31 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
 
       // Intercept bare `three` imports from within bundled code — every
       // `examples/jsm` addon behind `@bundled/three/addons` opens with
-      // `import { ... } from 'three'`, and in exe mode that artifact has three
-      // marked external precisely so this hook can answer it. Left to Bun's
-      // default resolver it would either fail (exe: no node_modules) or resolve a
-      // second copy, and a second three is a second set of classes — `instanceof`
-      // across the seam answers false with nothing in the build to say so.
-      build.onResolve({ filter: /^three$/ }, (args: Bun.OnResolveArgs) => {
-        const embeddedLibs = getEmbeddedLibs();
-        if (embeddedLibs?.three) {
-          debugBundledLibrary(
-            `[bundled-lib] bare three (from ${args.importer}) → embedded (namespace=${NAMESPACE})`,
-          );
-          return { path: 'three', namespace: NAMESPACE };
+      // `import { ... } from 'three'`, and `three/tsl` with
+      // `import { TSL } from 'three/webgpu'`; in exe mode those artifacts have
+      // the import marked external precisely so this hook can answer it. Left to
+      // Bun's default resolver it would either fail (exe: no node_modules) or
+      // resolve a second copy, and a second three is a second set of classes —
+      // `instanceof` across the seam answers false with nothing in the build to
+      // say so. Both specifiers land on the app's one three: in a WebGPU app an
+      // addon's `three` is `three/webgpu`, which is what makes the addons usable
+      // there at all.
+      build.onResolve({ filter: /^three(\/webgpu)?$/ }, (args: Bun.OnResolveArgs) => {
+        const libName = threeEntryFor(threeRenderer);
+        if (args.path === 'three/webgpu' && libName !== 'three/webgpu') {
+          throw new Error(threeWebGPUNotEnabledMessage('three/webgpu'));
         }
 
-        const label = `bare three (from ${args.importer})`;
-        const resolved = resolveNpmBrowserPath(BUNDLED_LIBRARIES.three, label);
+        const embeddedLibs = getEmbeddedLibs();
+        if (embeddedLibs?.[libName]) {
+          debugBundledLibrary(
+            `[bundled-lib] bare ${args.path} (from ${args.importer}) → embedded ${libName} (namespace=${NAMESPACE})`,
+          );
+          return { path: libName, namespace: NAMESPACE };
+        }
+
+        const label = `bare ${args.path} (from ${args.importer})`;
+        const resolved = resolveNpmBrowserPath(BUNDLED_LIBRARIES[libName], label);
         if (resolved) return { path: resolved };
 
         debugBundledLibrary(`[bundled-lib] ${label} → UNRESOLVED (returning undefined)`);

@@ -19,6 +19,7 @@ import { isAbsolute, join, normalize, relative, resolve } from 'path';
 import type TS from 'typescript';
 import { BUNDLED_TYPES_DTS, PACKAGE_ROOT } from '../paths.js';
 import { SANDBOX_INCLUDE, sandboxCompilerOptions, sliceBundledTypes } from '../sandbox-tsconfig.js';
+import type { ThreeRenderer } from '../bundled/three-renderer.js';
 import type {
   CallerHit,
   FindReferencesQuery,
@@ -63,10 +64,11 @@ export class SandboxReferences {
     private readonly ts: typeof TS,
     sandboxRoot: string,
     private readonly bundles: string[],
+    private readonly three: ThreeRenderer,
   ) {
     this.root = fwd(resolve(sandboxRoot));
     this.options = ts.convertCompilerOptionsFromJson(
-      sandboxCompilerOptions(bundles),
+      sandboxCompilerOptions(bundles, three),
       this.root,
     ).options;
 
@@ -108,6 +110,7 @@ export class SandboxReferences {
         this.ts,
         readFileSync(BUNDLED_TYPES_DTS, 'utf8'),
         this.bundles,
+        this.three,
       );
       this.slicedText = sliced;
       this.slicedFrom = typesVersion;

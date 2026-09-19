@@ -10,6 +10,7 @@ import { getCompilerConfig } from './config.js';
 import { loadTypeScript } from './load-typescript.js';
 import { scanProjectGuards } from './guards/scan-project.js';
 import { PACKAGE_ROOT } from './paths.js';
+import { readThreeRenderer, type ThreeRenderer } from './bundled/three-renderer.js';
 import {
   BUNDLED_TYPES_DIR,
   SANDBOX_INCLUDE,
@@ -44,11 +45,12 @@ function getTscPath(): string {
 async function writeAllowedBundledTypes(
   sourcePath: string,
   allowedBundles: string[],
+  three: ThreeRenderer,
 ): Promise<string> {
   const ts = await loadTypeScript();
   if (!ts) return sourcePath;
 
-  const sliced = sliceBundledTypes(ts, await readFile(sourcePath, 'utf8'), allowedBundles);
+  const sliced = sliceBundledTypes(ts, await readFile(sourcePath, 'utf8'), allowedBundles, three);
   if (sliced === null) return sourcePath;
 
   // Keep the sliced view under the compiler package so its re-exports resolve
@@ -88,12 +90,14 @@ export async function typecheckSandbox(
   // overwrite or unlink each other's config while tsc is reading it.
   const tsconfigPath = join(sandboxRoot, `tsconfig.typecheck.${crypto.randomUUID()}.json`);
 
+  const three = readThreeRenderer(sandboxRoot);
   const bundledTypesPath = await writeAllowedBundledTypes(
     bundledTypesSource,
     options.bundles ?? [],
+    three,
   );
   const tsconfig = {
-    compilerOptions: sandboxCompilerOptions(options.bundles),
+    compilerOptions: sandboxCompilerOptions(options.bundles, three),
     files: [bundledTypesPath],
     include: SANDBOX_INCLUDE,
   };

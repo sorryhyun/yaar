@@ -9,6 +9,7 @@ import { mkdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { buildAppBundle, formatBuildLogs, siblingAssetError } from './build/build-app.js';
 import { AppSourceCache } from './build/source-cache.js';
+import { readThreeRenderer, type ThreeRenderer } from './bundled/three-renderer.js';
 import { formatProtocolError } from './protocol/extract-protocol-ast.js';
 import { extractProtocolFromDir } from './protocol/extract-protocol-dir.js';
 import { getCompilerConfig } from './config.js';
@@ -220,9 +221,10 @@ async function compileWithBun(
   entryPoint: string,
   minify: boolean,
   bundles: string[] | undefined,
+  three: ThreeRenderer,
   sources: AppSourceCache,
 ): Promise<string> {
-  const result = await buildAppBundle(entryPoint, { minify, bundles, sources });
+  const result = await buildAppBundle(entryPoint, { minify, bundles, three, sources });
 
   if (!result.success) {
     const errors = formatBuildLogs(result.logs, {
@@ -296,7 +298,13 @@ export async function compileTypeScript(
     if (tokenFindings.length > 0) throw new Error(formatTokenFindings(tokenFindings));
 
     // Bundle TypeScript to JavaScript
-    const jsCode = await compileWithBun(entryPoint, minify, options.bundles, sources);
+    const jsCode = await compileWithBun(
+      entryPoint,
+      minify,
+      options.bundles,
+      readThreeRenderer(sandboxPath),
+      sources,
+    );
 
     // Protocol gate — after bundling so genuine build errors keep precedence.
     // A registration whose commands/state only partially parse used to write a

@@ -8,6 +8,7 @@
  */
 
 import { loadTypeScript } from '../load-typescript.js';
+import { readThreeRenderer } from '../bundled/three-renderer.js';
 import { SandboxReferences } from './service.js';
 import type { FindReferencesQuery, FindReferencesResult } from './types.js';
 
@@ -29,7 +30,10 @@ const MAX_WARM = 2;
 const warm = new Map<string, SandboxReferences>();
 
 async function serviceFor(root: string, bundles: string[]): Promise<SandboxReferences | null> {
-  const key = `${root}\0${[...bundles].sort().join(',')}`;
+  // app.json's `three` changes what `@bundled/three` declares, so it is part of
+  // which program this is — flipping it must not hit the old service.
+  const three = readThreeRenderer(root);
+  const key = `${root}\0${[...bundles].sort().join(',')}\0${three}`;
   const hit = warm.get(key);
   if (hit) {
     // Re-insert so Map order is recency order.
@@ -39,7 +43,7 @@ async function serviceFor(root: string, bundles: string[]): Promise<SandboxRefer
   }
   const ts = await loadTypeScript();
   if (!ts) return null;
-  const created = new SandboxReferences(ts, root, bundles);
+  const created = new SandboxReferences(ts, root, bundles, three);
   warm.set(key, created);
   while (warm.size > MAX_WARM) {
     const [oldestKey, oldest] = warm.entries().next().value!;

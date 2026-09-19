@@ -163,6 +163,7 @@ AI는 이 모든 것을 `read('yaar://skills/marketplace')`를 통해 접근합�
 | anime.js | `@bundled/anime` | 애니메이션 |
 | Three.js | `@bundled/three` | 3D 그래픽 |
 | Three.js 애드온 | `@bundled/three/addons` | 선별된 `examples/jsm`: `GLTFLoader`/`GLTFExporter` (glTF + GLB — 직접 리더를 만들지 마세요), `OBJLoader`/`MTLLoader`/`STLLoader`/`SVGLoader`, `FontLoader` + `TextGeometry`, `OrbitControls`/`MapControls`/`PointerLockControls`/`TransformControls`, `BufferGeometryUtils`/`SkeletonUtils`. Draco/KTX2/meshopt 로더는 의도적으로 제외 — 런타임에 디코더를 fetch 하는데 단일 파일 앱에는 그것을 서빙할 곳이 없습니다 |
+| Three.js WebGPU | `@bundled/three/webgpu`, `@bundled/three/tsl` | `WebGPURenderer` (필요하면 스스로 WebGL2로 폴백), 노드 머티리얼, TSL 셰이더. `app.json`에 `"three": "webgpu"`가 필요하며, 그러면 `@bundled/three` 자체가 WebGPU 빌드로 해석됩니다 — 계속 `* as THREE from '@bundled/three'`로 import 하세요. 앱은 하나의 three.js만 씁니다: WebGPU 앱에서는 `WebGLRenderer`, GLSL `ShaderMaterial`, `onBeforeCompile`을 쓸 수 없습니다 |
 | cannon-es | `@bundled/cannon-es` | 3D 물리 엔진 |
 | xlsx | `@bundled/xlsx` | 스프레드시트 파싱/생성 |
 | Chart.js | `@bundled/chart.js` | 차트/그래프 |

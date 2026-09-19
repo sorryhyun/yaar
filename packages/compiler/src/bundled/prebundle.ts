@@ -67,13 +67,15 @@ export function solidExternals(name: string): string[] {
 }
 
 /**
- * Mark `three` external without taking `three/addons/*` with it.
+ * Mark one three entry external without taking its subpaths with it.
  *
  * three joins solid as a runtime that must exist once (`SHARED_RUNTIME_LIBS`):
  * every `examples/jsm` module behind `@bundled/three/addons` opens with
  * `import { ... } from 'three'`, and an addons artifact carrying its own three
  * would hand the app a second `Mesh`/`Material`/`Object3D` — every `instanceof`
  * across the two silently false, with nothing in the build to say so.
+ * `three/tsl` is the same shape one level over: it opens with
+ * `import { TSL } from 'three/webgpu'`.
  *
  * It cannot ride in `Bun.build`'s `external` array: an entry there externalizes
  * the package *and all its subpaths*, so `'three'` would also externalize the
@@ -81,19 +83,33 @@ export function solidExternals(name: string): string[] {
  * 1KB re-export shell that resolves to nothing. An `onResolve` hook is the only
  * spelling that separates the package from its subpaths.
  */
-function threeCoreExternalPlugin(): Bun.BunPlugin {
+function threeExternalPlugin(specifier: 'three' | 'three/webgpu'): Bun.BunPlugin {
+  const filter = new RegExp(`^${specifier.replace('/', '\\/')}$`);
   return {
-    name: 'three-core-external',
+    name: `external-${specifier}`,
     setup(build) {
-      build.onResolve({ filter: /^three$/ }, () => ({ path: 'three', external: true }));
+      build.onResolve({ filter }, () => ({ path: specifier, external: true }));
     },
   };
 }
 
+/**
+ * The three entry an artifact must leave to the app, or null.
+ *
+ * `three` and `three/webgpu` are the two roots: each inlines `three.core.js`, and
+ * an app links exactly one of them (`three-renderer.ts`). Everything else under
+ * `three/` imports a root and must not carry it.
+ */
+function sharedThreeRoot(name: string): 'three' | 'three/webgpu' | null {
+  if (name === 'three' || name === 'three/webgpu') return null;
+  if (name === 'three/tsl') return 'three/webgpu';
+  return name.startsWith('three/') ? 'three' : null;
+}
+
 /** Prebundle plugins for `name`: the Node stubs, plus shared-runtime externals. */
 function prebundlePlugins(name: string): Bun.BunPlugin[] {
-  const sharesThree = name !== 'three' && name.startsWith('three/');
-  return sharesThree ? [nodeShimPlugin, threeCoreExternalPlugin()] : [nodeShimPlugin];
+  const root = sharedThreeRoot(name);
+  return root ? [nodeShimPlugin, threeExternalPlugin(root)] : [nodeShimPlugin];
 }
 
 /** Resolve the entrypoint a library is prebundled from (shim wins over the npm entry). */

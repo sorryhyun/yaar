@@ -26,6 +26,11 @@ export {
   resolveBrowserEntry,
   toForwardSlash,
 } from './bundled/registry.js';
+export {
+  THREE_WEBGPU_LIBS,
+  readThreeRenderer,
+  type ThreeRenderer,
+} from './bundled/three-renderer.js';
 export { getBundledLibraryDetail, getDescribableLibraries } from './bundled/describe-library.js';
 export {
   ASSET_MIME_TYPES,

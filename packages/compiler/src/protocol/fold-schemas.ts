@@ -35,6 +35,7 @@ import { join } from 'path';
 import type { AppManifest } from '@yaar/shared';
 import { listKeybindingIssues } from '@yaar/shared';
 import { buildAppBundle, formatBuildLogs, siblingAssetError } from '../build/build-app.js';
+import { readThreeRenderer } from '../bundled/three-renderer.js';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings' | '$defs'>;
 
@@ -465,7 +466,11 @@ export async function foldAppSchemas(options: FoldOptions): Promise<FoldResult> 
     // The same build the compiler runs, minus minification — this bundle is
     // never shipped, and a readable stack is the difference between "the app
     // threw" and knowing where.
-    const built = await buildAppBundle(entryPath, { minify: false, bundles });
+    const built = await buildAppBundle(entryPath, {
+      minify: false,
+      bundles,
+      three: readThreeRenderer(appPath),
+    });
 
     const entryChunk = built.outputs.find((artifact) => artifact.kind === 'entry-point');
     if (!built.success || !entryChunk) {

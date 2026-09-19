@@ -71,6 +71,9 @@ export const SHARED_RUNTIME_LIBS = [
   'solid-js/html',
   'solid-js/store',
   'three',
+  // The other face of the same core — see `three-renderer.ts`. `three/tsl`
+  // imports it bare, and an app built against it redirects bare `three` here too.
+  'three/webgpu',
 ];
 
 export const CONDITIONAL_EXPORT_LIBS = [
@@ -110,6 +113,11 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   // `three` imports resolve to the entry above, never to a second copy — see
   // `SHARED_RUNTIME_LIBS`.
   'three/addons': 'three/addons',
+  // The WebGPU build and its shader-node language, for an app whose app.json
+  // says `"three": "webgpu"` (refused otherwise — see `three-renderer.ts`). In
+  // such an app `@bundled/three` resolves to `three/webgpu` as well.
+  'three/webgpu': 'three/webgpu',
+  'three/tsl': 'three/tsl',
   'cannon-es': 'cannon-es',
   xlsx: '@e965/xlsx',
   'chart.js': 'chart.js',

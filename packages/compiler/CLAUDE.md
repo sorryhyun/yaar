@@ -34,6 +34,7 @@ src/
 ├── bundled/
 │   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / SHARED_RUNTIME_LIBS / resolveBrowserEntry — data, no Bun API
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
+│   ├── three-renderer.ts  # app.json `"three": "webgpu"` — which three build `@bundled/three` means (readThreeRenderer)
 │   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent (+ design-tokens pseudo-library)
 │   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
 ├── guards/
@@ -211,7 +212,7 @@ each derives its expectation from the compiler's own output so it cannot drift.
 
 ## Bun Plugins (`bundled/plugins.ts`)
 
-**`bundledLibraryPluginBun(allowedBundles)`** — resolves `@bundled/*` imports with priority:
+**`bundledLibraryPluginBun(allowedBundles, threeRenderer)`** — resolves `@bundled/*` imports with priority:
 1. Embedded (`globalThis.__YAAR_BUNDLED_LIBS` for standalone exe)
 2. Shim (local wrapper in `shims/`)
 3. Browser-aware (reads package.json exports, prefers browser condition)
@@ -227,6 +228,16 @@ copies of three are two `Object3D` classes with every `instanceof` across the se
 Held from the other side by `prebundle.ts`, which keeps the copy out of every *other* artifact —
 solid through `Bun.build`'s `external` array, three through an `onResolve` hook, because an array
 entry externalizes a package *and all its subpaths* and would take `three/addons/*` with it.
+
+three has **two roots**, `three` and `three/webgpu`, each inlining `three.core.js` in its exe
+artifact — so an app links exactly one, chosen by app.json `"three": "webgpu"`
+(`bundled/three-renderer.ts`). Under it, `@bundled/three` and every bare `three` (the addons) and
+`three/webgpu` (`three/tsl`) resolve to the WebGPU build; without it `@bundled/three/webgpu` and
+`/tsl` are refused by the build *and* by typecheck (`sandbox-tsconfig.ts` slices them out, and
+swaps the `@bundled/three` block for a WebGPU one in an opted-in app). It is deliberately not a
+`bundles` entry: the server renders every `bundles` entry as a privileged-SDK grant. The identity
+test that can actually fail is the exe-mode one in `three-addons.test.ts` — in a repo install both
+roots import the same `three.core.js` file and Bun dedupes them regardless.
 
 **`cssFilePlugin()`** — converts `.css` imports to JS that injects a `<style>` element at runtime.
 
@@ -249,7 +260,7 @@ denylist of extensions, so a new format is covered the day it is imported.
 
 Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LIBS=1` to print plugin initialization, resolution strategy, and resolved filesystem paths.
 
-**`typecheckSandbox(path, { bundles })`** — runs the real TypeScript JS entry through Bun and removes ambient declarations for gated SDKs not present in `app.json` `bundles`. Compile and typecheck therefore reject the same unauthorized `@bundled/yaar-*` imports.
+**`typecheckSandbox(path, { bundles })`** — runs the real TypeScript JS entry through Bun and removes ambient declarations for gated SDKs not present in `app.json` `bundles` (and for `@bundled/three/webgpu`/`tsl` unless app.json says `"three": "webgpu"`). Compile and typecheck therefore reject the same unauthorized imports.
 
 **`findReferences(path, query, { bundles })`** — symbol references and callers, from a TypeScript
 LanguageService built on `sandbox-tsconfig.ts`, the same options and grant-sliced declarations

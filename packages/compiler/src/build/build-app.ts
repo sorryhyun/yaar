@@ -16,6 +16,7 @@ import {
   solidHtmlSourcePlugin,
 } from '../bundled/plugins.js';
 import { toForwardSlash } from '../bundled/registry.js';
+import type { ThreeRenderer } from '../bundled/three-renderer.js';
 import type { AppSourceCache } from './source-cache.js';
 
 export interface AppBuildOptions {
@@ -27,6 +28,8 @@ export interface AppBuildOptions {
   minify: boolean;
   /** `app.json`'s `bundles`, gating the `@bundled/yaar-*` SDKs. */
   bundles?: string[];
+  /** `app.json`'s `three` — which three.js build `@bundled/three` means. */
+  three?: ThreeRenderer;
   /**
    * The compile's source cache, so the solid-html hook reads a file the token
    * guard already read from memory. Absent — as in the fold's throwaway build,
@@ -49,7 +52,7 @@ export async function buildAppBundle(
     // keep their file/line/column positions (the catch path loses them).
     throw: false,
     plugins: [
-      bundledLibraryPluginBun(options.bundles),
+      bundledLibraryPluginBun(options.bundles, options.three),
       cssFilePlugin(),
       assetDataUrlPlugin(),
       solidHtmlSourcePlugin(options.sources),

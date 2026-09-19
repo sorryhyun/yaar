@@ -10,6 +10,7 @@
 
 import { join } from 'path';
 import { GATED_BUNDLED_LIBRARIES } from './bundled/registry.js';
+import { THREE_WEBGPU_LIBS, type ThreeRenderer } from './bundled/three-renderer.js';
 import { BUNDLED_TYPES_DTS } from './paths.js';
 
 /** The directory `@bundled/*` resolves into. */
@@ -19,14 +20,39 @@ export const BUNDLED_TYPES_DIR = BUNDLED_TYPES_DTS.slice(0, BUNDLED_TYPES_DTS.la
 export const SANDBOX_INCLUDE = ['src/**/*.ts'];
 
 /**
+ * The `@bundled/*` names this sandbox may not import: the gated SDKs it did not
+ * declare in `bundles`, and the WebGPU-only three entries unless app.json says
+ * `"three": "webgpu"`. The build refuses the same set (`plugins.ts`).
+ */
+function deniedModules(bundles: string[], three: ThreeRenderer): string[] {
+  const deniedGated = GATED_BUNDLED_LIBRARIES.filter((bundle) => !bundles.includes(bundle));
+  return three === 'webgpu' ? deniedGated : [...deniedGated, ...THREE_WEBGPU_LIBS];
+}
+
+/**
+ * What `@bundled/three` means to a `"three": "webgpu"` app, standing in for the
+ * canonical block — which says `three` — once that is sliced out. It has to be a
+ * replacement rather than a second block: two ambient declarations of one name
+ * merge, and the WebGL-only `WebGLRenderer` would still typecheck.
+ */
+const WEBGPU_THREE_BLOCK = `
+declare module '@bundled/three' {
+  export * from 'three/webgpu';
+}
+`;
+
+/**
  * Compiler options for a sandbox, as tsconfig JSON (string enums, not the numeric
  * ones — `ts.convertCompilerOptionsFromJson` turns them into the latter).
  */
-export function sandboxCompilerOptions(bundles: string[] = []): Record<string, unknown> {
+export function sandboxCompilerOptions(
+  bundles: string[] = [],
+  three: ThreeRenderer = 'webgl',
+): Record<string, unknown> {
   // A denied gated bundle points at a directory that does not exist, so importing
   // it fails to resolve even where the declarations were not sliced out.
   const deniedBundlePaths = Object.fromEntries(
-    GATED_BUNDLED_LIBRARIES.filter((bundle) => !bundles.includes(bundle)).map((bundle) => [
+    deniedModules(bundles, three).map((bundle) => [
       `@bundled/${bundle}`,
       [join(BUNDLED_TYPES_DIR, '__bundle-not-enabled__', bundle)],
     ]),
@@ -55,18 +81,21 @@ export function sandboxCompilerOptions(bundles: string[] = []): Record<string, u
 }
 
 /**
- * The bundled declarations with every gated module the app did not opt into cut
- * out, or null when nothing is denied (the canonical file stands as is).
+ * The bundled declarations with every module the app did not opt into cut out,
+ * or null when nothing is denied (the canonical file stands as is).
  *
  * One canonical declaration file serves docs and editor tooling; a sandbox only
- * loses the ambient modules it has no grant for.
+ * loses the ambient modules it has no grant for. A WebGPU app also loses the
+ * canonical `@bundled/three` and gets `WEBGPU_THREE_BLOCK` in its place.
  */
 export function sliceBundledTypes(
   ts: typeof import('typescript'),
   source: string,
   bundles: string[] = [],
+  three: ThreeRenderer = 'webgl',
 ): string | null {
-  const denied = new Set(GATED_BUNDLED_LIBRARIES.filter((bundle) => !bundles.includes(bundle)));
+  const denied = new Set(deniedModules(bundles, three));
+  if (three === 'webgpu') denied.add('three');
   if (denied.size === 0) return null;
 
   const sourceFile = ts.createSourceFile(
@@ -89,5 +118,5 @@ export function sliceBundledTypes(
 
   let sliced = source;
   for (const range of ranges) sliced = sliced.slice(0, range.start) + sliced.slice(range.end);
-  return sliced;
+  return three === 'webgpu' ? sliced + WEBGPU_THREE_BLOCK : sliced;
 }
