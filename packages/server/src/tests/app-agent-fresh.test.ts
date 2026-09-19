@@ -124,6 +124,7 @@ mock.module('../agents/profiles/index.js', () => ({
   getDeveloperAllowedTools: mock(() => []),
   claudeModelToCodex: mock(() => undefined),
   getMonitorTurnOptions: mock(() => ({ model: undefined, allowedTools: [] })),
+  REMOTE_MESSAGE_CONTEXT: '',
   turnOptionsFor: mock(() => ({ model: undefined, allowedTools: [] })),
   CODEX_AGENT_ROLES: {},
   codexRoleToToml: mock(() => ''),
