@@ -100,7 +100,10 @@ function openAppWindow() {
 
     const args = [
       `--app=${appUrl}`,
-      ...(tls ? [`--ignore-certificate-errors-spki-list=${tls.spki}`] : []),
+      // The SPKI flag is on Chrome's bad-flags list; --test-type is what skips the
+      // "unsupported command-line flag" infobar it would otherwise bring (see
+      // AddInfoBarsIfNecessary in chrome/browser/ui/startup/infobar_utils.cc).
+      ...(tls ? [`--ignore-certificate-errors-spki-list=${tls.spki}`, '--test-type'] : []),
       `--user-data-dir=${userDataDir}`,
       '--disable-background-networking',
       '--disable-default-apps',

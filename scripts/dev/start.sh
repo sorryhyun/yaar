@@ -192,7 +192,10 @@ launch_chrome_when_ready() {
     fi
     if [ -n "$tls_port" ] && [ -n "$tls_spki" ]; then
       url="https://localhost:${tls_port}"
-      tls_flags=(--ignore-certificate-errors-spki-list="${tls_spki}")
+      # The SPKI flag is on Chrome's bad-flags list, so it brings the "unsupported
+      # command-line flag" infobar; --test-type is the switch that skips it
+      # (AddInfoBarsIfNecessary in chrome/browser/ui/startup/infobar_utils.cc).
+      tls_flags=(--ignore-certificate-errors-spki-list="${tls_spki}" --test-type)
     fi
     local open_url="$url"
     [ -n "${YAAR_REMOTE_TOKEN:-}" ] && open_url="${url}/#remote=${YAAR_REMOTE_TOKEN}"

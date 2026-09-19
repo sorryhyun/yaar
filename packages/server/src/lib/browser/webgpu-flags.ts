@@ -22,8 +22,8 @@
  * / RTX 5070 Ti, the flag *alone* yields a SwiftShader (CPU) adapter with no `shader-f16`,
  * while `--enable-features=Vulkan` alone yields the real NVIDIA adapter. Adding it to the
  * set below changed nothing but the infobar — same adapter, same features, visible and
- * headless alike. There is no switch that suppresses that infobar (the prompt has no
- * `--test-type` escape on desktop), so not passing the flag is the only way to be rid of it.
+ * headless alike. `--test-type` would hide the infobar (the launchers pass it for the
+ * local-TLS SPKI flag), but a flag that buys nothing is better not passed at all.
  *
  * Every launcher that opens a *visible* Chrome for a human to use YAAR in wants exactly
  * this set, and there are three of them (`scripts/dev/start.sh`, `exe-entry.ts`, and the
