@@ -9,7 +9,7 @@
 import { existsSync } from 'fs';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, dirname, join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
 import { getFreeDpiProxyUrl } from '@yaar/lib/freedpi';
 import type { Subprocess } from 'bun';
@@ -124,6 +124,33 @@ export async function findChrome(): Promise<string | null> {
   return null;
 }
 
+/**
+ * Android (Termux) only: the flag that lets Chromium start its child processes.
+ *
+ * Android forbids exec'ing a file from an app's data dir, so Termux's
+ * `libtermux-exec.so` (LD_PRELOAD) runs every program as
+ * `/system/bin/linker64 <program>`. Inside such a process `/proc/self/exe` is the
+ * linker, not chrome — and `/proc/self/exe` is what Chromium re-execs for its
+ * network service and renderers. Every child dies with `CANNOT LINK EXECUTABLE
+ * "/proc/self/exe"`, the page never loads, and navigation reports an empty title.
+ * Naming the real binary sends the child exec back through termux-exec like any
+ * other program. Dropping LD_PRELOAD instead is not an option: without it nothing
+ * in Termux can be exec'd at all.
+ *
+ * `chromePath` is normally the `chromium-browser` wrapper script in `$PREFIX/bin`;
+ * the ELF it wraps lives in `$PREFIX/lib/chromium/chrome`.
+ */
+export function androidSubprocessArgs(chromePath: string): string[] {
+  if (process.platform !== 'android') return [];
+  const candidates = [
+    basename(chromePath) === 'chrome' ? chromePath : '',
+    join(dirname(chromePath), '..', 'lib', 'chromium', 'chrome'),
+    process.env.PREFIX ? join(process.env.PREFIX, 'lib', 'chromium', 'chrome') : '',
+  ];
+  const real = candidates.find((p) => p && existsSync(p));
+  return real ? [`--browser-subprocess-path=${real}`] : [];
+}
+
 export interface ChromeInstance {
   process: Subprocess;
   port: number;
@@ -178,6 +205,7 @@ export async function launchChrome(
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
+    ...androidSubprocessArgs(chromePath),
     // Only when the bypass bound (default; `YAAR_FREEDPI=0` opts out). `--disable-quic`
     // is not optional alongside `--proxy-server`, and is the flip side of that default —
     // Chrome gives up HTTP/3 whenever the proxy is up, because HTTP/3 is
