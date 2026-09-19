@@ -50,11 +50,23 @@ if [ -z "${CLAUDE_CODE_PATH:-}" ]; then
   export CLAUDE_CODE_PATH="$cache/claude"
 fi
 
+# A full `auth login`, not a `setup-token`: the long-lived token is inference-only, and the
+# CLI refuses Remote Control with it. Termux is a terminal, so run the login here rather
+# than send the user off to find the unpacked binary.
 if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ ! -f "$HOME/.claude/.credentials.json" ]; then
-  echo "Claude is not logged in. Either run \`claude setup-token\` on another machine and"
-  echo "  export CLAUDE_CODE_OAUTH_TOKEN=<token>"
-  echo "or run \`$CLAUDE_CODE_PATH auth login\` here."
-  exit 1
+  if [ ! -t 0 ]; then
+    echo "Claude is not logged in. Run \`$CLAUDE_CODE_PATH auth login\`, then retry."
+    exit 1
+  fi
+  echo "Claude is not logged in. Starting \`claude auth login\` — open the URL it prints,"
+  echo "approve, and paste the code back here."
+  "$CLAUDE_CODE_PATH" auth login
+fi
+
+# The CLI prefers the env token over a full login, and refuses Remote Control with it.
+if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  echo "Note: CLAUDE_CODE_OAUTH_TOKEN is inference-only, so Remote Control will be refused."
+  echo "  For Remote Control: unset it and run \`$CLAUDE_CODE_PATH auth login\`."
 fi
 
 # No debuggable Chrome to launch on a phone; open the desktop in the default browser once
