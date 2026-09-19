@@ -40,6 +40,10 @@ Supports Linux, macOS (Intel & Apple Silicon), and Windows (WSL). Single binary 
 
 Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
 
+Android ([Termux](https://termux.dev/), Claude only): the same `curl ... | bash` line. With no
+Android binary to download, it installs Bun's Android build, checks out the source to `~/yaar`,
+and puts a `yaar` launcher on your PATH.
+
 Once running, start with something like "install essential apps".
 
 <details>

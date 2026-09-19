@@ -5,13 +5,14 @@
 #   curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
 #
 # Options (env vars):
-#   INSTALL_DIR  — where to put the binary (default: ~/.local/bin)
+#   INSTALL_DIR  — where to put the binary (default: ~/.local/bin; $PREFIX/bin on Termux)
 #   VERSION      — specific version tag (default: latest)
+#   YAAR_DIR     — Termux only: where the source checkout goes (default: ~/yaar)
 
 set -euo pipefail
 
 REPO="sorryhyun/yaar"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${INSTALL_DIR:-}" # default is per platform, set in main
 BINARY_NAME="yaar"
 
 # — Detect platform ——————————————————————————————————————————————————
@@ -33,6 +34,77 @@ detect_platform() {
   esac
 
   echo "${os}-${arch}"
+}
+
+# — Termux ———————————————————————————————————————————————————————————
+#
+# The release binaries are glibc builds, which Android's linker refuses, so on Termux
+# there is nothing to download. Instead: the Android build of Bun, a checkout of the
+# release tag, and a `yaar` launcher that runs `make termux` in it (which unpacks the
+# Claude CLI for Android and handles the login — see scripts/dev/start-termux.sh).
+
+is_termux() {
+  [ -n "${TERMUX_VERSION:-}" ] || [[ "${PREFIX:-}" == */com.termux/* ]]
+}
+
+install_termux() {
+  local version="$1"
+  local yaar_dir="${YAAR_DIR:-$HOME/yaar}"
+  local bun_dir="$HOME/.bun/bin"
+
+  local bun_asset
+  case "$(uname -m)" in
+    aarch64|arm64) bun_asset="bun-linux-aarch64-android" ;;
+    x86_64|amd64)  bun_asset="bun-linux-x64-android" ;;
+    *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+  esac
+
+  echo "Installing YAAR ${version} for Android (Termux) from source..."
+
+  local missing=() cmd
+  for cmd in git make curl unzip; do
+    command -v "$cmd" > /dev/null 2>&1 || missing+=("$cmd")
+  done
+  if [ ${#missing[@]} -gt 0 ]; then
+    pkg install -y "${missing[@]}"
+  fi
+
+  export PATH="$bun_dir:$PATH"
+  if ! bun --version > /dev/null 2>&1; then
+    echo "Installing Bun (Android build) to ${bun_dir}..."
+    local tmp
+    tmp=$(mktemp -d)
+    curl -fSL --progress-bar -o "$tmp/bun.zip" \
+      "https://github.com/oven-sh/bun/releases/latest/download/${bun_asset}.zip"
+    unzip -q "$tmp/bun.zip" -d "$tmp"
+    mkdir -p "$bun_dir"
+    mv "$tmp/${bun_asset}/bun" "$bun_dir/bun"
+    chmod +x "$bun_dir/bun"
+    rm -rf "$tmp"
+  fi
+
+  if [ -d "$yaar_dir/.git" ]; then
+    echo "Updating ${yaar_dir} to ${version}..."
+    git -C "$yaar_dir" fetch -q --depth 1 origin "$version"
+    git -C "$yaar_dir" checkout -q FETCH_HEAD
+  elif [ -e "$yaar_dir" ]; then
+    echo "${yaar_dir} exists and is not a git checkout — set YAAR_DIR to install elsewhere." >&2
+    exit 1
+  else
+    git clone -q --depth 1 --branch "$version" "https://github.com/${REPO}.git" "$yaar_dir"
+  fi
+
+  (cd "$yaar_dir" && bun install)
+
+  mkdir -p "$INSTALL_DIR"
+  local dest="${INSTALL_DIR}/${BINARY_NAME}"
+  printf '#!/usr/bin/env bash\nexport PATH="%s:$PATH"\ncd "%s" && exec make termux\n' \
+    "$bun_dir" "$yaar_dir" > "$dest"
+  chmod +x "$dest"
+
+  echo ""
+  echo "Installed to: $dest (runs ${yaar_dir})"
+  echo "Run 'yaar' to start. The first run asks you to log in to Claude."
 }
 
 # — Resolve version ——————————————————————————————————————————————————
@@ -113,6 +185,13 @@ verify_checksum() {
 
 main() {
   local platform version asset_name url tmp sums
+
+  if is_termux; then
+    INSTALL_DIR="${INSTALL_DIR:-$PREFIX/bin}"
+    install_termux "$(resolve_version)"
+    return
+  fi
+  INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
   platform=$(detect_platform)
   version=$(resolve_version)

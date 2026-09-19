@@ -41,6 +41,10 @@ Linux, macOS (Intel & Apple Silicon), Windows (WSL)를 지원합니다. 단일 �
 
 Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
 
+Android ([Termux](https://termux.dev/), Claude 전용): 같은 `curl ... | bash` 명령을 그대로 쓰면 됩니다.
+Android용 바이너리가 없어서 Bun의 Android 빌드를 설치하고, 소스를 `~/yaar`에 체크아웃한 뒤
+`yaar` 실행 스크립트를 PATH에 넣습니다.
+
 실행되면 "필수 앱 설치해줘" 같은 말로 시작해 보세요.
 
 <details>
