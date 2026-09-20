@@ -273,6 +273,35 @@ export interface AppEventEvent {
  */
 export type FormFactor = 'mobile' | 'desktop';
 
+/**
+ * How able the desktop is to answer, in its own words.
+ *
+ * `hidden` is the tab going to the background; `frozen` is the browser saying it has
+ * actually stopped running the page's script (the Page Lifecycle `freeze` event). The
+ * distinction is advisory — what matters to the server is that neither can answer.
+ */
+export type ClientPresenceState = 'visible' | 'hidden' | 'frozen';
+
+/**
+ * "I am about to stop being able to answer you" / "I can answer again."
+ *
+ * The socket is not evidence of a live desktop. A backgrounded tab — the ordinary case on
+ * a phone, where switching apps is how the phone is used — keeps its WebSocket open while
+ * running no script at all: the connection outlives the page's ability to use it, and
+ * stays open well past the transport's own idle timeout because the server is still
+ * sending. So every server→client wait against a frozen tab times out at its deadline and
+ * reports the only thing the server could see — that the app did not answer — which reads
+ * as the app being broken and is why a whole desktop's worth of `app_query`, capture and
+ * render-confirm failures used to look like an app bug.
+ *
+ * This frame is the missing signal. It changes no behavior on its own: it records what the
+ * desktop was doing, so a wait that ends in silence can say *which* silence it was.
+ */
+export interface ClientPresenceEvent {
+  type: typeof ClientEventType.CLIENT_PRESENCE;
+  state: ClientPresenceState;
+}
+
 export interface SubscribeMonitorEvent {
   type: typeof ClientEventType.SUBSCRIBE_MONITOR;
   monitorId: string;
@@ -331,6 +360,7 @@ export type ClientEvent =
   | AppProtocolResponseEvent
   | AppProtocolReadyEvent
   | AppEventEvent
+  | ClientPresenceEvent
   | SubscribeMonitorEvent
   | AddMonitorEvent
   | RemoveMonitorEvent

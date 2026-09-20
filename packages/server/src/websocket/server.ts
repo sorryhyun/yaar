@@ -10,6 +10,7 @@ import type { LiveSessionOptions } from '../session/live-session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
+import { forgetConnectionPresence } from '../session/client-presence.js';
 import {
   ClientEventType,
   ServerEventType,
@@ -280,6 +281,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
 
       const hub = getSessionHub();
       const session = hub.get(sessionId!);
+      if (sessionId) forgetConnectionPresence(sessionId, connectionId);
       if (session) {
         session.removeConnection(connectionId);
         if (!session.hasConnections()) {

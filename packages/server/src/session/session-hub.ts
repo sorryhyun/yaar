@@ -6,6 +6,7 @@
  */
 
 import { LiveSession, type LiveSessionOptions } from './live-session.js';
+import { forgetSessionPresence } from './client-presence.js';
 import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
 import type { RecoveryMode } from '@yaar/shared';
@@ -265,6 +266,7 @@ export class SessionHub {
       }
       this.sessions.delete(sessionId);
       this.evictedIds.add(sessionId);
+      forgetSessionPresence(sessionId);
       if (this.defaultSessionId === sessionId) {
         this.defaultSessionId = null;
       }

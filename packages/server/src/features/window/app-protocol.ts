@@ -19,6 +19,7 @@ import {
 import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type PendingOutcome } from '../../session/pending-store.js';
+import { clientAwayNote } from '../../session/client-presence.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import {
@@ -140,12 +141,20 @@ async function requireAppReady(
     // `getActiveSessionId()` resolves it the same way (`getWindowState()` in mcp/server.ts
     // and handlers/index.ts do): agent context first, default session outside a turn.
     // Anything else would gate the readiness check on a *different* session's desktop.
+    const askedAt = Date.now();
     const ready = await actionEmitter.waitForAppReady(
       sessionId ?? getActiveSessionId(),
       windowKey,
       deadlines.appReadyMs,
     );
-    if (!ready) return error('App did not register with the App Protocol (timeout).');
+    if (!ready)
+      return error(
+        withPresenceNote(
+          'App did not register with the App Protocol (timeout).',
+          askedAt,
+          sessionId,
+        ),
+      );
   }
   return null;
 }
@@ -197,10 +206,26 @@ export async function captureDeclaredAppState(
   return Object.fromEntries(entries as Array<readonly [string, unknown]>);
 }
 
+/**
+ * Append what the desktop was doing, when a wait ended in silence.
+ *
+ * A timeout can mean the app is wedged or it can mean nothing was running to hear the
+ * question. Only the first is worth retrying, and only the first is the app's fault — so
+ * where the server knows which it was, it says so rather than leaving the agent to read
+ * "the app did not respond" and believe it. Returns the message unchanged when the desktop
+ * was there throughout, which is the ordinary case.
+ */
+function withPresenceNote(message: string, waitStartedAt: number, sessionId?: string): string {
+  const note = clientAwayNote(sessionId ?? getActiveSessionId(), waitStartedAt);
+  return note ? `${message} ${note}` : message;
+}
+
 /** The message an agent sees when an app never answered. */
 function noAnswer(
   outcome: { ok: false; reason: 'timeout' | 'cancelled' | 'closed' },
   what: string,
+  waitStartedAt: number,
+  sessionId?: string,
 ): string {
   switch (outcome.reason) {
     case 'cancelled':
@@ -208,7 +233,11 @@ function noAnswer(
     case 'closed':
       return windowClosedMessage(what);
     default:
-      return `App did not respond to the ${what} (timeout).`;
+      return withPresenceNote(
+        `App did not respond to the ${what} (timeout).`,
+        waitStartedAt,
+        sessionId,
+      );
   }
 }
 
@@ -280,8 +309,9 @@ export async function handleAppQuery(
   };
 
   if (stateKey === 'manifest') {
+    const askedAt = Date.now();
     const outcome = await request(key, { kind: 'manifest' }, deadlines.appQueryMs);
-    if (!outcome.ok) return error(noAnswer(outcome, 'manifest request'));
+    if (!outcome.ok) return error(noAnswer(outcome, 'manifest request', askedAt));
     const response = outcome.value;
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
@@ -293,8 +323,9 @@ export async function handleAppQuery(
     return answer(response.manifest ? withoutPersonaCommands(response.manifest) : null);
   }
 
+  const askedAt = Date.now();
   const outcome = await request(key, { kind: 'query', stateKey }, deadlines.appQueryMs);
-  if (!outcome.ok) return error(noAnswer(outcome, `query "${stateKey}"`));
+  if (!outcome.ok) return error(noAnswer(outcome, `query "${stateKey}"`, askedAt));
   const response = outcome.value;
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
@@ -364,13 +395,14 @@ export async function handleAppDescribe(
   const readyErr = await requireAppReady(windowState, windowKey);
   if (readyErr) return readyErr;
 
+  const askedAt = Date.now();
   const outcome = await request(
     windowKey,
     { kind: 'describe', target, key },
     deadlines.appQueryMs,
     undefined,
   );
-  if (!outcome.ok) return error(noAnswer(outcome, `describe of ${target} "${key}"`));
+  if (!outcome.ok) return error(noAnswer(outcome, `describe of ${target} "${key}"`, askedAt));
   const response = outcome.value;
   if (response.kind !== 'describe') return error('Unexpected response kind.');
   // The app says this key is not in its table — the one genuine "no such resource".
@@ -482,17 +514,21 @@ export async function handleAppEval(
   // script and answers whether or not the app ever registered. Waiting
   // on readiness would make eval unusable for exactly the broken-app case it is
   // most useful for. (Same reasoning as the built-in `__console` state key.)
+  const askedAt = Date.now();
   const outcome = await request(win.id, { kind: 'eval', expression }, timeoutMs);
   if (!outcome.ok) {
     if (outcome.reason === 'cancelled')
       return error('The session ended before the app answered the eval request.');
     if (outcome.reason === 'closed') return error(windowClosedMessage('eval request'));
     return error(
-      `Preview did not answer the eval within ${(timeoutMs / 1000).toFixed(0)}s. If the ` +
-        'expression is legitimately slow — it awaits a promise, sleeps, or waits on a ' +
-        `render — retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s). ` +
-        'Note that the deadline of whatever call is wrapping this one applies too, so raise ' +
-        'that at the same time.',
+      withPresenceNote(
+        `Preview did not answer the eval within ${(timeoutMs / 1000).toFixed(0)}s. If the ` +
+          'expression is legitimately slow — it awaits a promise, sleeps, or waits on a ' +
+          `render — retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s). ` +
+          'Note that the deadline of whatever call is wrapping this one applies too, so raise ' +
+          'that at the same time.',
+        askedAt,
+      ),
     );
   }
   const response = outcome.value;
@@ -537,14 +573,17 @@ export async function handleAppCommand(
   const timeoutMs = resolveTimeout(payload, deadlines.appCommandMs);
 
   const agentId = getAgentId();
+  const askedAt = Date.now();
   const outcome = await request(key, req, timeoutMs);
   if (!outcome.ok) {
     if (outcome.reason === 'cancelled')
       return error('The session ended before the app answered the command.');
     if (outcome.reason === 'closed') return error(windowClosedMessage(`\`${req.command}\``));
-    const message =
+    const message = withPresenceNote(
       `App did not respond within ${(timeoutMs / 1000).toFixed(0)}s. If this command is ` +
-      `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`;
+        `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`,
+      askedAt,
+    );
     // A timeout is history too: the app may well have applied the command before the
     // deadline passed, and a reader of the log should see that it was sent.
     windowState.recordAppCommand(key, req, { ok: false, error: 'timeout' }, agentId);

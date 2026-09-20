@@ -32,6 +32,7 @@ import type { SurfaceRegistry } from './surface-state.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { actionEmitter } from './action-emitter.js';
+import { noteClientPresence } from './client-presence.js';
 import { genId } from '@yaar/lib/ids';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { getAppMeta } from '../features/apps/discovery.js';
@@ -115,6 +116,8 @@ export class ClientEventController {
           event.viewport,
           event.formFactor,
         ),
+      [ClientEventType.CLIENT_PRESENCE]: (event, connectionId) =>
+        noteClientPresence(this.deps.sessionId, connectionId, event.state),
       [ClientEventType.ADD_MONITOR]: (_event, connectionId) => this.deps.monitors.add(connectionId),
       [ClientEventType.REMOVE_MONITOR]: (event) => this.deps.monitors.remove(event.monitorId),
     };

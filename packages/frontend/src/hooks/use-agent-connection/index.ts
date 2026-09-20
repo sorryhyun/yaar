@@ -3,3 +3,4 @@ export * from './server-event-dispatcher';
 export * from './outbound-command-helpers';
 export { usePendingEventDrainer, drainPendingQueues } from './usePendingEventDrainer';
 export { useMonitorSync, monitorSubscription } from './useMonitorSync';
+export { useClientPresence, clientPresence } from './useClientPresence';

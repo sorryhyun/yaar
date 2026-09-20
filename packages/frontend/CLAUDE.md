@@ -85,9 +85,11 @@ The shade is the phone's **status surface** as well: `DesktopStatusBar` renders 
 ## WebSocket Connection
 
 `useAgentConnection` hook — singleton WebSocket with auto-reconnect (exponential backoff). Reconnects with `?sessionId=X` (rejoin) and `?token=X` (remote auth).
-- Decomposed into `hooks/use-agent-connection/`: `transport-manager`, `server-event-dispatcher`, `outbound-command-helpers`, `usePendingEventDrainer`, `useMonitorSync`
+- Decomposed into `hooks/use-agent-connection/`: `transport-manager`, `server-event-dispatcher`, `outbound-command-helpers`, `usePendingEventDrainer`, `useMonitorSync`, `useClientPresence`
 - `usePendingEventDrainer` drains store queues (feedback, app protocol responses, interactions) over WS
 - `useMonitorSync` sends `SUBSCRIBE_MONITOR` (which monitor *this connection* is on, its viewport, and its `formFactor`) on connect, active-monitor change, form-factor change, and viewport resize — always built by `monitorSubscription()`. It does **not** announce monitor creation/deletion: the monitor list is server state, so `monitorSlice` asks for changes directly (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the server's `MONITORS` answer. See `docs/architecture/monitor_and_windows_guide.md`.
+- `useClientPresence` sends `CLIENT_PRESENCE` (`visible` / `hidden` / `frozen`) on `visibilitychange` and the Page Lifecycle `freeze`/`resume` events, and re-announces on every (re)connect. **An open socket is not a live desktop**: a backgrounded tab keeps its WebSocket while running no script, so without this frame every server→client wait against it — `app_query`, window capture, the 2s render confirm — times out and reports the app as broken, across every window at once. Measured against real Chrome, a frozen tab held its socket for 264s, past the 255s transport idle timeout, because the server's own sends keep resetting the idle clock. The server records it per connection (`session/client-presence.ts`) and appends the reason to those timeouts; it changes no other behavior.
+- Coming back is also its own recovery trigger, not just socket close: the same hook re-runs `flushPending()` + `RESYNC` on `resume`, or after being hidden longer than `RESYNC_AFTER_HIDDEN_MS`. Reattach was the only path before, which left a tab that froze and resumed *without* the socket dropping talking to a server that had given up on it. Short flicks away deliberately skip it — a snapshot remounts app iframes.
 - Event types defined in `@yaar/shared` — grep `events/client.ts` and `events/server.ts` for schemas
 
 ## Content Renderers

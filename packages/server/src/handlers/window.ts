@@ -28,6 +28,7 @@ import type { ResourceRegistry, VerbResult, ResourceHandler, ReadOptions } from 
 import { hasLineFilter } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowState, WindowStateRegistry } from '../session/window-state.js';
+import { clientAwayNote } from '../session/client-presence.js';
 import {
   ok,
   okJson,
@@ -36,6 +37,7 @@ import {
   error,
   prependNote,
   getActiveSession,
+  getActiveSessionId,
   assertUri,
   requireAction,
   applyReadOptionsToValue,
@@ -393,10 +395,15 @@ export function registerWindowHandlers(
     }
 
     if (key === '__screenshot') {
+      const askedAt = Date.now();
       const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
       if (!imageData) {
+        // A capture is a round trip into the page, so "no image" can equally mean the
+        // page was not running. Say which, where the desktop told us.
+        const away = clientAwayNote(getActiveSessionId(), askedAt);
         return error(
-          `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.`,
+          `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.` +
+            (away ? ` ${away}` : ''),
         );
       }
       const image = { type: 'image' as const, data: imageData, mimeType: 'image/webp' };

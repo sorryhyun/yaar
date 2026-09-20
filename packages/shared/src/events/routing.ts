@@ -53,6 +53,7 @@ export const ClientEventType = {
   APP_PROTOCOL_RESPONSE: 'APP_PROTOCOL_RESPONSE',
   APP_PROTOCOL_READY: 'APP_PROTOCOL_READY',
   APP_EVENT: 'APP_EVENT',
+  CLIENT_PRESENCE: 'CLIENT_PRESENCE',
   SUBSCRIBE_MONITOR: 'SUBSCRIBE_MONITOR',
   ADD_MONITOR: 'ADD_MONITOR',
   REMOVE_MONITOR: 'REMOVE_MONITOR',
@@ -129,6 +130,12 @@ export function isAnswerEvent(type: string): boolean {
  * interrupting an agent twice is interrupting it once — and the wait is bounded by the
  * provider, so neither ordering nor liveness rests on the handler being instant.
  *
+ * `CLIENT_PRESENCE` is here for the sharpest version of the same argument: it reports that
+ * the desktop can no longer answer *anything*, which is only worth knowing while something
+ * is still waiting on it. Queued behind the turn whose waits it explains, it would arrive
+ * after every one of them had already timed out and blamed the app. It writes one field in
+ * a session-level registry and nothing reads it as a sequence.
+ *
  * Deliberately absent: `RESYNC`, whose entire contract is "you have now heard everything
  * I said before this" — it is the one frame whose meaning *is* its position in the queue.
  */
@@ -138,6 +145,7 @@ export const CONTROL_EVENT_TYPES = [
   ClientEventType.SUBSCRIBE_MONITOR, // → BroadcastCenter, per-connection
   ClientEventType.INTERRUPT, // → cancels the very turn that would block it
   ClientEventType.INTERRUPT_AGENT, // → same, scoped to one agent
+  ClientEventType.CLIENT_PRESENCE, // → a session-level flag; see above
 ] as const;
 
 /** A client frame that controls the session and carries no queue ordering. */

@@ -25,6 +25,8 @@ import {
   drainPendingQueues,
   useMonitorSync,
   monitorSubscription,
+  useClientPresence,
+  clientPresence,
 } from './use-agent-connection';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 // Window IDs in the store are opaque handles — send as-is to server.
@@ -213,6 +215,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
       onOpen: () => {
         sendEvent(wsManager, monitorSubscription(useDesktopStore.getState().activeMonitorId));
+        // Presence is per connection and the server forgets it on close, so say it again.
+        sendEvent(wsManager, clientPresence());
       },
       onMessage: handleMessage,
       onClose: () => {
@@ -443,6 +447,22 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Put the desktop back together after the tab was not running.
+   *
+   * Exactly what reattach does, for the case that never reattaches: a tab frozen with its
+   * socket intact comes back to a server that may have spent the whole time talking past
+   * it. Both halves are idempotent — re-announcing readiness for a window the server
+   * already knows is a no-op, and the snapshot is authoritative by design.
+   */
+  const recoverAfterResume = useCallback(() => {
+    if (wsManager.ws?.readyState !== WebSocket.OPEN) return;
+    flushPending();
+    resync();
+  }, [flushPending, resync]);
+
+  useClientPresence(recoverAfterResume);
 
   usePendingEventDrainer({
     send,

@@ -71,6 +71,7 @@ src/
 ├── session/              # LiveSession (aggregate root), SessionHub, BroadcastCenter, ActionEmitter, SessionEventRouter, WindowStateRegistry, types
 │   ├── monitor-registry.ts          # MonitorRegistry — authoritative monitor list, id minting, subscription + viewport, removal
 │   ├── client-event-controller.ts   # ClientEventController — the total ClientEventRoutes table + frame handlers
+│   ├── client-presence.ts           # per-connection visible/hidden/frozen, and the note a timed-out wait appends
 │   ├── session-snapshot-service.ts  # SessionSnapshotService — read-only window/surface/agent snapshot building
 │   ├── app-window-coordinator.ts    # AppWindowCoordinator — app readiness, command replay, app-channel/bridge-event routing
 │   ├── desktop-request.ts           # DesktopRequest — the ask-the-desktop-and-wait prelude every server→client question shares

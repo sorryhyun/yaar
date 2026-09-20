@@ -13,7 +13,8 @@ import {
 } from '@yaar/shared';
 import { componentLayoutSchema } from '@yaar/shared/schemas';
 import type { VerbResult } from '../../handlers/uri-registry.js';
-import { okJson, error, validateRelativePath } from '../../handlers/utils.js';
+import { okJson, error, validateRelativePath, getActiveSessionId } from '../../handlers/utils.js';
+import { clientAwayNote } from '../../session/client-presence.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
@@ -301,6 +302,7 @@ export async function handleCreate(
     // silent as the relay's. Remembered so the resulting 403 can name its own reason.
     session?.windowState.noteUndelegatedUris(actualId, undelegatedUris(payload), windowMonitorId);
 
+    const askedAt = Date.now();
     const outcome = await actionEmitter.emitActionWithFeedback(osAction, IFRAME_RENDER_TIMEOUT_MS);
 
     if (outcome.ok && !outcome.value.success) {
@@ -319,6 +321,9 @@ export async function handleCreate(
     // site is still loading) nor a success (a wedged one never will), and the agent is
     // the one who has to decide what to do about that, so tell it which it got.
     if (!outcome.ok) {
+      // A render confirmation comes from the page, so a backgrounded tab produces this
+      // for every window it is asked to make — which reads as each one failing.
+      const away = clientAwayNote(getActiveSessionId(), askedAt);
       return okJson({
         windowId: actualId,
         renderConfirmed: false,
@@ -326,7 +331,8 @@ export async function handleCreate(
           `Created window "${formatWindowRef(actualId)}", but its iframe did not confirm ` +
           `rendering within ${IFRAME_RENDER_TIMEOUT_MS / 1000}s (${outcome.reason}). It may still ` +
           `be loading, or may have failed silently — read ${formatWindowRef(actualId)} to see it ` +
-          `before telling the user it is ready. Do not create the window again.`,
+          `before telling the user it is ready. Do not create the window again.` +
+          (away ? ` ${away}` : ''),
       });
     }
 
