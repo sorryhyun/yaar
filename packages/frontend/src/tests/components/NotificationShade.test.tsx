@@ -12,7 +12,6 @@ import { useDesktopStore } from '@/store';
 import { NotificationShade } from '@/components/overlays/NotificationShade';
 import { DesktopStatusBar } from '@/components/desktop/DesktopStatusBar';
 import { SHADE_SETTLE_MS } from '@/lib/gestures';
-import { produce } from 'immer';
 
 const noop = mock(() => {});
 
@@ -178,44 +177,6 @@ describe('NotificationShade', () => {
 
     it('raises a window without putting the shade away', () => {
       open();
-      const s0 = useDesktopStore.getState();
-      console.log(
-        'DIAG probe',
-        JSON.stringify({
-          keys: Object.keys(s0.windows),
-          hasW1: !!s0.windows.w1,
-          w1Type: typeof s0.windows.w1,
-          fnType: typeof s0.userFocusWindow,
-          frozen: Object.isFrozen(s0.windows),
-          frozenW1: s0.windows.w1 ? Object.isFrozen(s0.windows.w1) : null,
-        }),
-      );
-      const immerOut = produce({ a: { b: 1 } }, (d) => {
-        d.a.b = 2;
-      });
-      console.log('DIAG immer', JSON.stringify({ immerOut }));
-      useDesktopStore.setState((st) => {
-        console.log(
-          'DIAG inside-recipe',
-          JSON.stringify({ keys: Object.keys(st.windows), hasW1: !!st.windows.w1 }),
-        );
-        st.focusedWindowId = 'probe';
-      });
-      console.log('DIAG after-raw-set', useDesktopStore.getState().focusedWindowId);
-      useDesktopStore.setState({ focusedWindowId: null });
-      console.log('DIAG fnsrc', String(useDesktopStore.getState().userFocusWindow).slice(0, 400));
-      try {
-        useDesktopStore.getState().userFocusWindow('w1');
-        console.log('DIAG call ok');
-      } catch (err) {
-        console.log('DIAG call threw', String(err));
-      }
-      const s1 = useDesktopStore.getState();
-      console.log(
-        'DIAG after-direct',
-        JSON.stringify({ focused: s1.focusedWindowId, zOrder: s1.zOrder, keys: Object.keys(s1.windows) }),
-      );
-      useDesktopStore.setState({ focusedWindowId: null, zOrder: [] });
       fireEvent.click(screen.getByTitle('Notes'));
       expect(useDesktopStore.getState().focusedWindowId).toBe('w1');
       expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);

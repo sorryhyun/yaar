@@ -21,6 +21,25 @@ const open = (id: string, title: string, renderer = 'markdown') => ({
 });
 
 describe('Taskbar', () => {
+  /**
+   * The real window actions, captured before any case stubs them.
+   *
+   * A zustand action lives *in* the state, so `setState({ userFocusWindow: spy })` does
+   * not scope the stub to one case — it replaces the store's own implementation for the
+   * rest of the process. The frontend suite runs its files in one shared global
+   * (`scripts/test/partitions.ts`), so a stub left behind here is the implementation the
+   * *next file* gets: `NotificationShade.test.tsx` clicked a window tab, called what it
+   * thought was `userFocusWindow`, and got a no-op mock that left `focusedWindowId`
+   * null. It failed only in CI, because the leak needs this file to run first and the
+   * order is the runner's to choose. The MonitorTabs block below already does this for
+   * its own two actions.
+   */
+  const realActions = {
+    userFocusWindow: useDesktopStore.getState().userFocusWindow,
+    userMinimizeWindow: useDesktopStore.getState().userMinimizeWindow,
+    userCloseWindow: useDesktopStore.getState().userCloseWindow,
+  };
+
   beforeEach(() => {
     useDesktopStore.setState({
       windows: {},
@@ -41,6 +60,7 @@ describe('Taskbar', () => {
 
   afterEach(() => {
     cleanup();
+    useDesktopStore.setState(realActions);
   });
 
   // Monitor controls moved onto the command-palette input bar (MonitorTabs); the
