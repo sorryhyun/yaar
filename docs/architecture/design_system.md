@@ -142,7 +142,7 @@ It has two pages:
   every color, type step and radius in them is a `var(--color-*)` / `var(--text-*)` /
   `var(--radius-*)`, resolved by the same CSS the cards use, so changing the accent in
   `tokens.ts` recolors the phone too. Three things stay literal, because the token
-  module does not own them: the phone's geometry (390×844, a 36px title bar, a 30px
+  module does not own them: the phone's geometry (390×844, a 44px title bar, a 30px
   collapsed palette handle), the wallpaper (the `dark-blue` preset from
   `constants/appearance.ts` — store state the user picks), and the few alpha washes the
   shell's own modules write inline. Their structure is copied from the components, not

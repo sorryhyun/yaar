@@ -104,6 +104,10 @@
     "lockedBy": "Verrouillé par : {{agent}}",
     "poolAgent": "Agent du pool : {{agentId}} ({{status}})",
     "export": "Exporter le contenu",
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "restore": "Restaurer",
+    "close": "Fermer",
     "fullscreen": "Plein écran",
     "exitFullscreen": "Quitter le plein écran",
     "changed": "Mis à jour"
@@ -176,7 +180,6 @@
     "empty": "Aucune notification",
     "clearAll": "Tout effacer",
     "dismiss": "Ignorer",
-    "open": "Ouvrir les notifications ({{count}})",
     "close": "Fermer les notifications"
   },
   "shade": {

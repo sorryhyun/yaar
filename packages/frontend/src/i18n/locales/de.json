@@ -104,6 +104,10 @@
     "lockedBy": "Gesperrt von: {{agent}}",
     "poolAgent": "Pool-Agent: {{agentId}} ({{status}})",
     "export": "Inhalt exportieren",
+    "minimize": "Minimieren",
+    "maximize": "Maximieren",
+    "restore": "Wiederherstellen",
+    "close": "Schließen",
     "fullscreen": "Vollbild",
     "exitFullscreen": "Vollbild beenden",
     "changed": "Aktualisiert"
@@ -176,7 +180,6 @@
     "empty": "Keine Mitteilungen",
     "clearAll": "Alle löschen",
     "dismiss": "Schließen",
-    "open": "Mitteilungen öffnen ({{count}})",
     "close": "Mitteilungen schließen"
   },
   "shade": {

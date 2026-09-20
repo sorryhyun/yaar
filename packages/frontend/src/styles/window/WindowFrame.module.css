@@ -172,21 +172,39 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-subtext-muted);
-  font-size: var(--text-xl);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition-fast);
+  /* Line art, so the pointer feedback is colour as much as fill — a muted stroke
+     coming up to full text weight reads on a transparent button, where a background
+     tint alone barely does. */
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Sized here rather than on the <svg>: the same icon is a 16px mark on a desktop
+   title bar and a larger one inside a card's 40px touch target. */
+.controlBtn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .controlBtn:hover {
   background: var(--bg-overlay-strong);
+  color: var(--color-text);
 }
 
 .controlBtn[data-action='close']:hover {
   background: var(--color-danger);
   color: var(--color-base);
+}
+
+.controlBtn[aria-pressed='true'] {
+  color: var(--color-accent);
 }
 
 .content {
@@ -472,4 +490,21 @@
 .frame[data-card] .controlBtn {
   width: 40px;
   height: 40px;
+}
+
+.frame[data-card] .controlBtn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* A phone has no hover to give the press away, so the card's buttons answer the
+   touch itself. */
+.frame[data-card] .controlBtn:active {
+  background: var(--bg-overlay-strong);
+  color: var(--color-text);
+}
+
+.frame[data-card] .controlBtn[data-action='close']:active {
+  background: var(--color-danger);
+  color: var(--color-base);
 }

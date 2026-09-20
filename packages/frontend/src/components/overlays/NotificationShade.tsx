@@ -4,9 +4,12 @@
  * On a desktop notifications stack in the top-right corner, where there is room for them,
  * and the connection and agent readings sit in a pill at the top. On a phone that corner
  * is a card's title bar and that pill is a permanent strip of a small screen, so both
- * live here instead: pulled down from the top edge (`PhoneGestures`), or opened by the
- * badge that appears while notifications are waiting — the badge is what keeps a hidden
- * notification from being a lost one.
+ * live here instead, pulled down from the top edge (`PhoneGestures`).
+ *
+ * The pull is the only way in. A floating badge used to offer a second one while
+ * notifications were waiting, and it cost more than it bought: a pill parked over the
+ * card, in the one strip of the top edge nothing else claimed, for a gesture that is
+ * already the phone's habit.
  *
  * The shade is therefore never empty. It used to close itself the moment the last
  * notification went, which made a pull-down on a quiet session look like a gesture that
@@ -130,21 +133,7 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
     [setOpen],
   );
 
-  if (!isMobile) return null;
-
-  if (!open) {
-    if (notifications.length === 0) return null;
-    return (
-      <button
-        className={styles.badge}
-        onClick={() => setOpen(true)}
-        aria-label={t('notifications.open', { count: notifications.length })}
-      >
-        <span aria-hidden="true">&#9679;</span>
-        {notifications.length}
-      </button>
-    );
-  }
+  if (!isMobile || !open) return null;
 
   return (
     <>

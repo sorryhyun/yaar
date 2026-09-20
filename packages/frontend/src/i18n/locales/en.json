@@ -105,6 +105,10 @@
     "lockedBy": "Locked by: {{agent}}",
     "poolAgent": "Pool agent: {{agentId}} ({{status}})",
     "export": "Export content",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close",
     "fullscreen": "Full screen",
     "exitFullscreen": "Exit full screen",
     "changed": "Updated"
@@ -178,7 +182,6 @@
     "empty": "No notifications",
     "clearAll": "Clear all",
     "dismiss": "Dismiss",
-    "open": "Open notifications ({{count}})",
     "close": "Close notifications"
   },
   "shade": {

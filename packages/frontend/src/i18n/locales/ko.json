@@ -104,6 +104,10 @@
     "lockedBy": "잠금: {{agent}}",
     "poolAgent": "풀 에이전트: {{agentId}} ({{status}})",
     "export": "내용 내보내기",
+    "minimize": "최소화",
+    "maximize": "최대화",
+    "restore": "이전 크기로",
+    "close": "닫기",
     "fullscreen": "전체 화면",
     "exitFullscreen": "전체 화면 종료",
     "changed": "변경됨"
@@ -173,7 +177,6 @@
     "empty": "알림 없음",
     "clearAll": "모두 지우기",
     "dismiss": "닫기",
-    "open": "알림 열기 ({{count}})",
     "close": "알림 닫기"
   },
   "shade": {

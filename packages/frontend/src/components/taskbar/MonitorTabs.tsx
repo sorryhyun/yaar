@@ -140,7 +140,13 @@ export function MonitorTabs() {
     [],
   );
 
-  const showMonitorTabs = monitors.length > 1;
+  // A desktop hides the switcher until there is something to switch between — the row
+  // sits against the input bar, where a lone chip is chrome for a choice nobody has.
+  // The phone keeps it: its row is a section of the shade, headed "Monitors", and a
+  // heading over nothing but a "+" reads as a list that failed to load rather than as
+  // a list of one. The chip is also the only thing on a phone that says which monitor
+  // the pan is currently on.
+  const showMonitorTabs = monitors.length > 1 || isMobile;
   const showNewMonitor = monitors.length < 4;
 
   if (!showMonitorTabs && !showNewMonitor) return null;

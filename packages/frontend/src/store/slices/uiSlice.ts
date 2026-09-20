@@ -9,8 +9,8 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   selectedWindowIds: [],
   formFactor: detectFormFactor(),
   fullscreenWindowId: null,
-  // Both phone surfaces start put away. The palette's handle and the shade's badge are
-  // what say they are there — see `CommandPalette` and `NotificationShade`.
+  // Both phone surfaces start put away. The palette's handle says it is there; the
+  // shade answers a pull from the top edge — see `CommandPalette` and `PhoneGestures`.
   paletteSheetOpen: false,
   notificationShadeOpen: false,
 

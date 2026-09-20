@@ -21,6 +21,15 @@ import { RendererErrorBoundary } from './RendererErrorBoundary';
 import { LockOverlay } from './LockOverlay';
 import { SnapPreview } from './SnapPreview';
 import { SelectionActionInput } from './SelectionActionInput';
+import {
+  CloseIcon,
+  ExitFullscreenIcon,
+  ExportIcon,
+  FullscreenIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  RestoreIcon,
+} from './WindowControlIcons';
 import { exportContent } from '@/lib/exportContent';
 import { useDragWindow } from '@/hooks/useDragWindow';
 import { beginShellDrag } from '@/lib/selection';
@@ -352,17 +361,20 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
                 className={styles.controlBtn}
                 data-action="export"
                 title={t('window.export')}
+                aria-label={t('window.export')}
                 onClick={() => exportContent(window.content, window.title, window.id)}
               >
-                ↑
+                <ExportIcon />
               </button>
             )}
             <button
               className={styles.controlBtn}
               data-action="minimize"
+              title={t('window.minimize')}
+              aria-label={t('window.minimize')}
               onClick={() => useDesktopStore.getState().userMinimizeWindow(window.id)}
             >
-              −
+              <MinimizeIcon />
             </button>
             {isCard && (
               <button
@@ -378,13 +390,15 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
                   useDesktopStore.getState().toggleFullscreenWindow(window.id);
                 }}
               >
-                {isFullscreen ? '⤡' : '⤢'}
+                {isFullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}
               </button>
             )}
             {!isCard && (
               <button
                 className={styles.controlBtn}
                 data-action="maximize"
+                title={t(window.maximized ? 'window.restore' : 'window.maximize')}
+                aria-label={t(window.maximized ? 'window.restore' : 'window.maximize')}
                 onClick={() => {
                   useDesktopStore.getState().applyAction({
                     type: window.maximized ? 'window.restore' : 'window.maximize',
@@ -392,15 +406,17 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
                   });
                 }}
               >
-                □
+                {window.maximized ? <RestoreIcon /> : <MaximizeIcon />}
               </button>
             )}
             <button
               className={styles.controlBtn}
               data-action="close"
+              title={t('window.close')}
+              aria-label={t('window.close')}
               onClick={() => userCloseWindow(window.id)}
             >
-              ×
+              <CloseIcon />
             </button>
           </div>
         </div>

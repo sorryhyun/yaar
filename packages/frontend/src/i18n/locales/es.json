@@ -104,6 +104,10 @@
     "lockedBy": "Bloqueado por: {{agent}}",
     "poolAgent": "Agente del grupo: {{agentId}} ({{status}})",
     "export": "Exportar contenido",
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "restore": "Restaurar",
+    "close": "Cerrar",
     "fullscreen": "Pantalla completa",
     "exitFullscreen": "Salir de pantalla completa",
     "changed": "Actualizado"
@@ -176,7 +180,6 @@
     "empty": "Sin notificaciones",
     "clearAll": "Borrar todo",
     "dismiss": "Descartar",
-    "open": "Abrir notificaciones ({{count}})",
     "close": "Cerrar notificaciones"
   },
   "shade": {

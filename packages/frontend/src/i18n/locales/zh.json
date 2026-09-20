@@ -104,6 +104,10 @@
     "lockedBy": "锁定者：{{agent}}",
     "poolAgent": "池代理：{{agentId}} ({{status}})",
     "export": "导出内容",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭",
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
     "changed": "已更新"
@@ -176,7 +180,6 @@
     "empty": "没有通知",
     "clearAll": "全部清除",
     "dismiss": "关闭",
-    "open": "打开通知 ({{count}})",
     "close": "关闭通知"
   },
   "shade": {

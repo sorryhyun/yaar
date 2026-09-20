@@ -1,32 +1,6 @@
-/* The phone notification shade: a sheet from the top edge, plus the badge that stands
-   in for it while it is closed. Mobile-only — `NotificationShade` renders nothing on a
-   desktop, so these rules need no form-factor guard. */
-
-/* Clear of the title bar, not beside it: the top-right corner of a phone screen is a
-   card's close/minimize/full-screen cluster, and the top centre is the status pill on
-   the home screen. Below both is the one strip of the top edge nothing else claims. */
-.badge {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 52px);
-  right: var(--space-2);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  /* 44px of touch target with 28px of pill: the padding is the target, not the paint. */
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--bg-glass);
-  backdrop-filter: blur(12px);
-  color: var(--color-accent);
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  font-weight: 600;
-  cursor: pointer;
-  z-index: var(--z-toast);
-}
+/* The phone notification shade: a sheet from the top edge. Mobile-only —
+   `NotificationShade` renders nothing on a desktop, so these rules need no
+   form-factor guard. */
 
 .backdrop {
   position: fixed;

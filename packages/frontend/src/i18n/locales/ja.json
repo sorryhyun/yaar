@@ -104,6 +104,10 @@
     "lockedBy": "ロック中: {{agent}}",
     "poolAgent": "プールエージェント: {{agentId}} ({{status}})",
     "export": "コンテンツをエクスポート",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "元のサイズに戻す",
+    "close": "閉じる",
     "fullscreen": "全画面",
     "exitFullscreen": "全画面を終了",
     "changed": "更新あり"
@@ -176,7 +180,6 @@
     "empty": "通知はありません",
     "clearAll": "すべて消去",
     "dismiss": "閉じる",
-    "open": "通知を開く ({{count}})",
     "close": "通知を閉じる"
   },
   "shade": {

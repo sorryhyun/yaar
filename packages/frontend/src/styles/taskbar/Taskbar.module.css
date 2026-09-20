@@ -268,13 +268,15 @@
 }
 
 /* A chip is a number here (see `shortLabel`), so it is padded to a touch target rather
-   than sized by its text — four of them in a row should not be four different widths. */
+   than sized by its text — four of them in a row should not be four different widths.
+   One step up the ramp from the desktop's chip: a single digit centred in 44px is a
+   small mark on a phone held at arm's length, and it is the whole label. */
 :global(html[data-form-factor='mobile']) .monitorTab {
   justify-content: center;
   min-width: 44px;
   min-height: 40px;
   padding: 4px 8px;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 /* The throw-away gesture. `pan-x` leaves the row its sideways scroll and keeps the
@@ -286,9 +288,14 @@
   will-change: transform;
 }
 
+/* Against the last chip, not against the far edge. The desktop's `margin-left: auto`
+   is for a row that shares the input bar's width with nothing else; here the row is a
+   section of a sheet, and a "+" pushed to the right margin reads as its own control
+   rather than as the end of the list it extends. */
 :global(html[data-form-factor='mobile']) .newMonitorButton {
   width: 40px;
   height: 40px;
+  margin-left: 0;
   border-color: var(--color-border);
   font-size: var(--text-xl);
 }

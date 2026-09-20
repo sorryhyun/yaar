@@ -221,6 +221,16 @@ describe('MonitorTabs', () => {
     expect(screen.queryByText('Monitor 1')).not.toBeInTheDocument();
   });
 
+  // The phone's row is a section of the shade with a "Monitors" heading over it, so a
+  // lone "+" under that heading would read as a list that failed to load.
+  it('keeps the chip on a phone even with a single monitor', () => {
+    useDesktopStore.setState({ formFactor: 'mobile' } as any);
+
+    render(<MonitorTabs />);
+    expect(screen.getByTitle('Monitor 1')).toHaveTextContent(/^1/);
+    expect(screen.getByTitle('Create new monitor')).toBeInTheDocument();
+  });
+
   it('renders a tab per monitor once there is more than one', () => {
     useDesktopStore.setState({
       monitors: [monitor('m1', 'Monitor 1'), monitor('m2', 'Monitor 2')],
