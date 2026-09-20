@@ -80,9 +80,18 @@ export async function describeApp(
   const [skill, docs] = await Promise.all([loadAppSkill(appId), loadAppDocs(appId)]);
 
   return {
+    id: app.id,
     name: app.name,
     ...(app.description ? { description: app.description } : {}),
     ...(app.icon ? { icon: app.icon } : {}),
+    // Identity, not state — but a describe that cannot answer "which version is
+    // installed?" sends its caller to `read`, or worse to a re-clone of the source, for
+    // one line. `read` and `list` both carry these; the three now agree by construction
+    // (`handlers/apps/app-resource.test.ts`).
+    kind: app.kind,
+    source: app.source,
+    ...(app.version ? { version: app.version } : {}),
+    ...(app.author ? { author: app.author } : {}),
     // The protocol as compiled, minus persona-audience commands — those are the
     // sub-agent's half of the protocol and are described to it in its own voice at
     // spawn, so an operator reading them reads the wrong script (`persona-commands.ts`).
