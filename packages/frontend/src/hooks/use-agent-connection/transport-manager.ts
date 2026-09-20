@@ -133,6 +133,36 @@ export function retryNow(
   reconnect();
 }
 
+/**
+ * Abandon a socket that is not going to answer, and open a fresh one now.
+ *
+ * `close()` on its own does not get us there. Closing starts a handshake, and the
+ * socket this exists for — one whose peer vanished silently, see `liveness-probe.ts` —
+ * has no peer to complete it, so it sits in `CLOSING` for as long as the OS keeps
+ * hoping and `onclose` never arrives to trigger the reconnect. Dropping our reference
+ * is what makes the replacement immediate: `openSocket`'s `isCurrent()` guard already
+ * ignores every callback from a superseded socket, so the dead one's eventual `onclose`
+ * cannot null out or reconnect over the socket that replaced it.
+ *
+ * Respects `stopped`: a user who asked to be offline is not brought back by this.
+ */
+export function replaceDeadSocket(
+  wsManager: ReturnType<typeof createWsManager>,
+  reconnect: () => void,
+): void {
+  if (wsManager.stopped) return;
+  const dead = wsManager.ws;
+  wsManager.ws = null;
+  wsManager.attached = false;
+  wsManager.notify();
+  try {
+    dead?.close();
+  } catch {
+    // Already past closing; there is nothing left to tidy.
+  }
+  retryNow(wsManager, reconnect);
+}
+
 export interface SocketHandlers {
   onOpen: (socket: WebSocket) => void;
   onMessage: (event: MessageEvent) => void;

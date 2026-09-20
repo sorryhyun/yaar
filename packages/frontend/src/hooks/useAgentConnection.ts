@@ -27,6 +27,8 @@ import {
   monitorSubscription,
   useClientPresence,
   clientPresence,
+  createLivenessProbe,
+  replaceDeadSocket,
 } from './use-agent-connection';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 // Window IDs in the store are opaque handles — send as-is to server.
@@ -34,6 +36,29 @@ import { captureMonitorScreenshot } from '@/lib/captureMonitorScreenshot';
 import { refreshStaleIframeTokens } from '@/lib/iframeTokenRefresh';
 
 let sessionCheckDone = false;
+
+/**
+ * The current `connect`, for the module-level probe below to reach.
+ *
+ * The probe cannot be built inside the hook: it has to outlive every re-render (a
+ * deadline that restarted whenever a callback identity changed would never expire) and
+ * `connect` is a `useCallback`. Kept in sync by an effect; the probe only ever fires
+ * seconds after a resume, by which time it is assigned.
+ */
+let reconnectNow: () => void = () => {};
+
+/**
+ * Hangs up on a socket that came back from a freeze and then said nothing.
+ *
+ * See `liveness-probe.ts` for why `readyState` cannot answer this and why the reconnect
+ * path never noticed on its own. The socket identity check is what makes a late deadline
+ * harmless — by the time it fires we may already be on a different, healthy connection.
+ */
+const livenessProbe = createLivenessProbe((probed) => {
+  if (wsManager.ws !== probed) return;
+  useDesktopStore.getState().setConnectionStatus('connecting');
+  replaceDeadSocket(wsManager, reconnectNow);
+});
 
 function buildWsUrl(): string {
   const state = useDesktopStore.getState();
@@ -152,6 +177,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
+      // Any frame at all proves there is still a server on the other end, which is the
+      // only thing the probe was waiting to hear.
+      livenessProbe.disarm();
       try {
         const message = JSON.parse(event.data);
         // Attachment — not transport open — is what proves the connection made progress.
@@ -214,12 +242,18 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     wsManager.stopped = false;
     const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
       onOpen: () => {
+        // A completed handshake is a live peer; a probe armed against a socket that was
+        // still connecting has its answer.
+        livenessProbe.disarm();
         sendEvent(wsManager, monitorSubscription(useDesktopStore.getState().activeMonitorId));
         // Presence is per connection and the server forgets it on close, so say it again.
         sendEvent(wsManager, clientPresence());
       },
       onMessage: handleMessage,
       onClose: () => {
+        // The socket declared itself dead, so there is nothing left to probe for — and
+        // the backoff below owns the reconnect from here.
+        livenessProbe.disarm();
         setIsConnecting(false);
         useDesktopStore.getState().setConnectionStatus('disconnected');
         // The socket dropped under us. Whatever those agents were doing, we are no longer
@@ -442,6 +476,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   );
 
   useEffect(() => {
+    reconnectNow = connect;
+  }, [connect]);
+
+  useEffect(() => {
     if (autoConnect) {
       connect();
     }
@@ -455,11 +493,28 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
    * socket intact comes back to a server that may have spent the whole time talking past
    * it. Both halves are idempotent — re-announcing readiness for a window the server
    * already knows is a no-op, and the snapshot is authoritative by design.
+   *
+   * And then we check that any of it landed. "Its socket intact" is what our end of the
+   * socket claims, not a fact: a phone that spent ten minutes in another app usually
+   * comes back holding a connection whose peer is long gone, where the resync above goes
+   * out into nothing and no `onclose` will ever arrive to start a reconnect. The socket
+   * owes us a `SNAPSHOT` for that resync, so we hold it to a deadline —
+   * `liveness-probe.ts` has the rest.
    */
   const recoverAfterResume = useCallback(() => {
-    if (wsManager.ws?.readyState !== WebSocket.OPEN) return;
-    flushPending();
-    resync();
+    const socket = wsManager.ws;
+    if (!socket) return;
+    if (socket.readyState === WebSocket.OPEN) {
+      flushPending();
+      resync();
+    } else if (socket.readyState !== WebSocket.CONNECTING) {
+      // CLOSING or CLOSED: the close path already owns the retry.
+      return;
+    }
+    // CONNECTING gets the same deadline with nothing sent: a handshake interrupted by the
+    // freeze can sit there forever, and `openSocket` refuses to replace a connecting
+    // socket, so nothing else would ever clear it.
+    livenessProbe.arm(socket);
   }, [flushPending, resync]);
 
   useClientPresence(recoverAfterResume);
