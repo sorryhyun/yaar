@@ -57,4 +57,8 @@ if command -v termux-open-url >/dev/null 2>&1; then
   ) &
 fi
 
-MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" LAUNCH_CHROME=0 exec ./scripts/dev/start.sh claude
+# REMOTE=0 explicitly, not merely unset: on a phone the client and the server are the same
+# device, so there is no network leg to secure and nothing to hand a token to — the desktop
+# is opened locally, just above. Pinning it here also keeps a `REMOTE=1` exported in the
+# user's shell profile from quietly turning this launch into a tunnelled one.
+MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" LAUNCH_CHROME=0 REMOTE=0 exec ./scripts/dev/start.sh claude
