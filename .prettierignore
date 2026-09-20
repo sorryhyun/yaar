@@ -8,3 +8,7 @@ storage/
 config/
 packages/server/src/providers/codex/generated/
 packages/frontend/src/styles/base/tokens.css
+
+# Artboard fragments: the canvas renders these literally, and one of them is a
+# terminal transcript inside `white-space: pre-wrap`, which reflowing rewrites.
+scripts/codegen/design-screens/

@@ -1,0 +1,59 @@
+<div style="width: 390px; height: 844px; box-sizing: border-box; font-family: var(--font-sans); font-size: var(--text-base); line-height: 1.5; position: relative; overflow: hidden; background: var(--color-mantle); display: flex; flex-direction: column; color: var(--color-text);">
+
+  <div style="height: 18px; flex-shrink: 0;"></div>
+
+  <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 10px; border-bottom: 1px solid var(--color-border-muted);">
+
+    <span style="font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap;">Send to</span>
+
+    <div style="display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-base);">
+      <button type="button" style="height: 30px; padding: 0 12px; border: none; border-radius: var(--radius-full); background: var(--yaar-wash-accent-strong); color: {{accent}}; font-family: inherit; font-size: var(--text-sm); font-weight: 600; white-space: nowrap; cursor: pointer;">Monitor</button>
+      <button type="button" title="Session acts as you and can drive your real browser." style="height: 30px; padding: 0 12px; border: none; border-radius: var(--radius-full); background: transparent; color: var(--color-warning); font-family: inherit; font-size: var(--text-sm); font-weight: 600; white-space: nowrap; cursor: pointer;">Session</button>
+    </div>
+
+    <span style="flex-grow: 1;"></span>
+
+    <div role="group" aria-label="Monitor" style="display: flex; align-items: center; gap: 4px;">
+      <button type="button" style="width: 30px; height: 30px; border: 1px solid {{accent}}; border-radius: var(--radius-md); background: var(--yaar-wash-accent); color: {{accent}}; font-family: var(--font-mono); font-size: var(--text-sm); cursor: pointer;">1</button>
+      <button type="button" style="width: 30px; height: 30px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-base); color: var(--color-subtext-muted); font-family: var(--font-mono); font-size: var(--text-sm); cursor: pointer;">2</button>
+      <button type="button" style="width: 30px; height: 30px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-base); color: var(--color-subtext-muted); font-family: var(--font-mono); font-size: var(--text-sm); cursor: pointer;">3</button>
+    </div>
+
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; margin: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-mantle);">
+
+    <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 10px; border-bottom: 1px solid var(--color-border-muted); background: var(--color-mantle);">
+      <span style="min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); background: var(--yaar-wash-accent-strong); color: {{accent}}; font-family: var(--font-mono); font-size: var(--text-xs);">1</span>
+      <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-subtext);">monitor 1</span>
+      <span style="flex-grow: 1;"></span>
+      <span style="width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--color-success);"></span>
+      <span style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-muted);">claude</span>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; overflow: hidden; padding: 12px 12px 0; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.7; color: var(--color-subtext-muted); white-space: pre-wrap;"><span style="color: var(--color-accent);">$</span> <span style="color: var(--color-text);">three days in tokyo, hotel in shinjuku</span>
+
+<span style="color: var(--agent-app);">▸ Read</span>  storage/inbox/flight-confirmation.eml
+<span style="color: var(--agent-app);">▸ Bash</span>  ls storage/inbox
+      projects  screenshots  tokyo-plan.md
+      shinjuku-hotel.pdf  rail-fares.json
+
+<span style="color: var(--color-subtext);">Flights land 14:20 at HND on the 4th, so day
+one is short. I put the plan in a window you
+can edit and the fares next to it.</span>
+
+<span style="color: var(--agent-app);">▸ window.open</span>  "Tokyo, 3 days"
+<span style="color: var(--agent-app);">▸ window.open</span>  "rail fares"
+
+<span style="color: var(--color-success);">done</span> · 2 windows on monitor 1
+
+<span style="color: var(--color-accent);">$</span> <span style="display: inline-block; width: 8px; height: 15px; vertical-align: text-bottom; background: var(--color-accent);"></span></div>
+
+  </div>
+
+  <button type="button" aria-label="Open the input field" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 48px; padding: 0 0 18px; border: none; border-top: 1px solid var(--color-border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; background: var(--bg-glass-strong); color: var(--color-muted); font-family: inherit; font-size: var(--text-sm); cursor: pointer;">
+    <span aria-hidden="true" style="width: 36px; height: 4px; border-radius: var(--radius-full); background: var(--color-border-hover);"></span>
+    Ask anything…
+  </button>
+
+</div>

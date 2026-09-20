@@ -102,28 +102,20 @@ ${body}
 }
 
 /**
- * The same card as one Design-canvas artboard.
+ * The .dc.html envelope, shared by both kinds of artboard: a token card and a phone
+ * screen differ only in the `frame` they hand it.
  *
- * Three things the .dc.html format requires and the preview envelope does not: the
+ * Three things the format requires that the preview envelope does not: the
  * `support.js` head line verbatim, a root element sized exactly to the board's frame
  * in canvas.json, and a `$preview` that agrees with it. What was `<head>` becomes
- * `<helmet>`, and `.y-light` moves from <body> onto the frame — which works because
- * that class only declares custom properties, so descendants inherit the substituted
- * values wherever it sits.
+ * `<helmet>`.
  *
  * Deliberately no `data-props` levers. A tweak knob would let someone recolor the
  * picture without touching tokens.ts, which is precisely the drift this system exists
  * to prevent: the canvas is a mirror of the code, not a place to edit the palette.
  */
-function artboard(opts: {
-  title: string;
-  body: string;
-  w: number;
-  h: number;
-  light?: boolean;
-}): string {
-  const { title, body, w, h, light } = opts;
-  const frameClass = light ? ' class="y-light"' : '';
+function dcPage(opts: { title: string; frame: string; w: number; h: number }): string {
+  const { title, frame, w, h } = opts;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -139,11 +131,7 @@ ${CARD_CSS}
 body{margin:0}
 </style>
 </helmet>
-<div${frameClass} style="width: ${w}px; height: ${h}px; box-sizing: border-box; overflow: hidden; ${CARD_SURFACE}">
-<div class="demo">
-${body}
-</div>
-</div>
+${frame}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":${w},"height":${h}}}'>
 class Component extends DCLogic {
@@ -155,6 +143,32 @@ class Component extends DCLogic {
 </body>
 </html>
 `;
+}
+
+/**
+ * A token/component card: the generator supplies the frame, and `.y-light` rides on
+ * it rather than on <body> — which works because that class only declares custom
+ * properties, so descendants inherit the substituted values wherever it sits.
+ */
+function artboard(opts: {
+  title: string;
+  body: string;
+  w: number;
+  h: number;
+  light?: boolean;
+}): string {
+  const { title, body, w, h, light } = opts;
+  const frameClass = light ? ' class="y-light"' : '';
+  return dcPage({
+    title,
+    w,
+    h,
+    frame: `<div${frameClass} style="width: ${w}px; height: ${h}px; box-sizing: border-box; overflow: hidden; ${CARD_SURFACE}">
+<div class="demo">
+${body}
+</div>
+</div>`,
+  });
 }
 
 const swatch = (name: string) => `
@@ -524,6 +538,33 @@ for (const c of cards) {
   );
 }
 
+// ---- The phone shell, page two of the canvas --------------------------------
+
+/**
+ * Whole-screen mockups of the phone shell, one file each in `design-screens/`.
+ *
+ * Unlike the cards above these are not built from the token module — they are drawn
+ * by hand, because there is no generator that can produce "the home screen". What
+ * they DO take from it is every value it owns: each file names colors, type steps
+ * and radii as `var(--color-*)` / `var(--text-*)` / `var(--radius-*)`, resolved by
+ * the same `CARD_CSS` the cards use. So the palette still cannot drift here; change
+ * the accent in tokens.ts and these recolor with everything else.
+ *
+ * What stays literal is the phone's geometry — 390×844, a 44px title bar, a 62px
+ * icon tile. Those are the mockup's own subject matter, not the design system's, and
+ * they are also what a comment on one of these screens is usually about.
+ */
+const PHONE = { w: 390, h: 844 };
+const SCREENS_DIR = join(import.meta.dir, 'design-screens');
+const screens: Array<{ file: string; name: string; title: string }> = [
+  { file: 'home.html', name: 'home.dc.html', title: 'Home' },
+  { file: 'shade.html', name: 'shade.dc.html', title: 'Shade — pulled down' },
+  { file: 'palette.html', name: 'palette.dc.html', title: 'Input — open' },
+  { file: 'card.html', name: 'card.dc.html', title: 'Window as a card' },
+  { file: 'pan.html', name: 'pan.dc.html', title: 'Pan — mid-gesture' },
+  { file: 'cli.html', name: 'cli.dc.html', title: 'CLI' },
+];
+
 // ---- The same cards as a Design canvas -------------------------------------
 
 /** Headroom under each card, so a body that grew by a line is not clipped by its frame. */
@@ -535,6 +576,13 @@ const ROW_GAP = 380;
 const TITLE_RISE = 300;
 /** Short group names would be shrunk to fit a narrow row; give every title this much. */
 const TITLE_MIN_W = 560;
+/**
+ * What the canvas itself writes onto a note when it saves one. Emitted here for the
+ * same reason `attachments` is below: the editor normalizes the index when it opens
+ * it, and a generator that leaves its defaults out makes every republish a diff
+ * against the editor rather than against the last generated index.
+ */
+const NOTE_W = 240;
 
 /**
  * Pinned, not `new Date()`. This generator rewrites the whole index every run, and
@@ -568,7 +616,7 @@ for (const group of groups) {
       join(OUT, 'project', name),
       artboard({ title: c.title, body: c.body, w: c.w, h, light: c.light }),
     );
-    boards[name] = { x, y, w: c.w, h, title: c.title };
+    boards[name] = { x, y, w: c.w, h, page: 'system', title: c.title };
     order.push(name);
     x += c.w + COL_GAP;
     rowH = Math.max(rowH, h);
@@ -576,6 +624,8 @@ for (const group of groups) {
   notes[`g-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`] = {
     x: 0,
     y: y - TITLE_RISE,
+    w: NOTE_W,
+    page: 'system',
     text: group,
     kind: 'title1',
     maxW: Math.max(x - COL_GAP, TITLE_MIN_W),
@@ -583,15 +633,65 @@ for (const group of groups) {
   y += rowH + ROW_GAP;
 }
 
+// The phone screens, on their own page: three to a row, one title over each row.
+// Their own coordinate space, so this starts at the top again.
+const SCREEN_ROWS: Array<{ title: string; of: string[] }> = [
+  { title: 'At rest', of: ['home.dc.html', 'shade.dc.html', 'palette.dc.html'] },
+  { title: 'In use', of: ['card.dc.html', 'pan.dc.html', 'cli.dc.html'] },
+];
+for (const screen of screens) {
+  const frame = readFileSync(join(SCREENS_DIR, screen.file), 'utf8').trim();
+  // The frame's size lives in the file and its entry lives here; a mismatch would
+  // leave the artboard floating inside a wrong-sized frame, silently.
+  if (!frame.includes(`width: ${PHONE.w}px; height: ${PHONE.h}px`)) {
+    throw new Error(`${screen.file}: root element is not ${PHONE.w}x${PHONE.h}`);
+  }
+  writeFileSync(
+    join(OUT, 'project', screen.name),
+    dcPage({ title: screen.title, frame, w: PHONE.w, h: PHONE.h }),
+  );
+  order.push(screen.name);
+}
+SCREEN_ROWS.forEach((row, r) => {
+  const rowY = r * (PHONE.h + ROW_GAP);
+  row.of.forEach((name, i) => {
+    const screen = screens.find((s) => s.name === name);
+    if (!screen) throw new Error(`SCREEN_ROWS names ${name}, which no screen declares`);
+    boards[name] = {
+      x: i * (PHONE.w + COL_GAP),
+      y: rowY,
+      w: PHONE.w,
+      h: PHONE.h,
+      page: 'mobile',
+      title: screen.title,
+    };
+  });
+  notes[`m-row-${r}`] = {
+    x: 0,
+    y: rowY - TITLE_RISE,
+    w: NOTE_W,
+    page: 'mobile',
+    text: row.title,
+    kind: 'title1',
+    maxW: row.of.length * (PHONE.w + COL_GAP) - COL_GAP,
+  };
+});
+
 writeFileSync(
   join(OUT, 'project', 'canvas.json'),
   `${JSON.stringify(
     {
       v: 3,
       createdOnFiles: { v: 1, at: CANVAS_CREATED_AT },
+      // The canvas adds this itself the first time it opens the index; emitting it
+      // keeps a republish from reading as a change.
+      attachments: {},
       title: 'YAAR Design System',
-      launch: { view: 'canvas' },
-      pages: [],
+      launch: { view: 'canvas', page: 'system' },
+      pages: [
+        { id: 'system', name: 'System' },
+        { id: 'mobile', name: 'Mobile' },
+      ],
       designSystems: [],
       boards,
       order,
@@ -602,7 +702,9 @@ writeFileSync(
   )}\n`,
 );
 
-console.log(`Generated ${cards.length} cards in ${OUT} (previews/ + project/)`);
+console.log(
+  `Generated ${cards.length} cards + ${screens.length} phone screens in ${OUT} (previews/ + project/)`,
+);
 
 // Where the canvas half of that goes. Kept in .env rather than here or in the docs
 // because the artifact is private — a link nobody else on the repo can open is not

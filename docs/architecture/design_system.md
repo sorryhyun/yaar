@@ -132,6 +132,23 @@ same URL. A round trip, not a publish.
 tokens.ts + the shell CSS modules → make design → canvas → comment → tokens.ts …
 ```
 
+It has two pages:
+
+- **System** — the twelve token and component cards, generated whole from the token
+  module and the real shell CSS modules.
+- **Mobile** — six whole-screen mockups of the phone shell (home, shade, input, card,
+  pan, CLI), hand-drawn in `scripts/codegen/design-screens/*.html` because no generator
+  can produce "the home screen". They are still not allowed a palette of their own:
+  every color, type step and radius in them is a `var(--color-*)` / `var(--text-*)` /
+  `var(--radius-*)`, resolved by the same CSS the cards use, so changing the accent in
+  `tokens.ts` recolors the phone too. What stays literal is the phone's geometry —
+  390×844, a 44px title bar — which is the mockup's own subject, not the system's.
+
+**The canvas layout is generated, so do not rearrange it in the editor**: the next
+`make design` writes `canvas.json` whole and would undo it. Move a board by moving it
+in the generator. Comments are not in the index and survive every republish, which is
+the part that matters.
+
 To republish it from an agent session:
 
 ```bash
