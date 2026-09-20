@@ -191,6 +191,14 @@ describe('Taskbar', () => {
 describe('MonitorTabs', () => {
   const monitor = (id: string, label: string) => ({ id, label });
 
+  // Store *actions* are singletons too, and a spy left in one is a trap for every file
+  // that runs after this one — it calls the action, nothing happens, and the failure
+  // lands somewhere else entirely. Put the real ones back.
+  const realActions = {
+    switchMonitor: useDesktopStore.getState().switchMonitor,
+    removeMonitor: useDesktopStore.getState().removeMonitor,
+  };
+
   beforeEach(() => {
     useDesktopStore.setState({
       monitors: [monitor('m1', 'Monitor 1')],
@@ -200,6 +208,7 @@ describe('MonitorTabs', () => {
 
   afterEach(() => {
     cleanup();
+    useDesktopStore.setState(realActions);
   });
 
   it('shows only the new-monitor button with a single monitor', () => {

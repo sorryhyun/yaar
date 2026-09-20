@@ -10,6 +10,25 @@
   pointer-events: none;
 }
 
+/* Monitor pan. `PhoneGestures` publishes --monitor-peek-x on the root while a sideways
+   drag is in flight and the peek panel reads the same var, so the desktop being left and
+   the one being uncovered move as one strip.
+
+   Gated on the attribute rather than defaulting the var to 0: a transform makes this the
+   containing block for every fixed child inside it, and that is not a thing to have on
+   the desktop permanently for the sake of a gesture that runs for a fifth of a second. */
+:global(html[data-monitor-peek]) .desktop {
+  transform: translate3d(var(--monitor-peek-x, 0px), 0, 0);
+  will-change: transform;
+}
+
+/* Only once the finger is up — see the matching rule in PhoneGestures.module.css. The
+   duration comes from PEEK_SETTLE_MS, published beside the offset, because the timer
+   that lands the switch and the transition that draws it have to agree. */
+:global(html[data-monitor-peek='settling']) .desktop {
+  transition: transform var(--monitor-peek-ms, 220ms) cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 .statusBar {
   position: absolute;
   top: var(--space-2);

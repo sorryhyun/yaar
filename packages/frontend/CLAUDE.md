@@ -54,15 +54,21 @@ src/
 
 ### Phone gestures
 
-Three edges, recognised by `lib/gestures.ts` (pure: `swipeDirection`, `edgeZone`, `stepMonitorIndex`) and wired by `components/desktop/PhoneGestures.tsx`.
+Three of them, recognised by `lib/gestures.ts` (pure arithmetic: `swipeDirection`, `dragAxis`, `peekOffset`, `shouldCommitPeek`, `edgeZone`, `stepMonitorIndex`) and wired by `components/desktop/PhoneGestures.tsx`.
 
 | Gesture | Effect | How the touch is caught |
 |---|---|---|
-| Pull **up** from the bottom handle | Raises the command palette (`paletteSheetOpen`, ui slice) and focuses the input | The handle is shell DOM at the bottom edge — `CommandPalette` owns this one |
-| Swipe in from the **left/right** edge | Previous / next monitor (`switchMonitorBy`, clamped — no wrap) | 20px gutters at `--z-gesture`, the only gesture that needs an element, because an app card is an iframe and a touch inside it reaches no listener here. A gutter touch that was a tap is replayed to the element underneath |
+| Pull **up** from the bottom handle | Raises the command palette (`paletteSheetOpen`, ui slice) and opens the keyboard | The handle is shell DOM at the bottom edge — `CommandPalette` owns this one |
+| **Drag sideways** | Pans to the previous / next monitor (clamped — no wrap) | `document` listeners, plus 20px gutters at `--z-gesture` at each side edge for the case the shell does not own: an app card is an iframe, so a touch inside one reaches no listener here. A gutter touch that was a tap is replayed to the element underneath |
 | Pull **down** from the top | Opens the notification shade (`notificationShadeOpen`, ui slice) | `document` listeners — the top of the screen is a title bar or the home grid, both shell DOM, so nothing is covered and no tap is stolen |
 
+**The monitor pan** follows the finger: `PhoneGestures` publishes `--monitor-peek-x` (and `--monitor-peek-ms`) on `<html>` with a `data-monitor-peek` state of `dragging` or `settling`, and two CSS rules read them — `.desktop` in `DesktopSurface.module.css` translates by it, and the peek panel in `PhoneGestures.module.css`, parked one screen off the side it comes in from, translates by the same amount. The panel is the neighbouring monitor's wallpaper, label and open window titles. The var is written straight to the DOM node, never through React: a pan re-renders once, when the monitor it is heading for changes, not once per frame.
+
+Because the pan is visible it no longer has to start at an edge. `dragAxis` locks the axis at 10px — far sooner than `swipeDirection`'s 56px, and biased towards vertical so an ambiguous drag stays a scroll — and the pan may begin anywhere the shell owns. Not inside a window (`data-window-id`; a card is the monitor's *content*), not on a sideways scroller, and not on a surface that opted out with `data-no-pan` (the palette, the drawing canvas). `shouldCommitPeek` decides the landing on distance *or* flick speed; anything else settles back.
+
 The palette is a **bottom sheet** on a phone: collapsed to a labelled handle by default, so the screen belongs to the card. Collapsed it is translated down by its own height less the handle, and `--palette-h` is published from the handle's height instead of the container's — a rect read mid-transition would hand the cards a height about to be wrong. The sheet body is `inert` while collapsed so its textarea cannot be focused off the bottom edge. The two sheets are mutually exclusive: raising one lowers the other.
+
+The pull-up raises the sheet on **touchmove**, as soon as the pull has said "up", so the slide and the rest of the drag overlap. The keyboard is a separate problem: a phone opens it only for a `focus()` that a user gesture is still activating, so `openSheetWithKeyboard` focuses from inside the touchend/click handler — clearing `inert` on the node first, since React has not re-rendered yet — rather than from the effect keyed on `sheetOpen`. That effect stays as the fallback for every other way the sheet can open.
 
 Notifications render in `NotificationShade` on a phone and in `NotificationCenter` on a desktop, because a top-right stack lands on a card's title bar. The auto-dismiss timers stay in `NotificationCenter` either way, so one component owns expiry; a badge marks a shade with something in it.
 

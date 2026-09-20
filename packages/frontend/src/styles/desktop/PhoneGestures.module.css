@@ -20,13 +20,43 @@
   right: 0;
 }
 
-/* Named while the finger is still down, so the swipe can be abandoned when it is the
-   wrong monitor rather than discovered afterwards. */
-.preview {
+/* The monitor the pan is uncovering, parked exactly one screen off the side it comes
+   from and translated by the same --monitor-peek-x as the desktop, so the two move as
+   one strip. Below --z-panel, which is where the palette lives: the input field is the
+   phone's system bar and stays put while the desktops slide past behind it. */
+.peek {
   position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  max-width: 50vw;
+  inset: 0;
+  z-index: var(--z-window);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  box-sizing: border-box;
+  /* The wallpaper is set inline — it is store state, not a token. */
+  pointer-events: none;
+}
+
+.peek[data-side='left'] {
+  transform: translate3d(calc(-100% + var(--monitor-peek-x, 0px)), 0, 0);
+}
+
+.peek[data-side='right'] {
+  transform: translate3d(calc(100% + var(--monitor-peek-x, 0px)), 0, 0);
+}
+
+/* Only while the finger is up. Under the finger the panel is pinned to it, and a
+   transition there would make it lag by exactly the transition's duration. */
+:global(html[data-monitor-peek='settling']) .peek {
+  transition: transform var(--monitor-peek-ms, 220ms) cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Named while the finger is still down, so the pan can be abandoned when it is the
+   wrong monitor rather than discovered afterwards. */
+.peekLabel {
+  max-width: 100%;
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
@@ -39,14 +69,30 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none;
-  z-index: var(--z-gesture);
 }
 
-.preview[data-side='left'] {
-  left: var(--space-3);
+/* What is open over there. A label alone says which monitor is next; this says whether
+   it is the one being looked for. */
+.peekWindows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.preview[data-side='right'] {
-  right: var(--space-3);
+.peekWindow {
+  max-width: 100%;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--bg-dark-overlay-strong);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

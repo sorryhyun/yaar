@@ -8,11 +8,15 @@
  *
  * The shell recognises gestures two different ways, and the difference is the iframe
  * boundary. Touches on shell DOM — a card's title bar, the desktop grid, the palette
- * handle — reach a `document` listener, so the top and bottom gestures need no overlay
- * and steal nothing: they only `preventDefault` once they have actually fired. Touches
- * inside an app iframe reach nothing at all, which is why the left/right monitor swipe
- * is the one gesture that needs a real element over the page (`EDGE_GUTTER_PX` wide) to
- * catch them.
+ * handle — reach a `document` listener, so those gestures need no overlay and steal
+ * nothing: they only `preventDefault` once they have actually fired. Touches inside an
+ * app iframe reach nothing at all, which is why the monitor pan also keeps a real
+ * element over the page (`EDGE_GUTTER_PX` wide at each side edge) to catch them.
+ *
+ * The monitor pan is two questions, not one, and they are asked at different moments.
+ * `dragAxis` runs while the finger is still down and decides whether the desktop is
+ * following it — early, because a peek that starts late looks like a stutter.
+ * `shouldCommitPeek` runs when the finger lifts and decides where it lands.
  */
 
 /** How far in from the left/right screen edge a monitor swipe has to start. */
@@ -92,4 +96,77 @@ export function edgeZone(
   if (x <= EDGE_GUTTER_PX) return 'left';
   if (x >= viewportWidth - EDGE_GUTTER_PX) return 'right';
   return null;
+}
+
+/**
+ * Travel before a drag has to say which axis it is on.
+ *
+ * Much smaller than `SWIPE_MIN_PX`, because this is a different question. `SWIPE_MIN_PX`
+ * asks "was that a swipe?" once the finger is up; this asks "is the desktop following
+ * this finger?" while it is still down, and the answer has to come early enough that the
+ * peek looks like it was there from the first pixel.
+ */
+export const DRAG_INTENT_PX = 10;
+
+/**
+ * How far the horizontal axis has to beat the vertical one to claim an undecided drag.
+ *
+ * Lower than `SWIPE_AXIS_RATIO`: at 10px of travel a finger has barely committed to
+ * anything, and the tie goes to vertical — an unwanted page scroll is a smaller mistake
+ * than a monitor that slides away under a finger that meant to scroll.
+ */
+export const DRAG_AXIS_RATIO = 1.2;
+
+/** Resistance applied to a drag that has no monitor to uncover. */
+export const RUBBER_BAND_DIVISOR = 4;
+
+/** Speed, in px/ms, at which a short drag still counts as a flick. */
+export const FLICK_VELOCITY = 0.5;
+
+/** How long the desktop takes to settle onto a monitor after the finger lifts. */
+export const PEEK_SETTLE_MS = 220;
+
+/** At most this many window titles are named on the monitor being peeked at. */
+export const PEEK_TITLE_LIMIT = 3;
+
+/**
+ * Which axis an in-flight drag has committed to, or `null` while it is still undecided.
+ *
+ * Once decided it stays decided — the caller locks it — because a finger arcs, and a
+ * pan that re-evaluated every frame would hand the drag back to the page halfway
+ * through a swipe that was going fine.
+ */
+export function dragAxis(dx: number, dy: number): 'x' | 'y' | null {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (ax >= DRAG_INTENT_PX && ax >= ay * DRAG_AXIS_RATIO) return 'x';
+  if (ay >= DRAG_INTENT_PX) return 'y';
+  return null;
+}
+
+/**
+ * How far the desktop is dragged aside for a finger that has travelled `dx`.
+ *
+ * One-to-one when there is a monitor to uncover: the screen is the thing being dragged,
+ * so it has to stay under the finger or the gesture stops reading as direct manipulation.
+ * When there is nothing over there it is divided down instead of clamped flat, which is
+ * the difference between an edge that says "no" and one that says nothing at all.
+ */
+export function peekOffset(dx: number, hasNeighbour: boolean, viewportWidth: number): number {
+  const limit = Math.max(0, viewportWidth) / (hasNeighbour ? 1 : RUBBER_BAND_DIVISOR);
+  const travel = hasNeighbour ? dx : dx / RUBBER_BAND_DIVISOR;
+  return Math.max(-limit, Math.min(limit, travel));
+}
+
+/**
+ * Whether a finished pan lands on the neighbour or falls back.
+ *
+ * Distance *or* speed: a slow deliberate drag is read from how far it went, and a flick
+ * from how fast — insisting on `SWIPE_MIN_PX` for both would make the quickest version
+ * of the gesture the one that does not work.
+ */
+export function shouldCommitPeek(dx: number, elapsedMs: number): boolean {
+  const ax = Math.abs(dx);
+  if (ax >= SWIPE_MIN_PX) return true;
+  return ax >= DRAG_INTENT_PX && elapsedMs > 0 && ax / elapsedMs >= FLICK_VELOCITY;
 }

@@ -343,5 +343,7 @@ export function DrawingOverlay() {
     };
   }, [drawLine, saveStrokesSnapshot]);
 
-  return <canvas ref={canvasRef} className={styles.overlay} data-active={pencilMode} />;
+  return (
+    <canvas ref={canvasRef} className={styles.overlay} data-active={pencilMode} data-no-pan="" />
+  );
 }

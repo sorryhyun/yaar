@@ -5,10 +5,16 @@
  */
 import { describe, it, expect } from 'bun:test';
 import {
+  DRAG_INTENT_PX,
   EDGE_GUTTER_PX,
+  FLICK_VELOCITY,
+  RUBBER_BAND_DIVISOR,
   SWIPE_MIN_PX,
   TOP_EDGE_PX,
+  dragAxis,
   edgeZone,
+  peekOffset,
+  shouldCommitPeek,
   stepMonitorIndex,
   swipeDirection,
 } from '../../lib/gestures';
@@ -76,5 +82,64 @@ describe('edgeZone', () => {
     expect(edgeZone(EDGE_GUTTER_PX + 1, 300, width)).toBeNull();
     expect(edgeZone(200, TOP_EDGE_PX, width)).toBe('top');
     expect(edgeZone(200, TOP_EDGE_PX + 1, width)).toBeNull();
+  });
+});
+
+describe('dragAxis', () => {
+  it('says nothing until the finger has committed to something', () => {
+    expect(dragAxis(0, 0)).toBeNull();
+    expect(dragAxis(DRAG_INTENT_PX - 1, 0)).toBeNull();
+    expect(dragAxis(0, DRAG_INTENT_PX - 1)).toBeNull();
+  });
+
+  it('decides far sooner than swipeDirection would', () => {
+    // The pan starts following the finger here; whether it *lands* is a later question.
+    expect(dragAxis(DRAG_INTENT_PX, 0)).toBe('x');
+    expect(swipeDirection(DRAG_INTENT_PX, 0)).toBeNull();
+  });
+
+  it('gives a drag that is going both ways to the page', () => {
+    // A 45-degree drag is more likely a scroll that drifted than a pan that is late,
+    // and a wrong scroll is a smaller mistake than a monitor sliding away.
+    expect(dragAxis(40, 40)).toBe('y');
+    expect(dragAxis(40, 20)).toBe('x');
+  });
+});
+
+describe('peekOffset', () => {
+  const width = 400;
+
+  it('keeps the desktop under the finger when there is somewhere to go', () => {
+    expect(peekOffset(-80, true, width)).toBe(-80);
+    expect(peekOffset(80, true, width)).toBe(80);
+  });
+
+  it('never drags it further than one screen', () => {
+    expect(peekOffset(width * 3, true, width)).toBe(width);
+    expect(peekOffset(-width * 3, true, width)).toBe(-width);
+  });
+
+  it('resists instead of refusing at the end of the list', () => {
+    // Not clamped flat: an edge that moves a little says "nothing over there", and an
+    // edge that does not move at all says nothing at all.
+    expect(peekOffset(80, false, width)).toBe(80 / RUBBER_BAND_DIVISOR);
+    expect(peekOffset(width * 3, false, width)).toBe(width / RUBBER_BAND_DIVISOR);
+  });
+});
+
+describe('shouldCommitPeek', () => {
+  it('lands a drag that went far enough, however long it took', () => {
+    expect(shouldCommitPeek(SWIPE_MIN_PX, 4000)).toBe(true);
+    expect(shouldCommitPeek(-SWIPE_MIN_PX, 4000)).toBe(true);
+  });
+
+  it('lands a short one that was fast enough', () => {
+    const dx = SWIPE_MIN_PX / 2;
+    expect(shouldCommitPeek(dx, dx / FLICK_VELOCITY - 1)).toBe(true);
+    expect(shouldCommitPeek(dx, dx / FLICK_VELOCITY + 1)).toBe(false);
+  });
+
+  it('never reads a nudge as a flick, however quick', () => {
+    expect(shouldCommitPeek(DRAG_INTENT_PX - 1, 1)).toBe(false);
   });
 });

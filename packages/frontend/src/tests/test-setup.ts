@@ -61,6 +61,11 @@ const domGlobals = [
   'setInterval',
   'clearInterval',
   'queueMicrotask',
+  // Viewport size. Shell code that measures the screen (gesture thresholds, the
+  // palette's --palette-h) reads these off globalThis, and without them every such
+  // measurement is NaN under test while being a number in a browser.
+  'innerWidth',
+  'innerHeight',
 ] as const;
 
 for (const key of domGlobals) {
