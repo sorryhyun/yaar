@@ -9,7 +9,7 @@ import type {
   StreamFrameEvent,
   CliEntry,
 } from '@/types';
-import { ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
+import { NO_AGENT_ACK, ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
 export interface ServerEventDispatchHandlers {
   applyActions: (actions: OSAction[]) => void;
@@ -82,6 +82,7 @@ export interface ServerEventDispatchHandlers {
   queueMessage: (messageId: string, position: number) => void;
   failMessage: (messageId: string, error: string) => void;
   settleOutbox: (messageId: string) => void;
+  clearMessageStatus: (messageId: string) => void;
   clearAllMessageStatuses: () => void;
   applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => void;
   /** Send everything buffered while the socket was down (interactions, outbox). */
@@ -470,7 +471,12 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     // so the outbox can let go of it — that, and nothing about the socket's state, is what
     // "delivered" means.
     case ServerEventType.MESSAGE_ACCEPTED:
-      handlers.acceptMessage(message.messageId, message.agentId);
+      // A context reset rides this same ack so it can leave the outbox, but it is not a
+      // message: it has no transcript entry, so filing a status for it would leave the
+      // palette showing an "accepted" chip for something the user cannot look at. Clearing
+      // is not merely skipping — a resend out of the outbox marks it 'sent' on the way.
+      if (message.agentId === NO_AGENT_ACK) handlers.clearMessageStatus(message.messageId);
+      else handlers.acceptMessage(message.messageId, message.agentId);
       handlers.settleOutbox(message.messageId);
       break;
     case ServerEventType.MESSAGE_QUEUED:

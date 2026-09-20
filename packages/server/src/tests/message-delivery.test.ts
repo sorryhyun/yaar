@@ -165,6 +165,7 @@ const { LiveSession } = await import('../session/live-session.js');
 
 import {
   ClientEventType,
+  NO_AGENT_ACK,
   ServerEventType,
   type OSAction,
   type ServerEvent,
@@ -314,6 +315,85 @@ function turnCount(session: InstanceType<typeof LiveSession>): number {
   const handleMessage = agent.session.handleMessage as unknown as { mock: { calls: unknown[] } };
   return handleMessage.mock.calls.length;
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// A reset is a delivery, not a gesture
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The same rule as F-2, for the one command that was exempt from it.
+ *
+ * A reset used to be answered by silence. From the client that is indistinguishable from a
+ * reset that never arrived, and on a phone the second case is routine: a tab resumed from
+ * the background holds a socket whose peer is long gone, so the frame is "sent" into
+ * nothing. The desktop cleared itself, the session did not, and the next message came back
+ * in the voice of the conversation the user had just pressed a button to end.
+ */
+describe('RESET — acknowledged, and run once', () => {
+  let session: InstanceType<typeof LiveSession>;
+  let ws: ReturnType<typeof createMockWs>;
+
+  beforeEach(() => {
+    resetBroadcastCenter();
+    session = new LiveSession(SESSION);
+    ws = createMockWs();
+    session.addConnection('conn-a', ws);
+    getBroadcastCenter().subscribe('conn-a', ws, SESSION);
+  });
+
+  afterEach(async () => {
+    await session.cleanup();
+    resetBroadcastCenter();
+  });
+
+  const reset = (messageId?: string) =>
+    ({ type: ClientEventType.RESET, monitorId: '0', ...(messageId ? { messageId } : {}) }) as never;
+
+  const acksFor = (messageId: string) =>
+    ws.events.filter(
+      (e) =>
+        e.type === ServerEventType.MESSAGE_ACCEPTED &&
+        (e as { messageId: string }).messageId === messageId,
+    );
+
+  it('acks a reset that carries an id, so the client can stop holding it', async () => {
+    await session.routeMessage(reset('r-1'), 'conn-a');
+
+    const acks = acksFor('r-1');
+    expect(acks).toHaveLength(1);
+    // Not a message and not an agent's work: the sentinel is how the client knows to settle
+    // the outbox without filing a status chip for something with no transcript entry.
+    expect((acks[0] as { agentId: string }).agentId).toBe(NO_AGENT_ACK);
+  });
+
+  it('a resent reset is acked again and does not throw away a second conversation', async () => {
+    await session.routeMessage(userMessage('m-1'), 'conn-a');
+    const before = session.getPool()?.agentPool.getMonitorAgent('0');
+    expect(before).toBeDefined();
+
+    await session.routeMessage(reset('r-1'), 'conn-a');
+    const afterReset = session.getPool()?.agentPool.getMonitorAgent('0');
+    // The reset really did run: the monitor agent was torn down and rebuilt.
+    expect(afterReset).toBeDefined();
+    expect(afterReset).not.toBe(before);
+
+    // The client never saw the ack and resent from its outbox. By now the user may well
+    // have started talking to `afterReset`; running the reset again would take that with it.
+    await session.routeMessage(reset('r-1'), 'conn-a');
+
+    expect(session.getPool()?.agentPool.getMonitorAgent('0')).toBe(afterReset);
+    expect(acksFor('r-1')).toHaveLength(2);
+  });
+
+  it('still resets for a client too old to send an id', async () => {
+    await session.routeMessage(userMessage('m-1'), 'conn-a');
+    const before = session.getPool()?.agentPool.getMonitorAgent('0');
+
+    await session.routeMessage(reset(), 'conn-a');
+
+    expect(session.getPool()?.agentPool.getMonitorAgent('0')).not.toBe(before);
+  });
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 // F-1 — the snapshot is authoritative: what it does not name does not exist

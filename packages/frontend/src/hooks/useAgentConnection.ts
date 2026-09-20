@@ -214,6 +214,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           queueMessage: store.queueMessage,
           failMessage: store.failMessage,
           settleOutbox: store.settleOutbox,
+          clearMessageStatus: store.clearMessageStatus,
           clearAllMessageStatuses: store.clearAllMessageStatuses,
           applySnapshot: store.applySnapshot,
           flushPending,
@@ -459,11 +460,28 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
    * event tells the server which agent tree to forget, `resetDesktop` clears the matching
    * client state. Omitting `monitorId` keeps the session-wide behavior for callers that
    * have no monitor in hand.
+   *
+   * Into the outbox first, for the same reason a user message goes there: `send` returning
+   * true means the frame reached *our* end of the socket, and a phone coming back from
+   * another app routinely holds one whose peer is long gone (see `recoverAfterResume`).
+   * The local clear below then ran against a server that had never heard of the reset —
+   * the transcript emptied, the toast appeared, and the next message was answered by the
+   * conversation the button exists to end. The outbox holds it until the server acks it and
+   * resends it on the next attach; the server dedups, so a reset that did land is not run
+   * twice.
+   *
+   * The desktop is still cleared straight away rather than on the ack. The ack is
+   * ordinarily immediate, but `resetSession` is not, and a reset button that leaves the old
+   * transcript on screen while an agent is rebuilt reads as a button that did nothing.
    */
   const reset = useCallback(
     (monitorId?: string) => {
-      send({ type: ClientEventType.RESET, monitorId });
-      useDesktopStore.getState().resetDesktop(monitorId);
+      const messageId = generateMessageId();
+      const store = useDesktopStore.getState();
+      const event: ClientEvent = { type: ClientEventType.RESET, monitorId, messageId };
+      store.enqueueOutbox(messageId, event);
+      send(event);
+      store.resetDesktop(monitorId);
     },
     [send],
   );

@@ -187,6 +187,18 @@ export interface WindowAgentStatusEvent {
   status: 'assigned' | 'active' | 'released';
 }
 
+/**
+ * The `agentId` on the ack for a command that no agent runs.
+ *
+ * A context reset carries a `messageId` so the client can hold it in its outbox until the
+ * server confirms it (see `ResetEvent.messageId`), and the ack for it is this same event —
+ * there is no second acknowledgement protocol. But a reset has no transcript entry and no
+ * agent, so a client that filed it under message status would leave an "accepted" chip on
+ * the palette naming a message that does not exist. This sentinel is how the client tells
+ * the two apart: settle the outbox either way, and skip the status for this one.
+ */
+export const NO_AGENT_ACK = 'reset';
+
 export interface MessageAcceptedEvent {
   type: typeof ServerEventType.MESSAGE_ACCEPTED;
   messageId: string;

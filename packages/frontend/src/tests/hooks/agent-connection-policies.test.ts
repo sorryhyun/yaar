@@ -75,6 +75,7 @@ function createHandlers() {
     queueMessage: mock(() => {}),
     failMessage: mock(() => {}),
     settleOutbox: mock(() => {}),
+    clearMessageStatus: mock(() => {}),
     clearAllMessageStatuses: mock(() => {}),
     applySnapshot: mock(() => {}),
     flushPending: mock(() => {}),
@@ -457,6 +458,31 @@ describe('server event dispatcher', () => {
 
     expect(handlers.failMessage).toHaveBeenCalledWith('m-9', 'Message dropped: the window closed.');
     expect(handlers.settleOutbox).toHaveBeenCalledWith('m-9');
+  });
+
+  it('files a message ack under its message', () => {
+    const handlers = createHandlers();
+
+    dispatchServerEvent(
+      { type: 'MESSAGE_ACCEPTED', messageId: 'm-7', agentId: 'agent-3' },
+      handlers,
+    );
+
+    expect(handlers.acceptMessage).toHaveBeenCalledWith('m-7', 'agent-3');
+    expect(handlers.settleOutbox).toHaveBeenCalledWith('m-7');
+  });
+
+  it('settles a reset without leaving a status chip for it', () => {
+    const handlers = createHandlers();
+
+    // A reset rides the same ack so it can leave the outbox, but it is not a message: there
+    // is no transcript entry to point a chip at, and a resend out of the outbox has already
+    // marked it 'sent' on the way, so skipping is not enough — it has to be cleared.
+    dispatchServerEvent({ type: 'MESSAGE_ACCEPTED', messageId: 'r-1', agentId: 'reset' }, handlers);
+
+    expect(handlers.clearMessageStatus).toHaveBeenCalledWith('r-1');
+    expect(handlers.acceptMessage).not.toHaveBeenCalled();
+    expect(handlers.settleOutbox).toHaveBeenCalledWith('r-1');
   });
 
   it('ignores an output event with no chunk', () => {

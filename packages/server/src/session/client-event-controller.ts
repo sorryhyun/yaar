@@ -17,6 +17,7 @@
 
 import {
   ClientEventType,
+  NO_AGENT_ACK,
   ServerEventType,
   type ServerEvent,
   type UserInteraction,
@@ -94,8 +95,7 @@ export class ClientEventController {
       [ClientEventType.APP_INTERACTION]: (event) => this.handleAppInteraction(event),
       [ClientEventType.COMPONENT_ACTION]: (event) => this.handleComponentAction(event),
       [ClientEventType.INTERRUPT]: () => this.deps.getPool()?.interruptAll(),
-      [ClientEventType.RESET]: (event, connectionId) =>
-        this.deps.resetSession(connectionId, event.monitorId),
+      [ClientEventType.RESET]: (event, connectionId) => this.handleReset(event, connectionId),
       [ClientEventType.INTERRUPT_AGENT]: (event) =>
         this.deps.getPool()?.agentPool.interruptByIdOrRole(event.agentId),
       [ClientEventType.RENDERING_FEEDBACK]: (event) => this.handleRenderingFeedback(event),
@@ -121,6 +121,40 @@ export class ClientEventController {
       [ClientEventType.ADD_MONITOR]: (_event, connectionId) => this.deps.monitors.add(connectionId),
       [ClientEventType.REMOVE_MONITOR]: (event) => this.deps.monitors.remove(event.monitorId),
     };
+  }
+
+  /**
+   * Clear a context, and say so.
+   *
+   * The ack is the point. A reset used to be answered by silence, which is indistinguishable
+   * — from the client — from a reset that never arrived, and on a phone the second case is
+   * common: a tab resumed from the background holds a socket whose peer is gone, so the
+   * frame is "sent" into nothing. The desktop cleared itself, the session did not, and the
+   * next message came back in the voice of the conversation the user had just dismissed.
+   * With an id in hand the client holds the reset in its outbox and resends it on the next
+   * attach, and this is what lets it stop.
+   *
+   * Acked *before* the work, not after: `MESSAGE_ACCEPTED` means the server has taken the
+   * command, which is true the moment we are here — and `resetSession` can spend seconds
+   * acquiring a provider and building a replacement agent, which is not a wait the outbox
+   * should sit through. Same order a user message is accepted in.
+   */
+  private async handleReset(
+    event: ClientEventOf<typeof ClientEventType.RESET>,
+    connectionId: ConnectionId,
+  ): Promise<void> {
+    if (event.messageId) {
+      const first = this.deps.claimMessageId(event.messageId);
+      this.deps.sendTo(connectionId, {
+        type: ServerEventType.MESSAGE_ACCEPTED,
+        messageId: event.messageId,
+        agentId: NO_AGENT_ACK,
+      });
+      // A resend of a reset we already performed. Acked again above so the outbox lets go;
+      // running it twice would throw away a conversation the user has since started.
+      if (!first) return;
+    }
+    await this.deps.resetSession(connectionId, event.monitorId);
   }
 
   /** Send the authoritative state of this session to one connection. */

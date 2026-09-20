@@ -90,6 +90,23 @@ export interface ResetEvent {
    * no monitor in hand gets.
    */
   monitorId?: string;
+  /**
+   * Delivery id, so a reset can be held in the client's outbox until the server says it
+   * has it — and resent if it never did.
+   *
+   * A reset used to be pure fire-and-forget: the client cleared its own transcript and
+   * assumed the frame landed. An open WebSocket is not proof that it did, and on a phone
+   * it routinely is not — a tab that spent minutes in another app comes back holding a
+   * socket whose peer is long gone (`useAgentConnection`'s `recoverAfterResume`), where a
+   * send succeeds locally and reaches nobody. The desktop went blank, the server never
+   * heard a word, and the next message was answered by the conversation the user had just
+   * pressed a button to be rid of.
+   *
+   * Optional only for a client older than the ack; the server resets either way and acks
+   * when an id is present. Deduped against the same accepted-id set as a user message, so
+   * a resend of one that did land is acked again rather than run twice.
+   */
+  messageId?: string;
 }
 
 export interface RenderingFeedbackEvent {
