@@ -177,49 +177,26 @@ describe('NotificationShade', () => {
 
     it('raises a window without putting the shade away', () => {
       open();
-      const before = useDesktopStore.getState();
-      console.log('DIAG before', JSON.stringify({
-        focusedWindowId: before.focusedWindowId,
-        activeMonitorId: before.activeMonitorId,
-        windowKeys: Object.keys(before.windows),
-        zOrder: before.zOrder,
-        formFactor: before.formFactor,
-        shadeOpen: before.notificationShadeOpen,
-        titled: Array.from(document.querySelectorAll('[title]')).map((e) => e.getAttribute('title')),
-        containers: document.body.children.length,
-        bodyLen: document.body.innerHTML.length,
-      }));
-      const tab = screen.getByTitle('Notes');
-      const errs: string[] = [];
-      window.addEventListener('error', (e) => errs.push(String(e.message)));
-      let native = 0;
-      let captured = 0;
-      tab.addEventListener('click', () => native++);
-      document.body.addEventListener('click', () => captured++, true);
-      const monitorTab = screen.getByTitle('Monitor 2');
-      let monitorNative = 0;
-      monitorTab.addEventListener('click', () => monitorNative++);
-      fireEvent.click(tab);
-      console.log('DIAG events', JSON.stringify({ native, captured, errs }));
-      fireEvent.click(monitorTab);
-      console.log('DIAG monitor', JSON.stringify({
-        monitorNative,
-        activeMonitorId: useDesktopStore.getState().activeMonitorId,
-      }));
+      const s0 = useDesktopStore.getState();
+      console.log(
+        'DIAG probe',
+        JSON.stringify({
+          keys: Object.keys(s0.windows),
+          hasW1: !!s0.windows.w1,
+          w1Type: typeof s0.windows.w1,
+          fnType: typeof s0.userFocusWindow,
+          frozen: Object.isFrozen(s0.windows),
+          frozenW1: s0.windows.w1 ? Object.isFrozen(s0.windows.w1) : null,
+        }),
+      );
       useDesktopStore.getState().userFocusWindow('w1');
-      console.log('DIAG direct', JSON.stringify({
-        focused: useDesktopStore.getState().focusedWindowId,
-        zOrder: useDesktopStore.getState().zOrder,
-      }));
+      const s1 = useDesktopStore.getState();
+      console.log(
+        'DIAG after-direct',
+        JSON.stringify({ focused: s1.focusedWindowId, zOrder: s1.zOrder, keys: Object.keys(s1.windows) }),
+      );
       useDesktopStore.setState({ focusedWindowId: null, zOrder: [] });
-      fireEvent.click(tab);
-      const after = useDesktopStore.getState();
-      console.log('DIAG after', JSON.stringify({
-        focusedWindowId: after.focusedWindowId,
-        minimized: after.windows.w1?.minimized,
-        zOrder: after.zOrder,
-        interactions: after.pendingInteractions?.map((i) => i.type),
-      }));
+      fireEvent.click(screen.getByTitle('Notes'));
       expect(useDesktopStore.getState().focusedWindowId).toBe('w1');
       expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
     });
