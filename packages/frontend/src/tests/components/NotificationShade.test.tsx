@@ -190,7 +190,28 @@ describe('NotificationShade', () => {
         bodyLen: document.body.innerHTML.length,
       }));
       const tab = screen.getByTitle('Notes');
-      console.log('DIAG tab', tab.tagName, tab.getAttribute('aria-pressed'), tab.isConnected, document.body.contains(tab));
+      const errs: string[] = [];
+      window.addEventListener('error', (e: never) => errs.push(String((e as { message?: unknown }).message)));
+      let native = 0;
+      let captured = 0;
+      tab.addEventListener('click', () => native++);
+      document.body.addEventListener('click', () => captured++, true);
+      const monitorTab = screen.getByTitle('Monitor 2');
+      let monitorNative = 0;
+      monitorTab.addEventListener('click', () => monitorNative++);
+      fireEvent.click(tab);
+      console.log('DIAG events', JSON.stringify({ native, captured, errs }));
+      fireEvent.click(monitorTab);
+      console.log('DIAG monitor', JSON.stringify({
+        monitorNative,
+        activeMonitorId: useDesktopStore.getState().activeMonitorId,
+      }));
+      useDesktopStore.getState().userFocusWindow('w1');
+      console.log('DIAG direct', JSON.stringify({
+        focused: useDesktopStore.getState().focusedWindowId,
+        zOrder: useDesktopStore.getState().zOrder,
+      }));
+      useDesktopStore.setState({ focusedWindowId: null, zOrder: [] });
       fireEvent.click(tab);
       const after = useDesktopStore.getState();
       console.log('DIAG after', JSON.stringify({
