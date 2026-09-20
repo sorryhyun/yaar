@@ -4,7 +4,7 @@
  * The drawing canvas is registered by DrawingOverlay on mount so that the
  * capture can be triggered from anywhere (e.g. the send flow).
  */
-import { PALETTE_DARK } from '@yaar/shared';
+import { PALETTE_DARK, captureScale } from '@yaar/shared';
 import { tryIframeSelfCapture } from '@/store';
 
 let drawingCanvas: HTMLCanvasElement | null = null;
@@ -181,8 +181,13 @@ export function scrubForXml(root: HTMLElement) {
  * custom properties, color-mix(), etc. Style inlining must happen BEFORE any
  * nodes are removed from the clone: querySelectorAll on the original and the
  * clone only pair up index-by-index while the two trees are still identical.
+ *
+ * `scale` is image pixels per CSS pixel — `captureScale`, not the display's
+ * devicePixelRatio, which this used to pass. The SVG renders at the canvas's
+ * resolution, so on the phone shell the extra scale is detail the agent reading
+ * the picture did not have before.
  */
-async function captureBodyViaForeignObject(dpr: number): Promise<HTMLCanvasElement | null> {
+async function captureBodyViaForeignObject(scale: number): Promise<HTMLCanvasElement | null> {
   try {
     const docEl = document.documentElement;
     const w = docEl.clientWidth;
@@ -224,10 +229,11 @@ async function captureBodyViaForeignObject(dpr: number): Promise<HTMLCanvasEleme
 
     const img = await loadImage(dataUri);
     const canvas = document.createElement('canvas');
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
     const ctx = canvas.getContext('2d')!;
-    ctx.scale(dpr, dpr);
+    ctx.scale(scale, scale);
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, w, h);
     return canvas;
   } catch {
@@ -259,7 +265,8 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
   if (!drawingCanvas) return null;
 
   try {
-    const dpr = window.devicePixelRatio || 1;
+    const docEl = document.documentElement;
+    const scale = captureScale(docEl.clientWidth, docEl.clientHeight);
 
     // Pre-capture visible iframes via self-capture (canvas/svg/DOM foreignObject)
     const iframes = document.querySelectorAll('iframe');
@@ -278,7 +285,7 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
       }),
     );
 
-    const screenshot = await captureBodyViaForeignObject(dpr);
+    const screenshot = await captureBodyViaForeignObject(scale);
     if (!screenshot) return strokesFallback();
 
     const compositeCanvas = document.createElement('canvas');
@@ -286,6 +293,9 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
     compositeCanvas.height = screenshot.height;
     const ctx = compositeCanvas.getContext('2d');
     if (!ctx) return strokesFallback();
+    // Each iframe capture is drawn at its own scale and resampled into the rect
+    // below; the default is a nearest-ish filter that undoes the extra detail.
+    ctx.imageSmoothingQuality = 'high';
 
     ctx.fillStyle = desktopBackgroundColor();
     ctx.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
@@ -294,7 +304,13 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
     // Overlay iframe captures at their screen positions
     for (const { rect, dataUrl } of iframeCaptures) {
       const img = await loadImage(dataUrl);
-      ctx.drawImage(img, rect.left * dpr, rect.top * dpr, rect.width * dpr, rect.height * dpr);
+      ctx.drawImage(
+        img,
+        rect.left * scale,
+        rect.top * scale,
+        rect.width * scale,
+        rect.height * scale,
+      );
     }
 
     // Overlay drawing strokes on top

@@ -35,4 +35,6 @@ export * from './yaar-uri.js';
 // Wire contracts of `yaar://system/fonts` and `POST /api/browser` — plain interfaces, no Zod.
 export * from './fonts.js';
 export * from './browser.js';
+// The one unit both screen captures resolve their canvas size in — no Zod, no DOM.
+export * from './capture-scale.js';
 export * from './design/index.js';

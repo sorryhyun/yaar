@@ -41,6 +41,7 @@
  * the composite believes it drew everything.
  */
 import { APP_MSG } from '../app-protocol.js';
+import { CAPTURE_TARGET_EDGE, MAX_CAPTURE_SCALE } from '../capture-scale.js';
 export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 (function() {
   // Hot-upgrade: remove previous handler so only the latest version responds
@@ -62,11 +63,27 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   /**
+   * Image pixels per CSS pixel for a w×h capture — the ES5 twin of \`captureScale\`
+   * in \`@yaar/shared/capture-scale\`, whose constants are interpolated below. An
+   * injected script string cannot import, so the rule lives in two places; the
+   * numbers do not.
+   */
+  function captureScale(w, h) {
+    var edge = Math.max(w, h);
+    if (!(edge > 0)) return 1;
+    return Math.min(${MAX_CAPTURE_SCALE}, Math.max(1, ${CAPTURE_TARGET_EDGE} / edge));
+  }
+
+  /**
    * Render an SVG/foreignObject to a canvas data URL, then call cb(dataUrl, reason).
    * On success the reason is undefined; on failure dataUrl is null and reason
    * names the cause.
+   *
+   * \`scale\` is image pixels per CSS pixel. The SVG is re-rendered at the canvas's
+   * size rather than blown up after the fact, so above 1 this is real resolution —
+   * which is the whole point on a phone-sized window. See \`capture-scale.ts\`.
    */
-  function svgToCanvas(svgStr, w, h, cb) {
+  function svgToCanvas(svgStr, w, h, scale, cb) {
     // Use data URL instead of blob URL — Chromium is less strict about
     // tainting canvas from data-URL SVGs than blob-URL SVGs.
     var dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
@@ -74,10 +91,13 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     img.onload = function() {
       try {
         var c = document.createElement('canvas');
-        c.width = w;
-        c.height = h;
+        c.width = Math.max(1, Math.round(w * scale));
+        c.height = Math.max(1, Math.round(h * scale));
         var ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
+        // Only the already-raster parts of the clone are resampled here; everything
+        // else is drawn by the SVG renderer at the canvas's own resolution.
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, c.width, c.height);
         cb(c.toDataURL('image/webp', 0.9));
       } catch (ex) {
         // drawImage/toDataURL only throw here for a tainted (cross-origin) canvas.
@@ -512,7 +532,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
           respondWithFallback(requestId, 'serialize-error', notes);
           return;
         }
-        svgToCanvas(svg, w, h, function(data, reason) {
+        svgToCanvas(svg, w, h, captureScale(w, h), function(data, reason) {
           // The canvas fallback can rescue the pixels, but not the picture: a
           // labelled success says which of the two arrived.
           if (data) { respond(requestId, data, undefined, notes); return; }

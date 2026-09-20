@@ -144,8 +144,14 @@ import { join, basename } from 'path';
  * and the `y-nav-*` family (full-bleed drawer, backdrop, 44px targets), and `@bundled/yaar`
  * gained `isNarrow`/`isTouch` and the collapsible panel's `drawer` mode. The stylesheet is
  * inlined into `dist/`, so an unrebuilt app keeps a desktop-only sheet on a phone.
+ *
+ * '33': the capture helper sizes its canvas by `captureScale` instead of rendering one
+ * image pixel per CSS pixel, so a window on the phone shell screenshots at ~2.4x rather
+ * than ~400px wide. The injected copy hot-upgrades the baked one, so a same-origin app
+ * gets this without a rebuild — but an origin-isolated app is not same-origin, nothing
+ * is injected into it, and the copy in `dist/` is the only one it has.
  */
-export const COMPILER_VERSION = '32';
+export const COMPILER_VERSION = '33';
 
 export interface BuildManifest {
   sourceHash: string;
