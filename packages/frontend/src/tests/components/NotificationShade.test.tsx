@@ -191,7 +191,7 @@ describe('NotificationShade', () => {
       }));
       const tab = screen.getByTitle('Notes');
       const errs: string[] = [];
-      window.addEventListener('error', (e: never) => errs.push(String((e as { message?: unknown }).message)));
+      window.addEventListener('error', (e) => errs.push(String(e.message)));
       let native = 0;
       let captured = 0;
       tab.addEventListener('click', () => native++);
