@@ -117,8 +117,11 @@ claude-bench:
 codex-types:
 	bun scripts/codegen/codex-types.js $(CODEX_BIN)
 
-# Regenerate design tokens + browsable preview cards from packages/shared/src/design.
-# Both generators read the real token module, so previews cannot drift from what ships.
+# Regenerate design tokens + preview cards from packages/shared/src/design.
+# Both generators read the real token module, so neither the browsable previews nor
+# the design canvas can drift from what ships. Set YAAR_DESIGN_OUT to build the cards
+# somewhere other than dist/ (which agents are denied read access to) before publishing
+# the canvas — see docs/architecture/design_system.md.
 design:
 	bun scripts/codegen/design-tokens.ts
 	bun scripts/codegen/design-previews.ts

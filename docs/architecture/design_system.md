@@ -108,7 +108,7 @@ session-logs) so a reader can tell an extension from an override at a glance.
 - Browsable previews: `make design` regenerates tokens + preview cards;
   `make design-preview` serves them at `http://127.0.0.1:4321/previews/` for visual
   review **without running the app** (override with `DESIGN_PREVIEW_PORT`). Also
-  published as the "YAAR Design System" project on claude.ai/design.
+  published as a design canvas — see "The review loop" below.
   - The cards render from the real token module, so **token values** (palette,
     contrast, type ramp, component fills) cannot drift from what ships.
   - The real shell CSS modules (typography / components / forms / renderers) are
@@ -119,3 +119,41 @@ session-logs) so a reader can tell an extension from an override at a glance.
   - Card **markup** is still hand-written, so DOM structure can drift from the real
     components even while the CSS stays honest. Verify structural changes (window
     chrome, grid layout, placement) in the running app.
+
+## The review loop
+
+The canvas — `YAAR_DESIGN_CANVAS` in `.env`, which `make design` prints — is the same
+twelve cards as one Design Artifact, and it exists because it is the only surface that
+can send feedback **back**. Comment on a card, send the thread to Claude, and the session
+reads it (`ArtifactComments`), changes the real code, regenerates, and republishes the
+same URL. A round trip, not a publish.
+
+```
+tokens.ts + the shell CSS modules → make design → canvas → comment → tokens.ts …
+```
+
+To republish it from an agent session:
+
+```bash
+YAAR_DESIGN_OUT=<a readable scratch dir> bun scripts/codegen/design-previews.ts
+```
+
+then publish `<dir>/project/` to `YAAR_DESIGN_CANVAS` with the Artifact tool. The override
+exists because `.claude/settings.json` denies reads under `dist/`, deliberately — build
+output does not belong in an agent's context, and publishing has to read them back.
+
+Two limits worth knowing before trusting a card:
+
+- **CSS is real, markup is not.** A comment about color, type, spacing, or a button's
+  padding lands in `tokens.ts` and comes back true. A comment about *structure* may be
+  fixing a hand-written card rather than a component — the caveat above, seen from the
+  other end. Making markup real too means server-rendering the actual components, which
+  needs the CSS-module class names to be hashed at build time for both at once.
+- **A comment only wakes a live session.** Close the terminal and comments queue up
+  silently; the next session has to go read them.
+
+The claude.ai/design project this used to publish to is gone. `DesignSync` has no method
+that reads comments — `list_projects / get_project / list_files / get_file /
+finalize_plan / write_files / delete_files / register_assets / unregister_assets /
+create_project / report_validate` — so that path could only ever push, and a design
+system you cannot answer is a slide deck.

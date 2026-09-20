@@ -1,19 +1,35 @@
 /**
- * Generates preview cards for the "YAAR Design System" project on claude.ai/design.
+ * Generates the design-system preview cards, in the two envelopes they are read in.
  *
- *   bun scripts/codegen/design-previews.ts     → dist/design-previews/
+ *   bun scripts/codegen/design-previews.ts
+ *     → dist/design-previews/previews/*.html   browsable over http, `make design-preview`
+ *     → dist/design-previews/project/          a Design-canvas Artifact: *.dc.html + canvas.json
  *
  * Renders from the SAME generators that style the product (@yaar/shared design
- * module), so the published previews cannot drift from what ships. Upload is done
- * via Claude Code's DesignSync tool (see docs/architecture/design_system.md);
- * dist/design-previews/cards.json carries the card metadata for registration.
+ * module), so neither envelope can drift from what ships — and because both are
+ * built from one `CARD_CSS` and one set of card bodies, they cannot drift from
+ * each other either.
+ *
+ * The canvas is the surface that closes the loop: it is the only one that can send
+ * a comment back to a Claude Code session (ArtifactComments), so a change asked for
+ * on a card can be made in tokens.ts and regenerated here. The claude.ai/design
+ * project this script used to feed had no such channel and is no longer published;
+ * see docs/architecture/design_system.md.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAppTokensCss } from '../../packages/shared/src/design/app-css.ts';
 import { buildShellTokensCss } from '../../packages/shared/src/design/shell-css.ts';
 
-const OUT = join(import.meta.dir, '../../dist/design-previews');
+/**
+ * `dist/` by default, which is where `make design-preview` serves from.
+ *
+ * Overridable because publishing the canvas has to read the generated files back,
+ * and `.claude/settings.json` denies reads under `dist/` — deliberately, to keep
+ * build output out of an agent's context. An agent republishing the canvas points
+ * this at its own scratchpad instead; nothing else cares where the files landed.
+ */
+const OUT = process.env.YAAR_DESIGN_OUT ?? join(import.meta.dir, '../../dist/design-previews');
 mkdirSync(join(OUT, 'previews'), { recursive: true });
 
 // Strip @font-face — the OTF files are served by the YAAR server, not claude.ai.
@@ -47,29 +63,95 @@ const shellModuleCss = SHELL_MODULES.map((p) =>
   readFileSync(join(import.meta.dir, '..', '..', p), 'utf8'),
 ).join('\n');
 
-function page(opts: { group: string; title: string; body: string; light?: boolean }): string {
-  const { group, title, body, light } = opts;
-  return `<!-- @dsCard group="${group}" -->
-<!doctype html>
+/**
+ * Everything both envelopes paint with: the two generated token blocks, the real
+ * shell modules, and the few scaffold rules the card bodies below use. One const
+ * so a browsable preview and its artboard twin cannot disagree about any of it.
+ */
+const CARD_CSS = `${shellCss}
+${appCss}
+${shellModuleCss}
+.demo{padding:var(--yaar-sp-4);display:flex;flex-direction:column;gap:var(--yaar-sp-4)}
+.demo-row{display:flex;align-items:center;gap:var(--yaar-sp-3);flex-wrap:wrap}
+.demo-note{font-family:var(--yaar-font-mono);font-size:var(--yaar-text-xs);color:var(--yaar-text-dim)}`;
+
+/** The card surface itself — on <body> in a preview, on the frame in an artboard. */
+const CARD_SURFACE =
+  'background:var(--yaar-bg);color:var(--yaar-text);font-family:var(--yaar-font);font-size:var(--yaar-text-base);line-height:1.5';
+
+function page(opts: { title: string; body: string; light?: boolean }): string {
+  const { title, body, light } = opts;
+  return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>${title}</title>
 <style>
-${shellCss}
-${appCss}
-${shellModuleCss}
+${CARD_CSS}
 html,body{margin:0;height:100%}
-body{background:var(--yaar-bg);color:var(--yaar-text);font-family:var(--yaar-font);font-size:var(--yaar-text-base);line-height:1.5}
-.demo{padding:var(--yaar-sp-4);display:flex;flex-direction:column;gap:var(--yaar-sp-4)}
-.demo-row{display:flex;align-items:center;gap:var(--yaar-sp-3);flex-wrap:wrap}
-.demo-note{font-family:var(--yaar-font-mono);font-size:var(--yaar-text-xs);color:var(--yaar-text-dim)}
+body{${CARD_SURFACE}}
 </style>
 </head>
 <body class="${light ? 'y-light' : ''}">
 <div class="demo">
 ${body}
 </div>
+</body>
+</html>
+`;
+}
+
+/**
+ * The same card as one Design-canvas artboard.
+ *
+ * Three things the .dc.html format requires and the preview envelope does not: the
+ * `support.js` head line verbatim, a root element sized exactly to the board's frame
+ * in canvas.json, and a `$preview` that agrees with it. What was `<head>` becomes
+ * `<helmet>`, and `.y-light` moves from <body> onto the frame — which works because
+ * that class only declares custom properties, so descendants inherit the substituted
+ * values wherever it sits.
+ *
+ * Deliberately no `data-props` levers. A tweak knob would let someone recolor the
+ * picture without touching tokens.ts, which is precisely the drift this system exists
+ * to prevent: the canvas is a mirror of the code, not a place to edit the palette.
+ */
+function artboard(opts: {
+  title: string;
+  body: string;
+  w: number;
+  h: number;
+  light?: boolean;
+}): string {
+  const { title, body, w, h, light } = opts;
+  const frameClass = light ? ' class="y-light"' : '';
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+${CARD_CSS}
+body{margin:0}
+</style>
+</helmet>
+<div${frameClass} style="width: ${w}px; height: ${h}px; box-sizing: border-box; overflow: hidden; ${CARD_SURFACE}">
+<div class="demo">
+${body}
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":${w},"height":${h}}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
 </body>
 </html>
 `;
@@ -438,22 +520,95 @@ const cards: Array<{
 for (const c of cards) {
   writeFileSync(
     join(OUT, 'previews', c.file),
-    page({ group: c.group, title: c.title, body: c.body, light: c.light }),
+    page({ title: c.title, body: c.body, light: c.light }),
   );
 }
 
+// ---- The same cards as a Design canvas -------------------------------------
+
+/** Headroom under each card, so a body that grew by a line is not clipped by its frame. */
+const BOARD_PAD = 24;
+const COL_GAP = 80;
+/** Air between rows: the canvas wants 120, and a group title needs its rise on top. */
+const ROW_GAP = 380;
+/** How far a title1 sits above the row it heads — the canvas asks for at least 223. */
+const TITLE_RISE = 300;
+/** Short group names would be shrunk to fit a narrow row; give every title this much. */
+const TITLE_MIN_W = 560;
+
+/**
+ * Pinned, not `new Date()`. This generator rewrites the whole index every run, and
+ * `createdOnFiles` is a field the canvas owns — a moving value would hand it a new
+ * birthday on each republish.
+ */
+const CANVAS_CREATED_AT = '2026-09-20T00:00:00Z';
+
+mkdirSync(join(OUT, 'project'), { recursive: true });
+
+/** The canvas entry has to be `Main.dc.html`; the rest keep their preview stem. */
+const boardName = (c: (typeof cards)[number], i: number) =>
+  i === 0 ? 'Main.dc.html' : `${c.file.replace(/\.html$/, '')}.dc.html`;
+
+const boards: Record<string, Record<string, unknown>> = {};
+const order: string[] = [];
+const notes: Record<string, Record<string, unknown>> = {};
+
+// One row per group, in the order the cards are declared, with the group name as a
+// title1 above it — which is what the canvas reads as at a zoomed-out glance.
+const groups = [...new Set(cards.map((c) => c.group))];
+let y = 0;
+for (const group of groups) {
+  const row = cards.map((c, i) => ({ c, i })).filter(({ c }) => c.group === group);
+  let x = 0;
+  let rowH = 0;
+  for (const { c, i } of row) {
+    const name = boardName(c, i);
+    const h = c.h + BOARD_PAD;
+    writeFileSync(
+      join(OUT, 'project', name),
+      artboard({ title: c.title, body: c.body, w: c.w, h, light: c.light }),
+    );
+    boards[name] = { x, y, w: c.w, h, title: c.title };
+    order.push(name);
+    x += c.w + COL_GAP;
+    rowH = Math.max(rowH, h);
+  }
+  notes[`g-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`] = {
+    x: 0,
+    y: y - TITLE_RISE,
+    text: group,
+    kind: 'title1',
+    maxW: Math.max(x - COL_GAP, TITLE_MIN_W),
+  };
+  y += rowH + ROW_GAP;
+}
+
 writeFileSync(
-  join(OUT, 'cards.json'),
-  JSON.stringify(
-    cards.map((c) => ({
-      name: c.title,
-      path: `previews/${c.file}`,
-      group: c.group,
-      viewport: { width: c.w, height: c.h },
-    })),
+  join(OUT, 'project', 'canvas.json'),
+  `${JSON.stringify(
+    {
+      v: 3,
+      createdOnFiles: { v: 1, at: CANVAS_CREATED_AT },
+      title: 'YAAR Design System',
+      launch: { view: 'canvas' },
+      pages: [],
+      designSystems: [],
+      boards,
+      order,
+      notes,
+    },
     null,
     2,
-  ),
+  )}\n`,
 );
 
-console.log(`Generated ${cards.length} preview cards in ${OUT}`);
+console.log(`Generated ${cards.length} cards in ${OUT} (previews/ + project/)`);
+
+// Where the canvas half of that goes. Kept in .env rather than here or in the docs
+// because the artifact is private — a link nobody else on the repo can open is not
+// worth checking in. Bun loads .env by itself, so `make design` just prints it.
+console.log(
+  process.env.YAAR_DESIGN_CANVAS
+    ? `Publish project/ to ${process.env.YAAR_DESIGN_CANVAS}`
+    : 'Set YAAR_DESIGN_CANVAS in .env to name the canvas project/ is published to.',
+);

@@ -212,6 +212,15 @@ When the main agent is **Fable**, always pass an explicit `model` to the `Agent`
 - ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
 - Prettier: semi, singleQuote, trailingComma all, tabWidth 2, printWidth 100
 
+## Design System
+
+Token values are hand-written in exactly one place (`packages/shared/src/design/tokens.ts`);
+every other surface — shell CSS, app iframes, the agent-facing reference — is generated
+from it, and a frontend test fails if the checked-in `tokens.css` drifts. `make design`
+regenerates both the tokens and the preview cards, which publish as a design canvas whose
+comments come back to a Claude Code session and turn into real edits. The rules, the
+exception registry, and that review loop: [`docs/architecture/design_system.md`](./docs/architecture/design_system.md).
+
 ## Apps System
 
 Convention-based: each folder in `apps/` becomes an app (`app.json` metadata, `protocol.json`
