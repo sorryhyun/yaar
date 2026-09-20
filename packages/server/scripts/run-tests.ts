@@ -22,6 +22,7 @@
  */
 
 import { Glob } from 'bun';
+import { join } from 'path';
 
 import { type Partition, partitionOf } from '../../../scripts/test/partitions.ts';
 import {
@@ -35,7 +36,10 @@ import {
 /** Test processes to keep in flight at once. */
 const MAX_CONCURRENT = 4;
 
-const PACKAGE_DIR = new URL('../', import.meta.url).pathname;
+// `import.meta.dir`, not `new URL(...).pathname`: a file URL's pathname keeps the URL's
+// leading slash, so on Windows this read `/C:/Users/.../packages/server/` and every spawn
+// from it died with ENOENT before a single test ran.
+const PACKAGE_DIR = join(import.meta.dir, '..');
 const REPO_PREFIX = 'packages/server/';
 
 interface Group {

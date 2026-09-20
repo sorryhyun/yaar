@@ -56,7 +56,11 @@ function resolveVendoredCodex(): string | null {
   const target = CODEX_VENDOR_TARGETS[`${process.platform}-${process.arch}`];
   if (!target) return null;
 
-  const require = createRequire(import.meta.url);
+  // Anchored on `import.meta.dir`, not `import.meta.url`: under `--bytecode` both carry
+  // the build machine's source path, and `createRequire` of a POSIX *file URL* throws on
+  // Windows the way `config/env.ts` used to. A path it cannot resolve from just means the
+  // vendored binary is not found, which is the answer this function already has a null for.
+  const require = createRequire(join(import.meta.dir, 'codex.ts'));
   const roots: string[] = [];
   for (const pkg of [target.pkg, '@openai/codex']) {
     try {

@@ -9,7 +9,6 @@
 
 import { join, dirname } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
 
 export function getEnvInt(key: string, defaultValue: number): number {
   return parseInt(process.env[key] ?? String(defaultValue), 10);
@@ -19,7 +18,20 @@ export function getEnvInt(key: string, defaultValue: number): number {
 declare const __YAAR_BUNDLED: boolean | undefined;
 export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BUNDLED;
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+/**
+ * Directory of this module.
+ *
+ * `import.meta.dir`, never `fileURLToPath(import.meta.url)`. The exe is compiled with
+ * `--bytecode`, whose CommonJS conversion bakes both of those to the **build machine's**
+ * source directory — the same root cause `exe-assets.ts` probes its way around. As a bare
+ * path string that is merely a directory which does not exist, and costs nothing: the exe
+ * hangs every path it needs off `process.execPath` (PROJECT_ROOT, just below), and only
+ * the dev branch reads this. As a *URL* it is fatal on Windows, and was — the release
+ * workflow cross-compiles all five targets on Linux, so the shipped Windows binary carried
+ * `file:///home/runner/...`, `fileURLToPath` refuses a Windows path with no drive letter,
+ * and v0.20.2 died of ERR_INVALID_FILE_URL_PATH on its first import, before `main()` ran.
+ */
+const __dirname = import.meta.dir;
 
 /**
  * Project root directory.

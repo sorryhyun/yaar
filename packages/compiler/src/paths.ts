@@ -9,8 +9,7 @@
  * moving a module changed what it could find.
  */
 
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 
 /** Normalize a path to forward slashes; see `toForwardSlash` in `bundled/registry.ts`. */
 const fwd = (p: string): string => p.replace(/\\/g, '/');
@@ -19,8 +18,15 @@ const fwd = (p: string): string => p.replace(/\\/g, '/');
  * The root of this package's module tree: `src/` under `bun`/tsx, `dist/` once
  * built. This file sits directly in it, which is the whole reason it is here and
  * not in a subdirectory.
+ *
+ * `import.meta.dir`, never `fileURLToPath(import.meta.url)`: inside the `--bytecode`
+ * exe both are baked to the build machine's source directory, and a *URL* spelling of
+ * a Linux path is one `fileURLToPath` call away from throwing on Windows (see
+ * `config/env.ts` in the server, which shipped that crash once). The stale path itself
+ * is harmless — in the exe every `@bundled/*` import resolves from the embedded libs,
+ * and this node_modules-anchored ladder is the dev-only fallback below it.
  */
-export const MODULE_ROOT = fwd(dirname(fileURLToPath(import.meta.url)));
+export const MODULE_ROOT = fwd(import.meta.dir);
 
 /** `packages/compiler` — where the bundled libraries are installed as devDependencies. */
 export const PACKAGE_ROOT = fwd(join(MODULE_ROOT, '..'));
