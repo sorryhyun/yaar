@@ -13,8 +13,9 @@
 import type { SliceCreator, MonitorSlice, DesktopStore } from '../types';
 import { DEFAULT_MONITOR_ID, ClientEventType } from '@yaar/shared';
 import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
+import { stepMonitorIndex } from '@/lib/gestures';
 
-export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
+export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, get) => ({
   monitors: [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }],
   activeMonitorId: DEFAULT_MONITOR_ID,
 
@@ -75,4 +76,22 @@ export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
         state.activeMonitorId = id;
       }
     }),
+
+  /**
+   * Step along the monitor list. The phone's edge swipe is the caller: it hands over a
+   * direction and needs to know whether anything happened, because a swipe that found
+   * no monitor to go to should leave the touch alone rather than eat it.
+   */
+  switchMonitorBy: (delta) => {
+    const { monitors, activeMonitorId } = get();
+    const at = monitors.findIndex((m) => m.id === activeMonitorId);
+    if (at === -1) return null;
+    const next = stepMonitorIndex(at, monitors.length, delta);
+    if (next === null) return null;
+    const id = monitors[next].id;
+    set((state) => {
+      state.activeMonitorId = id;
+    });
+    return id;
+  },
 });

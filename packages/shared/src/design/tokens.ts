@@ -225,6 +225,11 @@ export const TRANSITIONS = {
 /** Shell stacking order. */
 export const Z_INDEX = {
   window: 9000,
+  /**
+   * The phone's edge gutters: over every window, under the palette and the shade they
+   * open — a gesture layer that catches the touches an app iframe would swallow.
+   */
+  gesture: 9997,
   panel: 9998,
   modal: 9999,
   toast: 10000,

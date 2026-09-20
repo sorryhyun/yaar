@@ -32,6 +32,11 @@
       "agentsStopped": "{{count}} agents stopped",
       "contextReset": "Context reset",
       "contextResetMonitor": "Context reset on {{monitor}}"
+    },
+    "sheet": {
+      "hint": "Ask anything…",
+      "open": "Open the input field",
+      "close": "Close the input field"
     }
   },
   "settings": {
@@ -166,5 +171,13 @@
   "desktop": {
     "iconsLoadFailed": "Couldn't load your apps.",
     "retry": "Retry"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "clearAll": "Clear all",
+    "dismiss": "Dismiss",
+    "open": "Open notifications ({{count}})",
+    "close": "Close notifications"
   }
 }

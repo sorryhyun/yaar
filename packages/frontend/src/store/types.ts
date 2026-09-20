@@ -198,6 +198,15 @@ export interface UiSliceState {
    * Only in effect while that card is the one on top — see `selectFullscreenCardId`.
    */
   fullscreenWindowId: string | null;
+  /**
+   * Whether the phone's command palette is pulled up. It is a bottom sheet there:
+   * collapsed to a handle by default so the screen belongs to the content, raised by
+   * a pull-up from the bottom edge or a tap on the handle. Meaningless on a desktop,
+   * where the palette is always on screen.
+   */
+  paletteSheetOpen: boolean;
+  /** Whether the phone's notification shade is pulled down. See `NotificationShade`. */
+  notificationShadeOpen: boolean;
 }
 
 export interface UiSliceActions {
@@ -206,6 +215,8 @@ export interface UiSliceActions {
   setSelectedWindows: (ids: string[]) => void;
   setFormFactor: (formFactor: FormFactor) => void;
   toggleFullscreenWindow: (windowId: string) => void;
+  setPaletteSheetOpen: (open: boolean) => void;
+  setNotificationShadeOpen: (open: boolean) => void;
 }
 
 export type UiSlice = UiSliceState & UiSliceActions;
@@ -391,6 +402,12 @@ export interface MonitorSliceActions {
   /** Apply the session's authoritative monitor list. `focus` switches this tab to it. */
   setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
   switchMonitor: (id: string) => void;
+  /**
+   * Switch `delta` monitors along the list, clamped at both ends. Returns the id it
+   * moved to, or `null` when the edge of the list stopped it — the phone's edge swipe
+   * uses that answer to decide whether it consumed the touch.
+   */
+  switchMonitorBy: (delta: number) => string | null;
 }
 
 export type MonitorSlice = MonitorSliceState & MonitorSliceActions;

@@ -158,6 +158,7 @@ ${Object.entries(SPACING)
 
   /* === Z-Index Scale === */
   --z-window: ${Z_INDEX.window};
+  --z-gesture: ${Z_INDEX.gesture};
   --z-panel: ${Z_INDEX.panel};
   --z-modal: ${Z_INDEX.modal};
   --z-toast: ${Z_INDEX.toast};

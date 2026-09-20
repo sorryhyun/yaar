@@ -31,6 +31,11 @@
       "agentsStopped": "{{count}} agentes parados",
       "contextReset": "Contexto redefinido",
       "contextResetMonitor": "Contexto redefinido em {{monitor}}"
+    },
+    "sheet": {
+      "hint": "Pergunte qualquer coisa…",
+      "open": "Abrir o campo de entrada",
+      "close": "Fechar o campo de entrada"
     }
   },
   "settings": {
@@ -164,5 +169,13 @@
   "desktop": {
     "iconsLoadFailed": "Não foi possível carregar seus apps.",
     "retry": "Tentar novamente"
+  },
+  "notifications": {
+    "title": "Notificações",
+    "empty": "Sem notificações",
+    "clearAll": "Limpar tudo",
+    "dismiss": "Dispensar",
+    "open": "Abrir notificações ({{count}})",
+    "close": "Fechar notificações"
   }
 }

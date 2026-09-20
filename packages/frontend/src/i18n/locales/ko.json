@@ -31,6 +31,11 @@
       "agentsStopped": "에이전트 {{count}}개 중지됨",
       "contextReset": "컨텍스트 초기화됨",
       "contextResetMonitor": "{{monitor}} 컨텍스트 초기화됨"
+    },
+    "sheet": {
+      "hint": "무엇이든 물어보세요",
+      "open": "입력창 열기",
+      "close": "입력창 닫기"
     }
   },
   "settings": {
@@ -161,5 +166,13 @@
   "desktop": {
     "iconsLoadFailed": "앱을 불러오지 못했습니다.",
     "retry": "다시 시도"
+  },
+  "notifications": {
+    "title": "알림",
+    "empty": "알림 없음",
+    "clearAll": "모두 지우기",
+    "dismiss": "닫기",
+    "open": "알림 열기 ({{count}})",
+    "close": "알림 닫기"
   }
 }

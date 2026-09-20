@@ -5,6 +5,7 @@ export { CursorSpinner } from './CursorSpinner';
 export { DebugPanel } from './DebugPanel';
 export { LoadingScreen } from './LoadingScreen';
 export { NotificationCenter } from './NotificationCenter';
+export { NotificationShade } from './NotificationShade';
 export { RecentActionsPanel } from './RecentActionsPanel';
 export { RestorePromptBanner } from './RestorePromptBanner';
 export { TerminalPane } from './TerminalPane';

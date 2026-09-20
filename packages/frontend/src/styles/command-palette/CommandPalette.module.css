@@ -409,6 +409,67 @@
   font-size: var(--text-base);
 }
 
+/* ============ Phone bottom sheet ============
+   Collapsed, the whole container is translated down by its own height less the handle,
+   so exactly the handle is left on screen and nothing has to know how tall the sheet
+   is. The palette measures the handle to publish --palette-h in that state. */
+.sheetHandle {
+  display: none;
+}
+
+:global(html[data-form-factor='mobile']) .container {
+  --sheet-handle-h: calc(30px + env(safe-area-inset-bottom, 0px));
+  transition: transform var(--duration-normal) ease;
+}
+
+:global(html[data-form-factor='mobile']) .sheetHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  /* The handle is the one thing a finger can grab down here, so the browser must not
+     also read a drag on it as the start of a page scroll or a pull-to-refresh. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sheetGrip {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-overlay);
+}
+
+.sheetHint {
+  /* The handle is not self-explanatory on a first run, and it is the only way to the
+     input field — so collapsed it says what it opens. */
+  color: var(--color-muted);
+}
+
+:global(html[data-form-factor='mobile']) .container[data-collapsed] {
+  padding-bottom: 0;
+  transform: translateY(calc(100% - var(--sheet-handle-h)));
+}
+
+:global(html[data-form-factor='mobile']) .container[data-collapsed] .sheetHandle {
+  height: var(--sheet-handle-h);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
 /* Keyframes live in the module that names them: the CSS-modules pass scopes an
    animation name at both its definition and its references, so a name defined in a
    global stylesheet is unreachable from here. */

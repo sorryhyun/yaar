@@ -31,6 +31,11 @@
       "agentsStopped": "{{count}}個のエージェントを停止しました",
       "contextReset": "コンテキストをリセットしました",
       "contextResetMonitor": "{{monitor}}のコンテキストをリセットしました"
+    },
+    "sheet": {
+      "hint": "何でも聞いてください",
+      "open": "入力欄を開く",
+      "close": "入力欄を閉じる"
     }
   },
   "settings": {
@@ -164,5 +169,13 @@
   "desktop": {
     "iconsLoadFailed": "アプリを読み込めませんでした。",
     "retry": "再試行"
+  },
+  "notifications": {
+    "title": "通知",
+    "empty": "通知はありません",
+    "clearAll": "すべて消去",
+    "dismiss": "閉じる",
+    "open": "通知を開く ({{count}})",
+    "close": "通知を閉じる"
   }
 }

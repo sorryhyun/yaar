@@ -36,6 +36,7 @@ import { useShallow } from 'zustand/react/shallow';
 import {
   ToastContainer,
   NotificationCenter,
+  NotificationShade,
   ConfirmDialog,
   UserPrompt,
   CursorSpinner,
@@ -47,6 +48,7 @@ import { resolveWallpaper, resolveAccent, resolveIconSize } from '@/constants/ap
 import { beginShellDrag } from '@/lib/selection';
 import { DesktopStatusBar } from './DesktopStatusBar';
 import { DesktopIcons } from './DesktopIcons';
+import { PhoneGestures } from './PhoneGestures';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 export function DesktopSurface() {
@@ -448,12 +450,19 @@ export function DesktopSurface() {
           ))}
         </QueueAwareComponentActionProvider>
 
-        {/* Notification center (top-right) */}
+        {/* Notification center (top-right) — the phone shows the same notifications in
+            a pull-down shade instead, outside the desktop so a card cannot cover it. */}
         <NotificationCenter />
 
         {/* Cursor spinner when AI is thinking */}
         <CursorSpinner />
       </div>
+
+      <NotificationShade />
+      {/* Edge gestures: swipe in from the side to change monitor, pull down for the
+          shade. Above the desktop so the gutters sit over the cards they have to
+          catch touches in front of. */}
+      <PhoneGestures />
 
       <DrawingOverlay />
       {/* A phone keeps the palette under every window — it is the only way to talk to the

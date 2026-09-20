@@ -52,6 +52,20 @@ src/
 
 `lib/formFactor.ts` picks `formFactor` (`'mobile' | 'desktop'`, ui slice) by media query — coarse pointer + narrow viewport, never UA — and `?ui=mobile|desktop|auto` pins/unpins it. `useFormFactorSync` mirrors it to `<html data-form-factor>`, which CSS Modules branch on via `:global(html[data-form-factor='mobile'])`. On mobile a standard window renders as a full-screen *card* (`data-card`, no drag/resize) sized above the command palette via the `--palette-h` var the palette publishes. A card's ⤢ title-bar button is the phone's maximize: it sets `fullscreenWindowId` (ui slice) and the card covers the palette (monitor/window tabs included) too; `selectFullscreenCardId` honours it only while that card is focused, so closing, minimizing or covering the card brings the palette back. The server gets the form factor through `SUBSCRIBE_MONITOR` and tells the monitor agent with a `<device>` block each turn.
 
+### Phone gestures
+
+Three edges, recognised by `lib/gestures.ts` (pure: `swipeDirection`, `edgeZone`, `stepMonitorIndex`) and wired by `components/desktop/PhoneGestures.tsx`.
+
+| Gesture | Effect | How the touch is caught |
+|---|---|---|
+| Pull **up** from the bottom handle | Raises the command palette (`paletteSheetOpen`, ui slice) and focuses the input | The handle is shell DOM at the bottom edge — `CommandPalette` owns this one |
+| Swipe in from the **left/right** edge | Previous / next monitor (`switchMonitorBy`, clamped — no wrap) | 20px gutters at `--z-gesture`, the only gesture that needs an element, because an app card is an iframe and a touch inside it reaches no listener here. A gutter touch that was a tap is replayed to the element underneath |
+| Pull **down** from the top | Opens the notification shade (`notificationShadeOpen`, ui slice) | `document` listeners — the top of the screen is a title bar or the home grid, both shell DOM, so nothing is covered and no tap is stolen |
+
+The palette is a **bottom sheet** on a phone: collapsed to a labelled handle by default, so the screen belongs to the card. Collapsed it is translated down by its own height less the handle, and `--palette-h` is published from the handle's height instead of the container's — a rect read mid-transition would hand the cards a height about to be wrong. The sheet body is `inert` while collapsed so its textarea cannot be focused off the bottom edge. The two sheets are mutually exclusive: raising one lowers the other.
+
+Notifications render in `NotificationShade` on a phone and in `NotificationCenter` on a desktop, because a top-right stack lands on a card's title bar. The auto-dismiss timers stay in `NotificationCenter` either way, so one component owns expiry; a badge marks a shade with something in it.
+
 ## CLI Panel
 
 `Shift+Tab` toggles `cliMode` (`store/slices/cliSlice.ts`), rendering `CliPanel` — a tmux-style grid of `TerminalPane`s streaming each monitor's agent. The panel also carries a **Monitor / Session ("act as me")** target toggle (`cliTarget` in the cli slice): `'session'` routes typed messages to the session agent — the user's deputy that can drive the real browser via `yaar://session/browser`. `sendMessage` (in `useAgentConnection`) attaches `target: 'session'` to `USER_MESSAGE` only while the CLI panel is open and the toggle is set; the main command palette always stays on the monitor agent.

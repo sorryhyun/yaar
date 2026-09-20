@@ -125,6 +125,7 @@
 
   /* === Z-Index Scale === */
   --z-window: 9000;
+  --z-gesture: 9997;
   --z-panel: 9998;
   --z-modal: 9999;
   --z-toast: 10000;

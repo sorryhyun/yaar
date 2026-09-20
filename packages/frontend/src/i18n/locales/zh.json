@@ -31,6 +31,11 @@
       "agentsStopped": "已停止 {{count}} 个助手",
       "contextReset": "上下文已重置",
       "contextResetMonitor": "已重置 {{monitor}} 的上下文"
+    },
+    "sheet": {
+      "hint": "问点什么…",
+      "open": "打开输入框",
+      "close": "关闭输入框"
     }
   },
   "settings": {
@@ -164,5 +169,13 @@
   "desktop": {
     "iconsLoadFailed": "无法加载应用。",
     "retry": "重试"
+  },
+  "notifications": {
+    "title": "通知",
+    "empty": "没有通知",
+    "clearAll": "全部清除",
+    "dismiss": "关闭",
+    "open": "打开通知 ({{count}})",
+    "close": "关闭通知"
   }
 }
