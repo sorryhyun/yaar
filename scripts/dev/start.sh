@@ -71,6 +71,7 @@ bun run --filter @yaar/compiler build
 # the URL (which also brings the debug port up).
 CHROME_PID=""
 CHROME_PIDFILE=""
+MOBILE_PID=""
 
 # Kill a Chrome this script started in a previous run but never cleaned up —
 # e.g. the terminal/pane was closed (SIGHUP), the shell was force-killed, or the
@@ -131,8 +132,13 @@ launch_chrome_when_ready() {
 
   local port="${CHROME_DEBUG_PORT:-9222}"
   # A non-default profile is mandatory: Chrome refuses remote debugging on the
-  # default profile (the one holding your real logins).
-  local profile="${YAAR_CHROME_PROFILE:-$HOME/.yaar-chrome}"
+  # default profile (the one holding your real logins). Phone mode gets a profile of
+  # its own so the two sessions do not share a window size, a localStorage or a
+  # logged-in desktop — `make claude-dev` and `make claude-dev-mobile` are meant to be
+  # two devices, not one browser being redecorated.
+  local default_profile="$HOME/.yaar-chrome"
+  [ "${MOBILE:-0}" = "1" ] && default_profile="$HOME/.yaar-chrome-mobile"
+  local profile="${YAAR_CHROME_PROFILE:-$default_profile}"
   # Record the fresh-launched Chrome's PID so a future run can reap it (see
   # reap_stale_chrome). Derive the pidfile from the *unix* profile path, before
   # any cygpath conversion, so bash can read/write it on Git Bash too.
@@ -170,6 +176,16 @@ launch_chrome_when_ready() {
   local gpu_flags=()
   [ "$(uname -s)" = "Linux" ] && gpu_flags=(--enable-features=Vulkan
     --enable-dawn-features=vulkan_enable_f16_on_nvidia)
+
+  # Phone mode opens phone-shaped. This is the first approximation only — it applies to a
+  # fresh Chrome and not to one this just hands a tab to, and it sizes the window rather
+  # than the page. emulate-mobile.ts corrects both once it is attached.
+  # --touch-events=enabled is the other half: it makes `'ontouchstart' in window` and the
+  # TouchEvent constructors exist, which is decided once at renderer start and so cannot
+  # be turned on later over CDP. The CDP side supplies the actual touches.
+  local window_flags=()
+  [ "${MOBILE:-0}" = "1" ] && window_flags=(--window-size="${YAAR_MOBILE_WINDOW:-412,960}"
+    --touch-events=enabled)
 
   (
     # Wait up to ~60s for the server to start answering before opening the tab.
@@ -210,8 +226,8 @@ launch_chrome_when_ready() {
     # deliberate for now: we are measuring, not shipping. Remove once the pointer-lock
     # path is understood.
     exec "$bin" --remote-debugging-port="${port}" --user-data-dir="${profile}" \
-      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${tls_flags[@]}" \
-      --app="${open_url}" >/dev/null 2>&1
+      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${window_flags[@]}" \
+      "${tls_flags[@]}" --app="${open_url}" >/dev/null 2>&1
   ) &
   CHROME_PID=$!
   # exec (above) replaces the subshell in place, so CHROME_PID becomes the Chrome
@@ -220,6 +236,22 @@ launch_chrome_when_ready() {
   # handoff exits immediately and this PID goes dead; the reaper's liveness +
   # command check then skips it.)
   echo "$CHROME_PID" > "$pidfile" 2>/dev/null || true
+}
+
+# Phone mode (MOBILE=1, set by `make claude-dev-mobile`). Chrome is already opening
+# phone-shaped; what is missing is touch, and a mouse cannot supply it. emulate-mobile.ts
+# attaches over the debug port and turns mouse drags into real touch streams, which is
+# what makes the phone gestures testable on a PC at all. It has to stay attached — CDP
+# drops a client's emulation overrides when the client goes away — so it runs until
+# cleanup kills it. See the script's header for what it sets and why nothing pins ?ui=.
+start_mobile_emulation() {
+  [ "${MOBILE:-0}" = "1" ] || return 0
+  if [ "${LAUNCH_CHROME:-0}" != "1" ]; then
+    echo "[mobile] LAUNCH_CHROME is off, so there is no Chrome here to put into phone mode"
+    return 0
+  fi
+  bun scripts/dev/emulate-mobile.ts &
+  MOBILE_PID=$!
 }
 
 # Cleanup function. Guarded so the EXIT trap can't re-run it after an explicit
@@ -231,15 +263,22 @@ cleanup() {
   echo ""
   echo "Shutting down..."
 
+  # Every line below ends in `|| true`, and that is not decoration. `set -e` is on, and
+  # `[ -n "$PID" ] && kill ...` puts the kill last in an && list, which is exactly the
+  # position -e still watches. So killing a process that had already exited — the force
+  # kill below, once the graceful one worked — aborted the trap right there, and every
+  # step after it never ran. That is where the orphaned Chromes reap_stale_chrome exists
+  # to clean up came from: cleanup was dying one line before it got to the browser.
+
   # Kill process groups (negative PID kills the group). SERVER_PID may be unset
   # if we abort during the build steps before the server starts.
-  [ -n "$SERVER_PID" ] && kill -TERM -$SERVER_PID 2>/dev/null
+  [ -n "$SERVER_PID" ] && kill -TERM -$SERVER_PID 2>/dev/null || true
 
   # Give the server time to gracefully stop child processes (e.g. codex app-server)
   sleep 3
 
   # Force kill if still running
-  [ -n "$SERVER_PID" ] && kill -KILL -$SERVER_PID 2>/dev/null
+  [ -n "$SERVER_PID" ] && kill -KILL -$SERVER_PID 2>/dev/null || true
 
   # Clean up any orphaned codex app-server processes
   pkill -f "codex app-server" 2>/dev/null || true
@@ -248,8 +287,12 @@ cleanup() {
   # reused, this PID already exited (the open-a-tab handoff returns immediately),
   # so we never kill a browser we didn't start. The profile dir persists, so
   # logins survive across runs.
-  [ -n "$CHROME_PID" ] && kill -TERM "$CHROME_PID" 2>/dev/null
-  [ -n "$CHROME_PIDFILE" ] && rm -f "$CHROME_PIDFILE" 2>/dev/null
+  [ -n "$CHROME_PID" ] && kill -TERM "$CHROME_PID" 2>/dev/null || true
+  [ -n "$CHROME_PIDFILE" ] && rm -f "$CHROME_PIDFILE" 2>/dev/null || true
+
+  # Dropping the CDP client is what gives Chrome its desktop pointer back, so this also
+  # undoes the emulation rather than just stopping a poller.
+  [ -n "$MOBILE_PID" ] && kill -TERM "$MOBILE_PID" 2>/dev/null || true
 
   exit 0
 }
@@ -276,9 +319,11 @@ SERVER_PID=$!
 
 # Open a local debuggable Chrome on the YAAR desktop once the server is up (opt-in).
 launch_chrome_when_ready
+start_mobile_emulation
 
 echo ""
 echo "YAAR running at http://localhost:${PORT}"
+[ "${MOBILE:-0}" = "1" ] && echo "Phone mode: drag with the mouse and it arrives as touch"
 echo "Press Ctrl+C to stop"
 
 # Wait for server

@@ -22,6 +22,7 @@ make dev                         # Start with auto-detected provider (single por
 make claude                      # Start with Claude provider (REMOTE=1, serves from port 8000)
 make codex                       # Start with Codex provider (REMOTE=1, serves from port 8000)
 make claude-dev                  # Claude provider without MCP auth (local dev)
+make claude-dev-mobile           # Same, but the browser is a phone (see MOBILE below)
 make codex-dev                   # Codex provider without MCP auth (local dev)
 make termux                      # Claude provider on Android/Termux (unpacks claude to JS for Android Bun)
 make build                       # Build all packages
@@ -66,6 +67,7 @@ happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 - `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`
 - `YAAR_REMOTE_TOKEN` - Use this remote-mode token instead of a freshly minted one (lets a launcher know the `#remote=<token>` URL up front). Ignored under 32 chars.
 - `LAUNCH_CHROME` - `1` opens a local debuggable Chrome on the desktop once the server is up (set by `make claude`/`make claude-dev`)
+- `MOBILE` - `1` makes that Chrome a phone: its own profile, a phone-shaped window, and — over CDP, from `scripts/dev/emulate-mobile.ts` — mouse drags arriving as real touch events, which is the only way the phone shell's gestures are testable on a PC. Nothing pins `?ui=`: a coarse pointer in a narrow window is what the shell's own media query asks for, so a desktop layout means the emulation did not land. Viewport from `YAAR_MOBILE_VIEWPORT=WxH` (default `412x915`). Set by `make claude-dev-mobile`; works on any target (`MOBILE=1 make codex-dev`)
 - `YAAR_FREEDPI` - routes outbound TLS through a local fragmenting CONNECT proxy to get past SNI-matching DPI. **On by default**, `0` turns it off; hosts are learned, not configured, so an unblocked network pays a loopback hop and nothing else. See `docs/reference/server_env.md`
 - `CLAUDE_CODE_PATH` - Absolute path to the `claude` binary. Overrides discovery (bundled exe → `~/.local/bin/claude` → `PATH`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - Inherited by the spawned `claude` CLI for non-interactive auth (alternative to `claude login`).

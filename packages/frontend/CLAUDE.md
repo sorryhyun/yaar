@@ -68,6 +68,8 @@ Because the pan is visible it no longer has to start at an edge. `dragAxis` lock
 
 The palette is a **bottom sheet** on a phone: collapsed to a labelled handle by default, so the screen belongs to the card. Collapsed it is translated down by its own height less the handle, and `--palette-h` is published from the handle's height instead of the container's — a rect read mid-transition would hand the cards a height about to be wrong. The sheet body is `inert` while collapsed so its textarea cannot be focused off the bottom edge. The two sheets are mutually exclusive: raising one lowers the other.
 
+To try any of this on a PC: `make claude-dev-mobile`. A narrow window is only half of a phone — the other half is touch, which a mouse does not produce — so it opens a phone-shaped Chrome on its own profile and `scripts/dev/emulate-mobile.ts` attaches over CDP to turn mouse drags into real touch streams. See the `MOBILE` entry in the root `CLAUDE.md`.
+
 The pull-up raises the sheet on **touchmove**, as soon as the pull has said "up", so the slide and the rest of the drag overlap. The keyboard is a separate problem: a phone opens it only for a `focus()` that a user gesture is still activating, so `openSheetWithKeyboard` focuses from inside the touchend/click handler — clearing `inert` on the node first, since React has not re-rendered yet — rather than from the effect keyed on `sheetOpen`. That effect stays as the fallback for every other way the sheet can open.
 
 Notifications render in `NotificationShade` on a phone and in `NotificationCenter` on a desktop, because a top-right stack lands on a card's title bar. The auto-dismiss timers stay in `NotificationCenter` either way, so one component owns expiry; a badge marks a shade with something in it.

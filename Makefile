@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev termux claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench codex-types design design-preview
+.PHONY: dev claude codex claude-dev claude-dev-mobile codex-dev termux claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench codex-types design design-preview
 
 # GNU make on Windows runs recipes with cmd.exe by default, which can't parse
 # the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
@@ -38,6 +38,15 @@ codex-windows:
 # session agent's real-browser door (yaar://session/browser) can attach.
 claude-dev:
 	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev/start.sh claude
+
+# Same, but the browser is a phone: a phone-shaped window on its own Chrome profile,
+# with mouse drags arriving as touch events so the phone gestures actually work on a
+# PC. No ?ui= pin — a coarse pointer in a narrow window is what the shell's own media
+# query asks for, so a desktop layout here means the emulation did not land.
+# Size it with YAAR_MOBILE_VIEWPORT=WxH (default 412x915). MOBILE=1 works on any of
+# the targets above: MOBILE=1 make codex-dev.
+claude-dev-mobile:
+	@MOBILE=1 MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev/start.sh claude
 
 # Run with Claude provider on Android (Termux): unpacks the SDK's claude binary to JS
 # so the Android build of Bun can run it. See scripts/dev/start-termux.sh.

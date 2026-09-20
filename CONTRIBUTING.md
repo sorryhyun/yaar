@@ -127,6 +127,7 @@ authenticated.
 bun install          # install all workspace deps
 make dev             # start with auto-detected provider (http://localhost:5173)
 make claude-dev      # Claude provider, no MCP auth (local dev)
+make claude-dev-mobile  # Same, in a phone-shaped Chrome whose mouse drags are touches
 make codex-dev       # Codex provider, no MCP auth (local dev)
 ```
 
