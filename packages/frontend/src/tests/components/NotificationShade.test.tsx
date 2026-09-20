@@ -12,6 +12,7 @@ import { useDesktopStore } from '@/store';
 import { NotificationShade } from '@/components/overlays/NotificationShade';
 import { DesktopStatusBar } from '@/components/desktop/DesktopStatusBar';
 import { SHADE_SETTLE_MS } from '@/lib/gestures';
+import { produce } from 'immer';
 
 const noop = mock(() => {});
 
@@ -189,6 +190,19 @@ describe('NotificationShade', () => {
           frozenW1: s0.windows.w1 ? Object.isFrozen(s0.windows.w1) : null,
         }),
       );
+      const immerOut = produce({ a: { b: 1 } }, (d) => {
+        d.a.b = 2;
+      });
+      console.log('DIAG immer', JSON.stringify({ immerOut }));
+      useDesktopStore.setState((st) => {
+        console.log(
+          'DIAG inside-recipe',
+          JSON.stringify({ keys: Object.keys(st.windows), hasW1: !!st.windows.w1 }),
+        );
+        st.focusedWindowId = 'probe';
+      });
+      console.log('DIAG after-raw-set', useDesktopStore.getState().focusedWindowId);
+      useDesktopStore.setState({ focusedWindowId: null });
       useDesktopStore.getState().userFocusWindow('w1');
       const s1 = useDesktopStore.getState();
       console.log(
