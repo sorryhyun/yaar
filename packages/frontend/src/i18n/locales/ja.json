@@ -142,6 +142,7 @@
     }
   },
   "status": {
+    "title": "ステータス",
     "connected": "接続済み ({{provider}})",
     "connecting": "接続中...",
     "disconnected": "切断されました",

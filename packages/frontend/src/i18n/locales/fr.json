@@ -142,6 +142,7 @@
     }
   },
   "status": {
+    "title": "État",
     "connected": "Connecté ({{provider}})",
     "connecting": "Connexion en cours...",
     "disconnected": "Déconnecté",

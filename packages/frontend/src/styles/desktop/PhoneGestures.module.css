@@ -39,6 +39,17 @@
   pointer-events: none;
 }
 
+/* The CLI end of the strip. No wallpaper to show — it is not a desktop — so it paints
+   the terminal's own background, which is what the panel about to replace it paints. */
+.peek[data-cli] {
+  background: var(--color-mantle);
+}
+
+.peek[data-cli] .peekLabel {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
+}
+
 .peek[data-side='left'] {
   transform: translate3d(calc(-100% + var(--monitor-peek-x, 0px)), 0, 0);
 }

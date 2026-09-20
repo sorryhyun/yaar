@@ -18,6 +18,20 @@
   gap: 1px;
 }
 
+/* The phone drags the CLI aside like a monitor: it is the left-hand end of the same
+   strip, so it translates by the same --monitor-peek-x `PhoneGestures` publishes while
+   a sideways drag is in flight. Gated on the attribute for the same reason the desktop's
+   rule is — a permanent transform on a full-screen panel makes it the containing block
+   for every fixed child inside it. On a desktop nothing ever sets the attribute. */
+:global(html[data-monitor-peek]) .cliPanel {
+  transform: translate3d(var(--monitor-peek-x, 0px), 0, 0);
+  will-change: transform;
+}
+
+:global(html[data-monitor-peek='settling']) .cliPanel {
+  transition: transform var(--monitor-peek-ms, 220ms) cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 .grid1 {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
@@ -254,4 +268,23 @@
   50% {
     opacity: 0;
   }
+}
+
+/* ============ Phone ============
+   The bottom padding above clears a desktop's always-on command palette. A phone's is a
+   collapsed sheet that publishes its own height, so the terminal gets the rest. */
+:global(html[data-form-factor='mobile']) .cliPanel {
+  padding-bottom: var(--palette-h, 0px);
+}
+
+/* Centred is where a card's title bar sits; on a phone the toggle takes the left of the
+   top row instead, and drops the label it does not have the width for. */
+:global(html[data-form-factor='mobile']) .targetToggle {
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-1));
+  left: var(--space-2);
+  transform: none;
+}
+
+:global(html[data-form-factor='mobile']) .targetLabel {
+  display: none;
 }

@@ -354,6 +354,12 @@ export interface CliSliceState {
 
 export interface CliSliceActions {
   toggleCliMode: () => void;
+  /**
+   * The same switch, said rather than flipped. The phone's sideways pan lands on the
+   * CLI or on the desktop from a drag whose direction already decided which, and a
+   * toggle there would undo itself on the second swipe in the same direction.
+   */
+  setCliMode: (on: boolean) => void;
   setCliTarget: (target: 'monitor' | 'session') => void;
   addCliEntry: (entry: {
     type: CliEntry['type'];

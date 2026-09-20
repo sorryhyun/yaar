@@ -11,9 +11,14 @@
  *   if it was not what they meant. The side gutters stay for the case the shell does not
  *   own: a phone window is a full-screen card and an app card is an iframe, so a touch
  *   inside one reaches no listener in this document at all.
- * - **Pull down from the top** opens the notification shade. That needs nothing over the
- *   page either: the top of a phone screen is a card's title bar or the home grid, both
- *   of them shell DOM.
+ * - **Pull down from the top** opens the notification shade, which on a phone is also
+ *   where the connection and agent readings live.
+ *
+ * The strip the pan runs along is one wider than the monitor list: the **CLI** sits one
+ * step to the left of the first monitor. `Shift+Tab` is the way into it on a desktop and
+ * a phone has no Shift+Tab, so without this the tmux-style view was simply unreachable
+ * there. It is the left-hand end of the strip rather than a mode toggle because that is
+ * what makes it reversible by the same gesture, in the direction the finger already knows.
  *
  * Neither gesture consumes a touch it did not use. A drag that turns out to be vertical
  * is handed straight back to the page, and a touch in a gutter that turns out to be a tap
@@ -45,9 +50,15 @@ const PEEK_X_VAR = '--monitor-peek-x';
 /** Published beside it so the settle transition and the settle timer cannot disagree. */
 const PEEK_MS_VAR = '--monitor-peek-ms';
 
-/** The monitor a pan is heading for, and enough of it to put on screen behind the drag. */
+/**
+ * Where a pan can land: a monitor, the CLI to the left of the first one, or — from
+ * inside the CLI — the desktop it was opened from.
+ */
+type PanTarget = { kind: 'monitor'; id: string } | { kind: 'cli' } | { kind: 'desktop' };
+
+/** The surface a pan is heading for, and enough of it to put on screen behind the drag. */
 interface Peek {
-  id: string;
+  target: PanTarget;
   label: string;
   titles: string[];
   /** Which edge it is coming in from — left when the finger is dragging right. */
@@ -71,10 +82,9 @@ interface Drag {
 
 export function PhoneGestures() {
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
-  const monitorCount = useDesktopStore((s) => s.monitors.length);
   const wallpaper = useDesktopStore((s) => s.wallpaper);
 
-  /** The monitor sliding in behind the drag, rendered while the finger is down. */
+  /** The surface sliding in behind the drag, rendered while the finger is down. */
   const [peek, setPeek] = useState<Peek | null>(null);
   // The handlers are plain DOM listeners and read this rather than the closed-over state,
   // which would be a frame behind by the time the next touchmove asked.
@@ -101,13 +111,24 @@ export function PhoneGestures() {
       setPeekNow(null);
     };
 
-    /** The monitor `delta` steps away, with a look at what is open on it. */
+    /** The surface `delta` steps away, with a look at what is open on it. */
     const neighbour = (delta: number, side: 'left' | 'right'): Peek | null => {
-      const { monitors, activeMonitorId, windows } = useDesktopStore.getState();
+      const { monitors, activeMonitorId, windows, cliMode } = useDesktopStore.getState();
+      // Inside the CLI the strip has one exit, and it is the way back in: rightwards.
+      // Nothing is drawn for it — the desktop is genuinely behind the panel, so the
+      // slide uncovers the real thing rather than a picture of it.
+      if (cliMode) {
+        return delta > 0 ? { target: { kind: 'desktop' }, label: '', titles: [], side } : null;
+      }
       const at = monitors.findIndex((m) => m.id === activeMonitorId);
       if (at === -1) return null;
       const next = stepMonitorIndex(at, monitors.length, delta);
-      if (next === null) return null;
+      if (next === null) {
+        // Off the left end of the monitor list is not nothing: it is the CLI.
+        return delta < 0 && at === 0
+          ? { target: { kind: 'cli' }, label: 'CLI', titles: [], side }
+          : null;
+      }
       const monitor = monitors[next];
       const titles = Object.values(windows)
         .filter(
@@ -119,12 +140,20 @@ export function PhoneGestures() {
         )
         .map((w) => w.title)
         .slice(0, PEEK_TITLE_LIMIT);
-      return { id: monitor.id, label: monitor.label, titles, side };
+      return { target: { kind: 'monitor', id: monitor.id }, label: monitor.label, titles, side };
+    };
+
+    /** Land on whatever the pan chose. The one place a swipe changes what is on screen. */
+    const commit = (target: PanTarget) => {
+      const state = useDesktopStore.getState();
+      if (target.kind === 'cli') state.setCliMode(true);
+      else if (target.kind === 'desktop') state.setCliMode(false);
+      else state.switchMonitor(target.id);
     };
 
     /** Follow the finger: move the desktop, and keep the right neighbour behind it. */
     const trackPan = (dx: number) => {
-      // Dragging right pulls the desktop right, which brings the monitor on its left
+      // Dragging right pulls the desktop right, which brings the surface on its left
       // into view — the same direction sense as a page of a book.
       if (dx !== 0) {
         const side = dx > 0 ? 'left' : 'right';
@@ -144,7 +173,7 @@ export function PhoneGestures() {
       );
     };
 
-    /** Let go: run the rest of the slide, then land on whichever monitor won. */
+    /** Let go: run the rest of the slide, then land on whichever surface won. */
     const finishPan = (dx: number, elapsed: number) => {
       const target = peekRef.current;
       // A drag that reversed past its start is heading back where it came from, and the
@@ -162,9 +191,9 @@ export function PhoneGestures() {
         landing ? `${landing.side === 'left' ? width : -width}px` : '0px',
       );
       settle.current = setTimeout(() => {
-        // Switch and un-translate in the same tick: React commits the new monitor before
+        // Switch and un-translate in the same tick: React commits the new surface before
         // the browser paints, so the desktop is never seen at rest showing the old one.
-        if (landing) useDesktopStore.getState().switchMonitor(landing.id);
+        if (landing) commit(landing.target);
         clearPeek();
       }, PEEK_SETTLE_MS);
     };
@@ -191,9 +220,10 @@ export function PhoneGestures() {
         axis: null,
         fromTop: zone === 'top',
         fromGutter,
+        // No monitor-count test: with the CLI on the end of the strip there is somewhere
+        // to go even from a lone monitor, and a direction with nothing in it rubber-bands
+        // rather than being refused up front.
         canPan:
-          state.monitors.length > 1 &&
-          !state.cliMode &&
           !state.paletteSheetOpen &&
           !state.notificationShadeOpen &&
           (fromGutter || canPanFrom(e.target)),
@@ -237,8 +267,12 @@ export function PhoneGestures() {
       if (!d.axis && d.canPan) {
         const direction = swipeDirection(dx, dy);
         if (direction === 'left' || direction === 'right') {
-          useDesktopStore.getState().switchMonitorBy(direction === 'right' ? -1 : 1);
-          return;
+          const right = direction === 'right';
+          const target = neighbour(right ? -1 : 1, right ? 'left' : 'right');
+          if (target) {
+            commit(target.target);
+            return;
+          }
         }
       }
       if (d.fromTop && swipeDirection(dx, dy) === 'down') {
@@ -281,23 +315,27 @@ export function PhoneGestures() {
 
   return (
     <>
-      {monitorCount > 1 &&
-        (['left', 'right'] as const).map((side) => (
-          <div
-            key={side}
-            className={styles.gutter}
-            data-side={side}
-            data-phone-gutter=""
-            // Width comes from the constant the recogniser uses, so the band that
-            // catches the touch and the band that qualifies it are the same band.
-            style={{ width: EDGE_GUTTER_PX }}
-          />
-        ))}
-      {peek && (
+      {/* Always both, on every phone: the CLI is off the left end of the strip whatever
+          the monitor count, and the right gutter is the way back from it. */}
+      {(['left', 'right'] as const).map((side) => (
+        <div
+          key={side}
+          className={styles.gutter}
+          data-side={side}
+          data-phone-gutter=""
+          // Width comes from the constant the recogniser uses, so the band that
+          // catches the touch and the band that qualifies it are the same band.
+          style={{ width: EDGE_GUTTER_PX }}
+        />
+      ))}
+      {peek && peek.target.kind !== 'desktop' && (
         <div
           className={styles.peek}
           data-side={peek.side}
-          style={{ background: resolveWallpaper(wallpaper) }}
+          data-cli={peek.target.kind === 'cli' || undefined}
+          style={
+            peek.target.kind === 'cli' ? undefined : { background: resolveWallpaper(wallpaper) }
+          }
           aria-hidden
         >
           <div className={styles.peekLabel}>{peek.label}</div>

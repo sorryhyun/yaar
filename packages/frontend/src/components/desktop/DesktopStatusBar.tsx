@@ -7,24 +7,29 @@
  * the right level of detail for one agent and unreadable for several: four of them
  * overflowed the pill, and the pool admits ten (`MAX_AGENTS`) plus sub-agents under
  * them. The status text still exists, one hover or one click away, in the panel below.
+ *
+ * None of it is on screen on a phone. A pill pinned to the top edge costs a strip of a
+ * 412px screen for the whole session to say "Connected", and a dot that is there
+ * whatever the user is doing is the kind of chrome a phone has no room for — so the
+ * phone shows all of this, the connection reading included, in the pull-down shade
+ * instead (`NotificationShade`). Nothing stays behind, not even for a disconnection:
+ * the pull-down is the one place a phone reports on itself.
  */
-import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import type { ActiveAgent } from '@/types/state';
+import {
+  AgentRoster,
+  ConnectionStatus,
+  chipOrder,
+  elapsedLabel,
+  useElapsedNow,
+} from './AgentStatus';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 interface DesktopStatusBarProps {
   interrupt: () => void;
   interruptAgent: (agentId: string) => void;
 }
-
-/**
- * Below this, the phase is not worth timing — the label would flicker "0s/1s/2s" through
- * the tool churn of a healthy turn and train the eye to ignore it. The number exists to
- * be alarming, so it only appears once a phase has lasted longer than one plausibly does.
- */
-const ELAPSED_VISIBLE_AFTER_MS = 3000;
 
 /**
  * The chip's own, much later threshold.
@@ -39,9 +44,6 @@ const ELAPSED_VISIBLE_AFTER_MS = 3000;
  */
 const CHIP_ELAPSED_VISIBLE_AFTER_MS = 30000;
 
-/** Re-render cadence while any agent is active. Matches the 1s resolution shown. */
-const TICK_MS = 1000;
-
 /**
  * How many chips the pill shows before collapsing the rest into a count. Ten is
  * `MAX_AGENTS`, and sub-agents run under that same ceiling, so this is reached only by a
@@ -49,26 +51,6 @@ const TICK_MS = 1000;
  * chips would.
  */
 const MAX_CHIPS = 10;
-
-/** `8s`, `1m04s` — narrow enough to sit in a status bar without reflowing it. */
-function formatElapsed(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  if (total < 60) return `${total}s`;
-  return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, '0')}s`;
-}
-
-/**
- * How long the agent has been in its current phase, or null while that is too short to
- * be worth saying.
- *
- * The status label is last-event-wins with no heartbeat behind it (see {@link
- * ActiveAgent.statusSince}), so a phase that has gone quiet renders exactly like one that
- * is streaming. This is the only thing on screen that tells them apart.
- */
-function elapsedLabel(agent: ActiveAgent, now: number, threshold = ELAPSED_VISIBLE_AFTER_MS) {
-  const elapsed = now - agent.statusSince;
-  return elapsed >= threshold ? formatElapsed(elapsed) : null;
-}
 
 /**
  * What the chip says: the monitor the agent is working for.
@@ -91,58 +73,29 @@ function chipTitle(agent: ActiveAgent, now: number): string {
   return `${agent.kind} · ${where} — ${agent.status}${elapsed ? ` ${elapsed}` : ''}${subs}`;
 }
 
-/**
- * Chips in a stable order: monitor first, so an agent's neighbours are the other agents
- * on its desktop, then tier, then id. Ordering by arrival instead would reshuffle the
- * row every time a turn ended.
- */
-function chipOrder(a: ActiveAgent, b: ActiveAgent): number {
-  return (
-    (a.monitorId ?? '~').localeCompare(b.monitorId ?? '~') ||
-    a.kind.localeCompare(b.kind) ||
-    a.id.localeCompare(b.id)
-  );
-}
-
 export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBarProps) {
-  const { t } = useTranslation();
-  const connectionStatus = useDesktopStore((s) => s.connectionStatus);
-  const providerType = useDesktopStore((s) => s.providerType);
+  const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const activeAgents = useDesktopStore((s) => s.activeAgents);
   const agentPanelOpen = useDesktopStore((s) => s.agentPanelOpen);
   const toggleAgentPanel = useDesktopStore((s) => s.toggleAgentPanel);
-  const windows = useDesktopStore((s) => s.windows);
-  const windowAgents = useDesktopStore((s) => s.windowAgents);
 
   const agentList = Object.values(activeAgents).sort(chipOrder);
   const chips = agentList.slice(0, MAX_CHIPS);
   const hidden = agentList.length - chips.length;
 
-  // Drives the elapsed counters. Runs only while something is active, so an idle desktop
-  // schedules nothing; `agentList.length` (not the array) is the dependency, or every
-  // status change would tear the interval down and restart the second.
-  const [now, setNow] = useState(() => Date.now());
-  const hasAgents = agentList.length > 0;
-  useEffect(() => {
-    if (!hasAgents) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(id);
-  }, [hasAgents]);
+  const now = useElapsedNow(agentList.length > 0);
+
+  // The phone's rule, in one place: this bar is a desktop thing. Everything it would
+  // have said is a pull-down away.
+  if (isMobile) return null;
+  const census = agentList.length > 0;
 
   return (
     <>
       {/* Connection status indicator */}
       <div className={styles.statusBar}>
-        <span className={styles.statusDot} data-status={connectionStatus} />
-        <span className={styles.statusText}>
-          {connectionStatus === 'connected'
-            ? t('status.connected', { provider: providerType || 'agent' })
-            : connectionStatus === 'connecting'
-              ? t('status.connecting')
-              : t('status.disconnected')}
-        </span>
-        {agentList.length > 0 && (
+        <ConnectionStatus />
+        {census && (
           <>
             <span className={styles.statusDivider} />
             <button
@@ -178,58 +131,9 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
       </div>
 
       {/* Expanded agent panel */}
-      {agentPanelOpen && agentList.length > 0 && (
+      {census && agentPanelOpen && (
         <div className={styles.agentPanel}>
-          <div className={styles.agentPanelHeader}>
-            <span>{t('status.activeAgents')}</span>
-            <button
-              className={styles.stopAllButton}
-              onClick={interrupt}
-              title={t('status.stopAll')}
-            >
-              {t('status.stopAll')}
-            </button>
-          </div>
-          <div className={styles.agentPanelList}>
-            {agentList.map((agent) => {
-              // Find window associated with this agent (keyed by agentId)
-              const windowAgent = windowAgents[agent.id];
-              const windowId = windowAgent?.windowId;
-              const windowTitle = windowId ? windows[windowId]?.title : null;
-
-              return (
-                <div key={agent.id} className={styles.agentPanelItem}>
-                  {/* Same color axis as the chip, so a row can be matched back to the
-                      chip that led the user to open the panel. */}
-                  <span className={styles.agentChipDot} data-kind={agent.kind} />
-                  <div className={styles.agentPanelInfo}>
-                    <span className={styles.agentPanelId}>{agent.id}</span>
-                    <span className={styles.agentPanelStatus}>{agent.status}</span>
-                    {elapsedLabel(agent, now) && (
-                      <span className={styles.agentElapsed}>{elapsedLabel(agent, now)}</span>
-                    )}
-                    {agent.subagentCount > 0 && (
-                      <span className={styles.agentPanelSubagents}>
-                        {t('status.subagents', { count: agent.subagentCount })}
-                      </span>
-                    )}
-                    {windowTitle && (
-                      <span className={styles.agentPanelWindow}>
-                        {t('status.window', { title: windowTitle })}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    className={styles.stopAgentButton}
-                    onClick={() => interruptAgent(agent.id)}
-                    title={t('status.stopAgent', { agentId: agent.id })}
-                  >
-                    {t('status.stop')}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <AgentRoster interrupt={interrupt} interruptAgent={interruptAgent} />
         </div>
       )}
     </>

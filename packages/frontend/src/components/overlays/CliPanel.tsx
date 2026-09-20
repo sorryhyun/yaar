@@ -1,6 +1,10 @@
 /**
  * CliPanel - Tmux-style multi-monitor terminal view.
  * Shows all monitors simultaneously in a split-pane grid layout.
+ *
+ * Except on a phone, where it shows one: two panes side by side on a 412px screen are
+ * two unreadable columns. The one it shows is the monitor the user is on, which is also
+ * the monitor the sideways pan that opened the CLI came from (`PhoneGestures`).
  */
 import { useDesktopStore } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
@@ -14,8 +18,11 @@ export function CliPanel() {
   const cliTarget = useDesktopStore((s) => s.cliTarget);
   const setCliTarget = useDesktopStore((s) => s.setCliTarget);
 
+  const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
+
+  const panes = isMobile ? monitors.filter((m) => m.id === activeMonitorId) : monitors;
   const gridClass =
-    monitors.length === 1 ? styles.grid1 : monitors.length === 2 ? styles.grid2 : styles.grid4;
+    panes.length === 1 ? styles.grid1 : panes.length === 2 ? styles.grid2 : styles.grid4;
 
   return (
     <div className={`${styles.cliPanel} ${gridClass}`}>
@@ -45,11 +52,13 @@ export function CliPanel() {
         </button>
       </div>
 
-      {monitors.map((monitor, i) => (
+      {panes.map((monitor) => (
         <TerminalPane
           key={monitor.id}
           monitorId={monitor.id}
-          index={i + 1}
+          // The pane is numbered by where it sits in the monitor list, not by where it
+          // sits in the grid — on a phone those are different and the list is the name.
+          index={monitors.indexOf(monitor) + 1}
           isFocused={monitor.id === activeMonitorId}
           onClick={() => switchMonitor(monitor.id)}
         />

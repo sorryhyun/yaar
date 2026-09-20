@@ -17,6 +17,11 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
       state.cliMode = !state.cliMode;
     }),
 
+  setCliMode: (on) =>
+    set((state) => {
+      state.cliMode = on;
+    }),
+
   setCliTarget: (target) =>
     set((state) => {
       state.cliTarget = target;

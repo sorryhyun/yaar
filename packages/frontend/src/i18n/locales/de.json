@@ -142,6 +142,7 @@
     }
   },
   "status": {
+    "title": "Status",
     "connected": "Verbunden ({{provider}})",
     "connecting": "Verbinde...",
     "disconnected": "Getrennt",

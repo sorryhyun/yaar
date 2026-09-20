@@ -1,11 +1,17 @@
 /**
- * NotificationShade - the phone's notifications, behind a pull-down.
+ * NotificationShade - the phone's status and notifications, behind a pull-down.
  *
- * On a desktop notifications stack in the top-right corner, where there is room for them.
- * On a phone that corner is a card's title bar, so a notification either covered the
- * controls or was covered by them. Here they live in a shade instead: pulled down from
- * the top edge (`PhoneGestures`), or opened by the badge that appears while any are
- * waiting — the badge is what keeps a hidden notification from being a lost one.
+ * On a desktop notifications stack in the top-right corner, where there is room for them,
+ * and the connection and agent readings sit in a pill at the top. On a phone that corner
+ * is a card's title bar and that pill is a permanent strip of a small screen, so both
+ * live here instead: pulled down from the top edge (`PhoneGestures`), or opened by the
+ * badge that appears while notifications are waiting — the badge is what keeps a hidden
+ * notification from being a lost one.
+ *
+ * The shade is therefore never empty. It used to close itself the moment the last
+ * notification went, which made a pull-down on a quiet session look like a gesture that
+ * did not work; now the pull always lands on something, because the status above the
+ * list is there whether or not anything has been notified.
  *
  * Auto-dismiss still belongs to `NotificationCenter`, which owns the timers whichever
  * form factor is on screen. This component only renders.
@@ -14,10 +20,16 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectNotifications } from '@/store';
+import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
 import { swipeDirection } from '@/lib/gestures';
 import styles from '@/styles/overlays/NotificationShade.module.css';
 
-export function NotificationShade() {
+interface NotificationShadeProps {
+  interrupt: () => void;
+  interruptAgent: (agentId: string) => void;
+}
+
+export function NotificationShade({ interrupt, interruptAgent }: NotificationShadeProps) {
   const { t } = useTranslation();
   const notifications = useDesktopStore(useShallow(selectNotifications));
   const dismissNotification = useDesktopStore((s) => s.dismissNotification);
@@ -35,12 +47,6 @@ export function NotificationShade() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, setOpen]);
-
-  // The shade with nothing left in it is a shade the user has to close by hand for no
-  // reason: dismissing the last notification closes it.
-  useEffect(() => {
-    if (open && notifications.length === 0) setOpen(false);
-  }, [open, notifications.length, setOpen]);
 
   // Push the shade back up the way it came. The grip sits at the bottom edge of the
   // sheet, which is where the finger that pulled it down ended up.
@@ -84,7 +90,15 @@ export function NotificationShade() {
   return (
     <>
       <div className={styles.backdrop} onClick={() => setOpen(false)} />
-      <div className={styles.shade} role="dialog" aria-label={t('notifications.title')}>
+      <div className={styles.shade} role="dialog" aria-label={t('status.title')}>
+        {/* What the desktop keeps in its status pill all session. */}
+        <div className={styles.status}>
+          <ConnectionStatus />
+        </div>
+        <div className={styles.roster}>
+          <AgentRoster interrupt={interrupt} interruptAgent={interruptAgent} />
+        </div>
+
         <div className={styles.header}>
           <span className={styles.heading}>{t('notifications.title')}</span>
           {notifications.length > 0 && (

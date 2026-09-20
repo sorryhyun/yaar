@@ -84,10 +84,10 @@ describe('PhoneGestures', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('puts no gutters over the screen when there is only one monitor', () => {
+  it('keeps its gutters even with one monitor, because the CLI is still over there', () => {
     useDesktopStore.setState({ monitors: [monitors[0]] });
     render(<PhoneGestures />);
-    expect(gutters()).toHaveLength(0);
+    expect(gutters()).toHaveLength(2);
   });
 
   it('pans from anywhere on the shell, not just the edges', async () => {
@@ -172,6 +172,7 @@ describe('PhoneGestures', () => {
   });
 
   it('pans from a gutter, which is how a touch over a card reaches it at all', async () => {
+    useDesktopStore.setState({ activeMonitorId: 'b' });
     render(<PhoneGestures />);
     const left = gutters()[0];
     touch(left, 'touchstart', 4, 300);
@@ -179,19 +180,73 @@ describe('PhoneGestures', () => {
     expect(panState()).toBe('dragging');
     touch(left, 'touchend', 160, 305);
     await settle();
-    // Dragging right brings the monitor on the left into view, and there is none.
+    // Dragging right brings the monitor on the left into view.
     expect(useDesktopStore.getState().activeMonitorId).toBe('a');
   });
 
   it('resists rather than moves when there is nowhere to go', () => {
+    useDesktopStore.setState({ activeMonitorId: 'b' });
     const { container } = render(<PhoneGestures />);
-    const left = gutters()[0];
-    touch(left, 'touchstart', 4, 300);
-    touch(left, 'touchmove', 84, 300);
+    const right = gutters()[1];
+    touch(right, 'touchstart', 396, 300);
+    touch(right, 'touchmove', 316, 300);
     // 80px of finger, a quarter of it on screen, and no monitor named — the edge says
-    // "no" rather than saying nothing.
-    expect(peekOffsetPx()).toBe('20px');
+    // "no" rather than saying nothing. The right-hand end is the one that is really an
+    // end; off the left of monitor 1 is the CLI.
+    expect(peekOffsetPx()).toBe('-20px');
     expect(container.textContent).not.toContain('Monitor');
+  });
+
+  it('opens the CLI off the left end of the strip, where a phone has no Shift+Tab', async () => {
+    const { container } = render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 300);
+    touch(document.body, 'touchmove', 280, 305);
+
+    // Named while the finger is still down, like any other surface being uncovered.
+    expect(container.textContent).toContain('CLI');
+    expect(peekOffsetPx()).toBe('80px');
+
+    touch(document.body, 'touchend', 360, 305);
+    await settle();
+    expect(useDesktopStore.getState().cliMode).toBe(true);
+    expect(panState()).toBeNull();
+  });
+
+  it('leaves the CLI where it is when the drag comes from a later monitor', () => {
+    useDesktopStore.setState({ activeMonitorId: 'b' });
+    const { container } = render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 300);
+    touch(document.body, 'touchmove', 280, 305);
+    // Monitor 1 is what is on the left of monitor 2 — the CLI is only off the far end.
+    expect(container.textContent).toContain('Monitor 1');
+    expect(container.textContent).not.toContain('CLI');
+  });
+
+  it('drags back out of the CLI the way it came in', async () => {
+    useDesktopStore.setState({ cliMode: true });
+    const { container } = render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 300, 300);
+    touch(document.body, 'touchmove', 220, 305);
+
+    // Nothing is drawn for the way back: the desktop is really behind the CLI panel,
+    // so the slide uncovers it rather than a picture of it.
+    expect(container.querySelector('[data-side]:not([data-phone-gutter])')).toBeNull();
+    expect(peekOffsetPx()).toBe('-80px');
+
+    touch(document.body, 'touchend', 140, 305);
+    await settle();
+    expect(useDesktopStore.getState().cliMode).toBe(false);
+  });
+
+  it('will not drag further left out of the CLI — it is the end of the strip', () => {
+    useDesktopStore.setState({ cliMode: true });
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 300);
+    touch(document.body, 'touchmove', 280, 300);
+    // 80px of finger, a quarter of it on screen: resistance, not a move.
+    expect(peekOffsetPx()).toBe('20px');
+    touch(document.body, 'touchend', 360, 300);
+    expect(useDesktopStore.getState().cliMode).toBe(true);
   });
 
   it('switches on a flick the browser coalesced into a start and an end', () => {

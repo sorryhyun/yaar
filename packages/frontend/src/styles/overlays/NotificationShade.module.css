@@ -53,6 +53,31 @@
   animation-duration: var(--duration-normal);
 }
 
+/* The connection reading the desktop keeps in its status pill. First thing under the
+   top edge, because on a phone the pull-down is the only place it is ever shown. */
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-subtle);
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+/* The agent census under it. Capped and scrollable on its own: ten agents plus their
+   sub-agents would otherwise push the notifications off a 70vh sheet. Empty when the
+   pool is — `AgentRoster` renders nothing then, which leaves this box childless. */
+.roster {
+  max-height: 40vh;
+  overflow-y: auto;
+  border-bottom: var(--border-subtle);
+}
+
+.roster:empty {
+  display: none;
+}
+
 .header {
   display: flex;
   align-items: center;

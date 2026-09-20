@@ -18,7 +18,7 @@ bun run test             # Run tests once
 ```
 src/
 ├── components/
-│   ├── desktop/           # DesktopSurface, WindowManager, DesktopIcons, DesktopStatusBar
+│   ├── desktop/           # DesktopSurface, WindowManager, DesktopIcons, DesktopStatusBar, AgentStatus
 │   ├── drawing/           # DrawingOverlay
 │   ├── command-palette/   # CommandPalette (primary user input)
 │   ├── taskbar/           # Taskbar (always-visible navigation)
@@ -59,8 +59,10 @@ Three of them, recognised by `lib/gestures.ts` (pure arithmetic: `swipeDirection
 | Gesture | Effect | How the touch is caught |
 |---|---|---|
 | Pull **up** from the bottom handle | Raises the command palette (`paletteSheetOpen`, ui slice) and opens the keyboard | The handle is shell DOM at the bottom edge — `CommandPalette` owns this one |
-| **Drag sideways** | Pans to the previous / next monitor (clamped — no wrap) | `document` listeners, plus 20px gutters at `--z-gesture` at each side edge for the case the shell does not own: an app card is an iframe, so a touch inside one reaches no listener here. A gutter touch that was a tap is replayed to the element underneath |
-| Pull **down** from the top | Opens the notification shade (`notificationShadeOpen`, ui slice) | `document` listeners — the top of the screen is a title bar or the home grid, both shell DOM, so nothing is covered and no tap is stolen |
+| **Drag sideways** | Pans along the strip: the previous / next monitor, or the **CLI** off the left end of it (clamped — no wrap) | `document` listeners, plus 20px gutters at `--z-gesture` at each side edge for the case the shell does not own: an app card is an iframe, so a touch inside one reaches no listener here. A gutter touch that was a tap is replayed to the element underneath |
+| Pull **down** from the top | Opens the status/notification shade (`notificationShadeOpen`, ui slice) | `document` listeners — the top of the screen is a title bar or the home grid, both shell DOM, so nothing is covered and no tap is stolen |
+
+The strip is one wider than the monitor list: `cliMode` sits one step **left of the first monitor**, because a phone has no `Shift+Tab` and the CLI was otherwise unreachable there. `PanTarget` in `PhoneGestures` is the monitor / `cli` / `desktop` union the pan lands on, and `setCliMode` (cli slice) is what a landing calls — a toggle would undo itself on the second swipe in the same direction. Entering, the peek panel paints the terminal's background instead of a wallpaper; leaving, nothing is drawn at all: the desktop is genuinely behind `CliPanel`, so `CliPanel.module.css` translates the panel by `--monitor-peek-x` and `DesktopSurface.module.css` makes the desktop under it stay put and visible for the slide to uncover. `CliPanel` shows one pane on a phone (the active monitor) — a tmux grid on 412px is unreadable columns.
 
 **The monitor pan** follows the finger: `PhoneGestures` publishes `--monitor-peek-x` (and `--monitor-peek-ms`) on `<html>` with a `data-monitor-peek` state of `dragging` or `settling`, and two CSS rules read them — `.desktop` in `DesktopSurface.module.css` translates by it, and the peek panel in `PhoneGestures.module.css`, parked one screen off the side it comes in from, translates by the same amount. The panel is the neighbouring monitor's wallpaper, label and open window titles. The var is written straight to the DOM node, never through React: a pan re-renders once, when the monitor it is heading for changes, not once per frame.
 
@@ -74,9 +76,11 @@ The pull-up raises the sheet on **touchmove**, as soon as the pull has said "up"
 
 Notifications render in `NotificationShade` on a phone and in `NotificationCenter` on a desktop, because a top-right stack lands on a card's title bar. The auto-dismiss timers stay in `NotificationCenter` either way, so one component owns expiry; a badge marks a shade with something in it.
 
+The shade is the phone's **status surface** as well: `DesktopStatusBar` renders nothing at all on a phone — a pill that says "Connected" all session, dot included, is chrome a 412px screen has no room for — and the connection reading and the agent roster are shown inside the pull-down instead. `components/desktop/AgentStatus.tsx` holds the two pieces (`ConnectionStatus`, `AgentRoster`) both surfaces render, so they cannot drift. Because the shade now always has something in it, it no longer closes itself when the last notification goes; a pull-down on a quiet session used to look like a gesture that did not work. A disconnection is reported there and nowhere else.
+
 ## CLI Panel
 
-`Shift+Tab` toggles `cliMode` (`store/slices/cliSlice.ts`), rendering `CliPanel` — a tmux-style grid of `TerminalPane`s streaming each monitor's agent. The panel also carries a **Monitor / Session ("act as me")** target toggle (`cliTarget` in the cli slice): `'session'` routes typed messages to the session agent — the user's deputy that can drive the real browser via `yaar://session/browser`. `sendMessage` (in `useAgentConnection`) attaches `target: 'session'` to `USER_MESSAGE` only while the CLI panel is open and the toggle is set; the main command palette always stays on the monitor agent.
+`Shift+Tab` toggles `cliMode` (`store/slices/cliSlice.ts`) — on a phone it is the left-hand end of the sideways pan instead, see Phone gestures — rendering `CliPanel` — a tmux-style grid of `TerminalPane`s streaming each monitor's agent. The panel also carries a **Monitor / Session ("act as me")** target toggle (`cliTarget` in the cli slice): `'session'` routes typed messages to the session agent — the user's deputy that can drive the real browser via `yaar://session/browser`. `sendMessage` (in `useAgentConnection`) attaches `target: 'session'` to `USER_MESSAGE` only while the CLI panel is open and the toggle is set; the main command palette always stays on the monitor agent.
 
 ## WebSocket Connection
 

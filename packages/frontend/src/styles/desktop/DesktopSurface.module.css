@@ -22,6 +22,15 @@
   will-change: transform;
 }
 
+/* The CLI is the left-hand end of the same strip, and a pan out of it drags the CLI
+   panel aside rather than the desktop — so here the desktop is the thing being
+   uncovered, and it has to stay put and be visible to be uncovered at all. Still
+   pointer-events: none from the rule above: the finger is on the panel sliding off it. */
+:global(html[data-monitor-peek]) .desktop[data-cli-mode='true'] {
+  visibility: visible;
+  transform: none;
+}
+
 /* Only once the finger is up — see the matching rule in PhoneGestures.module.css. The
    duration comes from PEEK_SETTLE_MS, published beside the offset, because the timer
    that lands the switch and the transition that draws it have to agree. */
@@ -595,7 +604,9 @@
 
 :global(html[data-form-factor='mobile']) .desktopIcons {
   --icon-size: 48px;
-  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  /* No pill to clear: the phone's status lives in the pull-down shade, so the grid
+     starts at the top edge and gets a row back. */
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-3));
   left: var(--space-2);
   right: var(--space-2);
   bottom: var(--palette-h, 0px);
