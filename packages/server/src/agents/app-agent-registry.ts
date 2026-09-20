@@ -33,6 +33,25 @@ interface SpawnTag {
   appId: string;
 }
 
+/**
+ * Why an app agent was reclaimed — the one distinction its successor needs.
+ *
+ * `release` is the app tier asking for it: a `fresh:true` turn, or the close of the
+ * app's last window on this monitor. Either way the *caller* knows the memory ended.
+ * The other three are reclamations nobody told the app about — the reaper firing behind
+ * a backgrounded tab, an operator deleting the agent, a monitor going away — and a
+ * successor handed no word of them starts a turn believing it is the same agent that
+ * did the earlier work. See `AppTaskProcessor`'s context-lost notice.
+ */
+export type AppAgentReclaimReason = 'idle' | 'release' | 'external' | 'monitor-closed';
+
+/** Told about every reclamation `dispose` performs, after the agent is gone. */
+export type AppAgentReclaimListener = (
+  monitorId: string,
+  appId: string,
+  reason: AppAgentReclaimReason,
+) => void;
+
 export class AppAgentRegistry {
   /** Persistent per-app agents, keyed by `{monitorId}::{appId}` (see `appAgentKey`). */
   private records = new Map<string, PooledAgent>();
@@ -54,7 +73,22 @@ export class AppAgentRegistry {
    */
   private idleSweepTimer: ReturnType<typeof setInterval> | null = null;
 
+  /**
+   * Who to tell when an agent is reclaimed.
+   *
+   * A listener rather than a constructor argument because the one subscriber —
+   * `AppTaskProcessor` — is built after the pool that owns this registry, and it is
+   * the only tier that holds what a reclamation invalidates (the handoff fingerprints)
+   * and the only one that can put a sentence in front of the successor's first turn.
+   */
+  private reclaimListeners: AppAgentReclaimListener[] = [];
+
   constructor(private readonly host: AgentHost) {}
+
+  /** Subscribe to reclamations. Called for every `dispose`, never for `clear()`. */
+  onReclaimed(listener: AppAgentReclaimListener): void {
+    this.reclaimListeners.push(listener);
+  }
 
   /**
    * Get or create the agent for one app on one monitor. First call for a
@@ -215,7 +249,11 @@ export class AppAgentRegistry {
    * and then immediately re-creates, so this is the ordinary case here, not the exotic
    * one.
    */
-  async dispose(monitorId: string, appId: string, reason?: string): Promise<void> {
+  async dispose(
+    monitorId: string,
+    appId: string,
+    reason: AppAgentReclaimReason = 'release',
+  ): Promise<void> {
     const key = appAgentKey(monitorId, appId);
     await this.spawns.settle((tag) => tag.monitorId === monitorId && tag.appId === appId);
 
@@ -225,8 +263,9 @@ export class AppAgentRegistry {
     this.records.delete(key);
     await this.host.disposeAgent(
       agent,
-      `App agent disposed${reason ? ` (${reason})` : ''} for ${appId} on monitor ${monitorId}`,
+      `App agent disposed (${reason}) for ${appId} on monitor ${monitorId}`,
     );
+    for (const listener of this.reclaimListeners) listener(monitorId, appId, reason);
   }
 
   /**
@@ -245,7 +284,7 @@ export class AppAgentRegistry {
       .map((k) => k.appId);
 
     for (const appId of appIds) {
-      await this.dispose(monitorId, appId);
+      await this.dispose(monitorId, appId, 'monitor-closed');
     }
   }
 

@@ -18,7 +18,12 @@ import { windowSource, monitorSource } from './context.js';
 import { appRolePrefix, monitorRole } from './roles.js';
 import { appAgentKey } from './agent-roster.js';
 import { enqueueOrReject } from './queue-refusal.js';
-import { AppStateHandoffStore, formatAppStateHandoffNotice } from './app-state-handoff.js';
+import {
+  AppStateHandoffStore,
+  formatAppStateHandoffNotice,
+  formatContextLostNotice,
+  type ContextLostReason,
+} from './app-state-handoff.js';
 import { captureDeclaredAppState } from '../features/window/app-protocol.js';
 import { createLogger } from '../observability/log.js';
 
@@ -68,8 +73,28 @@ export class AppTaskProcessor {
    * inside the processing lock, between the last message and the first queued one.
    */
   private pendingRelease = new Set<string>();
+  /**
+   * App-agent keys whose agent was reclaimed without the app tier asking, and the reason,
+   * until the successor's first turn has been told.
+   *
+   * Keyed by (monitor, app) rather than by window because that is what an app agent is:
+   * one window closing and another opening is the same agent, and the successor owes the
+   * notice to whichever window speaks to it first.
+   */
+  private contextLost = new Map<string, ContextLostReason>();
 
-  constructor(private readonly ctx: AppPoolContext) {}
+  constructor(private readonly ctx: AppPoolContext) {
+    // Every per-app reclamation, including the ones no app task caused — see
+    // `releaseAgent` for why the fingerprints cannot outlive the agent that made them.
+    // `monitor-closed` is not one of them: the monitor takes every window with it, so
+    // `clearMonitor` drops the whole monitor's fingerprints in one call, and there is no
+    // successor on a monitor that no longer exists to hand a notice to.
+    this.ctx.agentPool.appAgents.onReclaimed((monitorId, appId, reason) => {
+      if (reason === 'monitor-closed') return;
+      this.forgetHandoffState(monitorId, appId);
+      if (reason !== 'release') this.contextLost.set(appAgentKey(monitorId, appId), reason);
+    });
+  }
 
   /**
    * The monitor that owns an app agent: the monitor of the window it drives.
@@ -203,8 +228,15 @@ export class AppTaskProcessor {
       }
 
       const stateKeys = profile.appStateKeys ?? [];
-      const stateNotice = await this.buildHandoffNotice(windowId, stateKeys);
-      const prompt = stateNotice ? `${stateNotice}\n\n${task.content}` : task.content;
+      // Order matters: the loss of the predecessor is the frame the rest of the turn is
+      // read in, so it goes first. `takeContextLostNotice` is a take — one successor is
+      // told once, and a turn that never reaches here keeps the mark for the next.
+      const notices = [
+        this.takeContextLostNotice(monitorId, appId),
+        await this.buildHandoffNotice(windowId, stateKeys),
+      ].filter(Boolean);
+      const prompt =
+        notices.length > 0 ? `${notices.join('\n\n')}\n\n${task.content}` : task.content;
 
       const { fp } = buildReloadContext(this.ctx, task, {
         currentWindowId: windowId,
@@ -310,12 +342,12 @@ export class AppTaskProcessor {
    * the context tape is a log, and nothing reads it back into a prompt, so there is
    * no branch to prune here.
    *
-   * The handoff fingerprints must go with it. They exist to tell an agent that comes
-   * *back* to a window whether the app's state moved while it was away; handed to an
-   * agent that was never there, `<app_state_since_handoff changed="true"/>` claims a
-   * handoff that never happened. Every window of this app on this monitor is cleared,
-   * not just the one this task names — the dead agent may have driven several, and its
-   * successor has seen none of them.
+   * The handoff fingerprints must go with it — see {@link forgetHandoffState}. That no
+   * longer happens here: the registry announces every reclamation and this class forgets
+   * on the announcement, because the two reclamations that do *not* come through here
+   * (the idle reaper, and a `delete` on `yaar://agents/{app}`) left the fingerprints
+   * behind, and a successor was then told `<app_state_since_handoff changed="false"/>`
+   * about a handoff it had never made.
    *
    * Sub-agents deliberately survive *this*. A persona's owner is the (monitor, app) pair,
    * not the app agent — the iframe spawns them and they exist whether or not an app agent
@@ -332,8 +364,16 @@ export class AppTaskProcessor {
   private async releaseAgent(monitorId: string, appId: string): Promise<void> {
     if (!this.ctx.agentPool.appAgents.has(monitorId, appId)) return;
 
-    await this.ctx.agentPool.appAgents.dispose(monitorId, appId);
+    await this.ctx.agentPool.appAgents.dispose(monitorId, appId, 'release');
+  }
 
+  /**
+   * Drop the handoff fingerprints of one app on one monitor — its agent is gone.
+   *
+   * Every window of the app, not just the one whose task prompted this: the dead agent
+   * may have driven several, and its successor has seen none of them.
+   */
+  private forgetHandoffState(monitorId: string, appId: string): void {
     for (const handle of this.ctx.windowState.handleMap.listByMonitor(monitorId)) {
       if (this.ctx.windowState.getAppIdForWindow(handle) === appId) {
         this.handoffState.forget(handle);
@@ -447,6 +487,9 @@ export class AppTaskProcessor {
     for (const key of this.activeWindows.keys()) {
       if (key.startsWith(prefix)) this.activeWindows.delete(key);
     }
+    for (const key of this.contextLost.keys()) {
+      if (key.startsWith(prefix)) this.contextLost.delete(key);
+    }
     this.handoffState.forgetMonitor(monitorId);
   }
 
@@ -454,9 +497,25 @@ export class AppTaskProcessor {
     this.activeWindows.clear();
     this.profiles.clear();
     this.handoffState.clear();
+    this.contextLost.clear();
     // Bookkeeping only — each entry's resolver is held by its own turn's `finally`, so
     // a close already waiting on one is released by the turn, not by this map.
     this.inflight.clear();
+  }
+
+  /**
+   * The context-lost notice owed to this app's agent on this monitor, consumed.
+   *
+   * Empty whenever the incumbent is the agent that did the work — which is every
+   * ordinary turn. Read after `getOrCreate`, so the mark left by a reclamation is spent
+   * on the successor rather than on the reclaimed agent's own last breath.
+   */
+  private takeContextLostNotice(monitorId: string, appId: string): string {
+    const key = appAgentKey(monitorId, appId);
+    const reason = this.contextLost.get(key);
+    if (!reason) return '';
+    this.contextLost.delete(key);
+    return formatContextLostNotice(reason);
   }
 
   private async buildHandoffNotice(
