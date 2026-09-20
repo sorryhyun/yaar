@@ -40,3 +40,35 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* ── Phone / narrow window ───────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .header-bar {
+    flex-wrap: wrap;
+    padding: var(--yaar-sp-3);
+  }
+
+  /* A floor rather than `min-width: 0`: the title should shrink to about half the
+     row and then push the buttons onto a second line, instead of shrinking away
+     to nothing so "Update All (3)" can stay beside it. */
+  .header-left {
+    flex: 1 1 auto;
+    min-width: 170px;
+  }
+
+  .header-title {
+    font-size: 17px;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+}
+
+@media (pointer: coarse) {
+  .refresh-btn,
+  .update-all-btn {
+    min-height: 44px;
+  }
+}

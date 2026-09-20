@@ -32,17 +32,6 @@
   border-color: var(--yaar-accent);
 }
 
-/* ── Filter bar ──────────────────────────────────────────────────────────── */
-
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--yaar-border);
-  flex-shrink: 0;
-}
-
 .filter-toggle {
   display: flex;
   align-items: center;
@@ -67,4 +56,40 @@
   margin-left: auto;
   font-size: 13px;
   white-space: nowrap;
+}
+
+/* ── Phone / narrow window ───────────────────────────────────────────────── */
+/* Width and pointer are separate questions, so they get separate queries — the
+   same split the shared `y-*` sheet makes. */
+
+@media (max-width: 768px) {
+  .search-bar {
+    flex-wrap: wrap;
+    gap: var(--yaar-sp-2);
+    padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  }
+
+  /* The count is a caption, not a control. Giving it the whole second row is what
+     keeps the input from being squeezed to a few characters beside it. */
+  .filter-count {
+    flex-basis: 100%;
+    margin-left: 0;
+    white-space: normal;
+  }
+}
+
+@media (pointer: coarse) {
+  .search-mode-select,
+  .search-input {
+    min-height: 44px;
+  }
+
+  .filter-toggle {
+    min-height: 44px;
+  }
+
+  .filter-toggle input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+  }
 }

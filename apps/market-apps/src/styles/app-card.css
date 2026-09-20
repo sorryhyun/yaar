@@ -135,3 +135,14 @@
 .uninstall-btn:disabled {
   opacity: 0.4;
 }
+
+/* ── Phone / narrow window ───────────────────────────────────────────────── */
+
+@media (pointer: coarse) {
+  /* Install / Uninstall / Publish are the app's real verbs and they render as
+     `y-btn-sm`, which is a ~24px target. The card grows; a missed tap that
+     installs the wrong app does not undo itself. */
+  .app-actions .y-btn {
+    min-height: 44px;
+  }
+}

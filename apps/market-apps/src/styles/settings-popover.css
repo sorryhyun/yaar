@@ -91,3 +91,10 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+@media (pointer: coarse) {
+  .config-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
