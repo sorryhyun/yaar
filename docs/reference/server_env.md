@@ -335,6 +335,65 @@ any fixed one while a dead connection still has to be noticed.
 
 ---
 
+## Companion desktop
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `YAAR_COMPANION_TAB` | on for Android, off elsewhere | Park a second, always-visible desktop in a server-side browser (`1` forces on, `0` off) |
+
+### Why it exists
+
+A phone does not keep a backgrounded tab running. Switch to another app and Android first
+hides YAAR's tab, then freezes it — and every read that is a **round trip into the page**
+stops answering. `__screenshot` is the one that hurts, because it is rasterized inside the
+app's own iframe, so the agent building an app loses the ability to look at what it built
+the moment the user glances at another app.
+
+The socket does not tell you this has happened. Measured against a real Chrome frozen with
+`Page.setWebLifecycleState`, it stayed open for **264s** in front of a page that could not
+execute a line, with the server reporting the client connected throughout
+(`packages/server/src/session/client-presence.ts`).
+
+### Why a second client is the whole fix
+
+Nothing about the capture path is per-connection:
+
+- An action goes to **every** connection in the session (`BroadcastCenter.publishToSession`)
+  and the first feedback wins (`ActionEmitter.emitActionWithFeedback`).
+- `clientAwayNote` owes no explanation while **any** connection is visible — one that could
+  have answered means the silence was never a backgrounded tab.
+- A socket that asks for no particular session gets the default one, which is the user's
+  (`SessionHub.attach`).
+
+So a second desktop that is always visible answers what the phone cannot, with no new
+mechanism and nothing for the phone's client to do differently.
+
+### Why the default is Android-only
+
+On a phone the client and the server are the same device, so "the user switched apps" is the
+ordinary case. Termux keeps running while they are elsewhere (given a wake lock), and
+Chromium there is a child of that process tree — putting the companion on the **server** side
+of the freeze. Chromium under Termux needs `--browser-subprocess-path` to spawn renderers at
+all, which `lib/browser/chrome.ts` already handles.
+
+Everywhere else the user's own window is right there and visible, and a companion is not free:
+a Chromium process, plus a second live iframe for every open app window — so an app with
+side effects on mount runs them twice. It is not paid for unless it is buying something.
+
+### Two details that are load-bearing
+
+- **`?ui=desktop`.** The phone shell renders one window at a time as a full-screen card, so a
+  capture of any other window would find nothing in the DOM. Nobody looks at the companion, and
+  the desktop layout is the one that keeps every window mounted.
+- **Pinned against the idle sweep.** Nothing touches this tab between captures, so `cleanupIdle`
+  would collect it precisely when it is about to be needed (`BrowserSession.pinned`).
+
+A box with no Chromium simply goes without, and says so once.
+
+**Source:** `packages/server/src/features/companion/companion-tab.ts`
+
+---
+
 ## Agent budgets
 
 | Variable | Default | Meaning |

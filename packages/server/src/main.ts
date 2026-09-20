@@ -135,6 +135,13 @@ async function startup() {
   const { startClipboardGrant } = await import('./lib/browser/clipboard-grant.js');
   startClipboardGrant(getPort());
 
+  // Park a second desktop in a server-side browser, where the environment wants one (on a
+  // phone, where the user switching apps freezes the only client there is). Started after
+  // the port is settled for the same reason as the clipboard grant: the tab loads the
+  // desktop from it. Never fatal — see features/companion/companion-tab.ts.
+  const { startCompanionTab } = await import('./features/companion/companion-tab.js');
+  void startCompanionTab(getPort()).catch((err) => console.error('Companion tab error:', err));
+
   // Compile stale apps and warm the provider pool concurrently, AFTER the server
   // is listening — codex app-server needs to reach MCP endpoints at
   // http://127.0.0.1:{PORT}/mcp/*, and compile no longer blocks either the

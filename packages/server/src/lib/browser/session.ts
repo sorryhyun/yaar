@@ -199,6 +199,17 @@ export class BrowserSession extends EventEmitter {
   version = 0;
   /** Whether an agent is currently driving this tab (Phase 3 "agent is driving" indicator). */
   driving = false;
+  /**
+   * Exempt this session from the idle sweep.
+   *
+   * Idleness is a proxy for "nobody wants this tab any more", and it is a good one for a
+   * tab an agent opened to read a page. It is wrong for a tab whose whole job is to sit
+   * there doing nothing until something needs it — the companion desktop
+   * (`features/companion/companion-tab.ts`), which exists precisely so that a capture has
+   * somewhere to land while the user's own client is backgrounded. Nothing touches it
+   * between captures, so the sweep would collect it exactly when it is about to matter.
+   */
+  pinned = false;
 
   private cdp: CDPClient;
   private closed = false;

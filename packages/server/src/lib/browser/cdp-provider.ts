@@ -131,6 +131,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       // Someone is looking at this tab. Reading a long page is not idleness, and
       // the pre-P1 sweep would take the canvas out from under them mid-article.
       if (session.screencasting) continue;
+      // Kept on purpose, not merely unused — see `BrowserSession.pinned`.
+      if (session.pinned) continue;
       if (now - session.lastActivity > idleMs) {
         toClose.push(id);
       }

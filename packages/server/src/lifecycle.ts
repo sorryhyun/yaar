@@ -491,6 +491,15 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
       // Never started — nothing to release.
     }
 
+    // Before the providers go: stop the companion's watchdog, or its next tick would
+    // reopen the tab the shutdown below is closing.
+    try {
+      const { stopCompanionTab } = await import('./features/companion/companion-tab.js');
+      await stopCompanionTab();
+    } catch {
+      // Never started — nothing to stop.
+    }
+
     // Close browser sessions — both doors (headless sandbox + the user's real
     // Chrome). The local provider never owns Chrome, so its shutdown only drops
     // our CDP connection.
