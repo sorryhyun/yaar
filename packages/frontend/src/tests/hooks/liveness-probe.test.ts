@@ -71,7 +71,7 @@ describe('createLivenessProbe', () => {
   });
 
   it('is generous enough to survive a radio waking up', () => {
-    // Being wrong costs a reconnect, which remounts every app iframe.
+    // Being wrong costs a reconnect: a handshake, a flush and a full snapshot.
     expect(LIVENESS_PROBE_TIMEOUT_MS).toBeGreaterThanOrEqual(5_000);
   });
 });

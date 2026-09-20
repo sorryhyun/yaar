@@ -24,9 +24,10 @@
  * How long the server has to say anything at all before we call the socket dead.
  *
  * Generous on purpose. This fires on a phone that has just woken up, where the first
- * packets go out over a radio that is still reassociating; the cost of being wrong is a
- * reconnect that reattaches to the same session, but it is still a remount of every app
- * iframe, so we would rather wait than churn.
+ * packets go out over a radio that is still reassociating. Being wrong costs a reconnect
+ * that reattaches to the same session — no longer a remount of every app iframe, since
+ * `applySnapshot` keeps the tokens of the windows already on screen, but still a
+ * handshake, a flush and a full snapshot, so we would rather wait than churn.
  */
 export const LIVENESS_PROBE_TIMEOUT_MS = 8_000;
 

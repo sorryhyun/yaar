@@ -9,8 +9,9 @@
  * running when it comes back.
  *
  * The recovery half is gated on purpose, so most of these cases assert that it does *not*
- * run. A resync replaces the desktop from a snapshot; firing one on every glance at
- * another app would remount app iframes for nothing.
+ * run. A resync replaces the desktop from a snapshot — surfaces rebuilt, dialogs dropped,
+ * a round trip for every window — and firing one on every glance at another app pays that
+ * for nothing.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '@testing-library/react';
@@ -97,7 +98,7 @@ describe('useClientPresence', () => {
 
   it('does not resync after a glance away', () => {
     // A flick to another app and straight back: nothing can have timed out, and a resync
-    // would remount every app iframe for no reason.
+    // would replace the desktop from a snapshot for no reason.
     let clock = 10_000;
     Date.now = () => clock;
     const hook = mount();

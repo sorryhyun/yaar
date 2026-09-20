@@ -2,11 +2,9 @@
  * useMonitorSync — what a tab tells the server when it changes monitors.
  *
  * A switch retargets the connection's subscription (SUBSCRIBE_MONITOR) and sends
- * nothing else. Notably no RESYNC: the snapshot mints fresh iframe tokens, which
- * remounts every app iframe, and the remount replays that window's app commands —
- * side-effectful commands (memo's addMemo) would run again on every switch.
- * Window state and agent streams cross monitors server-side instead (see
- * monitorEventScope in LiveSession), so a switch has nothing to catch up on.
+ * nothing else. Notably no RESYNC: window state and agent streams cross monitors
+ * server-side (see monitorEventScope in LiveSession), so a switch has nothing to catch
+ * up on, and a snapshot is a round trip that rebuilds every surface to say so.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '@testing-library/react';

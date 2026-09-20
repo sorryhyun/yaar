@@ -23,9 +23,15 @@ import { useDesktopStore } from '@/store/desktop';
 import { apiFetch } from '@/lib/api';
 
 /**
- * The snapshot arrives on the same socket right after SESSION_ATTACHED and already carries
- * fresh tokens for the windows the server restored. Let it land first, then only touch what
- * it left stale — otherwise those iframes reload twice.
+ * The snapshot arrives on the same socket right after SESSION_ATTACHED and brings the
+ * windows the server restored, each with a token minted by the live process. Let it land
+ * first, so this only ever mints for the windows it did *not* account for.
+ *
+ * Note what changed under this: `applySnapshot` now keeps the token of a window the client
+ * is already showing, precisely so an ordinary resync does not navigate a live iframe. That
+ * makes this function the only thing that re-mints for such a window — which is why it runs
+ * on exactly the attaches where the old token is dead, and why nothing else may assume a
+ * snapshot refreshed one.
  */
 const SNAPSHOT_GRACE_MS = 500;
 

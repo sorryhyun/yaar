@@ -154,6 +154,12 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
         appId: createAction.appId,
         isolateOrigin: createAction.isolateOrigin,
         appOrigin: createAction.appOrigin,
+        // Carried over, never reset. `WindowFrame` keys the content subtree on this, so
+        // rewinding it to undefined remounts the iframe — and a `window.create` for a key
+        // that is already open is a *re-describe*, not a reopen: the reconnect snapshot
+        // replays one for every window the server holds. A genuine reopen arrives after a
+        // `window.close`, which deletes the record and takes the nonce with it.
+        reloadNonce: state.windows[key]?.reloadNonce,
       };
       state.windows[key] = window;
       insertIntoZOrder(state, key, variant);

@@ -63,10 +63,9 @@ export function useMonitorSync() {
           sendEvent(wsManager, monitorSubscription(state.activeMonitorId));
           // Deliberately no RESYNC here. Window state and agent streams are delivered
           // session-wide (see LiveSession.broadcast), so a switch has nothing to catch
-          // up on — and a snapshot is not free: it mints fresh iframe tokens, which
-          // remounts every app iframe, and the remount replays that window's app
-          // commands. Side-effectful commands (e.g. memo's addMemo) would run again
-          // on every switch.
+          // up on. The snapshot no longer reloads the apps it names — `applySnapshot`
+          // keeps the iframe token of a window already on screen — but asking for one
+          // is still a question with no answer we do not already have.
         }
       }
     });

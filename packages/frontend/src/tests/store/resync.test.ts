@@ -16,6 +16,18 @@ import type { OSAction, ClientEvent } from '@yaar/shared';
 
 const MONITOR = '0';
 
+function iframeWindowAction(id: string, iframeToken: string): OSAction {
+  return {
+    type: 'window.create',
+    windowId: toWindowKey(MONITOR, id),
+    title: id,
+    bounds: { x: 0, y: 0, w: 200, h: 200 },
+    content: { renderer: 'iframe', data: `/api/apps/${id}/index.html` },
+    appId: id,
+    iframeToken,
+  } as OSAction;
+}
+
 function windowAction(id: string): OSAction {
   return {
     type: 'window.create',
@@ -95,6 +107,48 @@ describe('applySnapshot — the server is authoritative', () => {
     );
 
     expect(Object.keys(useDesktopStore.getState().dialogs)).toEqual(['d-live']);
+  });
+
+  it('keeps the iframe token of a window already on screen, so the app is not reloaded', () => {
+    const store = useDesktopStore.getState();
+    store.applyActions([iframeWindowAction('devtools', 'token-held')]);
+
+    // The server re-mints a token for every iframe window it reports. That token rides in
+    // the iframe's `src`, so adopting it navigates the frame — and a resync is not only a
+    // reconnect: a tab fires one every time it comes back from being hidden, which on a
+    // phone is every app switch. Every open app was reloading, and devtools came back with
+    // no project open for an agent that then cloned the work again.
+    store.applySnapshot([iframeWindowAction('devtools', 'token-freshly-minted')], []);
+
+    const win = useDesktopStore.getState().windows[toWindowKey(MONITOR, 'devtools')];
+    expect(win.iframeToken).toBe('token-held');
+  });
+
+  it('takes the snapshot token for a window it was not already showing', () => {
+    // Nothing to preserve: there is no live iframe to disturb, and the restored window has
+    // to arrive with a token the running server actually holds.
+    useDesktopStore.getState().applySnapshot([iframeWindowAction('memo', 'token-restored')], []);
+
+    const win = useDesktopStore.getState().windows[toWindowKey(MONITOR, 'memo')];
+    expect(win.iframeToken).toBe('token-restored');
+  });
+
+  it('keeps the reload nonce, which the content subtree is keyed on', () => {
+    const store = useDesktopStore.getState();
+    store.applyActions([iframeWindowAction('devtools', 'token-held')]);
+    store.applyActions([
+      { type: 'window.reload', windowId: toWindowKey(MONITOR, 'devtools') } as OSAction,
+    ]);
+    const bumped = useDesktopStore.getState().windows[toWindowKey(MONITOR, 'devtools')].reloadNonce;
+    expect(bumped).toBe(1);
+
+    // A `window.create` for a key that is already open is a re-describe, not a reopen.
+    // Rewinding the nonce remounts the frame — the same reload, by the other door.
+    store.applySnapshot([iframeWindowAction('devtools', 'token-freshly-minted')], []);
+
+    expect(useDesktopStore.getState().windows[toWindowKey(MONITOR, 'devtools')].reloadNonce).toBe(
+      bumped,
+    );
   });
 
   it('rebuilds a restored window through the ordinary reducer, so it is a real window', () => {

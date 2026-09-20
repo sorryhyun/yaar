@@ -299,20 +299,52 @@ export const useDesktopStore = create<DesktopStore>()(
     applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => {
       const [set] = a;
 
-      // The windows the server still has. A snapshot always names windows by their scoped
-      // handle ("0/notes"); the fallback mirrors applyWindowAction for anything that isn't.
+      // A snapshot always names windows by their scoped handle ("0/notes"); the fallback
+      // mirrors applyWindowAction for anything that isn't.
+      const snapshotKey = (action: WindowCreateAction): string => {
+        const rawId = action.windowId;
+        if (rawId.includes('/')) return rawId;
+        const monitorId =
+          (action as { monitorId?: string }).monitorId ??
+          useDesktopStore.getState().activeMonitorId ??
+          DEFAULT_MONITOR_ID;
+        return toWindowKey(monitorId, rawId);
+      };
+
+      const held = useDesktopStore.getState().windows;
+
+      /**
+       * The snapshot's actions, with the iframe token of every window we are *already
+       * showing* left as it is.
+       *
+       * The server re-mints a token for every iframe window it reports
+       * (`refreshRestoredWindowActions`), because a snapshot also answers a client whose
+       * tokens were minted by a process that is gone. But a token rides in the iframe's
+       * `src` (`IframeRenderer`), so writing a new one navigates the frame — and a resync
+       * is not only a reconnect: `useClientPresence` fires one every time the tab comes
+       * back from being hidden. On a phone that is every app switch, and it was reloading
+       * every open app, which is how devtools kept coming back with no project open and
+       * its agent re-cloned work that was already there.
+       *
+       * Keeping ours is safe because a re-mint does not revoke its predecessor
+       * (`http/iframe-tokens.ts`) — our token is still live for as long as the process
+       * that minted it is. The one case where it is *not* is an attach that is not a
+       * rejoin of the same incarnation, and that case is already owned, in full and
+       * independently of this path, by `refreshStaleIframeTokens`.
+       */
+      const reconciled = actions.map((action) => {
+        if (action.type !== 'window.create') return action;
+        const create = action as WindowCreateAction;
+        const token = held[snapshotKey(create)]?.iframeToken;
+        if (!token || !create.iframeToken || token === create.iframeToken) return action;
+        return { ...create, iframeToken: token };
+      });
+
+      // The windows the server still has.
       const liveWindowKeys = new Set(
-        actions
+        reconciled
           .filter((action): action is WindowCreateAction => action.type === 'window.create')
-          .map((action) => {
-            const rawId = action.windowId;
-            if (rawId.includes('/')) return rawId;
-            const monitorId =
-              (action as { monitorId?: string }).monitorId ??
-              useDesktopStore.getState().activeMonitorId ??
-              DEFAULT_MONITOR_ID;
-            return toWindowKey(monitorId, rawId);
-          }),
+          .map(snapshotKey),
       );
 
       // Drop what the server does not have, before rebuilding what it does.
@@ -358,7 +390,7 @@ export const useDesktopStore = create<DesktopStore>()(
         }
       });
 
-      useDesktopStore.getState().applyActions(actions);
+      useDesktopStore.getState().applyActions(reconciled);
     },
 
     /**
