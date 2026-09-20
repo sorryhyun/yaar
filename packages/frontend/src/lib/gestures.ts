@@ -13,10 +13,11 @@
  * app iframe reach nothing at all, which is why the monitor pan also keeps a real
  * element over the page (`EDGE_GUTTER_PX` wide at each side edge) to catch them.
  *
- * The monitor pan is two questions, not one, and they are asked at different moments.
- * `dragAxis` runs while the finger is still down and decides whether the desktop is
- * following it — early, because a peek that starts late looks like a stutter.
- * `shouldCommitPeek` runs when the finger lifts and decides where it lands.
+ * A drag that the shell follows is two questions, not one, and they are asked at
+ * different moments. `dragAxis` runs while the finger is still down and decides whether
+ * the shell is following it — early, because a peek that starts late looks like a
+ * stutter. `shouldCommitDrag` runs when the finger lifts and decides where it lands.
+ * Both the monitor pan and the shade pull ask them, in that order.
  */
 
 /** How far in from the left/right screen edge a monitor swipe has to start. */
@@ -159,14 +160,35 @@ export function peekOffset(dx: number, hasNeighbour: boolean, viewportWidth: num
 }
 
 /**
- * Whether a finished pan lands on the neighbour or falls back.
+ * Whether a finished drag lands where it was heading or falls back.
  *
  * Distance *or* speed: a slow deliberate drag is read from how far it went, and a flick
  * from how fast — insisting on `SWIPE_MIN_PX` for both would make the quickest version
  * of the gesture the one that does not work.
+ *
+ * Axis-agnostic, because the question is the same one at both ends of the shell: the
+ * monitor pan asks it of `dx` and the shade pull of `dy`, and a phone where a flick
+ * opened the shade but not the neighbouring monitor would just feel inconsistent.
  */
-export function shouldCommitPeek(dx: number, elapsedMs: number): boolean {
-  const ax = Math.abs(dx);
-  if (ax >= SWIPE_MIN_PX) return true;
-  return ax >= DRAG_INTENT_PX && elapsedMs > 0 && ax / elapsedMs >= FLICK_VELOCITY;
+export function shouldCommitDrag(travel: number, elapsedMs: number): boolean {
+  const distance = Math.abs(travel);
+  if (distance >= SWIPE_MIN_PX) return true;
+  return distance >= DRAG_INTENT_PX && elapsedMs > 0 && distance / elapsedMs >= FLICK_VELOCITY;
+}
+
+/** How long the shade takes to finish the pull once the finger lifts. */
+export const SHADE_SETTLE_MS = 200;
+
+/**
+ * How far a pull has to travel before the screen behind the shade is fully dimmed.
+ *
+ * Shorter than the sheet is tall, on purpose: the dim is what says the shade is a layer
+ * over the desktop rather than part of it, and it reads as that from the first
+ * centimetre. It is not trying to be a percentage of anything.
+ */
+export const SHADE_DIM_PX = 180;
+
+/** How dark the screen behind a shade pulled down by `y` is, 0 to 1. */
+export function shadeDim(y: number): number {
+  return Math.max(0, Math.min(1, y / SHADE_DIM_PX));
 }

@@ -58,6 +58,8 @@ const gutters = () => document.querySelectorAll<HTMLElement>('[data-phone-gutter
 const peekOffsetPx = () =>
   document.documentElement.style.getPropertyValue('--monitor-peek-x').trim();
 const panState = () => document.documentElement.getAttribute('data-monitor-peek');
+const pullState = () => document.documentElement.getAttribute('data-shade-pull');
+const pullPx = () => document.documentElement.style.getPropertyValue('--shade-pull').trim();
 
 describe('PhoneGestures', () => {
   beforeEach(() => {
@@ -76,6 +78,8 @@ describe('PhoneGestures', () => {
     cleanup();
     document.documentElement.removeAttribute('data-monitor-peek');
     document.documentElement.style.removeProperty('--monitor-peek-x');
+    document.documentElement.removeAttribute('data-shade-pull');
+    document.documentElement.style.removeProperty('--shade-pull');
   });
 
   it('renders nothing at all on a desktop', () => {
@@ -282,6 +286,76 @@ describe('PhoneGestures', () => {
     touch(document.body, 'touchstart', 200, 10);
     touch(document.body, 'touchend', 205, 120);
     expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+  });
+
+  it('brings the shade down with the finger rather than after it', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 10);
+    touch(document.body, 'touchmove', 203, 50);
+
+    // On screen from the first frame of the drag, and 40px of it — as far as the finger
+    // has come, not as far as the gesture will eventually have gone.
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    expect(pullState()).toBe('dragging');
+    expect(pullPx()).toBe('40px');
+  });
+
+  it('follows a pull that changes its mind back up again', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 10);
+    touch(document.body, 'touchmove', 203, 50);
+    touch(document.body, 'touchmove', 203, 20);
+    expect(pullPx()).toBe('10px');
+  });
+
+  it('takes an abandoned pull back up once the finger lifts', async () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 10);
+    touch(document.body, 'touchmove', 203, 40);
+    await slowly();
+    touch(document.body, 'touchend', 203, 40);
+    // Still on screen while it slides back: unmounting it here would be a sheet that
+    // vanished rather than one that was put away.
+    expect(pullState()).toBe('settling');
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+
+    await settle();
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+  });
+
+  /** A scroller of `scrollTop`, as the home screen's icon grid is one. */
+  function scroller(scrollTop: number) {
+    const list = document.createElement('div');
+    list.style.overflowY = 'scroll';
+    Object.defineProperty(list, 'scrollHeight', { value: 400 });
+    Object.defineProperty(list, 'clientHeight', { value: 100 });
+    Object.defineProperty(list, 'scrollTop', { value: scrollTop, writable: true });
+    document.body.appendChild(list);
+    return list;
+  }
+
+  it('leaves a vertical drag over something scrollable to the scroll', () => {
+    const list = scroller(50);
+    render(<PhoneGestures />);
+
+    touch(list, 'touchstart', 200, 10);
+    touch(list, 'touchmove', 203, 60);
+    expect(pullState()).toBeNull();
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+    list.remove();
+  });
+
+  it('takes the drag back once that scroller has nothing left to scroll', () => {
+    // A home screen with more icons than fit would otherwise be a screen with no shade
+    // on it at all: the grid is under the whole top band, scrolled to the top or not.
+    const list = scroller(0);
+    render(<PhoneGestures />);
+
+    touch(list, 'touchstart', 200, 10);
+    touch(list, 'touchmove', 203, 60);
+    expect(pullState()).toBe('dragging');
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    list.remove();
   });
 
   it('leaves a pull that did not start at the top edge alone', () => {

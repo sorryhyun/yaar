@@ -11,8 +11,13 @@
  *   if it was not what they meant. The side gutters stay for the case the shell does not
  *   own: a phone window is a full-screen card and an app card is an iframe, so a touch
  *   inside one reaches no listener in this document at all.
- * - **Pull down from the top** opens the notification shade, which on a phone is also
- *   where the connection and agent readings live.
+ * - **Pull down from the top** brings down the notification shade — which on a phone is
+ *   also where the connection and agent readings live — and it comes down with the
+ *   finger rather than after it, for the same reason the pan does: a sheet that appears
+ *   only once the finger is up gives the user nothing to aim with and no way to change
+ *   their mind. The placing is left to CSS through `lib/shade-pull`, which the shade's
+ *   own grip writes to as well, so pulling it open and pushing it shut are one gesture
+ *   described in one place.
  *
  * The strip the pan runs along is one wider than the monitor list: the **CLI** sits one
  * step to the left of the first monitor. `Shift+Tab` is the way into it on a desktop and
@@ -37,10 +42,11 @@ import {
   dragAxis,
   edgeZone,
   peekOffset,
-  shouldCommitPeek,
+  shouldCommitDrag,
   stepMonitorIndex,
   swipeDirection,
 } from '@/lib/gestures';
+import { settleShadePull, trackShadePull } from '@/lib/shade-pull';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { resolveWallpaper } from '@/constants/appearance';
 import styles from '@/styles/desktop/PhoneGestures.module.css';
@@ -72,8 +78,9 @@ interface Drag {
   at: number;
   /** Locked on the first frame that says which way this is going. */
   axis: 'x' | 'y' | null;
-  /** The pull-down is only on offer from the top band. */
-  fromTop: boolean;
+  /** Whether this touch is allowed to pull the shade down — the top band, and nothing
+   *  vertically scrollable under the finger. */
+  canPull: boolean;
   /** Started in a side gutter, so a tap here belongs to whatever is underneath. */
   fromGutter: boolean;
   /** Whether this touch is allowed to pan at all — decided from where it landed. */
@@ -96,6 +103,9 @@ export function PhoneGestures() {
 
   const drag = useRef<Drag | null>(null);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Whether the finger currently down is the one dragging the shade. */
+  const pullingShade = useRef(false);
+  const shadeSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!isMobile) return;
@@ -181,7 +191,7 @@ export function PhoneGestures() {
       const landing =
         target !== null &&
         (target.side === 'left' ? dx > 0 : dx < 0) &&
-        shouldCommitPeek(dx, elapsed)
+        shouldCommitDrag(dx, elapsed)
           ? target
           : null;
       const width = globalThis.innerWidth;
@@ -198,6 +208,28 @@ export function PhoneGestures() {
       }, PEEK_SETTLE_MS);
     };
 
+    /** Bring the shade down under the finger, mounting it on the first frame. */
+    const trackShade = (dy: number) => {
+      if (!pullingShade.current) {
+        pullingShade.current = true;
+        // Mounting it *is* opening it as far as the rest of the shell is concerned: the
+        // sheet is on screen from here on, and a pull that is let go too early takes it
+        // back below. That is also what keeps the other gestures off this touch.
+        useDesktopStore.getState().setNotificationShadeOpen(true);
+      }
+      trackShadePull(dy);
+    };
+
+    /** Let go of a pull: finish the slide, and put the shade away if it lost. */
+    const finishShade = (dy: number, elapsed: number) => {
+      pullingShade.current = false;
+      const open = shouldCommitDrag(dy, elapsed) && dy > 0;
+      shadeSettle.current = settleShadePull(open, () => {
+        shadeSettle.current = null;
+        if (!open) useDesktopStore.getState().setNotificationShadeOpen(false);
+      });
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       // A second finger means a pinch or a zoom, not one of ours. Any pan the first
@@ -206,6 +238,7 @@ export function PhoneGestures() {
         const pending = drag.current;
         drag.current = null;
         if (pending?.axis === 'x' && peekRef.current) finishPan(0, 0);
+        else if (pullingShade.current) finishShade(0, 0);
         return;
       }
       // A touch landing mid-settle takes the pan over rather than fighting it.
@@ -213,20 +246,21 @@ export function PhoneGestures() {
       const zone = edgeZone(touch.clientX, touch.clientY, globalThis.innerWidth);
       const state = useDesktopStore.getState();
       const fromGutter = (e.target as Element | null)?.hasAttribute?.('data-phone-gutter') === true;
+      const sheetUp = state.paletteSheetOpen || state.notificationShadeOpen;
       drag.current = {
         x: touch.clientX,
         y: touch.clientY,
         at: performance.now(),
         axis: null,
-        fromTop: zone === 'top',
+        // The shade may be pulled from over a card's title bar — that is what the top
+        // band is sized for — so this asks a different question from `canPanFrom`: not
+        // "does the shell own this?" but "would the finger have scrolled something?".
+        canPull: zone === 'top' && !sheetUp && (fromGutter || canPullFrom(e.target)),
         fromGutter,
         // No monitor-count test: with the CLI on the end of the strip there is somewhere
         // to go even from a lone monitor, and a direction with nothing in it rubber-bands
         // rather than being refused up front.
-        canPan:
-          !state.paletteSheetOpen &&
-          !state.notificationShadeOpen &&
-          (fromGutter || canPanFrom(e.target)),
+        canPan: !sheetUp && (fromGutter || canPanFrom(e.target)),
       };
     };
 
@@ -237,10 +271,26 @@ export function PhoneGestures() {
       const dx = touch.clientX - d.x;
       const dy = touch.clientY - d.y;
       if (!d.axis) {
+        // Claim a downward drag before the browser does. `dragAxis` needs 10px to say
+        // which way this is going, and by then Chrome has decided too: it starts
+        // scrolling on the first move it is allowed to keep, after which the moves stop
+        // being cancelable and the shade would come down over a page sliding under it.
+        // Safe to claim this early, because `canPull` has already said that nothing
+        // under the finger has anywhere left to scroll upwards to.
+        if (d.canPull && dy > 0 && e.cancelable) e.preventDefault();
         d.axis = dragAxis(dx, dy);
         if (!d.axis) return;
       }
-      if (d.axis !== 'x' || !d.canPan) return;
+      if (d.axis === 'y') {
+        // Upwards from the top edge is nothing to begin with — there is no shade up there
+        // yet to push back — but once one is coming down it follows the finger both ways,
+        // so a pull can be taken back without lifting.
+        if (!d.canPull || (dy <= 0 && !pullingShade.current)) return;
+        if (e.cancelable) e.preventDefault();
+        trackShade(dy);
+        return;
+      }
+      if (!d.canPan) return;
       // The desktop is under the finger now, so the page must not also scroll under it.
       if (e.cancelable) e.preventDefault();
       trackPan(dx);
@@ -253,6 +303,7 @@ export function PhoneGestures() {
       if (!d) return;
       if (!touch) {
         if (d.axis === 'x' && peekRef.current) finishPan(0, 0);
+        else if (pullingShade.current) finishShade(0, 0);
         return;
       }
       const dx = touch.clientX - d.x;
@@ -260,6 +311,10 @@ export function PhoneGestures() {
 
       if (d.axis === 'x' && d.canPan) {
         finishPan(dx, performance.now() - d.at);
+        return;
+      }
+      if (pullingShade.current) {
+        finishShade(dy, performance.now() - d.at);
         return;
       }
       // No touchmove ever arrived — a browser can coalesce a fast flick into start and
@@ -275,13 +330,11 @@ export function PhoneGestures() {
           }
         }
       }
-      if (d.fromTop && swipeDirection(dx, dy) === 'down') {
-        const state = useDesktopStore.getState();
-        // Already showing something from an edge: the pull has nowhere to go.
-        if (!state.notificationShadeOpen && !state.paletteSheetOpen) {
-          state.setNotificationShadeOpen(true);
-          return;
-        }
+      // A pull that never reported a move — a browser can coalesce a fast one into start
+      // and end alone — has nothing to animate from, so it just opens.
+      if (d.canPull && swipeDirection(dx, dy) === 'down') {
+        useDesktopStore.getState().setNotificationShadeOpen(true);
+        return;
       }
       // A gutter touch that went nowhere was a tap on whatever the gutter is covering —
       // the left edge of a home-screen icon, a title bar button. Hand it over. A tap
@@ -293,6 +346,7 @@ export function PhoneGestures() {
     const onTouchCancel = () => {
       const d = drag.current;
       drag.current = null;
+      if (pullingShade.current) finishShade(0, 0);
       if (d?.axis === 'x' && peekRef.current) finishPan(0, 0);
       else if (peekRef.current) clearPeek();
     };
@@ -307,6 +361,9 @@ export function PhoneGestures() {
       document.removeEventListener('touchmove', onTouchMove, true);
       document.removeEventListener('touchend', onTouchEnd, true);
       document.removeEventListener('touchcancel', onTouchCancel, true);
+      if (shadeSettle.current) clearTimeout(shadeSettle.current);
+      shadeSettle.current = null;
+      pullingShade.current = false;
       clearPeek();
     };
   }, [isMobile, setPeekNow]);
@@ -371,6 +428,33 @@ function canPanFrom(el: EventTarget | null): boolean {
     // somewhere to scroll in the first place.
     if (node.scrollWidth > node.clientWidth + 1) {
       const overflow = getComputedStyle(node).overflowX;
+      if (overflow === 'auto' || overflow === 'scroll') return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Whether a touch that landed on `el` is allowed to pull the shade down.
+ *
+ * Looser than `canPanFrom` on purpose: a card is the monitor's content and must not be
+ * slid sideways out from under a reader, but the top band of the screen *is* a card's
+ * title bar most of the time, and a shade that could not be pulled from there would be
+ * a shade with nowhere to pull it from. What is refused instead is the one thing a
+ * downward drag would otherwise have been: a scroll.
+ *
+ * And only while there is still a scroll to be had. A list already at its top — a home
+ * screen with more icons than fit, scrolled back up — has nothing left to give a
+ * downward drag, so the drag is the shade's: the same bargain every phone makes with
+ * pull-to-refresh, and without it a screenful of icons is a screen with no shade.
+ */
+function canPullFrom(el: EventTarget | null): boolean {
+  for (let node = el instanceof Element ? el : null; node; node = node.parentElement) {
+    if (node.hasAttribute('data-no-pan')) return false;
+    // `scrollTop` first: it is a read, where `getComputedStyle` is a style resolution,
+    // and at the top of the scroll the answer is the same either way.
+    if (node.scrollTop > 0 && node.scrollHeight > node.clientHeight + 1) {
+      const overflow = getComputedStyle(node).overflowY;
       if (overflow === 'auto' || overflow === 'scroll') return false;
     }
   }

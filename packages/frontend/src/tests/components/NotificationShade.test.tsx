@@ -7,10 +7,11 @@
  * the old "close when the list empties" rule took away.
  */
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { NotificationShade } from '@/components/overlays/NotificationShade';
 import { DesktopStatusBar } from '@/components/desktop/DesktopStatusBar';
+import { SHADE_SETTLE_MS } from '@/lib/gestures';
 
 const noop = mock(() => {});
 
@@ -36,7 +37,11 @@ describe('NotificationShade', () => {
     });
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    document.documentElement.removeAttribute('data-shade-pull');
+    document.documentElement.style.removeProperty('--shade-pull');
+  });
 
   it('stays open on an empty list, because the status above it is the point', () => {
     open();
@@ -67,6 +72,67 @@ describe('NotificationShade', () => {
     useDesktopStore.setState({ connectionStatus: 'disconnected' });
     open();
     expect(screen.getByText('Disconnected')).toBeInTheDocument();
+  });
+
+  describe('the grip', () => {
+    /** The sheet, with a height — happy-dom lays nothing out, and the drag measures. */
+    function sheetOfHeight(px: number) {
+      const sheet = screen.getByRole('dialog');
+      Object.defineProperty(sheet, 'offsetHeight', { value: px, configurable: true });
+      return screen.getByLabelText('Close notifications');
+    }
+
+    const pullPx = () => document.documentElement.style.getPropertyValue('--shade-pull').trim();
+
+    it('pushes the sheet up with the finger, from wherever it already was', () => {
+      open();
+      const grip = sheetOfHeight(300);
+      fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
+      fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 260 }] });
+      // 300px of sheet was down and the finger has taken 40 of them back.
+      expect(pullPx()).toBe('260px');
+    });
+
+    it('puts a sheet back that was only nudged', async () => {
+      open();
+      const grip = sheetOfHeight(300);
+      fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
+      // Under `DRAG_INTENT_PX`, so it is a nudge at any speed — the sheet moved with it
+      // and moves back, which is how the user finds out the grip is a grip.
+      fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 292 }] });
+      fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 292 }] });
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, SHADE_SETTLE_MS + 40));
+      });
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+      expect(document.documentElement.dataset.shadePull).toBe('open');
+    });
+
+    it('closes on a push that meant it, and only once the sheet has arrived', async () => {
+      open();
+      const grip = sheetOfHeight(300);
+      fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
+      fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 200 }] });
+      fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 200 }] });
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, SHADE_SETTLE_MS + 40));
+      });
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+      // And the sheet takes its properties with it, or the next one opens parked.
+      expect(document.documentElement.dataset.shadePull).toBeUndefined();
+    });
+
+    it('is still a tap: a grip that was not dragged closes on the click', () => {
+      open();
+      const grip = sheetOfHeight(300);
+      fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
+      fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 302 }] });
+      fireEvent.click(grip);
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+    });
   });
 
   it('renders nothing on a desktop, which keeps its status pill', () => {

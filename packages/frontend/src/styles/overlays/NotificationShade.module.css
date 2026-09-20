@@ -32,6 +32,11 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
+  /* The dim comes down with the sheet rather than arriving with it: at the 10px the
+     pull is recognised at, a screen that went dark all at once would read as a mistake
+     rather than as a layer being drawn over it. Unset — every way in but the drag —
+     it is simply on. */
+  opacity: var(--shade-dim, 1);
   z-index: var(--z-toast);
 }
 
@@ -176,6 +181,28 @@
   height: 4px;
   border-radius: var(--radius-full);
   background: var(--color-overlay);
+}
+
+/* ============ Under the finger ============
+   While the shade is being dragged — open by `PhoneGestures`, shut by the grip above —
+   its position is the gesture's, not an animation's. `--shade-pull` is how much of the
+   sheet the finger has brought down and `min()` is the point at which it is all the way
+   open, so neither end of the drag has to know how tall the sheet is: `-100%` is
+   whatever it turned out to be. See `lib/shade-pull.ts`. */
+:global(html[data-shade-pull]) .shade {
+  /* An animated value beats an ordinary declaration whatever the specificity, so
+     without this the transform below would simply not apply while the entry ran. */
+  animation: none;
+  transform: translateY(min(0px, calc(-100% + var(--shade-pull, 0px))));
+}
+
+/* Only while the finger is gone: during the drag the sheet is *at* the finger, and a
+   transition would put it a fifth of a second behind it. */
+:global(html[data-shade-pull='settling']) .shade,
+:global(html[data-shade-pull='settling']) .backdrop {
+  transition:
+    transform var(--shade-pull-ms, 200ms) ease-out,
+    opacity var(--shade-pull-ms, 200ms) ease-out;
 }
 
 /* Keyframes live in the module that names them: the CSS-modules pass scopes an

@@ -9,12 +9,14 @@ import {
   EDGE_GUTTER_PX,
   FLICK_VELOCITY,
   RUBBER_BAND_DIVISOR,
+  SHADE_DIM_PX,
   SWIPE_MIN_PX,
   TOP_EDGE_PX,
   dragAxis,
   edgeZone,
   peekOffset,
-  shouldCommitPeek,
+  shadeDim,
+  shouldCommitDrag,
   stepMonitorIndex,
   swipeDirection,
 } from '../../lib/gestures';
@@ -127,19 +129,39 @@ describe('peekOffset', () => {
   });
 });
 
-describe('shouldCommitPeek', () => {
+describe('shouldCommitDrag', () => {
+  it('reads a vertical pull by the same rule as a sideways pan', () => {
+    // One rule, both axes: a flick that opens the shade but would not have changed
+    // monitors is the kind of inconsistency a thumb notices and cannot name.
+    expect(shouldCommitDrag(SWIPE_MIN_PX, 4000)).toBe(shouldCommitDrag(-SWIPE_MIN_PX, 4000));
+  });
+
   it('lands a drag that went far enough, however long it took', () => {
-    expect(shouldCommitPeek(SWIPE_MIN_PX, 4000)).toBe(true);
-    expect(shouldCommitPeek(-SWIPE_MIN_PX, 4000)).toBe(true);
+    expect(shouldCommitDrag(SWIPE_MIN_PX, 4000)).toBe(true);
+    expect(shouldCommitDrag(-SWIPE_MIN_PX, 4000)).toBe(true);
   });
 
   it('lands a short one that was fast enough', () => {
     const dx = SWIPE_MIN_PX / 2;
-    expect(shouldCommitPeek(dx, dx / FLICK_VELOCITY - 1)).toBe(true);
-    expect(shouldCommitPeek(dx, dx / FLICK_VELOCITY + 1)).toBe(false);
+    expect(shouldCommitDrag(dx, dx / FLICK_VELOCITY - 1)).toBe(true);
+    expect(shouldCommitDrag(dx, dx / FLICK_VELOCITY + 1)).toBe(false);
   });
 
   it('never reads a nudge as a flick, however quick', () => {
-    expect(shouldCommitPeek(DRAG_INTENT_PX - 1, 1)).toBe(false);
+    expect(shouldCommitDrag(DRAG_INTENT_PX - 1, 1)).toBe(false);
+  });
+});
+
+describe('shadeDim', () => {
+  it('darkens with the pull and stops at full', () => {
+    expect(shadeDim(0)).toBe(0);
+    expect(shadeDim(SHADE_DIM_PX / 2)).toBe(0.5);
+    expect(shadeDim(SHADE_DIM_PX * 3)).toBe(1);
+  });
+
+  it('is nothing at all for a pull that has gone backwards', () => {
+    // The grip drag measures from however much of the sheet was already down, so a
+    // finger that overshoots upward asks for a negative one.
+    expect(shadeDim(-40)).toBe(0);
   });
 });

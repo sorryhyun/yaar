@@ -386,8 +386,16 @@
   padding: 0 var(--space-2) calc(env(safe-area-inset-bottom, 0px) + var(--space-1));
 }
 
-:global(html[data-form-factor='mobile']) .container[data-expanded='true'] .actionButtons {
+/* Typing, the cluster steps aside so the textarea gets the row — all of it but the
+   reset, which stays. It is the one control there is no other way to reach on a phone
+   (no menu bar, no keyboard shortcut), and the moment it is wanted is the moment the
+   user is typing into a context they have decided to be rid of. */
+:global(html[data-form-factor='mobile']) .container[data-expanded='true'] .actionButtons > * {
   display: none;
+}
+
+:global(html[data-form-factor='mobile']) .container[data-expanded='true'] .resetButton {
+  display: flex;
 }
 
 :global(html[data-form-factor='mobile']) .qrButton,

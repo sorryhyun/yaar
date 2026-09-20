@@ -14,14 +14,18 @@
  * list is there whether or not anything has been notified.
  *
  * Auto-dismiss still belongs to `NotificationCenter`, which owns the timers whichever
- * form factor is on screen. This component only renders.
+ * form factor is on screen. This component only renders — with one exception: the sheet
+ * is dragged shut by its own grip, and a drag has to be followed rather than waited out,
+ * so the grip writes the same `lib/shade-pull` properties the pull-down does. The two
+ * halves of the gesture are the same gesture; see that module.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectNotifications } from '@/store';
 import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
-import { swipeDirection } from '@/lib/gestures';
+import { shouldCommitDrag } from '@/lib/gestures';
+import { clearShadePull, settleShadePull, trackShadePull } from '@/lib/shade-pull';
 import styles from '@/styles/overlays/NotificationShade.module.css';
 
 interface NotificationShadeProps {
@@ -50,11 +54,51 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
 
   // Push the shade back up the way it came. The grip sits at the bottom edge of the
   // sheet, which is where the finger that pulled it down ended up.
-  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const shadeRef = useRef<HTMLDivElement>(null);
+  const settling = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * The drag in progress: where it started, when, and how much of the sheet was on
+   * screen then — which is what the pull is measured from, so the sheet keeps sitting
+   * under the finger however tall it turned out to be.
+   */
+  const dragStart = useRef<{ y: number; at: number; shown: number; moved: boolean } | null>(null);
+
+  // The properties are on `<html>` and the shade is not unmounted when it closes, so
+  // nothing else will take them away: left at wherever the pull stopped, they would park
+  // the *next* shade there — off the top of the screen, if the pull was abandoned. The
+  // cleanup cancels a settle the same way, for a shade dismissed out from under one.
+  useEffect(() => {
+    if (!open || !isMobile) clearShadePull();
+    return () => {
+      if (settling.current) clearTimeout(settling.current);
+      settling.current = null;
+    };
+  }, [open, isMobile]);
 
   const onGripTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
-    dragStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    dragStart.current = touch
+      ? {
+          y: touch.clientY,
+          at: performance.now(),
+          shown: shadeRef.current?.offsetHeight ?? 0,
+          moved: false,
+        }
+      : null;
+  }, []);
+
+  const onGripTouchMove = useCallback((e: React.TouchEvent) => {
+    const start = dragStart.current;
+    const touch = e.touches[0];
+    if (!start || !touch) return;
+    const dy = touch.clientY - start.y;
+    // A tap wanders. Nothing moves until the drag has said it is one, or the sheet
+    // twitches under every finger that meant to close it with a tap.
+    if (!start.moved && Math.abs(dy) < 4) return;
+    start.moved = true;
+    // No preventDefault: React's touchmove listener is passive, so `touch-action: none`
+    // on the grip is what keeps the browser from scrolling the page along with this.
+    trackShadePull(start.shown + dy);
   }, []);
 
   const onGripTouchEnd = useCallback(
@@ -62,11 +106,15 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
       const start = dragStart.current;
       dragStart.current = null;
       const touch = e.changedTouches[0];
-      if (!start || !touch) return;
-      if (swipeDirection(touch.clientX - start.x, touch.clientY - start.y) !== 'up') return;
+      if (!start || !touch || !start.moved) return;
       // The drag decided; stop the browser following it with a click that would ask again.
       e.preventDefault();
-      setOpen(false);
+      const dy = touch.clientY - start.y;
+      const closing = dy < 0 && shouldCommitDrag(dy, performance.now() - start.at);
+      settling.current = settleShadePull(!closing, () => {
+        settling.current = null;
+        if (closing) setOpen(false);
+      });
     },
     [setOpen],
   );
@@ -90,7 +138,7 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
   return (
     <>
       <div className={styles.backdrop} onClick={() => setOpen(false)} />
-      <div className={styles.shade} role="dialog" aria-label={t('status.title')}>
+      <div className={styles.shade} ref={shadeRef} role="dialog" aria-label={t('status.title')}>
         {/* What the desktop keeps in its status pill all session. */}
         <div className={styles.status}>
           <ConnectionStatus />
@@ -137,6 +185,7 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
           className={styles.closeHandle}
           onClick={() => setOpen(false)}
           onTouchStart={onGripTouchStart}
+          onTouchMove={onGripTouchMove}
           onTouchEnd={onGripTouchEnd}
           aria-label={t('notifications.close')}
         >
