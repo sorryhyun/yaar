@@ -550,6 +550,21 @@ for (const c of cards) {
  * the same `CARD_CSS` the cards use. So the palette still cannot drift here; change
  * the accent in tokens.ts and these recolor with everything else.
  *
+ * Two kinds of value are deliberately literal, because the token module does not own
+ * them. The wallpaper is one: it is store state the user picks, so the screens paint
+ * the `dark-blue` preset from `constants/appearance.ts` verbatim rather than pretend a
+ * token names it. The other is the handful of alpha washes the shell's own modules
+ * write inline (`rgba(255, 255, 255, 0.25)` on the active monitor chip, the tab's
+ * `0 1px 4px` shadow) — copied from those modules so the picture matches what ships,
+ * and they move when the module does.
+ *
+ * The structure is copied from the components themselves, not invented: the icon grid
+ * is `DesktopSurface.module.css`'s phone grid, the sheet is `NotificationShade`, the
+ * bottom handle is `CommandPalette`'s collapsed sheet, the card is `WindowFrame` with
+ * `isCard` geometry, and the terminal is `CliPanel` + `TerminalPane`. A structural
+ * change to any of those is a change here too — verified against the running phone
+ * shell, which is the only thing that can settle it.
+ *
  * What stays literal is the phone's geometry — 390×844, a 44px title bar, a 62px
  * icon tile. Those are the mockup's own subject matter, not the design system's, and
  * they are also what a comment on one of these screens is usually about.

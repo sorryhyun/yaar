@@ -141,8 +141,15 @@ It has two pages:
   can produce "the home screen". They are still not allowed a palette of their own:
   every color, type step and radius in them is a `var(--color-*)` / `var(--text-*)` /
   `var(--radius-*)`, resolved by the same CSS the cards use, so changing the accent in
-  `tokens.ts` recolors the phone too. What stays literal is the phone's geometry —
-  390×844, a 44px title bar — which is the mockup's own subject, not the system's.
+  `tokens.ts` recolors the phone too. Three things stay literal, because the token
+  module does not own them: the phone's geometry (390×844, a 36px title bar, a 30px
+  collapsed palette handle), the wallpaper (the `dark-blue` preset from
+  `constants/appearance.ts` — store state the user picks), and the few alpha washes the
+  shell's own modules write inline. Their structure is copied from the components, not
+  invented — the grid from `DesktopSurface`, the sheet from `NotificationShade`, the
+  handle from `CommandPalette`, the card from `WindowFrame`, the terminal from
+  `CliPanel`/`TerminalPane` — so a structural change there is a change here too, and the
+  running phone shell is the only thing that settles it.
 
 **The canvas layout is generated, so do not rearrange it in the editor**: the next
 `make design` writes `canvas.json` whole and would undo it. Move a board by moving it

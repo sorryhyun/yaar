@@ -1,111 +1,73 @@
-<div style="width: 390px; height: 844px; box-sizing: border-box; font-family: var(--font-sans); font-size: var(--text-base); line-height: 1.5; position: relative; overflow: hidden; background-color: var(--color-mantle); background-image: linear-gradient(color-mix(in srgb, var(--color-accent) 5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 5%, transparent) 1px, transparent 1px); background-size: 26px 26px; display: flex; flex-direction: column; color: var(--color-text);">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; font-family: var(--font-sans); font-size: var(--text-base); line-height: 1.5; color: var(--color-text); background: linear-gradient(135deg, #0d1117 0%, #101a2e 50%, #0f2a52 100%);">
 
-  <div style="height: 58px; flex-shrink: 0;"></div>
+  <div style="position: absolute; top: 12px; left: 8px; right: 8px; bottom: 30px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start; gap: 12px 0;">
 
-  <button type="button" aria-label="Open notifications (3)" style="position: absolute; top: 52px; right: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; height: 44px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--bg-glass); color: {{accent}}; font-family: inherit; font-size: var(--text-base); font-weight: 600; cursor: pointer;">
-    <span aria-hidden="true" style="width: 7px; height: 7px; border-radius: var(--radius-full); background: {{accent}};"></span>
-    3
-  </button>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F680;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Start</span>
+    </button>
 
-  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 14px; row-gap: 26px; padding: 0 22px; margin-top: 24px;">
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F9ED;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Real Browser</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: {{accent}};">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Storage</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x2699;&#xFE0F;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Configurations</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.6 2.8 2.6 15.2 0 18"></path><path d="M12 3c-2.6 2.8-2.6 15.2 0 18"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Browser</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F9EA;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Lab</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"></path><path d="M15 3v4h4"></path><path d="M9.5 12h6"></path><path d="M9.5 16h4"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Memo</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F6D2;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Market Apps</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 8-5 4 5 4"></path><path d="m15 8 5 4-5 4"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Dev Tools</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F50C;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">MCP Manager</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m15.6 15.6 4.4 4.4"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Search</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F4DD;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Memo</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Logs</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F50D;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Process Explorer</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 15h18"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Dock</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F4E1;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Remote Control</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2z"></path><path d="M9 8a3 3 0 0 1 6 0"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Market</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F4CB;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Session Logs</span>
+    </button>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5"></path><path d="M15 3v5"></path><path d="M7 8h10v3a5 5 0 0 1-10 0z"></path><path d="M12 16v5"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">MCP</span>
-    </div>
-
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 7 4-14 3 7h4"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Processes</span>
-    </div>
-
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9"></path><path d="M19 7h1"></path><path d="M4 17h5"></path><path d="M15 17h5"></path><circle cx="16" cy="7" r="2.2"></circle><circle cx="12" cy="17" r="2.2"></circle></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Settings</span>
-    </div>
-
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-      <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext-muted);">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v6.2L5.2 18A2 2 0 0 0 7 21h10a2 2 0 0 0 1.8-3L14 9.2V3"></path><path d="M9 3h6"></path><path d="M7.6 15h8.8"></path></svg>
-      </div>
-      <span style="font-size: var(--text-xs); color: var(--color-subtext); letter-spacing: 0.01em;">Lab</span>
-    </div>
+    <button type="button" style="display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px 4px; border: none; border-radius: var(--radius-lg); background: transparent; font-family: inherit; cursor: pointer;">
+      <span style="font-size: 37px; line-height: 1;">&#x1F5C2;&#xFE0F;</span>
+      <span style="width: 100%; text-align: center; color: var(--color-text); font-size: var(--text-sm); font-weight: 500; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); word-break: keep-all; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Storage</span>
+    </button>
 
   </div>
 
-  <div style="flex-grow: 1;"></div>
-
-  <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 22px; padding: 6px 14px; border-radius: var(--radius-full); background: var(--bg-dark-overlay-medium);">
-    <span style="width: 6px; height: 6px; border-radius: var(--radius-full); background: {{accent}};"></span>
-    <span style="width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-border);"></span>
-    <span style="width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-border);"></span>
-  </div>
-
-  <button type="button" aria-label="Open the input field" style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 48px; padding: 0 0 18px; border: none; border-top: 1px solid var(--color-border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; background: var(--bg-glass); color: var(--color-muted); font-family: inherit; font-size: var(--text-sm); cursor: pointer;">
-    <span aria-hidden="true" style="width: 36px; height: 4px; border-radius: var(--radius-full); background: var(--color-border-hover);"></span>
-    Ask anything…
+  <button type="button" aria-label="Open notifications (2)" style="position: absolute; top: 52px; right: 8px; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--bg-glass); backdrop-filter: blur(12px); color: var(--color-accent); font-family: var(--font-sans); font-size: var(--text-base); font-weight: 600; cursor: pointer;">
+    <span aria-hidden="true">&#9679;</span>2
   </button>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 0 8px;">
+    <button type="button" aria-label="Open the input field" style="display: flex; align-items: center; justify-content: center; gap: 8px; box-sizing: border-box; width: 100%; height: 30px; padding: 0; border: none; border-top: 1px solid var(--color-border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; background: var(--bg-glass); backdrop-filter: blur(12px); color: var(--color-muted); font-family: var(--font-sans); font-size: var(--text-sm); cursor: pointer;">
+      <span aria-hidden="true" style="width: 36px; height: 4px; border-radius: var(--radius-full); background: var(--color-overlay);"></span>
+      Ask anything&#8230;
+    </button>
+  </div>
 
 </div>
