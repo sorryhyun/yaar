@@ -203,7 +203,13 @@ describe('NotificationShade', () => {
       });
       console.log('DIAG after-raw-set', useDesktopStore.getState().focusedWindowId);
       useDesktopStore.setState({ focusedWindowId: null });
-      useDesktopStore.getState().userFocusWindow('w1');
+      console.log('DIAG fnsrc', String(useDesktopStore.getState().userFocusWindow).slice(0, 400));
+      try {
+        useDesktopStore.getState().userFocusWindow('w1');
+        console.log('DIAG call ok');
+      } catch (err) {
+        console.log('DIAG call threw', String(err));
+      }
       const s1 = useDesktopStore.getState();
       console.log(
         'DIAG after-direct',
