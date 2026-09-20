@@ -133,6 +133,74 @@ export async function reclaimOrphanedPreviewStorage(): Promise<void> {
   }
 }
 
+/**
+ * Which projects were open, and which one was in front.
+ *
+ * The projects themselves live in storage; *this* is the part that did not survive —
+ * `openTabs` and `activeProject` are plain signals, so anything that reloads the iframe
+ * empties them. That happens far more often than "the user closed the app": the desktop
+ * replays a `window.create` for every window on reconnect, and a phone does it on every
+ * return from another app. What the agent then sees is a devtools with no project open,
+ * which is indistinguishable from a devtools that never had one — so it cloned the repo
+ * again, under a new id, on top of the work that was already there.
+ *
+ * A sidecar at the appStorage root, alongside {@link ORIGINS_PATH} and for the same
+ * reason: the projects' own `app.json` files are manifests that `deploy` ships.
+ *
+ * Deliberately *not* here: which file was open. It changes on every click in the tree,
+ * and a write per click buys back the one piece of state the agent can rebuild for
+ * itself by listing the project.
+ */
+const WORKSPACE_PATH = 'workspace.json';
+
+interface Workspace {
+  tabs: string[];
+  activeId: string | null;
+}
+
+/**
+ * Record the open set. Best effort, and not awaited by its callers: failing to write
+ * this must never fail the open or close that produced it — the cost of losing it is
+ * one restore, which is where we were before it existed.
+ */
+function saveWorkspace(): void {
+  const workspace: Workspace = { tabs: openTabs(), activeId: activeProject()?.id ?? null };
+  appStorage.save(WORKSPACE_PATH, JSON.stringify(workspace, null, 2)).catch((err) => {
+    console.error('[devtools] recording open projects failed', err);
+  });
+}
+
+/**
+ * Reopen what was open, once the project list is in.
+ *
+ * Filtered against the live list rather than trusted: a project deleted from another
+ * window — or from a session whose last write never landed — would otherwise put a tab
+ * on screen for a directory that is gone, and `openProject` would quietly do nothing
+ * while the tab stayed. Nothing is written back here; the next open or close does that.
+ */
+export async function restoreWorkspace(): Promise<void> {
+  try {
+    const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    const stored = raw as Partial<Workspace>;
+    const live = new Set(projects().map((p) => p.id));
+    const tabs = (Array.isArray(stored.tabs) ? stored.tabs : []).filter(
+      (id): id is string => typeof id === 'string' && live.has(id),
+    );
+    if (tabs.length === 0) return;
+    setOpenTabs(tabs);
+    const activeId =
+      typeof stored.activeId === 'string' && tabs.includes(stored.activeId)
+        ? stored.activeId
+        : tabs[tabs.length - 1];
+    await openProject(activeId);
+  } catch (err) {
+    // A workspace that cannot be read is not worth a status line: the user still has
+    // every project in the picker, and the next open writes a good one.
+    console.error('[devtools] restoring open projects failed', err);
+  }
+}
+
 export async function loadProjects(): Promise<void> {
   try {
     const entries = await appStorage.list('projects/');
@@ -321,6 +389,7 @@ export async function openProject(id: string): Promise<void> {
   setPreviewWindowId(null);
   await refreshFiles(id);
   await openFile('src/main.ts');
+  saveWorkspace();
   setStatusText(`Opened "${proj.name}"`);
 }
 
@@ -338,6 +407,7 @@ function clearActiveProjectState(): void {
     setPreviewUrl(null);
     setStaticProtocol(null);
   });
+  saveWorkspace();
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -382,6 +452,8 @@ export async function deleteProject(id: string): Promise<void> {
     } else {
       clearActiveProjectState();
     }
+  } else {
+    saveWorkspace();
   }
   await loadProjects();
   setStatusText('Project deleted');
@@ -392,9 +464,13 @@ export function closeTab(id: string): void {
   setOpenTabs(tabs);
   if (activeProject()?.id === id) {
     if (tabs.length > 0) {
+      // Both branches record the new set themselves — `openProject` on its way out,
+      // `clearActiveProjectState` likewise. Closing a *background* tab reaches neither.
       openProject(tabs[tabs.length - 1]);
-    } else {
-      clearActiveProjectState();
+      return;
     }
+    clearActiveProjectState();
+    return;
   }
+  saveWorkspace();
 }

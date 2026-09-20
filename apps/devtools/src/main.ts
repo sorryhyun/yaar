@@ -3,6 +3,7 @@ import './styles/index';
 import { AppShell } from './app-shell';
 import {
   loadProjects,
+  restoreWorkspace,
   loadBundledLibraries,
   loadWorkerConfig,
   startConsolePolling,
@@ -56,7 +57,9 @@ export default defineApp({
   view: AppShell,
 });
 
-loadProjects();
+// Sequenced, not fired in parallel: the restore filters the stored tabs against the
+// project list, so it has to run after that list is in. Everything below is independent.
+loadProjects().then(restoreWorkspace);
 loadBundledLibraries();
 loadWorkerConfig();
 startConsolePolling();
