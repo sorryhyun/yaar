@@ -177,7 +177,28 @@ describe('NotificationShade', () => {
 
     it('raises a window without putting the shade away', () => {
       open();
-      fireEvent.click(screen.getByTitle('Notes'));
+      const before = useDesktopStore.getState();
+      console.log('DIAG before', JSON.stringify({
+        focusedWindowId: before.focusedWindowId,
+        activeMonitorId: before.activeMonitorId,
+        windowKeys: Object.keys(before.windows),
+        zOrder: before.zOrder,
+        formFactor: before.formFactor,
+        shadeOpen: before.notificationShadeOpen,
+        titled: Array.from(document.querySelectorAll('[title]')).map((e) => e.getAttribute('title')),
+        containers: document.body.children.length,
+        bodyLen: document.body.innerHTML.length,
+      }));
+      const tab = screen.getByTitle('Notes');
+      console.log('DIAG tab', tab.tagName, tab.getAttribute('aria-pressed'), tab.isConnected, document.body.contains(tab));
+      fireEvent.click(tab);
+      const after = useDesktopStore.getState();
+      console.log('DIAG after', JSON.stringify({
+        focusedWindowId: after.focusedWindowId,
+        minimized: after.windows.w1?.minimized,
+        zOrder: after.zOrder,
+        interactions: after.pendingInteractions?.map((i) => i.type),
+      }));
       expect(useDesktopStore.getState().focusedWindowId).toBe('w1');
       expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
     });
