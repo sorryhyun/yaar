@@ -135,6 +135,73 @@ describe('NotificationShade', () => {
     });
   });
 
+  /**
+   * The navigation the desktop keeps around its input bar. On a phone the bottom edge is
+   * the palette's collapsed sheet, so both rows are in here — and they leave the sheet
+   * where it is: these are used in runs, and a shade that closed on the first tap would
+   * have to be pulled back down for the second.
+   */
+  describe('the monitor and window rows', () => {
+    beforeEach(() => {
+      useDesktopStore.setState({
+        monitors: [
+          { id: '0', label: 'Monitor 1', createdAt: 0 },
+          { id: '1', label: 'Monitor 2', createdAt: 0 },
+        ],
+        activeMonitorId: '0',
+        windows: {
+          w1: {
+            id: 'w1',
+            title: 'Notes',
+            monitorId: '0',
+            bounds: { x: 0, y: 0, w: 400, h: 300 },
+            content: { renderer: 'markdown', data: '' },
+            minimized: false,
+            maximized: false,
+          },
+        } as never,
+        focusedWindowId: null,
+      });
+    });
+
+    it('carries the monitor switcher and its "+"', () => {
+      open();
+      expect(screen.getByTitle('Create new monitor')).toBeInTheDocument();
+      expect(screen.getByTitle('Monitor 2')).toBeInTheDocument();
+    });
+
+    it('carries a tab for every window on the monitor', () => {
+      open();
+      expect(screen.getByTitle('Notes')).toBeInTheDocument();
+    });
+
+    it('raises a window without putting the shade away', () => {
+      open();
+      fireEvent.click(screen.getByTitle('Notes'));
+      expect(useDesktopStore.getState().focusedWindowId).toBe('w1');
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    });
+
+    it('switches monitors without putting the shade away', () => {
+      open();
+      fireEvent.click(screen.getByTitle('Monitor 2'));
+      expect(useDesktopStore.getState().activeMonitorId).toBe('1');
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    });
+
+    it('stays open when a window is closed from its tab', () => {
+      open();
+      fireEvent.click(screen.getByLabelText('Close Notes'));
+      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    });
+
+    it('says so when the monitor is empty, rather than showing a bare row', () => {
+      useDesktopStore.setState({ windows: {} });
+      open();
+      expect(screen.getByText('No open windows')).toBeInTheDocument();
+    });
+  });
+
   it('renders nothing on a desktop, which keeps its status pill', () => {
     const { container } = open(false);
     expect(container.innerHTML).toBe('');

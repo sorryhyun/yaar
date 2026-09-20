@@ -13,6 +13,14 @@
  * did not work; now the pull always lands on something, because the status above the
  * list is there whether or not anything has been notified.
  *
+ * It is also where the phone keeps its two navigation rows — the monitor switcher with
+ * its "+" and the window tabs — for the same reason: the bottom edge belongs to the
+ * palette's collapsed sheet, and stacking two strips of chips on top of it spent a
+ * small screen on chrome that is only wanted between one thing and the next. The shade
+ * stays down while they are used: switching monitors and raising windows is done in runs,
+ * and a sheet that closed itself on the first tap would have to be pulled back down for
+ * the second. It goes away the way it came, by the grip or the backdrop.
+ *
  * Auto-dismiss still belongs to `NotificationCenter`, which owns the timers whichever
  * form factor is on screen. This component only renders — with one exception: the sheet
  * is dragged shut by its own grip, and a drag has to be followed rather than waited out,
@@ -22,8 +30,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
-import { useDesktopStore, selectNotifications } from '@/store';
+import { useDesktopStore, selectNotifications, selectTaskbarWindows } from '@/store';
 import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
+import { MonitorTabs } from '../taskbar/MonitorTabs';
+import { Taskbar } from '../taskbar/Taskbar';
 import { shouldCommitDrag } from '@/lib/gestures';
 import { clearShadePull, settleShadePull, trackShadePull } from '@/lib/shade-pull';
 import styles from '@/styles/overlays/NotificationShade.module.css';
@@ -36,6 +46,7 @@ interface NotificationShadeProps {
 export function NotificationShade({ interrupt, interruptAgent }: NotificationShadeProps) {
   const { t } = useTranslation();
   const notifications = useDesktopStore(useShallow(selectNotifications));
+  const windows = useDesktopStore(useShallow(selectTaskbarWindows));
   const dismissNotification = useDesktopStore((s) => s.dismissNotification);
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const open = useDesktopStore((s) => s.notificationShadeOpen);
@@ -145,6 +156,22 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
         </div>
         <div className={styles.roster}>
           <AgentRoster interrupt={interrupt} interruptAgent={interruptAgent} />
+        </div>
+
+        {/* The two rows the desktop keeps around its input bar. Monitors first: a tap
+            there changes which set of windows the row below is listing. */}
+        <div className={styles.section}>
+          <span className={styles.sectionHeading}>{t('shade.monitors')}</span>
+          <MonitorTabs />
+        </div>
+
+        <div className={styles.section}>
+          <span className={styles.sectionHeading}>{t('shade.windows')}</span>
+          {windows.length === 0 ? (
+            <div className={styles.sectionEmpty}>{t('shade.noWindows')}</div>
+          ) : (
+            <Taskbar />
+          )}
         </div>
 
         <div className={styles.header}>

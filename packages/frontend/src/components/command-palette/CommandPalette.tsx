@@ -508,8 +508,10 @@ export function CommandPalette() {
             </div>
           )}
           {/* Monitor switcher sits above the bar, as its own row — same relationship
-            the taskbar row has below it, just on the other side. */}
-          <MonitorTabs />
+            the taskbar row has below it, just on the other side. On a phone both rows
+            move into the pull-down shade: down here they would be two strips of a small
+            screen stacked on a sheet that is collapsed most of the time. */}
+          {!isMobile && <MonitorTabs />}
           <div className={styles.inputRow}>
             {/* Single glass bar: icon cluster, textarea, and Send share one surface. */}
             <div
@@ -739,10 +741,13 @@ export function CommandPalette() {
           {activeStatus && (
             <div className={statusClass(activeStatus.status)}>{statusLabel(activeStatus)}</div>
           )}
-          {/* Fixed slot for the window tabs */}
-          <div className={styles.taskbarSlot}>
-            <Taskbar />
-          </div>
+          {/* Fixed slot for the window tabs — a phone's are in the shade instead, and
+            an empty slot there would only be 31px of the palette's own height. */}
+          {!isMobile && (
+            <div className={styles.taskbarSlot}>
+              <Taskbar />
+            </div>
+          )}
         </div>
       </div>
     </>

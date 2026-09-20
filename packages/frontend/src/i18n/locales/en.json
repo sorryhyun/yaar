@@ -180,5 +180,10 @@
     "dismiss": "Dismiss",
     "open": "Open notifications ({{count}})",
     "close": "Close notifications"
+  },
+  "shade": {
+    "monitors": "Monitors",
+    "windows": "Windows",
+    "noWindows": "No open windows"
   }
 }

@@ -9,6 +9,11 @@
  *
  * Monitor tabs and the "new monitor" button used to live here; they now render
  * inside the command palette's input bar (see MonitorTabs).
+ *
+ * On a phone this row is the app switcher, and it is rendered from the pull-down shade
+ * rather than under the input bar: the palette down there is a collapsed sheet, and a
+ * row of tabs on top of it was competing with the one thing a phone's bottom edge is
+ * for. See `NotificationShade`.
  */
 import { useDesktopStore, selectTaskbarWindows } from '@/store';
 import { useShallow } from 'zustand/react/shallow';

@@ -237,8 +237,20 @@
 }
 
 /* ============ Phone ============
-   The tab row is the app switcher here. Centered overflow would clip the first tabs out
-   of reach, and there is no hover to reveal a close button, so the focused tab shows it. */
+   Both rows render inside the pull-down shade here, not under the input bar, so every
+   rule below is about a row sitting in that sheet: the outer padding belongs to the
+   shade's own section, and each row is one line of it that scrolls sideways.
+
+   The tab row is the app switcher. Centered overflow would clip the first tabs out of
+   reach, and there is no hover to reveal a close button, so the focused tab shows it.
+   A monitor chip has no × at all here — it is flicked up instead; see `MonitorTabs`. */
+:global(html[data-form-factor='mobile']) .taskbar,
+:global(html[data-form-factor='mobile']) .monitorBar {
+  flex: 1;
+  padding: 0;
+  animation: none;
+}
+
 :global(html[data-form-factor='mobile']) .windowTabs {
   justify-content: flex-start;
 }
@@ -246,10 +258,37 @@
 :global(html[data-form-factor='mobile']) .tab {
   max-width: 140px;
   padding: 6px 10px;
+  min-height: 40px;
 }
 
 :global(html[data-form-factor='mobile']) .tab[data-active] .tabClose {
   opacity: 1;
   width: 20px;
   height: 20px;
+}
+
+/* A chip is a number here (see `shortLabel`), so it is padded to a touch target rather
+   than sized by its text — four of them in a row should not be four different widths. */
+:global(html[data-form-factor='mobile']) .monitorTab {
+  justify-content: center;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 4px 8px;
+  font-size: var(--text-base);
+}
+
+/* The throw-away gesture. `pan-x` leaves the row its sideways scroll and keeps the
+   browser off the vertical drag, which is the one the chip follows — React's touchmove
+   listener is passive, so there is no preventDefault to fall back on. The transform is
+   written straight to the node while the finger is down, so nothing here animates it. */
+:global(html[data-form-factor='mobile']) .monitorTab[data-liftable] {
+  touch-action: pan-x;
+  will-change: transform;
+}
+
+:global(html[data-form-factor='mobile']) .newMonitorButton {
+  width: 40px;
+  height: 40px;
+  border-color: var(--color-border);
+  font-size: var(--text-xl);
 }

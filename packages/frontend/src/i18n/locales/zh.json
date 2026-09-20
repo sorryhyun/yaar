@@ -178,5 +178,10 @@
     "dismiss": "关闭",
     "open": "打开通知 ({{count}})",
     "close": "关闭通知"
+  },
+  "shade": {
+    "monitors": "显示器",
+    "windows": "窗口",
+    "noWindows": "没有打开的窗口"
   }
 }

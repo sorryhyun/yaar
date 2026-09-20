@@ -83,6 +83,32 @@
   display: none;
 }
 
+/* The two navigation rows under the readings: a label, then the row itself, which
+   scrolls sideways on its own rather than wrapping — the sheet is capped at 70vh and
+   the notifications below have to keep their share of it. */
+.section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: var(--border-subtle);
+}
+
+.sectionHeading {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.sectionEmpty {
+  font-size: var(--text-base);
+  color: var(--color-muted);
+}
+
 .header {
   display: flex;
   align-items: center;

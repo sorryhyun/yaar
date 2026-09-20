@@ -178,5 +178,10 @@
     "dismiss": "Schließen",
     "open": "Mitteilungen öffnen ({{count}})",
     "close": "Mitteilungen schließen"
+  },
+  "shade": {
+    "monitors": "Monitore",
+    "windows": "Fenster",
+    "noWindows": "Keine offenen Fenster"
   }
 }

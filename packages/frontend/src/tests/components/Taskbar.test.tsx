@@ -203,6 +203,10 @@ describe('MonitorTabs', () => {
     useDesktopStore.setState({
       monitors: [monitor('m1', 'Monitor 1')],
       activeMonitorId: 'm1',
+      // A chip says something different on a phone (see the mobile case below), and the
+      // store is a singleton every file in this process shares — so pin the form factor
+      // rather than inheriting whatever ran last.
+      formFactor: 'desktop',
     } as any);
   });
 
@@ -225,6 +229,30 @@ describe('MonitorTabs', () => {
     render(<MonitorTabs />);
     expect(screen.getByText('Monitor 1')).toBeInTheDocument();
     expect(screen.getByText('Monitor 2')).toBeInTheDocument();
+  });
+
+  // On a phone these chips live in the shade, under a "Monitors" heading — the word on
+  // every chip was that heading repeated across a 412px screen.
+  it('drops the "Monitor" prefix on a phone, keeping the label in the tooltip', () => {
+    useDesktopStore.setState({
+      monitors: [monitor('m1', 'Monitor 1'), monitor('m2', 'Monitor 2')],
+      formFactor: 'mobile',
+    } as any);
+
+    render(<MonitorTabs />);
+    expect(screen.getByTitle('Monitor 2')).toHaveTextContent(/^2/);
+    expect(screen.queryByText('Monitor 2')).not.toBeInTheDocument();
+  });
+
+  // A label that is not "Monitor N" has no prefix to drop.
+  it('leaves a renamed monitor whole', () => {
+    useDesktopStore.setState({
+      monitors: [monitor('m1', 'Monitor 1'), monitor('m2', 'Work')],
+      formFactor: 'mobile',
+    } as any);
+
+    render(<MonitorTabs />);
+    expect(screen.getByText('Work')).toBeInTheDocument();
   });
 
   it('hides the new-monitor button at the 4-monitor cap', () => {
@@ -252,5 +280,107 @@ describe('MonitorTabs', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close Monitor 2' }));
     expect(removeSpy).toHaveBeenCalledWith('m2');
     expect(switchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * On a phone a monitor is thrown away, not clicked away: there is no hover to bring an
+   * × out of, so it would have to sit permanently under the thumb that switches monitors.
+   */
+  describe('the flick-up on a phone', () => {
+    const removeSpy = mock(() => {});
+    const switchSpy = mock(() => {});
+
+    beforeEach(() => {
+      removeSpy.mockClear();
+      switchSpy.mockClear();
+      useDesktopStore.setState({
+        // '0' is the session's own monitor, the one the server refuses to delete.
+        monitors: [monitor('0', 'Monitor 1'), monitor('m2', 'Monitor 2')],
+        activeMonitorId: '0',
+        formFactor: 'mobile',
+        removeMonitor: removeSpy,
+        switchMonitor: switchSpy,
+      } as any);
+    });
+
+    const chip = (label: string) => screen.getByTitle(label);
+
+    /** One vertical drag on a chip, start to finish. */
+    function flick(el: HTMLElement, dy: number) {
+      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
+      fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 300 + dy }] });
+      fireEvent.touchEnd(el, { changedTouches: [{ clientX: 100, clientY: 300 + dy }] });
+    }
+
+    it('carries no close button', () => {
+      render(<MonitorTabs />);
+      expect(screen.queryByRole('button', { name: 'Close Monitor 2' })).not.toBeInTheDocument();
+    });
+
+    it('closes the monitor the chip was thrown off the top', () => {
+      render(<MonitorTabs />);
+      flick(chip('Monitor 2'), -80);
+      expect(removeSpy).toHaveBeenCalledWith('m2');
+    });
+
+    // A browser sends a click after a touch it was allowed to keep, and that click would
+    // land on the chip that is leaving. Consuming the touchend is what stops it — the
+    // test asks the event, since only a real browser would send the click itself.
+    it('claims the touch, so no click follows the throw', () => {
+      render(<MonitorTabs />);
+      const el = chip('Monitor 2');
+      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
+      fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 220 }] });
+      const notConsumed = fireEvent.touchEnd(el, {
+        changedTouches: [{ clientX: 100, clientY: 220 }],
+      });
+      expect(notConsumed).toBe(false);
+      expect(switchSpy).not.toHaveBeenCalled();
+    });
+
+    // Short *and* slow. A short drag that was fast is a flick and does close the monitor,
+    // which is why the wait is what makes this one a nudge.
+    it('puts back a chip that was only nudged', async () => {
+      render(<MonitorTabs />);
+      const el = chip('Monitor 2');
+      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
+      fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 280 }] });
+      expect(el.style.transform).toBe('translateY(-20px)');
+      await new Promise((r) => setTimeout(r, 80));
+      fireEvent.touchEnd(el, { changedTouches: [{ clientX: 100, clientY: 280 }] });
+      expect(removeSpy).not.toHaveBeenCalled();
+      expect(el.style.transform).toBe('');
+    });
+
+    // A sideways drag is the row scrolling, and the chip must not ride along with it.
+    it('leaves a sideways drag to the row', () => {
+      render(<MonitorTabs />);
+      const el = chip('Monitor 2');
+      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
+      fireEvent.touchMove(el, { touches: [{ clientX: 40, clientY: 296 }] });
+      fireEvent.touchEnd(el, { changedTouches: [{ clientX: 40, clientY: 296 }] });
+      expect(removeSpy).not.toHaveBeenCalled();
+      expect(el.style.transform).toBe('');
+    });
+
+    // It does not move at all, rather than following the finger and coming back every
+    // time: the server would refuse, so the chip should not promise otherwise.
+    it('will not lift the session monitor', () => {
+      render(<MonitorTabs />);
+      const el = chip('Monitor 1');
+      flick(el, -80);
+      expect(removeSpy).not.toHaveBeenCalled();
+      expect(el.style.transform).toBe('');
+    });
+
+    it('still switches monitors on a tap', () => {
+      render(<MonitorTabs />);
+      const el = chip('Monitor 2');
+      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
+      fireEvent.touchEnd(el, { changedTouches: [{ clientX: 100, clientY: 302 }] });
+      fireEvent.click(el);
+      expect(switchSpy).toHaveBeenCalledWith('m2');
+      expect(removeSpy).not.toHaveBeenCalled();
+    });
   });
 });

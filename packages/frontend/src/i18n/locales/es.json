@@ -178,5 +178,10 @@
     "dismiss": "Descartar",
     "open": "Abrir notificaciones ({{count}})",
     "close": "Cerrar notificaciones"
+  },
+  "shade": {
+    "monitors": "Monitores",
+    "windows": "Ventanas",
+    "noWindows": "No hay ventanas abiertas"
   }
 }

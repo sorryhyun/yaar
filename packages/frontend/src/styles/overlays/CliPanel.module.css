@@ -47,6 +47,14 @@
   grid-template-rows: 1fr 1fr;
 }
 
+/* ---- Top bar ---- */
+
+/* Not a box on a desktop: the toggle below places itself over the grid, and a wrapper
+   that laid it out would have to be a grid item, which it is not. */
+.topBar {
+  display: contents;
+}
+
 /* ---- Target toggle ("act as me") ---- */
 
 .targetToggle {
@@ -85,11 +93,52 @@
   transition: all var(--transition-fast);
 }
 
+/* The half of the session button that a phone has no width for; the phone section
+   below hides it, leaving "Session" plus the amber and the tooltip. */
+.targetButtonLong {
+  white-space: nowrap;
+}
+
 .targetButton:hover {
   color: var(--color-subtext);
 }
 
 .targetButton[data-active='true'] {
+  background: var(--color-surface-hover);
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}
+
+/* ---- Monitor switch (phone) ---- */
+
+/* The grid is the desktop's monitor switcher; a phone has one pane, so it gets buttons.
+   Numbered to match the pane badge, because that is the name the pane goes by. */
+.monitorSwitch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 6px;
+  background: var(--color-surface);
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.monitorButton {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-subtext-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.monitorButton[data-active='true'] {
   background: var(--color-surface-hover);
   border-color: var(--color-accent);
   color: var(--color-accent-hover);
@@ -272,19 +321,36 @@
 
 /* ============ Phone ============
    The bottom padding above clears a desktop's always-on command palette. A phone's is a
-   collapsed sheet that publishes its own height, so the terminal gets the rest. */
+   collapsed sheet that publishes its own height, so the terminal gets the rest. The top
+   padding is the bar below: the controls used to float over the pane, where they landed
+   on its header and its Copy/Clear buttons. */
 :global(html[data-form-factor='mobile']) .cliPanel {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 44px);
   padding-bottom: var(--palette-h, 0px);
 }
 
-/* Centred is where a card's title bar sits; on a phone the toggle takes the left of the
-   top row instead, and drops the label it does not have the width for. */
+:global(html[data-form-factor='mobile']) .topBar {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  z-index: 2;
+}
+
+/* Centred is where a card's title bar sits; on a phone the toggle is just the left-hand
+   end of the bar, and drops the label it does not have the width for. */
 :global(html[data-form-factor='mobile']) .targetToggle {
-  top: calc(env(safe-area-inset-top, 0px) + var(--space-1));
-  left: var(--space-2);
+  position: static;
+  min-width: 0;
   transform: none;
 }
 
-:global(html[data-form-factor='mobile']) .targetLabel {
+:global(html[data-form-factor='mobile']) .targetLabel,
+:global(html[data-form-factor='mobile']) .targetButtonLong {
   display: none;
 }

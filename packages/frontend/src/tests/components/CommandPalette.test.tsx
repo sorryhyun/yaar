@@ -74,6 +74,30 @@ describe('CommandPalette bottom sheet', () => {
 
   const handle = () => screen.getByLabelText('Open the input field');
 
+  // Both rows moved into the pull-down shade: two strips of chips stacked on a sheet
+  // that is collapsed most of the time were spending a small screen on chrome that is
+  // only wanted between one thing and the next.
+  it('leaves the monitor and window rows to the shade', () => {
+    useDesktopStore.setState({
+      paletteSheetOpen: true,
+      windows: {
+        w1: {
+          id: 'w1',
+          title: 'Notes',
+          monitorId: '0',
+          bounds: { x: 0, y: 0, w: 400, h: 300 },
+          content: { renderer: 'markdown', data: '' },
+          minimized: false,
+          maximized: false,
+        },
+      } as never,
+      activeMonitorId: '0',
+    });
+    render(<CommandPalette />);
+    expect(screen.queryByTitle('Create new monitor')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Notes')).not.toBeInTheDocument();
+  });
+
   it('raises the sheet while the finger is still pulling', () => {
     render(<CommandPalette />);
     touch(handle(), 'touchstart', 200, 600);
