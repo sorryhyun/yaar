@@ -15,8 +15,8 @@
  *     `src/tests/loopback/` (real stack, `FakeClient` + `ScriptedProvider`) binds real
  *     sockets, and `src/tests/realfs/` drives real `git` over one on-disk fixture
  *     directory that its cases reseed — one shared path, so two of its files running
- *     at once reseed under each other. Both are therefore `parallel: false` groups of
- *     their own. Neither is the *integration* suite — that is `packages/tests/`, a
+ *     at once reseed under each other. Both are therefore sequential, non-isolated
+ *     groups of their own. Neither is the *integration* suite — that is `packages/tests/`, a
  *     separate package and therefore already a separate partition.
  *   - **The root preload sets up exactly one package per process.**
  *     `scripts/test/preload-root.ts` dispatches on the anchored package because the
@@ -36,7 +36,11 @@
  * mocking files pass in one `--parallel` process, and pass again in a single
  * `--isolate` process in sorted *and* reversed order. The `units` partition therefore
  * **depends on** `--isolate`, which is why `run-tests.ts` passes that flag explicitly
- * instead of leaning on `--parallel` to imply it.
+ * instead of leaning on `--parallel` to imply it — and why `isolate` and `parallel` are
+ * two fields below rather than one. `units` runs isolated and *sequential*: `--parallel`
+ * crashes a worker on a suite this size about one run in ten (oven-sh/bun#41357, #41055,
+ * both open), and a crashed worker aborts the whole run, so the speed was being paid for
+ * in false failures. Nothing about the isolation changed with it.
  *
  * Two consumers, so that the rule cannot drift from its enforcement:
  *
@@ -58,12 +62,24 @@ export interface Partition {
   /** Environment the group's process needs on top of the pinned baseline. */
   env: Record<string, string>;
   /**
-   * May the group's files run concurrently inside their one process (`bun test --parallel`)?
+   * Does each of the group's files get a fresh global and module registry (`--isolate`)?
    *
-   * `false` means "sequential *and* not isolated": the runner passes neither flag, so such a
-   * group keeps one global and one module registry across its files. That is what a suite
-   * holding a real socket or a real fixture directory needs — and it is also why the
-   * partition guard still works there (see `partition-guard.ts`).
+   * This is the correctness half, and `units` depends on it: it is the only thing keeping
+   * the `mock.module` stubs in those files out of each other. `false` means the group keeps
+   * one global across its files, which is what a suite holding a real socket or a real
+   * fixture directory wants — and is also the only mode the partition guard can observe,
+   * since an isolated file cannot tell a second one exists (see `partition-guard.ts`).
+   */
+  isolate: boolean;
+  /**
+   * May the group's files run concurrently, in worker processes (`--parallel`)?
+   *
+   * Separate from `isolate` because Bun couples them one way only: `--parallel` implies
+   * `--isolate`, but `--isolate` stands alone. Keeping them apart is what lets a group be
+   * isolated *without* being parallel — see `units`, which is exactly that.
+   *
+   * Nothing sets this today; it stays because the axis is real and turning it back on when
+   * Bun fixes the worker crash is meant to be a one-word change, not a redesign.
    */
   parallel: boolean;
   /** Command that runs this group correctly, quoted in the guard's error. */
@@ -96,7 +112,11 @@ export function partitionOf(repoRel: string): Partition | null {
   if (!pkg) return null;
 
   const inPackage = repoRel.slice(`packages/${pkg}/`.length);
-  const base: Pick<Partition, 'env' | 'parallel'> = { env: {}, parallel: false };
+  const base: Pick<Partition, 'env' | 'isolate' | 'parallel'> = {
+    env: {},
+    isolate: false,
+    parallel: false,
+  };
 
   if (pkg !== 'server') {
     return {
@@ -123,6 +143,7 @@ export function partitionOf(repoRel: string): Partition | null {
         'asserts remote mode, and IS_REMOTE is a module-load constant — REMOTE=1 has to be ' +
         'pinned for the whole process or the assertions are vacuous',
       env: { YAAR_TEST_REMOTE: '1' },
+      isolate: false,
       parallel: false,
       howToRun: 'cd packages/server && YAAR_TEST_REMOTE=1 bun test src/tests/remote/',
     };
@@ -153,9 +174,11 @@ export function partitionOf(repoRel: string): Partition | null {
     key: 'server:units',
     label: 'units',
     reason:
-      'is a plain unit test, which the suite runs concurrently in one shared --isolate process',
+      'is a plain unit test, which the suite runs in one --isolate process, each file in a ' +
+      'fresh global',
     env: {},
-    parallel: true,
+    isolate: true,
+    parallel: false,
     howToRun: 'bun run --filter @yaar/server test',
   };
 }

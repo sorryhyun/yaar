@@ -45,12 +45,20 @@ interface Group {
 
 async function run(group: Group): Promise<{ ok: boolean; counts: TestCounts }> {
   const { partition, files } = group;
-  // `--isolate` is the load-bearing half and is named explicitly, even though `--parallel`
-  // has implied it since Bun 1.4: the `units` group holds the files that install
-  // `mock.module`, and a fresh module registry per file is the only thing keeping their
-  // stubs from leaking into each other. `--parallel` is the speed half, and losing it
-  // should not silently cost correctness. See scripts/test/partitions.ts.
-  const args = [...files, ...(partition.parallel ? ['--parallel', '--isolate'] : [])];
+  // Two independent flags, and the partition decides each one. `--isolate` is the
+  // load-bearing half — the `units` group holds the files that install `mock.module`, and a
+  // fresh module registry per file is the only thing keeping their stubs out of each other.
+  // `--parallel` is only speed, and is currently off everywhere: it crashes a worker on a
+  // suite this size roughly one run in ten (oven-sh/bun#41357, #41055 — open, a 1.4.1
+  // regression, still there on 1.4.2), which aborts the whole run and reports it as dozens
+  // of failures with no failing case named. Serial `--isolate` costs the units group ~13s
+  // and the full `bun run test` nothing at all, since the compiler package is the long pole.
+  // See scripts/test/partitions.ts.
+  const args = [
+    ...files,
+    ...(partition.parallel ? ['--parallel'] : []),
+    ...(partition.isolate ? ['--isolate'] : []),
+  ];
   const proc = Bun.spawn(['bun', 'test', ...args], {
     cwd: PACKAGE_DIR,
     stdout: 'pipe',

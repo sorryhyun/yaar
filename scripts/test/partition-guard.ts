@@ -40,9 +40,10 @@
  * cannot leak, and `scripts/test/env.ts` re-runs per file, so its `tests/remote/` inference pins
  * `REMOTE=1` for exactly the file that needs it. What is left — `loopback`'s real sockets,
  * `realfs`'s one shared fixture directory — is a shared-*resource* problem that `--parallel`
- * aggravates and that no per-process guard could observe anyway. Those groups are `parallel:
- * false`, so the runner gives them plain non-isolated processes, which is exactly where this
- * guard still works.
+ * aggravates and that no per-process guard could observe anyway. Those groups are
+ * `isolate: false`, so the runner gives them plain shared-global processes, which is exactly
+ * where this guard still works. (`units` is `isolate: true` and sequential — being serial
+ * does not bring it back into this guard's view; isolation is what hides a group from it.)
  *
  * Wired from the root `bunfig.toml` (which is where the cross-package and whole-package mixes
  * come from) and from `packages/server/bunfig.toml` (where `bun test src/tests` mixes the

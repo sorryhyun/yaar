@@ -37,12 +37,22 @@ and `packages/server/bunfig.toml`. Full incident history and rationale:
 `scripts/test/partitions.ts` header.
 
 `mock.module` used to be a fourth reason — process-global, no teardown, so every file installing
-one got its own process. `bun test --isolate` (implied by `--parallel` since Bun 1.4) clears the
-module registry between files, which retired that rule and 15 processes with it. Two consequences
-worth knowing: the `units` partition now **depends on** `--isolate` (the runner passes it
-explicitly), and the guard cannot fire inside an isolated process at all — each file there gets a
-fresh global, a fresh `process.env`, and a `Bun.argv` naming only itself, so it can't tell a
-second file exists. The guard covers the plain `bun test <path>` form, which is what you type.
+one got its own process. `bun test --isolate` clears the module registry between files, which
+retired that rule and 15 processes with it. Two consequences worth knowing: the `units` partition
+now **depends on** `--isolate` (the runner passes it explicitly), and the guard cannot fire inside
+an isolated process at all — each file there gets a fresh global, a fresh `process.env`, and a
+`Bun.argv` naming only itself, so it can't tell a second file exists. The guard covers the plain
+`bun test <path>` form, which is what you type.
+
+**`--parallel` is off, everywhere, on purpose.** It implies `--isolate`, but the two are separate
+fields on a `Partition` precisely so that isolation can be kept without it: on a suite this size
+`--parallel` crashes a worker roughly one run in ten, and a worker killed by `SIGSEGV`/`SIGABRT`
+aborts the entire run — which surfaces as dozens of failures with *no* failing case named, not as
+a red assertion. It is an open Bun bug (oven-sh/bun#41357, #41055; a 1.4.1 regression, still
+present on 1.4.2), not anything in this repo, so don't go looking for the test that "caused" it.
+Serial `--isolate` costs the units group ~13s and costs `bun run test` nothing, because the
+compiler package is the long pole. If a run ever does report a crashed worker, re-run it and
+check whether Bun has shipped a fix before changing any test.
 
 If a run is refused, don't fight it — run the printed commands separately, or use
 `bun run test` / the package's own `test` script, which already partition correctly.
@@ -73,8 +83,9 @@ under `src/tests/remote/`.
 `src/` (colocated files included — which is why `tsconfig.build.json` excludes `**/*.test.ts`), groups them by
 `scripts/test/partitions.ts`, and spawns one process per group, concurrently. The partitions:
 
-1. `units` — one `--parallel --isolate` process for everything not named below, including every
-   file that calls `mock.module`.
+1. `units` — one `--isolate` process for everything not named below, including every file that
+   calls `mock.module`. Isolated (each file gets a fresh global) but sequential — see the
+   `--parallel` note above.
 2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process (`IS_REMOTE` is a
    module-load constant, so remote-gate assertions are vacuous in a local-mode process).
 3. `loopback` — `src/tests/loopback/`, the real stack end to end with exactly two fakes
