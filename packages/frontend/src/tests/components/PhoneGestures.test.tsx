@@ -54,6 +54,27 @@ const monitors = [
   { id: 'b', label: 'Monitor 2', createdAt: 0 },
 ];
 
+/**
+ * A sideways scroller inside a window card. happy-dom lays nothing out, so the three
+ * numbers the recogniser reads are set directly — which is the whole of what it asks.
+ */
+function sidewaysScroller(metrics: {
+  scrollLeft: number;
+  scrollWidth: number;
+  clientWidth: number;
+}) {
+  const card = document.createElement('div');
+  card.setAttribute(WINDOW_ID_DATA_ATTR, 'w1');
+  const strip = document.createElement('div');
+  strip.style.overflowX = 'auto';
+  for (const [key, value] of Object.entries(metrics)) {
+    Object.defineProperty(strip, key, { value, configurable: true });
+  }
+  card.appendChild(strip);
+  document.body.appendChild(card);
+  return strip;
+}
+
 const gutters = () => document.querySelectorAll<HTMLElement>('[data-phone-gutter]');
 const peekOffsetPx = () =>
   document.documentElement.style.getPropertyValue('--monitor-peek-x').trim();
@@ -163,16 +184,39 @@ describe('PhoneGestures', () => {
     expect(panState()).toBeNull();
   });
 
-  it('will not drag the desktop out from under a window', () => {
+  it('pans from over a window, which on a phone is most of the screen', async () => {
     const card = document.createElement('div');
     card.setAttribute(WINDOW_ID_DATA_ATTR, 'w1');
     document.body.appendChild(card);
     render(<PhoneGestures />);
     touch(card, 'touchstart', 400, 300);
     touch(card, 'touchmove', 240, 300);
+    expect(panState()).toBe('dragging');
+    touch(card, 'touchend', 240, 300);
+    await settle();
+    expect(useDesktopStore.getState().activeMonitorId).toBe('b');
+    card.remove();
+  });
+
+  it('leaves the drag to a sideways scroller that can still scroll that way', () => {
+    const strip = sidewaysScroller({ scrollLeft: 0, scrollWidth: 300, clientWidth: 100 });
+    render(<PhoneGestures />);
+    touch(strip, 'touchstart', 400, 300);
+    touch(strip, 'touchmove', 240, 300);
     expect(panState()).toBeNull();
     expect(useDesktopStore.getState().activeMonitorId).toBe('a');
-    card.remove();
+    strip.parentElement!.remove();
+  });
+
+  it('takes the drag the scroller has no use for, which is the one off its end', () => {
+    const strip = sidewaysScroller({ scrollLeft: 0, scrollWidth: 300, clientWidth: 100 });
+    render(<PhoneGestures />);
+    // Dragging right would scroll the strip back past its start — it is at the start,
+    // so the drag is the shell's and the monitor on the left comes in.
+    touch(strip, 'touchstart', 200, 300);
+    touch(strip, 'touchmove', 280, 300);
+    expect(panState()).toBe('dragging');
+    strip.parentElement!.remove();
   });
 
   it('pans from a gutter, which is how a touch over a card reaches it at all', async () => {

@@ -6,11 +6,14 @@
  * - **Drag sideways** pans between monitors, and the desktop follows the finger: the
  *   monitor being left slides out, the one being uncovered slides in behind it. That
  *   animation is the reason the gesture no longer has to start at an edge — a pan that
- *   shows where it is going can afford to begin anywhere the shell owns (the wallpaper,
- *   the icon grid, the status bar), because the user can see what it is doing and let go
- *   if it was not what they meant. The side gutters stay for the case the shell does not
- *   own: a phone window is a full-screen card and an app card is an iframe, so a touch
- *   inside one reaches no listener in this document at all.
+ *   shows where it is going can afford to begin anywhere, because the user can see what
+ *   it is doing and let go if it was not what they meant. It may begin over a window
+ *   too: a phone card is the whole screen, so a pan that stopped at a card's edge was a
+ *   pan with nowhere left to start from. What it gives way to is not the card but the
+ *   drag the card had a use for — a sideways scroller keeps the direction it can still
+ *   scroll in, and hands back the one it cannot. The side gutters stay for the case this
+ *   document hears nothing about at all: an app card is an iframe, so a touch inside one
+ *   reaches no listener here.
  * - **Pull down from the top** brings down the notification shade — which on a phone is
  *   also where the connection and agent readings live — and it comes down with the
  *   finger rather than after it, for the same reason the pan does: a sheet that appears
@@ -47,7 +50,6 @@ import {
   swipeDirection,
 } from '@/lib/gestures';
 import { settleShadePull, trackShadePull } from '@/lib/shade-pull';
-import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { resolveWallpaper } from '@/constants/appearance';
 import styles from '@/styles/desktop/PhoneGestures.module.css';
 
@@ -83,9 +85,23 @@ interface Drag {
   canPull: boolean;
   /** Started in a side gutter, so a tap here belongs to whatever is underneath. */
   fromGutter: boolean;
-  /** Whether this touch is allowed to pan at all — decided from where it landed. */
-  canPan: boolean;
+  /** Which way this touch may not pan — decided from where it landed. */
+  panBlock: PanBlock;
+  /** Whether the pan won the direction it set off in. `null` until the axis locks. */
+  panning: boolean | null;
 }
+
+/**
+ * The pan directions a touch is refused, in finger-travel terms: `right` is a drag
+ * rightwards, which is the one that uncovers the surface on the left.
+ */
+interface PanBlock {
+  left: boolean;
+  right: boolean;
+}
+
+const PAN_FREE: PanBlock = { left: false, right: false };
+const PAN_BLOCKED: PanBlock = { left: true, right: true };
 
 export function PhoneGestures() {
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
@@ -253,14 +269,15 @@ export function PhoneGestures() {
         at: performance.now(),
         axis: null,
         // The shade may be pulled from over a card's title bar — that is what the top
-        // band is sized for — so this asks a different question from `canPanFrom`: not
-        // "does the shell own this?" but "would the finger have scrolled something?".
+        // band is sized for — so this asks a different question from `panBlockFrom`:
+        // not "which way may this pan?" but "would the finger have scrolled something?".
         canPull: zone === 'top' && !sheetUp && (fromGutter || canPullFrom(e.target)),
         fromGutter,
         // No monitor-count test: with the CLI on the end of the strip there is somewhere
         // to go even from a lone monitor, and a direction with nothing in it rubber-bands
         // rather than being refused up front.
-        canPan: !sheetUp && (fromGutter || canPanFrom(e.target)),
+        panBlock: sheetUp ? PAN_BLOCKED : fromGutter ? PAN_FREE : panBlockFrom(e.target),
+        panning: null,
       };
     };
 
@@ -290,7 +307,10 @@ export function PhoneGestures() {
         trackShade(dy);
         return;
       }
-      if (!d.canPan) return;
+      // Which way the pan set off decides whether it is ours: a scroller that is already
+      // at its right-hand end has nothing to do with a drag that would take it further.
+      if (d.panning === null) d.panning = !d.panBlock[dx > 0 ? 'right' : 'left'];
+      if (!d.panning) return;
       // The desktop is under the finger now, so the page must not also scroll under it.
       if (e.cancelable) e.preventDefault();
       trackPan(dx);
@@ -309,7 +329,7 @@ export function PhoneGestures() {
       const dx = touch.clientX - d.x;
       const dy = touch.clientY - d.y;
 
-      if (d.axis === 'x' && d.canPan) {
+      if (d.axis === 'x' && d.panning) {
         finishPan(dx, performance.now() - d.at);
         return;
       }
@@ -319,9 +339,9 @@ export function PhoneGestures() {
       }
       // No touchmove ever arrived — a browser can coalesce a fast flick into start and
       // end alone. There was nothing to animate, so just go.
-      if (!d.axis && d.canPan) {
+      if (!d.axis) {
         const direction = swipeDirection(dx, dy);
-        if (direction === 'left' || direction === 'right') {
+        if ((direction === 'left' || direction === 'right') && !d.panBlock[direction]) {
           const right = direction === 'right';
           const target = neighbour(right ? -1 : 1, right ? 'left' : 'right');
           if (target) {
@@ -412,36 +432,57 @@ export function PhoneGestures() {
 }
 
 /**
- * Whether a touch that landed on `el` is allowed to pan between monitors.
+ * Which way a touch that landed on `el` may not pan.
  *
- * The pan may start anywhere the shell owns, and a window is not that: a card is the
- * monitor's *content*, and sliding the desktop out from under something the user is
- * reading is not what the drag meant. A sideways scroller — a tab strip, a row of chips —
- * is refused for the same reason, since it has its own use for a horizontal drag, and
- * `data-no-pan` is the explicit version of the same refusal for the few surfaces that
- * are neither: the palette, the drawing canvas.
+ * A window used to refuse both directions outright — a card is the monitor's *content*,
+ * and sliding the desktop out from under something the user is reading is not what the
+ * drag meant. But on a phone the card *is* the screen, so that left the pan startable
+ * from the wallpaper and little else: with one window open the gesture was gone, and the
+ * 20px gutters were the whole of it. What is worth protecting was never the card, it is
+ * the drag something under the finger already had a use for, so that is what is asked
+ * now — and per direction, because a sideways scroller only has a use for the drags it
+ * can still scroll with. One at its right-hand end keeps the drag that scrolls it back
+ * and gives away the one that would take it further, which is the bargain `canPullFrom`
+ * makes with a list already at its top. `data-no-pan` and a slider are the outright
+ * refusals: the palette, the drawing canvas, and anything whose whole use is a sideways
+ * drag that never scrolls.
  */
-function canPanFrom(el: EventTarget | null): boolean {
+function panBlockFrom(el: EventTarget | null): PanBlock {
+  const block: PanBlock = { left: false, right: false };
   for (let node = el instanceof Element ? el : null; node; node = node.parentElement) {
-    if (node.hasAttribute(WINDOW_ID_DATA_ATTR) || node.hasAttribute('data-no-pan')) return false;
+    if (node.hasAttribute('data-no-pan') || isSlider(node)) return PAN_BLOCKED;
     // getComputedStyle is the expensive half, so only ask it about elements that have
     // somewhere to scroll in the first place.
     if (node.scrollWidth > node.clientWidth + 1) {
       const overflow = getComputedStyle(node).overflowX;
-      if (overflow === 'auto' || overflow === 'scroll') return false;
+      if (overflow === 'auto' || overflow === 'scroll') {
+        // Distance from each end, not which side of zero it sits on: a right-to-left
+        // scroller counts down from 0 rather than up from it.
+        const at = Math.abs(node.scrollLeft);
+        // Dragging right scrolls a scroller back towards its start, so it is the one
+        // with something still behind it that keeps that drag.
+        if (at > 1) block.right = true;
+        if (at < node.scrollWidth - node.clientWidth - 1) block.left = true;
+        if (block.left && block.right) return PAN_BLOCKED;
+      }
     }
   }
-  return true;
+  return block;
+}
+
+/** A control a sideways drag is already the way of using, scroller or not. */
+function isSlider(node: Element): boolean {
+  if (node.getAttribute('role') === 'slider') return true;
+  return node.tagName === 'INPUT' && (node as HTMLInputElement).type === 'range';
 }
 
 /**
  * Whether a touch that landed on `el` is allowed to pull the shade down.
  *
- * Looser than `canPanFrom` on purpose: a card is the monitor's content and must not be
- * slid sideways out from under a reader, but the top band of the screen *is* a card's
- * title bar most of the time, and a shade that could not be pulled from there would be
- * a shade with nowhere to pull it from. What is refused instead is the one thing a
- * downward drag would otherwise have been: a scroll.
+ * The same shape as `panBlockFrom`, one axis over: what is refused is the one thing a
+ * downward drag would otherwise have been — a scroll — and nothing else. The top band of
+ * the screen *is* a card's title bar most of the time, and a shade that could not be
+ * pulled from there would be a shade with nowhere to pull it from.
  *
  * And only while there is still a scroll to be had. A list already at its top — a home
  * screen with more icons than fit, scrolled back up — has nothing left to give a
