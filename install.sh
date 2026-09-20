@@ -8,6 +8,7 @@
 #   INSTALL_DIR  — where to put the binary (default: ~/.local/bin; $PREFIX/bin on Termux)
 #   VERSION      — specific version tag (default: latest)
 #   YAAR_DIR     — Termux only: where the source checkout goes (default: ~/yaar)
+#   YAAR_SKIP_CLAUDE — Termux only: 1 leaves Claude Code for the first run to fetch
 
 set -euo pipefail
 
@@ -40,8 +41,8 @@ detect_platform() {
 #
 # The release binaries are glibc builds, which Android's linker refuses, so on Termux
 # there is nothing to download. Instead: the Android build of Bun, a checkout of the
-# release tag, and a `yaar` launcher that runs `make termux` in it (which unpacks the
-# Claude CLI for Android and handles the login — see scripts/dev/start-termux.sh).
+# release tag, Claude Code unpacked for Android, and a `yaar` launcher that runs
+# `make termux` in it (which handles the login — see scripts/dev/start-termux.sh).
 
 is_termux() {
   [ -n "${TERMUX_VERSION:-}" ] || [[ "${PREFIX:-}" == */com.termux/* ]]
@@ -96,6 +97,16 @@ install_termux() {
 
   (cd "$yaar_dir" && bun install)
 
+  # Claude Code, ahead of time. The Agent SDK ships no Android binary, so it has to be
+  # unpacked from the linux one — a ~220MB download that start-termux.sh would otherwise
+  # do on the first launch, where it reads as a hang rather than as an install step.
+  # Non-fatal: the first run does it instead, which is exactly what used to happen.
+  if [ "${YAAR_SKIP_CLAUDE:-0}" != "1" ]; then
+    if ! (cd "$yaar_dir" && ./scripts/dev/ensure-claude-android.sh > /dev/null); then
+      echo "⚠  Could not fetch Claude Code — the first 'yaar' run will try again." >&2
+    fi
+  fi
+
   mkdir -p "$INSTALL_DIR"
   local dest="${INSTALL_DIR}/${BINARY_NAME}"
   printf '#!/usr/bin/env bash\nexport PATH="%s:$PATH"\ncd "%s" && exec make termux\n' \
@@ -104,6 +115,8 @@ install_termux() {
 
   echo ""
   echo "Installed to: $dest (runs ${yaar_dir})"
+  # The login stays at first run whatever we do here: piped into bash, this script has
+  # no TTY on stdin, and `claude auth login` is interactive.
   echo "Run 'yaar' to start. The first run asks you to log in to Claude."
 }
 

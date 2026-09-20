@@ -2,10 +2,10 @@
 # Start YAAR with the Claude provider on Android (Termux).
 #
 # The Agent SDK only ships glibc/musl `claude` binaries, which Android's linker refuses
-# ("unexpected e_type: 2"). So this pulls the linux build matching the installed SDK,
-# unpacks its JS with unbun-claude.ts, and points CLAUDE_CODE_PATH at a wrapper that runs
-# it on the Android build of Bun. The extraction is cached per SDK version, so it only
-# happens again after the SDK is bumped. Everything else is start.sh.
+# ("unexpected e_type: 2"), so CLAUDE_CODE_PATH points at the unpacked JS that
+# ensure-claude-android.sh leaves in the cache. install.sh already ran that during the
+# install, so this is normally a no-op; it earns its keep on a phone that installed some
+# other way, or whose SDK has since been bumped. Everything else is start.sh.
 
 set -e
 
@@ -21,33 +21,8 @@ fi
 [ -e node_modules/.bin/tsc ] || bun install
 
 if [ -z "${CLAUDE_CODE_PATH:-}" ]; then
-  case "$(uname -m)" in
-    aarch64 | arm64) arch=arm64 ;;
-    x86_64) arch=x64 ;;
-    *)
-      echo "Unsupported CPU $(uname -m)"
-      exit 1
-      ;;
-  esac
-
-  sdk_version="$(bun -e "console.log(require('./packages/server/node_modules/@anthropic-ai/claude-agent-sdk/package.json').version)")"
-  cache="${XDG_CACHE_HOME:-$HOME/.cache}/yaar/claude-js/${sdk_version}-${arch}"
-
-  if [ ! -x "$cache/claude" ]; then
-    pkg="claude-agent-sdk-linux-${arch}"
-    echo "Unpacking Claude Code for SDK ${sdk_version} into ${cache}..."
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    curl -fsSL "https://registry.npmjs.org/@anthropic-ai/${pkg}/-/${pkg}-${sdk_version}.tgz" |
-      tar xz -C "$tmp"
-    rm -rf "$cache"
-    bun scripts/dev/unbun-claude.ts "$tmp/package/claude" "$cache"
-    printf '#!/bin/sh\nexec "%s" "%s/cli.js" "$@"\n' "$(command -v bun)" "$cache" >"$cache/claude"
-    chmod +x "$cache/claude"
-    rm -rf "$tmp"
-    trap - EXIT
-  fi
-  export CLAUDE_CODE_PATH="$cache/claude"
+  CLAUDE_CODE_PATH="$(./scripts/dev/ensure-claude-android.sh)"
+  export CLAUDE_CODE_PATH
 fi
 
 # A full `auth login`, not a `setup-token`: the long-lived token is inference-only, and the
