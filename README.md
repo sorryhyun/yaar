@@ -31,16 +31,21 @@ between: an app you're using is an app you can rewrite, right there, with the ag
 
 Codex or Claude Code authentication is required.
 
+For Linux, Mac, Android (termux) users:
+
 ```bash
 curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
 yaar                # Browser opens automatically
 ```
 
-Supports Linux, macOS (Intel & Apple Silicon), and Windows (WSL). Single binary — no Bun or Node.js required.
+For Windows users:
 
-Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
+```
+irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex
+yaar
+```
 
-Android ([Termux](https://termux.dev/), Claude only): the same `curl ... | bash` line. With no
+Android ([Termux](https://termux.dev/), Claude only): With no
 Android binary to download, it installs Bun's Android build, checks out the source to `~/yaar`,
 and puts a `yaar` launcher on your PATH.
 
