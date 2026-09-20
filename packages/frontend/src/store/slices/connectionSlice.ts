@@ -1,13 +1,17 @@
 /**
  * Connection slice - manages WebSocket connection state.
  */
+import { readJoinSessionId } from '@/lib/joinSession';
 import type { SliceCreator, ConnectionSlice, ConnectionStatus } from '../types';
 
 export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, _get) => ({
   connectionStatus: 'disconnected' as ConnectionStatus,
   connectionError: null,
   providerType: null,
-  sessionId: null,
+  // Null in the ordinary case, so the socket opens without an id and the server mints a
+  // session. Non-null only for `?sessionId=`, where this document is joining a session that
+  // already exists — see lib/joinSession.ts.
+  sessionId: readJoinSessionId(),
   sessionEpoch: null,
   connectionId: null,
   recoveryMode: null,
