@@ -401,7 +401,7 @@ A box with no Chromium simply goes without, and says so once.
 | `MONITOR_MAX_CONCURRENT` | `2` | Concurrent background monitor tasks |
 | `MONITOR_MAX_ACTIONS_PER_MIN` | `30` | Monitor action rate limit |
 | `MONITOR_MAX_OUTPUT_PER_MIN` | `50000` | Monitor output rate limit |
-| `APP_AGENT_IDLE_MINUTES` | `15` | Idle minutes before an app agent is reclaimed (`0` disables) |
+| `APP_AGENT_IDLE_MINUTES` | `60` | Idle minutes before an app agent is reclaimed (`0` disables) |
 
 ### Why `APP_AGENT_IDLE_MINUTES` exists
 
@@ -414,6 +414,12 @@ Reaping ends the agent's provider session, so its memory goes with it (the same 
 and a last-window close both do deliberately). Reaping leaves its sub-agents alone, because their
 owner is the (monitor, app) pair — only a last-window close, monitor removal, or teardown takes
 those.
+
+The default is an hour, not the fifteen minutes it started at: "idle" here means the *user* has
+been away, and on a phone that is every app switch. Fifteen minutes in another app was enough to
+come back to an agent with no memory, whose successor — told only that a predecessor had existed —
+re-did work that had already landed, in the reported case cloning a repository a second time under
+a new id. An hour is still far shorter than the "never" this exists to rule out.
 
 **Source:** `packages/server/src/agents/agent-pool.ts`
 

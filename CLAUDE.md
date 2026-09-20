@@ -61,7 +61,7 @@ happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 - `FABLE` - `1` enables fable mode: the monitor agent runs on Fable, every agent below it (session, app, sub-agent) on Opus. See `docs/reference/server_env.md`.
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
-- `APP_AGENT_IDLE_MINUTES` - Idle minutes before an app agent is reclaimed (default: 15, `0` disables). See `packages/server/CLAUDE.md`.
+- `APP_AGENT_IDLE_MINUTES` - Idle minutes before an app agent is reclaimed (default: 60, `0` disables). See `packages/server/CLAUDE.md`.
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
 - `YAAR_WORKSPACE` - Run against an isolated state bundle: storage, config, session logs, and user-apps all under `workspaces/<name>/` (git-ignored), and new app deploys land there instead of `apps/`. See `docs/reference/server_env.md`.
 - `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`

@@ -27,11 +27,18 @@ export const MONITOR_MAX_OUTPUT_PER_MIN = getEnvInt('MONITOR_MAX_OUTPUT_PER_MIN'
  * the ninth app (and every *other* session) got "Agent limit reached" forever.
  *
  * The cost of reaping is that the app agent's memory goes with its provider session —
- * the same thing `fresh:true` and a last-window close both do deliberately. Fifteen
- * minutes is chosen to make that a rare surprise while still being far shorter than
- * "never".
+ * the same thing `fresh:true` and a last-window close both do deliberately. The default
+ * is an hour rather than the fifteen minutes it started at, because the clock does not
+ * measure what it reads as: an app agent is idle while *the user* is away, and on a phone
+ * the user is away every time they switch apps. Fifteen minutes of another app was enough
+ * to come back to an agent that remembered nothing, and a successor told only that a
+ * predecessor existed re-did work that had already landed — the reported case was a
+ * repository cloned a second time, under a new id, on top of the first.
+ *
+ * An hour is still far shorter than "never", which is the slot-exhaustion this exists to
+ * prevent (see above). `0` disables it for a desktop that would rather keep the memory.
  */
-export const APP_AGENT_IDLE_MS = getEnvInt('APP_AGENT_IDLE_MINUTES', 15) * 60_000;
+export const APP_AGENT_IDLE_MS = getEnvInt('APP_AGENT_IDLE_MINUTES', 60) * 60_000;
 
 /** How often the pool looks for expired app agents. Resolution, not policy. */
 export const APP_AGENT_SWEEP_MS = 60_000;
