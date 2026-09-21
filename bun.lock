@@ -161,6 +161,7 @@
         "@yaar/server": "workspace:*",
         "@yaar/shared": "workspace:*",
         "bun-types": "catalog:",
+        "dompurify": "catalog:",
         "jsdom": "catalog:",
         "mitata": "catalog:",
       },
