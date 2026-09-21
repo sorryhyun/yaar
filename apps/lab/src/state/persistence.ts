@@ -1,4 +1,4 @@
-import { appStorage, errMsg } from '@bundled/yaar';
+import { appStorage, createSharedSignal, errMsg } from '@bundled/yaar';
 import { trimOutput } from '../lib/trim';
 import { starterCells } from './starter';
 import { notebooks, setNotebooks, current, setCurrent, setDirty, setStatus, uid } from './signals';
@@ -18,6 +18,35 @@ const nbPath = (id: string) => 'notebooks/' + id + '.json';
 
 function metaOf(nb: Notebook): NotebookMeta {
   return { id: nb.id, title: nb.title, updatedAt: nb.updatedAt, cellCount: nb.cells.length };
+}
+
+/**
+ * The open notebook, shared across copies of this window: every notebook/cell
+ * command (add/update/delete/moveCell, rename, openNotebook, newNotebook) ends up
+ * writing it to disk here, and a copy the agent isn't driving would otherwise keep
+ * showing what was open before. Cell outputs ride along as ordinary fields — a run
+ * result can't be recomputed by re-reading anything, so it has to be data, not a
+ * pointer.
+ *
+ * Only set where a save has just actually happened (`saveCurrent`, `openNotebook`),
+ * never from `onRemote` — that would echo every notebook back and forth forever.
+ * Riding on `saveCurrent` is also what keeps this off the per-keystroke path: typing
+ * in a cell debounces through `markDirty` before a save (and therefore a share)
+ * happens at all.
+ */
+const [, setSharedNotebook] = createSharedSignal<Notebook | null>('notebook', null, {
+  onRemote: (nb) => {
+    if (nb) applyRemoteNotebook(nb);
+  },
+});
+
+function applyRemoteNotebook(nb: Notebook): void {
+  setCurrent(nb);
+  setDirty(false);
+  // The index (titles/order in the sidebar) is separate storage, already written
+  // by whichever save or delete drove this notebook change — cheap to re-read
+  // rather than also shipping it through the shared signal.
+  void loadIndex();
 }
 
 async function writeIndex(list: NotebookMeta[]): Promise<void> {
@@ -61,6 +90,7 @@ export async function saveCurrent(): Promise<boolean> {
   list.push(metaOf(snapshot));
   await writeIndex(list);
   await appStorage.trySave(STATE_PATH, JSON.stringify({ lastOpened: nb.id }));
+  setSharedNotebook(snapshot);
   return true;
 }
 
@@ -83,7 +113,7 @@ export async function loadIndex(): Promise<NotebookMeta[]> {
   return clean;
 }
 
-export async function openNotebook(id: string): Promise<Notebook> {
+async function loadNotebook(id: string): Promise<Notebook> {
   const nb = await appStorage.readJson<Notebook>(nbPath(id));
   if (!nb || !Array.isArray(nb.cells)) throw new Error('Notebook ' + id + ' is missing or corrupt');
   nb.cells = nb.cells.map((c) => ({
@@ -94,6 +124,15 @@ export async function openNotebook(id: string): Promise<Notebook> {
   setCurrent(nb);
   setDirty(false);
   await appStorage.trySave(STATE_PATH, JSON.stringify({ lastOpened: id }));
+  return nb;
+}
+
+export async function openNotebook(id: string): Promise<Notebook> {
+  const nb = await loadNotebook(id);
+  // Nothing changed on disk (this only read it), but which notebook is *open* did —
+  // switching to a notebook a follower already had cached would otherwise never
+  // notify it, since only a real save bumps the shared value elsewhere.
+  setSharedNotebook(nb);
   return nb;
 }
 
@@ -126,7 +165,9 @@ export async function bootstrap(): Promise<void> {
       st.lastOpened && list.some((m) => m.id === st.lastOpened) ? st.lastOpened : list[0]?.id;
     if (wanted) {
       try {
-        await openNotebook(wanted);
+        // Not openNotebook: this is every copy loading its own starting point,
+        // not a switch to announce — see openNotebook's comment.
+        await loadNotebook(wanted);
         return;
       } catch {
         /* fall through to a fresh notebook */

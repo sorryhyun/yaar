@@ -1,4 +1,5 @@
 import { createSignal } from '@bundled/solid-js';
+import { createSharedSignal } from '@bundled/yaar';
 import { uid } from './signals';
 import { trimOutput } from '../lib/trim';
 import type { AgentRun, CellOutput } from '../types';
@@ -29,6 +30,30 @@ const [unseen, setUnseen] = createSignal(0);
 const [newestId, setNewestId] = createSignal<string | null>(null);
 
 export { agentRuns, mainView, unseen, newestId, MAX_ENTRIES };
+
+/**
+ * `runCode` has no cell to render into (see the module comment), so without this
+ * a copy the agent isn't driving never learns the run happened at all — nothing
+ * else about it touches `current`. Shared as the whole list, not a pointer: a run
+ * result cannot be recomputed, and it is already the thing `logAgentRun` builds.
+ *
+ * Only set at `logAgentRun`, the one mutation site. `onRemote` merges the arrived
+ * entries and bumps the unread badge like a real local run would, but it never
+ * switches `mainView` — that's this copy's own tab, the same reasoning the panel
+ * already uses to decide whose selection wins (see the devtools `fileChanges`
+ * precedent this mirrors: shared data, per-viewer selection).
+ */
+const [, setSharedRuns] = createSharedSignal<AgentRun[]>('agent-runs', [], {
+  onRemote: (next, prev) => {
+    const known = new Set(prev.map((r) => r.id));
+    const arrived = next.filter((r) => !known.has(r.id));
+    setAgentRuns(next);
+    if (arrived.length) {
+      setNewestId(next[next.length - 1]?.id ?? null);
+      if (mainView() !== 'agent') setUnseen(unseen() + arrived.length);
+    }
+  },
+});
 
 /** Switch the main pane. Landing on the log clears the unread badge. */
 export function setMainView(view: MainView): void {
@@ -74,7 +99,9 @@ export function logAgentRun(input: AgentRunInput): AgentRun {
     source,
     output: trimOutput(input.output),
   };
-  setAgentRuns([...agentRuns(), run].slice(-MAX_ENTRIES));
+  const list = [...agentRuns(), run].slice(-MAX_ENTRIES);
+  setAgentRuns(list);
+  setSharedRuns(list);
   setNewestId(run.id);
   if (input.focus) setMainView('agent');
   else if (mainView() !== 'agent') setUnseen(unseen() + 1);
