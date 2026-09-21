@@ -33,6 +33,10 @@ async function build() {
     // immutability is one it declined to compile. Note `bun test` transpiles without
     // this flag, so the suite cannot catch a compiler-only regression.
     reactCompiler: true,
+    // Bun inlines process.env.NODE_ENV from the building process's env, and `minify`
+    // does not set it — without this every release shipped React's development build
+    // (owner-stack capture per element, ~2x the render cost measured on the phone shell).
+    define: { 'process.env.NODE_ENV': '"production"' },
     sourcemap: 'linked',
     naming: '[dir]/[name]-[hash].[ext]',
     plugins: [pathAliasPlugin],
@@ -98,11 +102,7 @@ async function resolveFile(basePath: string): Promise<string> {
   return basePath;
 }
 
-export function generateHtml(
-  jsFiles: string[],
-  cssFiles: string[],
-  extraScripts = '',
-): string {
+export function generateHtml(jsFiles: string[], cssFiles: string[], extraScripts = ''): string {
   const cssLinks = cssFiles.map((f) => `    <link rel="stylesheet" href="${f}" />`).join('\n');
   const jsScripts = jsFiles.map((f) => `    <script type="module" src="${f}"></script>`).join('\n');
 

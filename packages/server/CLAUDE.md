@@ -31,6 +31,7 @@ before changing a default or adding a knob.
 | `PROVIDER` | auto-detect | Force `claude` or `codex` |
 | `FABLE` | off | `=1`: monitor agent on Fable, every other agent on Opus |
 | `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock that opens real windows — load/perf runs only |
+| `YAAR_REACT_PROD` | on for Android | Dev bundler ships React's production build (`1`/`0` force) |
 | `PORT` / `MAX_AGENTS` | `8000` / `10` | Server port; global agent limit |
 | `MCP_SKIP_AUTH` / `REMOTE` | off | Skip MCP auth (local dev); enable remote mode |
 | `YAAR_REMOTE_TOKEN` | — | Adopt this remote token instead of minting one (ignored under 32 chars) |

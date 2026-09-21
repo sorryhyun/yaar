@@ -9,7 +9,7 @@
  * `zod/index.js:16`. A fresh process has a cold, private cache, so the build is
  * deterministic no matter what the server happens to have loaded.
  *
- * Usage:  bun dev-bundle-worker.ts <frontendSrcDir> <outDir>
+ * Usage:  bun dev-bundle-worker.ts <frontendSrcDir> <outDir> [production]
  * Output: JSON { js, css, total } on stdout. `js`/`css` are the entry files the
  * dev HTML must link (paths relative to outDir); every output — including shared
  * chunks and sourcemaps — is written to outDir by Bun.build itself.
@@ -17,7 +17,7 @@
 
 import { join, relative } from 'path';
 
-const [frontendSrc, outDir] = process.argv.slice(2);
+const [frontendSrc, outDir, reactMode] = process.argv.slice(2);
 if (!frontendSrc || !outDir) {
   console.error('usage: dev-bundle-worker.ts <frontendSrcDir> <outDir>');
   process.exit(2);
@@ -59,6 +59,8 @@ const result = await Bun.build({
   // Kept in step with packages/frontend/build.ts: dev must compile the same way
   // prod does, or a React Compiler behavior change only ever shows up in a release.
   reactCompiler: true,
+  // `production` swaps in React's production build; see reactProduction() in dev-bundler.ts.
+  ...(reactMode === 'production' ? { define: { 'process.env.NODE_ENV': '"production"' } } : {}),
   sourcemap: 'linked',
   naming: '[dir]/[name]-[hash].[ext]',
   plugins: [pathAliasPlugin],

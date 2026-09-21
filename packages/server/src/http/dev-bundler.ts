@@ -86,10 +86,26 @@ const BUNDLE_WORKER = join(import.meta.dir, 'dev-bundle-worker.ts');
  * bundles against a cold, private cache, so a rebuild can't be poisoned by
  * whatever the long-lived server process happens to have loaded.
  */
+/**
+ * Whether the dev bundler ships React's production build. On Android the dev server *is*
+ * the product — `make termux` has no release build to fall back on — and React's
+ * development build costs the phone shell about twice the render time (owner-stack capture
+ * on every element). Elsewhere the dev warnings are worth it. `YAAR_REACT_PROD` forces it
+ * either way; `make mobile-bench` pins it on so it measures what a phone gets.
+ */
+function reactProduction(): boolean {
+  const flag = process.env.YAAR_REACT_PROD;
+  if (flag === '1') return true;
+  if (flag === '0') return false;
+  return process.platform === 'android';
+}
+
 async function runBundleWorker(
   stageDir: string,
 ): Promise<{ js: string[]; css: string[]; total: number }> {
-  const proc = Bun.spawn(['bun', BUNDLE_WORKER, FRONTEND_SRC, stageDir], {
+  const args = [BUNDLE_WORKER, FRONTEND_SRC, stageDir];
+  if (reactProduction()) args.push('production');
+  const proc = Bun.spawn(['bun', ...args], {
     cwd: PROJECT_ROOT,
     stdout: 'pipe',
     stderr: 'pipe',

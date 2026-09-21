@@ -25,6 +25,7 @@ passes in review.
 | `CODEX_WS_PORT` | `4510` | Codex app-server WebSocket listener |
 | `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
 | `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock — no model, no tokens (`make mobile-bench`) |
+| `YAAR_REACT_PROD` | on for Android, off elsewhere | Dev bundler ships React's production build (`1` forces on, `0` off) |
 
 ### `YAAR_MOCK_AGENT`
 
@@ -41,6 +42,26 @@ then opens six windows rotating markdown → table → component → iframe app.
 `perf` directive gets a one-line reply and no windows.
 
 **Source:** `packages/server/src/providers/mock/index.ts`, `scripts/bench/mobile.ts`
+
+### `YAAR_REACT_PROD`
+
+Whether the dev bundler (every launch that is not `REMOTE=1` and not the bundled exe —
+`make termux` included) builds the frontend against React's **production** build. React's
+development build captures an owner stack for every element it creates, and on the phone
+shell that doubled the render cost: `make mobile-bench` measured a 6-window turn at 273ms of
+renderer script in dev and 118ms in prod, and four swipes at 386ms against 122ms (4x CPU
+throttle), with 300ms of long tasks gone entirely.
+
+On a desktop the dev warnings are worth that, so the default stays development there. On
+Android it is production, because `make termux` *is* how YAAR runs on a phone — there is no
+release build behind it to measure or ship instead. `make mobile-bench` pins it on so it
+measures what a phone gets; `YAAR_REACT_PROD=0 make mobile-bench` measures the dev build.
+
+The release build (`packages/frontend/build.ts`) always defines `NODE_ENV=production`.
+Before that, it did not: Bun inlines `process.env.NODE_ENV` from the *building* process's
+environment, and `minify: true` does not set it, so every release shipped React's dev build.
+
+**Source:** `packages/server/src/http/dev-bundler.ts` (`reactProduction`), `packages/frontend/build.ts`
 
 ### `FABLE`
 
