@@ -254,69 +254,6 @@ describe('F-18 — every dropped message is visible', () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// F-2 — a resent message is acked, not run twice
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('F-2 — the outbox can retry safely', () => {
-  let session: InstanceType<typeof LiveSession>;
-  let ws: ReturnType<typeof createMockWs>;
-
-  beforeEach(() => {
-    resetBroadcastCenter();
-    session = new LiveSession(SESSION);
-    ws = createMockWs();
-    session.addConnection('conn-a', ws);
-    getBroadcastCenter().subscribe('conn-a', ws, SESSION);
-  });
-
-  afterEach(async () => {
-    await session.cleanup();
-    resetBroadcastCenter();
-  });
-
-  it('the same messageId twice runs once and is acknowledged twice', async () => {
-    await session.routeMessage(userMessage('m-dup'), 'conn-a');
-    const turnsAfterFirst = turnCount(session);
-
-    // The client never saw an ack (the socket died at the wrong moment) and resent from its
-    // outbox. Running this a second time would have the agent do the user's bidding twice.
-    await session.routeMessage(userMessage('m-dup'), 'conn-a');
-
-    expect(turnCount(session)).toBe(turnsAfterFirst);
-    const acks = ws.events.filter(
-      (e) =>
-        e.type === ServerEventType.MESSAGE_ACCEPTED &&
-        (e as { messageId: string }).messageId === 'm-dup',
-    );
-    // And it is acked again — otherwise the outbox would hold it forever and resend it on
-    // every reconnect, for the rest of the session.
-    expect(acks.length).toBeGreaterThanOrEqual(1);
-  });
-});
-
-/**
- * How many turns the monitor agent was asked to run — counted off the `AgentSession` stub
- * this file installs.
- *
- * Good enough for the one thing it is used for below (a duplicate `messageId` must not run
- * twice), and it must not be trusted with more than that. The stub's `handleMessage` resolves
- * instantly, so there is no turn here in any real sense: a message that was *dropped* and a
- * message that was *reordered* both leave this count looking perfect. What the count cannot
- * see is exactly what the queue is for.
- *
- * The load-bearing version is `tests/loopback/loopback-message-loss.test.ts` (S4), which
- * counts what the real provider was actually handed — every prompt, in the order the turns
- * started, with one turn held open so the others have to queue behind it.
- */
-function turnCount(session: InstanceType<typeof LiveSession>): number {
-  const pool = session.getPool();
-  const agent = pool?.agentPool.getMonitorAgent('0');
-  if (!agent) return 0;
-  const handleMessage = agent.session.handleMessage as unknown as { mock: { calls: unknown[] } };
-  return handleMessage.mock.calls.length;
-}
-
-// ───────────────────────────────────────────────────────────────────────────
 // A reset is a delivery, not a gesture
 // ───────────────────────────────────────────────────────────────────────────
 

@@ -97,6 +97,24 @@ describe('AgentLimiter', () => {
       expect(r2).toBeInstanceOf(Error);
       expect(limiter.getWaitingCount()).toBe(0);
     });
+
+    it('rejects with the error passed to it, during a reset', async () => {
+      // Ported from pool-drain.test.ts's 'AgentLimiter.clearWaiting during reset' — the one
+      // assertion not already covered above: the rejection carries the custom error a reset
+      // passes in, not a generic one.
+      limiter.tryAcquire();
+      limiter.tryAcquire();
+      limiter.tryAcquire();
+
+      const waiterPromise = limiter.acquire().catch((e: Error) => e);
+
+      limiter.clearWaiting(new Error('Pool resetting'));
+
+      const result = await waiterPromise;
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('Pool resetting');
+      expect(limiter.getWaitingCount()).toBe(0);
+    });
   });
 
   it('reset clears everything', () => {

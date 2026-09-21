@@ -27,11 +27,7 @@
  * for every caller and could never render one app's declared reach.
  */
 import { describe, expect, it } from 'bun:test';
-import {
-  sharedStorageGrants,
-  authorizeSharedStorage,
-  expandStorageShortcut,
-} from '../mcp/app-agent/shared-storage.js';
+import { sharedStorageGrants, expandStorageShortcut } from '../mcp/app-agent/shared-storage.js';
 import {
   APP_TOOL_DESCRIPTIONS,
   storageWriteAnswer,
@@ -40,7 +36,6 @@ import {
   appRelativeEntries,
 } from '../mcp/app-agent/index.js';
 import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
-import { permissionsAllow, type PermissionEntry } from '../http/access.js';
 
 /** memo, browser, dock, session-logs and process-explorer declare no storage entry. */
 const UNDECLARED = ['memo', 'browser', 'dock', 'session-logs', 'process-explorer'];
@@ -131,44 +126,6 @@ describe('the tool descriptions', () => {
     expect(APP_TOOL_DESCRIPTIONS.query).toContain('Query the app state.');
     expect(APP_TOOL_DESCRIPTIONS.commandParam).toContain('Command name to execute.');
     expect(APP_TOOL_DESCRIPTIONS.queryParam).toContain('State key to query');
-  });
-});
-
-describe('the boundary that survived', () => {
-  it('gives every app the commons, on all four verbs', async () => {
-    for (const verb of ['read', 'list', 'invoke', 'delete'] as const) {
-      expect(permissionsAllow([], 'memo', 'yaar://storage/shared/memo/out.md', verb)).toBe(true);
-    }
-  });
-
-  it('still refuses the shared tree past the commons to an undeclared app', async () => {
-    // The one refusal the removal did not touch, and the reason `authorizeSharedStorage`
-    // is still asked on every shared-tree call.
-    const denied = await authorizeSharedStorage('memo', 'reports/x.md', 'invoke');
-    expect(denied).toContain('not permitted: invoke yaar://storage/reports/x.md');
-    // And it points at the tree that *is* open, so the model is not left guessing.
-    expect(denied).toContain('storage/reports/x.md');
-  });
-
-  it('still refuses another app’s private tree, in either spelling', async () => {
-    for (const uri of [
-      'yaar://storage/apps/vault/secrets.json',
-      'yaar://apps/vault/storage/secrets.json',
-    ]) {
-      expect(permissionsAllow([], 'memo', uri, 'read')).toBe(false);
-    }
-  });
-
-  it('honours a narrow declaration verb by verb', async () => {
-    // A declaration is not a blanket grant: `storage:write` is charged as `invoke` and
-    // `storage:delete` as `delete`, the same verbs the verbs door charges for that work.
-    const narrow: PermissionEntry[] = [{ uri: 'yaar://storage/reports/', verbs: ['read', 'list'] }];
-
-    expect(permissionsAllow(narrow, 'notes', 'yaar://storage/reports/x.md', 'read')).toBe(true);
-    expect(permissionsAllow(narrow, 'notes', 'yaar://storage/reports/x.md', 'invoke')).toBe(false);
-    expect(permissionsAllow(narrow, 'notes', 'yaar://storage/reports/x.md', 'delete')).toBe(false);
-    // And nothing outside the prefix it named.
-    expect(permissionsAllow(narrow, 'notes', 'yaar://storage/files/tax.pdf', 'read')).toBe(false);
   });
 });
 

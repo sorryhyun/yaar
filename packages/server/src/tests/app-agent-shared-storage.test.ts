@@ -249,6 +249,18 @@ describe('the gate the door asks', () => {
     );
   });
 
+  it('refuses another app’s private tree with no declared permission, in either spelling', () => {
+    // Ported from app-agent-storage-door.test.ts's "the boundary that survived" — the one
+    // assertion there not already covered here: an *empty* grant list still must refuse a
+    // foreign app's storage in both dialects, not just the `yaar://storage/apps/...` one.
+    for (const uri of [
+      'yaar://storage/apps/vault/secrets.json',
+      'yaar://apps/vault/storage/secrets.json',
+    ]) {
+      expect(permissionsAllow([], 'memo', uri, 'read')).toBe(false);
+    }
+  });
+
   it('gives every app the commons, declared or not', () => {
     // The grant that is not a grant: `yaar://storage/shared/` is granted for being an
     // app, so an empty permission list reaches it and the rest of the tree stays shut.

@@ -89,6 +89,11 @@ describe('extractIframeToken', () => {
     const bogus = new Request('http://localhost:8000/api/storage/x.png?__yaar_token=nope');
     expect(hasValidIframeToken(bogus, new URL(bogus.url))).toBe(false);
   });
+
+  it('refuses an anonymous caller — no token, no identity', () => {
+    const anonymous = new Request('http://localhost:8000/api/verb');
+    expect(hasValidIframeToken(anonymous, new URL(anonymous.url))).toBe(false);
+  });
 });
 
 describe('every query-param consumer is on the coarse allowlist', () => {

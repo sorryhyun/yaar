@@ -191,32 +191,6 @@ describe('CodexProvider query() local appServer capture', () => {
   });
 });
 
-// ── AgentLimiter clearWaiting during reset ──────────────────────────────
-
-describe('AgentLimiter.clearWaiting during reset', () => {
-  it('unblocks waiters with rejection', async () => {
-    // Import the real limiter
-    const { AgentLimiter } = await import('../agents/limiter.js');
-    const limiter = new AgentLimiter(1);
-
-    // Fill up the limiter
-    limiter.tryAcquire();
-
-    // Queue a waiter
-    const waiterPromise = limiter.acquire().catch((e: Error) => e);
-
-    // Clear with reset error
-    limiter.clearWaiting(new Error('Pool resetting'));
-
-    const result = await waiterPromise;
-    expect(result).toBeInstanceOf(Error);
-    expect((result as Error).message).toBe('Pool resetting');
-    expect(limiter.getWaitingCount()).toBe(0);
-
-    limiter.reset();
-  });
-});
-
 // ── Integration: reset waits for inflight then disposes ─────────────────
 
 describe('Reset integration: interrupt → await inflight → dispose', () => {
