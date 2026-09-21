@@ -28,23 +28,6 @@ import {
 export default defineApp({
   id: 'devtools',
   name: 'Devtools',
-  // Nothing this app does is replayed on a remount.
-  //
-  // Replay exists to rebuild a document that lost its state. This one does not lose it:
-  // the projects are in storage, and which of them were open is in `workspace.json`,
-  // which `restoreWorkspace` reads at startup. So replay restores nothing here — it only
-  // re-runs the turn's history against a sandbox that has since moved on. Every clone and
-  // every `createProject` mints its id from `Date.now()`, so a remount made a *second*
-  // copy of the project being worked on; every `editFile` re-applied its insertion on top
-  // of the text that already had it; every `deploy` shipped again. And because the server
-  // sends the whole log at once, the handlers interleaved: a phone coming back from the
-  // background showed one project's file tree over another project's editor, under a
-  // status line naming a third.
-  //
-  // The per-command `replay: 'never'` in protocol/worker.ts stay as they are: they are
-  // true of those commands on their own terms, and they should keep holding if this
-  // app-wide default is ever narrowed.
-  replay: 'never',
   events: {
     worker: {
       description:

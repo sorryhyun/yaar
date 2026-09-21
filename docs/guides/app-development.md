@@ -692,14 +692,9 @@ export default defineApp({
   `describe('yaar://windows/{id}/state/{key}')`. Use it for what the static `description`
   cannot say because it changes: `describe: () => \`${rows().length} rows; a row is { id, title,
   done }\``. It never rides in the manifest, so the cheap call stays cheap.
-- **`replay`.** The server re-sends recorded commands, in order, when a window's iframe
-  remounts. Declare `replay: 'never'` on any command whose effect must not be applied twice
-  (appends, sends, deletes); omit it for idempotent ones. An app that **restores itself** —
-  one that persists what it is showing and reads it back at startup — declares
-  `replay: 'never'` once at the top level of `defineApp({...})` instead, and every command
-  inherits it (a command may still set `replay: 'always'` to opt back in). For that app
-  replay rebuilds nothing and re-runs everything: devtools re-cloned the project being
-  worked on, under a fresh id, on every return from the phone's home screen.
+- **`replay`.** The server re-sends recorded commands when a window's iframe remounts.
+  Declare `replay: 'never'` on any command whose effect must not be applied twice (appends,
+  sends, deletes); omit it for idempotent ones.
 - **`view`.** A Solid component is mounted with `render`; an imperative app that owns its own
   DOM passes `{ mount(el) { ... } }` and may return a teardown, which runs on window close
   after `onClose`.

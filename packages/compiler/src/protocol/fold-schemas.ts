@@ -281,10 +281,6 @@ function buildProtocol(definition) {
     protocol.state[key] = descriptor;
   }
 
-  // The app-wide replay default every command inherits — read once, applied below, so
-  // this path and the AST reader emit the same descriptors (see extract-protocol-ast).
-  const appReplay = definition.replay === 'never' ? 'never' : 'always';
-
   const commandSource = definition.commands || {};
   for (const key of Object.keys(commandSource)) {
     const entry = commandSource[key] || {};
@@ -294,7 +290,6 @@ function buildProtocol(definition) {
     const descriptor = { description: description };
     if (entry.aliases !== undefined) descriptor.aliases = entry.aliases;
     if (entry.replay !== undefined) descriptor.replay = entry.replay;
-    else if (appReplay === 'never') descriptor.replay = 'never';
     const params = foldSchema(entry.params, path + '.params', 'input');
     if (params !== undefined) descriptor.params = params;
     const returns = foldSchema(entry.returns, path + '.returns', 'output');

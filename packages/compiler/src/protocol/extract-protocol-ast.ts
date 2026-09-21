@@ -459,25 +459,6 @@ function buildProtocol(
   }
 
   // -- commands ------------------------------------------------------------
-  // The app-wide replay default every command inherits (`defineApp({ replay })`).
-  // Resolved before the loop because it lands on each descriptor below: the manifest
-  // has to name the policy the running app will actually hand the server, and an app
-  // that opts out wholesale opts every one of its commands out.
-  let appReplay: 'always' | 'never' = 'always';
-  const appReplayProp = sections.get('replay');
-  if (appReplayProp) {
-    const value = extractor.evaluate(appReplayProp.value, appReplayProp.scope, 'replay');
-    if (value !== 'always' && value !== 'never') {
-      extractor.error(
-        appReplayProp.scope,
-        appReplayProp.value,
-        `\`replay\`: expected 'always' or 'never'`,
-      );
-    } else {
-      appReplay = value;
-    }
-  }
-
   const commandEntries = sectionEntries('commands');
   if (commandEntries) {
     for (const entry of commandEntries) {
@@ -521,8 +502,6 @@ function buildProtocol(
           continue;
         }
         descriptor.replay = replay;
-      } else if (appReplay === 'never') {
-        descriptor.replay = 'never';
       }
 
       if (!assignObject(extractor, descriptor, 'params', props, label)) continue;

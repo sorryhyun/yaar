@@ -176,16 +176,9 @@ function saveWorkspace(): void {
  * window — or from a session whose last write never landed — would otherwise put a tab
  * on screen for a directory that is gone, and `openProject` would quietly do nothing
  * while the tab stayed. Nothing is written back here; the next open or close does that.
- *
- * It also yields to a command that got there first. The restore is started at module
- * scope and the agent's first command can land while it is still listing projects — and
- * a `cloneApp` that has already opened its new project must not then be replaced by
- * whatever was open last time, which is the same wrong-project-on-screen this file's
- * `workspace.json` exists to prevent, arriving from the other direction.
  */
 export async function restoreWorkspace(): Promise<void> {
   try {
-    if (activeProject()) return;
     const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
     const stored = raw as Partial<Workspace>;
@@ -194,8 +187,6 @@ export async function restoreWorkspace(): Promise<void> {
       (id): id is string => typeof id === 'string' && live.has(id),
     );
     if (tabs.length === 0) return;
-    // Re-checked after the read: the command could have arrived during it.
-    if (activeProject()) return;
     setOpenTabs(tabs);
     const activeId =
       typeof stored.activeId === 'string' && tabs.includes(stored.activeId)

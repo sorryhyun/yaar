@@ -551,31 +551,6 @@ describe('without typescript, the running app is the manifest', () => {
     expect(withoutAst.protocol).toEqual(withAst.protocol);
   });
 
-  test('the app-wide replay policy reaches the manifest on both roads', async () => {
-    // Two readers, one policy: an app that opts out of replay wholesale must look the
-    // same to an agent whether or not `typescript` loaded, and a command that opts back
-    // in must survive either road.
-    const source = `${HEAD}
-      export default defineApp({
-        id: 'folder',
-        name: 'Folder',
-        replay: 'never',
-        commands: {
-          edit: { description: 'Edit', run: () => 1 },
-          nav: { description: 'Nav', replay: 'always', run: () => 1 },
-        },
-      });`;
-    const dir = await writeApp({ 'src/main.ts': source });
-    const withAst = await extractProtocolFromDir(join(dir, 'src'));
-    process.env.YAAR_NO_TYPESCRIPT = '1';
-    const withoutAst = await extractProtocolFromDir(join(dir, 'src'));
-
-    expect(withAst.errors).toEqual([]);
-    expect(withAst.protocol!.commands.edit.replay).toBe('never');
-    expect(withAst.protocol!.commands.nav.replay).toBe('always');
-    expect(withoutAst.protocol).toEqual(withAst.protocol);
-  });
-
   test('the $defs table is the same on both roads, names included', async () => {
     // The AST road folds Zod per descriptor and then dedups; the no-typescript road
     // reads the whole manifest off the running app and dedups the same way. A def

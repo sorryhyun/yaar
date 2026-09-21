@@ -22,25 +22,6 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   var registration = null;
   var aliasMap = {};  // alias → canonical command name
 
-  // The app-wide replay policy (defineApp({ replay })), which every command inherits
-  // unless it names its own. 'always' is the historical default and stays it.
-  var appReplay = 'always';
-
-  // The tail of the replayed-command chain, or null when no replay is in flight.
-  //
-  // A replay is the command log re-applied to rebuild the document that remounted, so
-  // it only means anything in order. The server sends the whole log in one go, and the
-  // dispatcher below calls each handler the moment its frame lands — so the first
-  // handler that awaits anything yields to the next, and N replayed commands run
-  // interleaved, the app settling into whatever state the last write happened to win.
-  // devtools remounted after a clone showed one project's file tree, another project's
-  // editor and a third's status line, none of them the one being worked on.
-  //
-  // So a replayed command waits for the previous replayed command to settle. Only
-  // replays queue: a command arriving fresh from an agent is not part of this history
-  // and must not sit behind it.
-  var replayTail = null;
-
   // app.onDrop's handlers ({ files?, text? }), or null. The desktop learns which kinds
   // this frame claims from APP_MSG.dropAccept, restated empty here on every install:
   // its record outlives a reload, and a frame that stopped registering a hook must stop
@@ -93,9 +74,6 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     checkDescriptors(config.state, 'state', true);
     checkDescriptors(config.commands, 'commands', true);
     checkDescriptors(config.events, 'events', false);
-    if (config.replay !== undefined && config.replay !== 'always' && config.replay !== 'never') {
-      problems.push('"replay" must be "always" or "never" (it is the default every command inherits)');
-    }
     if (problems.length) {
       var who = (typeof config.appId === 'string' && config.appId) ? ' for app "' + config.appId + '"' : '';
       throw new Error('[yaar] defineApp()' + who + ' is invalid:\\n  - ' + problems.join('\\n  - '));
@@ -135,11 +113,6 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       // with it. Reading from disk would let the server replay a command this running
       // app never declared replayable, silently.
       aliasMap = {};
-      // An app that restores its own state from storage has nothing replay can rebuild,
-      // and every command it declares is one more thing a remount would re-run against a
-      // sandbox that has moved on. Such an app says so once, here, instead of repeating
-      // \`replay: 'never'\` on thirty descriptors and losing the thirty-first to a rebase.
-      appReplay = config.replay === 'never' ? 'never' : 'always';
       var noReplay = [];
       if (config.commands) {
         for (var name in config.commands) {
@@ -155,7 +128,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           // the canonical name would let \`command("newMemo")\` replay an addMemo that
           // \`command("addMemo")\` correctly skips, which is the exact double-apply the
           // policy exists to prevent.
-          if ((cmd.replay || appReplay) === 'never') {
+          if (cmd.replay === 'never') {
             noReplay.push(name);
             if (cmd.aliases) {
               for (var a = 0; a < cmd.aliases.length; a++) noReplay.push(cmd.aliases[a]);
@@ -526,64 +499,27 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
    * parent can only wait out. \`postToParent\` recovers most of those by plainifying
    * (a solid-js store proxy is the common case); \`fail\` below answers the rest
    * with a message that names the field, which \`String(err)\` alone never did.
-   *
-   * Returns a promise that settles when the reply has gone out — never rejecting, since
-   * a failure is an answer here. It exists for the replay queue below, which has to know
-   * when one command is done before it starts the next.
    */
   function settle(type, requestId, key, produce, mapValue) {
-    return new Promise(function(done) {
-      function succeed(value) {
-        var p = {};
-        p[key] = mapValue ? mapValue(value) : value;
-        var unsent = reply(type, requestId, p);
-        if (unsent) fail(unsent);
-        else done();
-      }
-      function fail(err) {
-        var p = {};
-        p[key] = null;
-        p.error = String(err);
-        reply(type, requestId, p);
-        done();
-      }
-      try {
-        var out = produce();
-        if (out && typeof out.then === 'function') out.then(succeed).catch(fail);
-        else succeed(out);
-      } catch (err) {
-        fail(err);
-      }
-    });
-  }
-
-  /**
-   * How long the rest of a replay waits on one command that has not answered.
-   *
-   * Not a deadline on the handler — its reply still goes out whenever it arrives, and the
-   * server keeps its own timeout. Only a bound on the queue: a single command that never
-   * settles used to cost nothing, and must not now be able to stop a replay half way
-   * through and leave the app in a state that never existed.
-   */
-  var REPLAY_STEP_CAP_MS = 30000;
-
-  /** Run \`step\` once every replayed command queued before it has settled. */
-  function queueReplay(step) {
-    var mine = (replayTail || Promise.resolve()).then(function() {
-      return new Promise(function(next) {
-        var timer = setTimeout(function() {
-          console.warn('[yaar] a replayed command has not answered in ' + REPLAY_STEP_CAP_MS + 'ms; replaying the rest without waiting for it');
-          next();
-        }, REPLAY_STEP_CAP_MS);
-        var advance = function() { clearTimeout(timer); next(); };
-        step().then(advance, advance);
-      });
-    });
-    replayTail = mine;
-    // The tail is a queue, not a record: once the last replayed command settles there is
-    // nothing left to wait behind, and a later remount should not start by chaining onto
-    // a promise from the previous one.
-    mine.then(function() { if (replayTail === mine) replayTail = null; });
+    function succeed(value) {
+      var p = {};
+      p[key] = mapValue ? mapValue(value) : value;
+      var unsent = reply(type, requestId, p);
+      if (unsent) fail(unsent);
+    }
+    function fail(err) {
+      var p = {};
+      p[key] = null;
+      p.error = String(err);
+      reply(type, requestId, p);
+    }
+    try {
+      var out = produce();
+      if (out && typeof out.then === 'function') out.then(succeed).catch(fail);
+      else succeed(out);
+    } catch (err) {
+      fail(err);
+    }
   }
 
   window.addEventListener('message', function(e) {
@@ -683,12 +619,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           if (c.aliases) manifest.commands[key].aliases = c.aliases;
           if (c.params) manifest.commands[key].params = c.params;
           if (c.returns) manifest.commands[key].returns = c.returns;
-          // The *effective* policy: a command that inherits \`replay: 'never'\` from the app
-          // is as unreplayable as one that declares it, and an agent reading the manifest
-          // to see what a remount will re-run must be told the same thing the server is.
-          var effectiveReplay = c.replay || appReplay;
-          if (effectiveReplay === 'never') manifest.commands[key].replay = 'never';
-          else if (c.replay) manifest.commands[key].replay = c.replay;
+          if (c.replay) manifest.commands[key].replay = c.replay;
         }
       }
       reply('${APP_MSG.manifestResponse}', requestId, { manifest: manifest });
@@ -742,19 +673,13 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       // null rather than undefined: postMessage drops undefined-valued keys, and the
       // parent bridge reads a response carrying neither result nor error as malformed.
       var asResult = function(data) { return data === undefined ? null : data; };
-      var runCommand = function() {
-        return settle('${APP_MSG.commandResponse}', requestId, 'result', function() {
-          // The handler's second argument is context, not another param: a command replayed
-          // at a remounted iframe is indistinguishable from a fresh call otherwise, and a
-          // handler that wants replay-aware behavior instead of a blanket replay: 'never'
-          // has no way to tell them apart.
-          return registration.commands[cmdName].handler(cmdParams, { replayed: !!msg.replayed });
-        }, asResult);
-      };
-      // A replay is history being re-applied, so it runs in the order it was recorded in;
-      // anything else runs the moment it arrives (see \`replayTail\`).
-      if (msg.replayed) queueReplay(runCommand);
-      else runCommand();
+      settle('${APP_MSG.commandResponse}', requestId, 'result', function() {
+        // The handler's second argument is context, not another param: a command replayed
+        // at a remounted iframe is indistinguishable from a fresh call otherwise, and a
+        // handler that wants replay-aware behavior instead of a blanket replay: 'never'
+        // has no way to tell them apart.
+        return registration.commands[cmdName].handler(cmdParams, { replayed: !!msg.replayed });
+      }, asResult);
       return;
     }
 
