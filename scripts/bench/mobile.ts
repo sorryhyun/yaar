@@ -74,6 +74,8 @@ const DPR = num('dpr', 2.625);
 const HEADLESS = !argv.has('headful');
 const KEEP_OPEN = argv.has('keep-open');
 const NO_BUILD = argv.has('no-build');
+/** Record a CPU profile of the phone's renderer per phase into bench/mobile/profiles/. */
+const PROFILE = argv.has('profile');
 const TURN_TIMEOUT_MS = 60_000;
 const COMPANION = (process.env.YAAR_COMPANION_TAB ?? '1') !== '0';
 const WORKSPACE = process.env.YAAR_WORKSPACE ?? 'mobile-bench';
@@ -139,18 +141,26 @@ async function waitHealth(port: number, timeoutMs = 90_000): Promise<void> {
   throw new Error('server did not become healthy in time');
 }
 
+const memSnapshots = async () =>
+  (
+    await Bun.file(`${OUT}/server.log`)
+      .text()
+      .catch(() => '')
+  )
+    .split('\n')
+    .filter((l) => l.includes('mem-snapshot'));
+
 async function serverMem(): Promise<Record<string, number>> {
   if (!server?.pid) return {};
+  const seen = (await memSnapshots()).length;
   process.kill(server.pid, 'SIGUSR2');
-  await sleep(400);
-  const text = await Bun.file(`${OUT}/server.log`)
-    .text()
-    .catch(() => '');
-  const line =
-    text
-      .split('\n')
-      .filter((l) => l.includes('mem-snapshot'))
-      .at(-1) ?? '';
+  // The server logs the snapshot within milliseconds; wait for the line, not a guess.
+  let lines: string[] = [];
+  for (const deadline = Date.now() + 2000; Date.now() < deadline; await sleep(20)) {
+    lines = await memSnapshots();
+    if (lines.length > seen) break;
+  }
+  const line = lines.at(-1) ?? '';
   const out: Record<string, number> = {};
   for (const m of line.matchAll(/(\w+)=([\d.]+)MB/g)) out[m[1]] = Number(m[2]);
   return out;
@@ -460,10 +470,15 @@ async function beginPhase(): Promise<void> {
   phaseMetrics = await rendererMetrics(cdp!);
   if (companion) companionMetrics = await rendererMetrics(companion).catch(() => ({}));
   phaseProcs = { at: performance.now(), sums: sumGroups(await procSnapshot()) };
+  if (PROFILE) await cdp!.send('Profiler.start');
 }
 
 async function endPhase(phase: string, latency?: PhaseRecord['latency']): Promise<void> {
   const page = await cdp!.evaluate<Record<string, number>>('__perf.take()');
+  if (PROFILE) {
+    const { profile } = await cdp!.send('Profiler.stop');
+    await Bun.write(`${OUT}/profiles/${phase}.cpuprofile`, JSON.stringify(profile));
+  }
   const renderer = rendererDelta(phaseMetrics, await rendererMetrics(cdp!));
   let companionRenderer: Metrics | undefined;
   if (companion) {
@@ -540,7 +555,7 @@ async function writeReport(port: number, pinnedUi: boolean): Promise<void> {
     COMPANION
       ? '- Termux model: companion desktop on, same CPU throttle as the phone'
       : '- companion desktop off (phone as a remote client)',
-    '- frontend served by the dev bundler (same as `make claude-dev`), not the release build',
+    `- frontend served by the dev bundler with React's ${process.env.YAAR_REACT_PROD === '0' ? 'development' : 'production'} build (what \`make termux\` serves)`,
     '',
   );
 
@@ -700,8 +715,11 @@ async function main() {
     // The server imports all three from dist/, and `bun src/main.ts` runs no prebuild hook.
     log('building @yaar/shared + @yaar/lib + @yaar/compiler…');
     await sh(['bun', 'run', '--filter', '@yaar/shared', 'build']);
-    await sh(['bun', 'run', '--filter', '@yaar/lib', 'build']);
-    await sh(['bun', 'run', '--filter', '@yaar/compiler', 'build']);
+    // Both depend on shared alone, not on each other.
+    await Promise.all([
+      sh(['bun', 'run', '--filter', '@yaar/lib', 'build']),
+      sh(['bun', 'run', '--filter', '@yaar/compiler', 'build']),
+    ]);
   }
 
   // Our own workspace is scratch: wipe it, or the session restores the last run's windows
@@ -725,6 +743,8 @@ async function main() {
       YAAR_WORKSPACE: WORKSPACE,
       // Termux: the server is on the phone, so the companion is on as it would be there.
       YAAR_COMPANION_TAB: COMPANION ? '1' : '0',
+      // What a phone gets: on Android the dev bundler ships production React.
+      YAAR_REACT_PROD: process.env.YAAR_REACT_PROD ?? '1',
     },
     stdout: serverFd,
     stderr: serverFd,
@@ -766,6 +786,11 @@ async function main() {
     .catch(() => {});
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
   await cdp.send('Performance.enable', { timeDomain: 'timeTicks' });
+  if (PROFILE) {
+    rmSync(`${OUT}/profiles`, { recursive: true, force: true });
+    await cdp.send('Profiler.enable');
+    await cdp.send('Profiler.setSamplingInterval', { interval: 200 });
+  }
   await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: PROBE });
 
   const origin = `http://localhost:${port}`;
