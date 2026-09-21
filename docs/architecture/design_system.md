@@ -123,7 +123,7 @@ session-logs) so a reader can tell an extension from an override at a glance.
 ## The review loop
 
 The canvas — `YAAR_DESIGN_CANVAS` in `.env`, which `make design` prints — is the same
-twelve cards as one Design Artifact, and it exists because it is the only surface that
+fourteen cards as one Design Artifact, and it exists because it is the only surface that
 can send feedback **back**. Comment on a card, send the thread to Claude, and the session
 reads it (`ArtifactComments`), changes the real code, regenerates, and republishes the
 same URL. A round trip, not a publish.
@@ -134,7 +134,7 @@ tokens.ts + the shell CSS modules → make design → canvas → comment → tok
 
 It has two pages:
 
-- **System** — the twelve token and component cards, generated whole from the token
+- **System** — the fourteen token and component cards, generated whole from the token
   module and the real shell CSS modules.
 - **Mobile** — six whole-screen mockups of the phone shell (home, shade, input, card,
   pan, CLI), hand-drawn in `scripts/codegen/design-screens/*.html` because no generator

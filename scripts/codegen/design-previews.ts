@@ -20,6 +20,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAppTokensCss } from '../../packages/shared/src/design/app-css.ts';
 import { buildShellTokensCss } from '../../packages/shared/src/design/shell-css.ts';
+import {
+  ACCENT_PRESETS_DATA,
+  PALETTE_DARK,
+  PALETTE_LIGHT,
+} from '../../packages/shared/src/design/tokens.ts';
 
 /**
  * `dist/` by default, which is where `make design-preview` serves from.
@@ -171,11 +176,92 @@ ${body}
   });
 }
 
+/**
+ * What a custom property holds in the dark `:root`, read back out of the generated
+ * CSS rather than out of tokens.ts, so a swatch's caption names the value the
+ * browser actually paints — including one a generator derives (`alpha()`, a var()
+ * alias) and not just the literals. The first declaration wins, which is the dark
+ * `:root` in both stylesheets; `.y-light` and the shell light theme come later.
+ */
+const GENERATED_CSS = `${shellCss}\n${appCss}`;
+function tokenValue(name: string, depth = 0): string {
+  const m = GENERATED_CSS.match(new RegExp(`${name}:\\s*([^;]+);`));
+  if (!m) throw new Error(`swatch names ${name}, which neither generated stylesheet declares`);
+  const value = m[1].trim();
+  const alias = value.match(/^var\((--[\w-]+)\)$/);
+  return alias && depth < 4 ? tokenValue(alias[1], depth + 1) : value;
+}
+
 const swatch = (name: string) => `
   <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
     <div style="width:64px;height:44px;border-radius:var(--yaar-radius);border:1px solid var(--yaar-border);background:var(${name})"></div>
     <span class="demo-note">${name}</span>
+    <span class="demo-note" style="color:var(--yaar-text-muted)">${tokenValue(name)}</span>
   </div>`;
+
+// ---- Contrast, computed from the palettes -----------------------------------
+
+/** WCAG 2 relative luminance of a `#rrggbb`. */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** The body-text bar. Every text tier is small text in YAAR, so there is no 3:1 tier. */
+const AA = 4.5;
+
+/** A ratio, badged: the number is the point, the badge is what a glance catches. */
+const ratio = (fg: string, bg: string) => {
+  const r = contrast(fg, bg);
+  const tone = r >= AA ? 'y-text-muted' : 'y-badge y-badge-error';
+  return `<span class="demo-note ${tone}">${r.toFixed(2)}</span>`;
+};
+
+type Palette = typeof PALETTE_DARK | typeof PALETTE_LIGHT;
+const TEXT_TIERS = [
+  'text',
+  'textSubtle',
+  'textMuted',
+  'textDim',
+  'accent',
+  'success',
+  'error',
+  'warning',
+] as const;
+const SURFACES = ['bg', 'bgInset', 'bgSurface', 'bgSurfaceHover'] as const;
+const FILLS = ['accentEmphasis', 'successEmphasis', 'dangerEmphasis'] as const;
+
+/**
+ * One theme's text-on-surface grid. Each cell is painted in the pair it measures, so
+ * the number and what it looks like sit in the same place; the fills row is white on
+ * each `*Emphasis`, which is how a filled button uses them.
+ */
+function contrastTable(p: Palette): string {
+  const cell = 'padding:3px 8px;text-align:right;white-space:nowrap';
+  const head = SURFACES.map(
+    (s) => `<th class="demo-note" style="${cell};font-weight:500">${s}</th>`,
+  ).join('');
+  const rows = TEXT_TIERS.map(
+    (t) =>
+      `<tr><td class="demo-note" style="padding:3px 8px 3px 0">${t}</td>${SURFACES.map(
+        (s) => `<td style="${cell};background:${p[s]};color:${p[t]}">Aa ${ratio(p[t], p[s])}</td>`,
+      ).join('')}</tr>`,
+  ).join('');
+  const fills = FILLS.map(
+    (f) =>
+      `<span class="demo-row" style="gap:6px"><span style="background:${p[f]};color:#fff;padding:2px 8px;border-radius:var(--yaar-radius-sm)" class="y-text-sm">${f}</span>${ratio('#ffffff', p[f])}</span>`,
+  ).join('');
+  return `<table style="border-collapse:collapse">
+<tr><th></th>${head}</tr>${rows}</table>
+<div class="demo-row">${fills}</div>`;
+}
 
 const directionBody = `
 <span class="y-label">One palette, one source, two surfaces</span>
@@ -204,21 +290,76 @@ const colorBody = `
 <span class="y-label">Text</span>
 <div class="demo-row">${['--yaar-text', '--yaar-text-muted', '--yaar-text-dim'].map(swatch).join('')}</div>
 <span class="y-label">Accent & semantic</span>
-<div class="demo-row">${['--yaar-accent', '--yaar-accent-hover', '--yaar-border', '--yaar-success', '--yaar-error', '--yaar-warning'].map(swatch).join('')}</div>`;
+<div class="demo-row">${['--yaar-accent', '--yaar-accent-hover', '--yaar-border', '--yaar-success', '--yaar-error', '--yaar-warning'].map(swatch).join('')}</div>
+<span class="y-label">Emphasis — fills under white text, never text colors</span>
+<div class="demo-row">${['--yaar-accent-emphasis', '--yaar-accent-emphasis-hover'].map(swatch).join('')}</div>`;
+
+const contrastBody = `
+<span class="y-label">Dark — text tier on surface (WCAG ratio, ${AA}:1 is the bar)</span>
+${contrastTable(PALETTE_DARK)}
+<span class="y-label">Light — the same grid from PALETTE_LIGHT</span>
+<div style="background:${PALETTE_LIGHT.bg};padding:var(--yaar-sp-3);border-radius:var(--yaar-radius);display:flex;flex-direction:column;gap:var(--yaar-sp-3)" class="y-light">
+${contrastTable(PALETTE_LIGHT)}
+</div>
+<div class="demo-note">Computed from tokens.ts on every run. A red badge is a pair that fails ${AA}:1.</div>`;
+
+/**
+ * The accent picker's presets. Keys are persisted in user settings, so the card names
+ * them; each shows the text hue on the base surface and white on its emphasis fill,
+ * the two ways the shell uses a preset once the picker has written it.
+ */
+const accentBody = `
+<span class="y-label">Accent presets — what the shell picker writes into --color-accent</span>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:var(--yaar-sp-3)">
+${ACCENT_PRESETS_DATA.map(
+  (p) => `
+  <div class="y-card" style="display:flex;flex-direction:column;gap:6px;padding:var(--yaar-sp-3)">
+    <span class="y-font-bold" style="color:${p.color}">${p.key}</span>
+    <span class="demo-note">text ${ratio(p.color, PALETTE_DARK.bg)}</span>
+    <span style="background:${p.emphasis};color:#fff;padding:2px 8px;border-radius:var(--yaar-radius-sm);align-self:flex-start" class="y-text-sm">Primary</span>
+    <span class="demo-note">fill ${ratio('#ffffff', p.emphasis)}</span>
+  </div>`,
+).join('')}
+</div>`;
+
+/**
+ * The desktop title bar's buttons, in WindowFrame's order for a non-card window, with
+ * the paths copied from WindowControlIcons.tsx and the metrics from `.controlBtn` in
+ * WindowFrame.module.css (24px button, 16px icon, muted stroke). Close is drawn
+ * hovered, since its danger fill is the one state that changes the picture.
+ */
+const WINDOW_CONTROLS: Array<{ label: string; paths: string; hover?: boolean }> = [
+  {
+    label: 'Export',
+    paths:
+      '<path d="M10 12.5V3.5"/><path d="M6.75 6.75L10 3.5L13.25 6.75"/><path d="M4.5 12.5v2.25c0 .69.56 1.25 1.25 1.25h8.5c.69 0 1.25-.56 1.25-1.25V12.5"/>',
+  },
+  { label: 'Minimize', paths: '<path d="M5 10h10"/>' },
+  {
+    label: 'Maximize',
+    paths: '<rect x="4.25" y="4.25" width="11.5" height="11.5" rx="2"/>',
+  },
+  { label: 'Close', paths: '<path d="M5.25 5.25l9.5 9.5M14.75 5.25l-9.5 9.5"/>', hover: true },
+];
+const controlBtn = (c: (typeof WINDOW_CONTROLS)[number]) =>
+  `<span aria-label="${c.label}" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);${c.hover ? 'background:var(--color-danger);color:var(--color-base)' : 'color:var(--color-subtext-muted)'}"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${c.paths}</svg></span>`;
 
 const shellBody = `
 <span class="y-label">Shell aliases — same values, --color-* names</span>
-<div class="demo-row">${['--color-base', '--color-mantle', '--color-surface', '--color-text', '--color-accent', '--color-success', '--color-danger', '--color-warning'].map(swatch).join('')}</div>
+<div class="demo-row">${['--color-base', '--color-mantle', '--color-surface', '--color-accent', '--color-success', '--color-danger', '--color-warning'].map(swatch).join('')}</div>
+<span class="y-label">Text tiers &amp; border ladder</span>
+<div class="demo-row">${['--color-text', '--color-subtext', '--color-subtext-muted', '--color-muted'].map(swatch).join('')}</div>
+<div class="demo-row">${['--color-border-muted', '--color-border', '--color-border-hover', '--color-border-strong'].map(swatch).join('')}</div>
+<span class="y-label">Agent tiers — categorical, one chip color per kind of agent</span>
+<div class="demo-row">${['--agent-monitor', '--agent-app', '--agent-persona', '--agent-session', '--agent-ephemeral'].map(swatch).join('')}</div>
 <span class="y-label">Glass tier (alpha overlays — hover washes, dock, scrims)</span>
 <div class="demo-row">${['--bg-overlay-light', '--bg-overlay-medium', '--bg-overlay-strong', '--bg-overlay-hover'].map(swatch).join('')}</div>
 <span class="y-label">Window chrome mock — elevation: desktop on mantle, window on base</span>
 <div style="background:var(--color-mantle);border-radius:var(--radius-lg);padding:var(--space-4)">
   <div style="background:var(--color-base);outline:1px solid var(--color-border);outline-offset:-1px;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;max-width:420px">
-    <div style="display:flex;align-items:center;gap:var(--space-2);height:36px;box-sizing:border-box;padding:0 var(--space-3);background:var(--color-base);border-bottom:1px solid var(--color-border-muted)">
-      <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-danger)"></span>
-      <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-warning)"></span>
-      <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-success)"></span>
-      <span style="font-size:var(--text-base);font-weight:500;color:var(--color-text);margin-left:var(--space-2)">Window title</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;height:36px;box-sizing:border-box;padding:0 var(--space-3);background:var(--color-base);border-bottom:1px solid var(--color-border-muted)">
+      <span style="font-size:var(--text-base);font-weight:500;color:var(--color-text)">Window title</span>
+      <span style="display:flex;gap:var(--space-2)">${WINDOW_CONTROLS.map(controlBtn).join('')}</span>
     </div>
     <div style="padding:var(--space-4);color:var(--color-subtext);font-size:var(--text-base)">AI-generated window content</div>
   </div>
@@ -367,7 +508,7 @@ const feedbackBody = `
  * Part C of the design refresh edits exactly these rules.
  */
 const componentDslBody = `
-<span class="y-label">Text variants (finding 3 fixed: .text is sans; only code stays mono)</span>
+<span class="y-label">Text variants — .text is sans; only variant: code is mono</span>
 <div class="componentRoot" style="display:grid;grid-template-columns:1fr;gap:var(--space-3)">
   <span class="text textHeading">Heading variant</span>
   <span class="text textSubheading">Subheading variant</span>
@@ -390,13 +531,13 @@ const componentDslBody = `
     <select class="formSelect"><option>Option</option></select>
   </div>
 </div>
-<span class="y-label">Badges (finding 5 fixed: justify-self keeps pills shrink-wrapped)</span>
+<span class="y-label">Badges — justify-self keeps a pill shrink-wrapped in its grid cell</span>
 <div class="componentRoot" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:var(--space-3)">
   <span class="badge badgeDefault">Default</span>
   <span class="badge badgeSuccess">Success</span>
   <span class="badge badgeError">Error</span>
 </div>
-<span class="y-label">Unknown component (finding 6 fixed: named placeholder, not raw text)</span>
+<span class="y-label">Unknown component — a named placeholder, never raw text</span>
 <div class="componentRoot" style="display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--space-3)">
   <span class="unsupported">unsupported: gauge</span>
   <span class="text textBody">…renders beside normal content without wrecking it.</span>
@@ -452,8 +593,24 @@ const cards: Array<{
     group: 'Colors',
     title: 'Color tokens (GitHub-dark)',
     body: colorBody,
-    w: 560,
-    h: 460,
+    w: 640,
+    h: 560,
+  },
+  {
+    file: 'contrast.html',
+    group: 'Colors',
+    title: 'Contrast (WCAG, computed)',
+    body: contrastBody,
+    w: 620,
+    h: 720,
+  },
+  {
+    file: 'accents.html',
+    group: 'Colors',
+    title: 'Accent presets',
+    body: accentBody,
+    w: 620,
+    h: 360,
   },
   {
     file: 'light-theme.html',
@@ -469,8 +626,8 @@ const cards: Array<{
     group: 'OS Shell',
     title: 'Shell aliases, glass tier, chrome',
     body: shellBody,
-    w: 640,
-    h: 560,
+    w: 720,
+    h: 900,
   },
   {
     file: 'typography.html',

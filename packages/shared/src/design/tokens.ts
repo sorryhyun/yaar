@@ -57,7 +57,16 @@ export const PALETTE_DARK = {
   warning: '#c69026',
 } as const;
 
-/** Light palette — powers the app-side `.y-light` class and the shell light theme. */
+/**
+ * Light palette — powers the app-side `.y-light` class and the shell light theme.
+ *
+ * The two lower text tiers sit one Primer step darker than their dark-theme
+ * counterparts would suggest: `textDim` was gray-4 (`#8b949e`), which reads at
+ * 2.9:1 on `bg` — under even the 3:1 large-text floor, for the tier that paints
+ * placeholders and metadata. It moved to the old `textMuted` value and `textMuted`
+ * to the next step down, so the ladder keeps its order and every tier clears 4.5:1
+ * on every light surface. The design canvas's contrast card is what shows this.
+ */
 export const PALETTE_LIGHT = {
   bg: '#f8f9fa',
   bgInset: '#eff1f3',
@@ -65,8 +74,8 @@ export const PALETTE_LIGHT = {
   bgSurfaceHover: '#f0f1f3',
   text: '#1f2328',
   textSubtle: '#424a53',
-  textMuted: '#656d76',
-  textDim: '#8b949e',
+  textMuted: '#59636e',
+  textDim: '#656d76',
   accent: '#0969da',
   accentHover: '#0550ae',
   accentEmphasis: '#0969da',
