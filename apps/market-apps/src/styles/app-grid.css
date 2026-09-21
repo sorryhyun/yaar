@@ -12,6 +12,10 @@
      sideways instead of collapsing to one column. */
   grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
   align-content: start;
+  /* The grid has a definite height (it is the flex child that scrolls), so plain
+     `auto` rows get no free space once cards overflow it and stop at each card's
+     `min-height` — clipping any card whose content is taller. */
+  grid-auto-rows: max-content;
 }
 
 .empty-msg {

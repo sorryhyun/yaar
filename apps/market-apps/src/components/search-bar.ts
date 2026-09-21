@@ -17,9 +17,9 @@ import { targetValue } from './ui.js';
  * new mode is one entry here and the compiler names this file if it is missed.
  */
 const SEARCH_PLACEHOLDERS: Record<SearchMode, string> = {
-  title: 'Search apps by name or description…',
-  author: 'Search apps by author…',
-  official: 'Filter YAAR official apps…',
+  title: 'Name or description…',
+  author: 'Author name…',
+  official: 'Filter official apps…',
 };
 
 /**

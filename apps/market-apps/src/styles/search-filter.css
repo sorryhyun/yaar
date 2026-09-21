@@ -78,6 +78,12 @@
   }
 }
 
+@media (max-width: 500px) {
+  .filter-count {
+    font-size: var(--yaar-text-xs);
+  }
+}
+
 @media (pointer: coarse) {
   .search-mode-select,
   .search-input {

@@ -66,6 +66,57 @@
   }
 }
 
+/* Below ~500px the header is one row (title + controls) over a small status line:
+   `display: contents` lets the title and the controls share a grid row even though
+   they sit in different wrappers. The domain line is a build constant and gives way. */
+@media (max-width: 500px) {
+  .header-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--yaar-sp-2);
+    row-gap: 2px;
+    padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  }
+
+  .header-left {
+    display: contents;
+  }
+
+  .header-title {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: var(--yaar-text-lg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .header-actions {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--yaar-sp-1);
+    margin-left: 0;
+  }
+
+  .header-status {
+    grid-column: 1 / -1;
+    font-size: var(--yaar-text-xs);
+  }
+
+  .header-domain {
+    display: none;
+  }
+
+  .refresh-btn,
+  .update-all-btn {
+    font-size: var(--yaar-text-base);
+    padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  }
+}
+
 @media (pointer: coarse) {
   .refresh-btn,
   .update-all-btn {
