@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, jest, test } from 'bun:test';
 
 /**
  * `appStorage.trySave` exists so a failed write stops being invisible. The thing
@@ -492,15 +492,22 @@ describe('createPersistedSignal', () => {
       expect(writes).toEqual(['"a"', '"ab"', '"abc"']);
     });
 
-    test('collapses a burst into one write carrying the last value', async () => {
-      const [get, set] = createPersistedSignal('debounced.json', '', { debounceMs: 20 });
-      for (const v of ['ㅈ', '주', '중', '주이', '주인']) set(v);
-      // The signal is never debounced — only the write is. A box that lagged the
-      // keystrokes by 20ms would be a worse bug than the one this fixes.
-      expect(get()).toBe('주인');
-      expect(writes).toBeEmpty();
-      await new Promise((r) => setTimeout(r, 50));
-      expect(writes).toEqual(['"주인"']);
+    test('collapses a burst into one write carrying the last value', () => {
+      jest.useFakeTimers();
+      try {
+        const [get, set] = createPersistedSignal('debounced.json', '', { debounceMs: 20 });
+        for (const v of ['ㅈ', '주', '중', '주이', '주인']) set(v);
+        // The signal is never debounced — only the write is. A box that lagged the
+        // keystrokes by 20ms would be a worse bug than the one this fixes.
+        expect(get()).toBe('주인');
+        expect(writes).toBeEmpty();
+        // Fast-forwards the real `setTimeout` the debounce scheduled, past its 20ms —
+        // deterministic instead of hoping 50ms of wall clock is always enough margin.
+        jest.advanceTimersByTime(50);
+        expect(writes).toEqual(['"주인"']);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test('flushes the pending write when the page is hidden', async () => {
@@ -514,14 +521,21 @@ describe('createPersistedSignal', () => {
       (globalThis as any).document.visibilityState = 'visible';
     });
 
-    test('a flush leaves nothing owed, so the timer fires into a no-op', async () => {
-      const [, set] = createPersistedSignal('once.json', '', { debounceMs: 20 });
-      set('x');
-      (globalThis as any).document.visibilityState = 'hidden';
-      for (const fn of docListeners['visibilitychange'] ?? []) fn({});
-      await new Promise((r) => setTimeout(r, 50));
-      expect(writes).toEqual(['"x"']);
-      (globalThis as any).document.visibilityState = 'visible';
+    test('a flush leaves nothing owed, so the timer fires into a no-op', () => {
+      jest.useFakeTimers();
+      try {
+        const [, set] = createPersistedSignal('once.json', '', { debounceMs: 20 });
+        set('x');
+        (globalThis as any).document.visibilityState = 'hidden';
+        for (const fn of docListeners['visibilitychange'] ?? []) fn({});
+        // The visibilitychange flush already cleared the debounce timer; fast-forward
+        // past where it would have fired to prove it stayed cleared, deterministically.
+        jest.advanceTimersByTime(50);
+        expect(writes).toEqual(['"x"']);
+        (globalThis as any).document.visibilityState = 'visible';
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

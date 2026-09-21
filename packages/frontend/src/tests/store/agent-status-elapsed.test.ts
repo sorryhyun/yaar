@@ -8,49 +8,58 @@
  * always reads as fresh. That is the same early-return that keeps Immer from re-rendering
  * every subscriber per token, so these two behaviours are load-bearing for each other.
  */
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, setSystemTime } from 'bun:test';
 import { useDesktopStore } from '../../store/desktop';
+
+/** A fixed instant, far from `Date.now()`'s real range, so a stray real clock read is obvious. */
+const T0 = 1_700_000_000_000;
 
 describe('Agent status elapsed clock', () => {
   beforeEach(() => {
     useDesktopStore.setState({ activeAgents: {} });
   });
 
+  afterEach(() => {
+    setSystemTime(); // restore the real clock
+  });
+
   it('stamps statusSince when an agent first becomes active', () => {
-    const before = Date.now();
+    setSystemTime(T0);
     useDesktopStore.getState().setAgentActive('a1', 'Thinking...');
     const agent = useDesktopStore.getState().activeAgents.a1;
 
-    expect(agent.statusSince).toBeGreaterThanOrEqual(before);
-    expect(agent.statusSince).toBeLessThanOrEqual(Date.now());
+    expect(agent.statusSince).toBe(T0);
   });
 
-  it('holds statusSince while the same status is re-asserted', async () => {
+  it('holds statusSince while the same status is re-asserted', () => {
+    setSystemTime(T0);
     useDesktopStore.getState().setAgentActive('a1', 'Responding...');
     const first = useDesktopStore.getState().activeAgents.a1.statusSince;
 
-    await new Promise((r) => setTimeout(r, 5));
+    setSystemTime(T0 + 5);
     useDesktopStore.getState().setAgentActive('a1', 'Responding...');
     useDesktopStore.getState().setAgentActive('a1', 'Responding...');
 
     expect(useDesktopStore.getState().activeAgents.a1.statusSince).toBe(first);
   });
 
-  it('advances statusSince when the phase actually changes', async () => {
+  it('advances statusSince when the phase actually changes', () => {
+    setSystemTime(T0);
     useDesktopStore.getState().setAgentActive('a1', 'Thinking...');
     const first = useDesktopStore.getState().activeAgents.a1.statusSince;
 
-    await new Promise((r) => setTimeout(r, 5));
+    setSystemTime(T0 + 5);
     useDesktopStore.getState().setAgentActive('a1', 'Running: Bash');
 
     expect(useDesktopStore.getState().activeAgents.a1.statusSince).toBeGreaterThan(first);
   });
 
-  it('keeps startedAt on the turn while statusSince tracks the phase', async () => {
+  it('keeps startedAt on the turn while statusSince tracks the phase', () => {
+    setSystemTime(T0);
     useDesktopStore.getState().setAgentActive('a1', 'Thinking...');
     const { startedAt } = useDesktopStore.getState().activeAgents.a1;
 
-    await new Promise((r) => setTimeout(r, 5));
+    setSystemTime(T0 + 5);
     useDesktopStore.getState().setAgentActive('a1', 'Reasoning...');
     const agent = useDesktopStore.getState().activeAgents.a1;
 

@@ -6,7 +6,7 @@
  * whether a drag that was not a swipe still gives the tap back, and whether the layer
  * stays out of a desktop's way entirely.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
 import { render, cleanup, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { PhoneGestures } from '@/components/desktop/PhoneGestures';
@@ -35,17 +35,40 @@ function touch(target: EventTarget, type: string, x: number, y: number) {
   });
 }
 
-/** Wait out the settle transition, after which the pan has landed and cleaned up. */
-async function settle() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, PEEK_SETTLE_MS + 40));
+/**
+ * Fast-forward the settle transition, after which the pan has landed and cleaned up.
+ * The handlers schedule a real `setTimeout`; the fake clock installed in `beforeEach`
+ * makes advancing it instant instead of a real wait on `PEEK_SETTLE_MS`.
+ */
+function settle() {
+  act(() => {
+    jest.advanceTimersByTime(PEEK_SETTLE_MS + 40);
   });
 }
 
-/** Real elapsed time between touchstart and touchend — a flick is a speed, not a shape. */
-async function slowly() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 80));
+/**
+ * Elapsed time between touchstart and touchend, as the handlers read it off
+ * `performance.now()` — a flick is a speed, not a shape. Driven off the same fake
+ * clock as `settle()`, so it is deterministic instead of "however fast this run's
+ * synchronous JS between the two touch calls happened to execute."
+ */
+function slowly() {
+  act(() => {
+    jest.advanceTimersByTime(80);
+  });
+}
+
+/**
+ * A sliver of elapsed time between touchstart and touchend, standing in for "fast
+ * enough to be a flick." Under the fake clock two touches back to back are exactly
+ * `elapsedMs === 0` — real `performance.now()` never landed on the exact same tick,
+ * but the fake one does, and `shouldCommitDrag` requires `elapsedMs > 0` — so a flick
+ * test needs this the same way a nudge test needs `slowly()`, just on the other side
+ * of the velocity threshold.
+ */
+function quickly() {
+  act(() => {
+    jest.advanceTimersByTime(1);
   });
 }
 
@@ -93,9 +116,16 @@ describe('PhoneGestures', () => {
       notificationShadeOpen: false,
       paletteSheetOpen: false,
     });
+    // Fake from before any touch in the test, not just around `settle()`/`slowly()`: the
+    // handlers time a drag off `performance.now()`, which the fake clock also controls
+    // (confirmed empirically — advancing it moves `performance.now()` the same as
+    // `Date.now()`), so a touch sequence and its wait have to share one clock or the
+    // elapsed-time arithmetic the handlers do is measuring two different clocks.
+    jest.useFakeTimers();
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     cleanup();
     document.documentElement.removeAttribute('data-monitor-peek');
     document.documentElement.style.removeProperty('--monitor-peek-x');
@@ -115,7 +145,7 @@ describe('PhoneGestures', () => {
     expect(gutters()).toHaveLength(2);
   });
 
-  it('pans from anywhere on the shell, not just the edges', async () => {
+  it('pans from anywhere on the shell, not just the edges', () => {
     const { container } = render(<PhoneGestures />);
     touch(document.body, 'touchstart', 400, 300);
     touch(document.body, 'touchmove', 320, 305);
@@ -126,7 +156,7 @@ describe('PhoneGestures', () => {
     expect(peekOffsetPx()).toBe('-80px');
 
     touch(document.body, 'touchend', 240, 305);
-    await settle();
+    settle();
     expect(useDesktopStore.getState().activeMonitorId).toBe('b');
     // Nothing of the pan is left behind — a stale transform would hold the desktop off
     // screen for the rest of the session.
@@ -154,23 +184,24 @@ describe('PhoneGestures', () => {
     expect(container.textContent).toContain('Notes');
   });
 
-  it('falls back to the monitor it started on when the drag was too small', async () => {
+  it('falls back to the monitor it started on when the drag was too small', () => {
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 400, 300);
     touch(document.body, 'touchmove', 380, 300);
-    await slowly();
+    slowly();
     touch(document.body, 'touchend', 380, 300);
-    await settle();
+    settle();
     expect(useDesktopStore.getState().activeMonitorId).toBe('a');
     expect(panState()).toBeNull();
   });
 
-  it('lands a short flick that was fast enough', async () => {
+  it('lands a short flick that was fast enough', () => {
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 400, 300);
     touch(document.body, 'touchmove', 370, 300);
+    quickly();
     touch(document.body, 'touchend', 370, 300);
-    await settle();
+    settle();
     expect(useDesktopStore.getState().activeMonitorId).toBe('b');
   });
 
@@ -184,7 +215,7 @@ describe('PhoneGestures', () => {
     expect(panState()).toBeNull();
   });
 
-  it('pans from over a window, which on a phone is most of the screen', async () => {
+  it('pans from over a window, which on a phone is most of the screen', () => {
     const card = document.createElement('div');
     card.setAttribute(WINDOW_ID_DATA_ATTR, 'w1');
     document.body.appendChild(card);
@@ -193,7 +224,7 @@ describe('PhoneGestures', () => {
     touch(card, 'touchmove', 240, 300);
     expect(panState()).toBe('dragging');
     touch(card, 'touchend', 240, 300);
-    await settle();
+    settle();
     expect(useDesktopStore.getState().activeMonitorId).toBe('b');
     card.remove();
   });
@@ -219,7 +250,7 @@ describe('PhoneGestures', () => {
     strip.parentElement!.remove();
   });
 
-  it('pans from a gutter, which is how a touch over a card reaches it at all', async () => {
+  it('pans from a gutter, which is how a touch over a card reaches it at all', () => {
     useDesktopStore.setState({ activeMonitorId: 'b' });
     render(<PhoneGestures />);
     const left = gutters()[0];
@@ -227,7 +258,7 @@ describe('PhoneGestures', () => {
     touch(left, 'touchmove', 100, 305);
     expect(panState()).toBe('dragging');
     touch(left, 'touchend', 160, 305);
-    await settle();
+    settle();
     // Dragging right brings the monitor on the left into view.
     expect(useDesktopStore.getState().activeMonitorId).toBe('a');
   });
@@ -245,7 +276,7 @@ describe('PhoneGestures', () => {
     expect(container.textContent).not.toContain('Monitor');
   });
 
-  it('opens the CLI off the left end of the strip, where a phone has no Shift+Tab', async () => {
+  it('opens the CLI off the left end of the strip, where a phone has no Shift+Tab', () => {
     const { container } = render(<PhoneGestures />);
     touch(document.body, 'touchstart', 200, 300);
     touch(document.body, 'touchmove', 280, 305);
@@ -255,7 +286,7 @@ describe('PhoneGestures', () => {
     expect(peekOffsetPx()).toBe('80px');
 
     touch(document.body, 'touchend', 360, 305);
-    await settle();
+    settle();
     expect(useDesktopStore.getState().cliMode).toBe(true);
     expect(panState()).toBeNull();
   });
@@ -270,7 +301,7 @@ describe('PhoneGestures', () => {
     expect(container.textContent).not.toContain('CLI');
   });
 
-  it('drags back out of the CLI the way it came in', async () => {
+  it('drags back out of the CLI the way it came in', () => {
     useDesktopStore.setState({ cliMode: true });
     const { container } = render(<PhoneGestures />);
     touch(document.body, 'touchstart', 300, 300);
@@ -282,7 +313,7 @@ describe('PhoneGestures', () => {
     expect(peekOffsetPx()).toBe('-80px');
 
     touch(document.body, 'touchend', 140, 305);
-    await settle();
+    settle();
     expect(useDesktopStore.getState().cliMode).toBe(false);
   });
 
@@ -352,18 +383,18 @@ describe('PhoneGestures', () => {
     expect(pullPx()).toBe('10px');
   });
 
-  it('takes an abandoned pull back up once the finger lifts', async () => {
+  it('takes an abandoned pull back up once the finger lifts', () => {
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 200, 10);
     touch(document.body, 'touchmove', 203, 40);
-    await slowly();
+    slowly();
     touch(document.body, 'touchend', 203, 40);
     // Still on screen while it slides back: unmounting it here would be a sheet that
     // vanished rather than one that was put away.
     expect(pullState()).toBe('settling');
     expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
 
-    await settle();
+    settle();
     expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
   });
 

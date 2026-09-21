@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from 'bun:test';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { Taskbar } from '@/components/taskbar/Taskbar';
@@ -369,17 +369,25 @@ describe('MonitorTabs', () => {
     });
 
     // Short *and* slow. A short drag that was fast is a flick and does close the monitor,
-    // which is why the wait is what makes this one a nudge.
-    it('puts back a chip that was only nudged', async () => {
-      render(<MonitorTabs />);
-      const el = chip('Monitor 2');
-      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
-      fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 280 }] });
-      expect(el.style.transform).toBe('translateY(-20px)');
-      await new Promise((r) => setTimeout(r, 80));
-      fireEvent.touchEnd(el, { changedTouches: [{ clientX: 100, clientY: 280 }] });
-      expect(removeSpy).not.toHaveBeenCalled();
-      expect(el.style.transform).toBe('');
+    // which is why the wait is what makes this one a nudge. The handler times the drag
+    // off `performance.now()`, so a fake clock — advanced instead of really slept
+    // through — makes the "slow" half of that deterministic rather than hoping the
+    // machine running the test is not fast enough to beat the 40ms it needs.
+    it('puts back a chip that was only nudged', () => {
+      jest.useFakeTimers();
+      try {
+        render(<MonitorTabs />);
+        const el = chip('Monitor 2');
+        fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 300 }] });
+        fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 280 }] });
+        expect(el.style.transform).toBe('translateY(-20px)');
+        jest.advanceTimersByTime(80);
+        fireEvent.touchEnd(el, { changedTouches: [{ clientX: 100, clientY: 280 }] });
+        expect(removeSpy).not.toHaveBeenCalled();
+        expect(el.style.transform).toBe('');
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     // A sideways drag is the row scrolling, and the chip must not ride along with it.

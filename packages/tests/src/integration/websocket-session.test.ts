@@ -255,7 +255,12 @@ describe('createWsHandlers open()', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await handlers.open(ws as any);
 
-    // Session should now exist in hub
-    expect(hub.getDefault()).toBeDefined();
+    // Not just "a" session — the one open() just minted and handed back over the wire.
+    const event = JSON.parse(ws.sentMessages[0]);
+    expect(event.type).toBe('SESSION_ATTACHED');
+    const session = hub.get(event.sessionId);
+    expect(session).toBeDefined();
+    expect(session).toBe(hub.getDefault());
+    expect(session!.sessionId).toBe(event.sessionId);
   });
 });

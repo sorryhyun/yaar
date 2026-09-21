@@ -6,7 +6,7 @@
  * to still be there to pull down when nothing has been notified, which is exactly what
  * the old "close when the list empties" rule took away.
  */
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from 'bun:test';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { NotificationShade } from '@/components/overlays/NotificationShade';
@@ -93,36 +93,48 @@ describe('NotificationShade', () => {
       expect(pullPx()).toBe('260px');
     });
 
-    it('puts a sheet back that was only nudged', async () => {
-      open();
-      const grip = sheetOfHeight(300);
-      fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
-      // Under `DRAG_INTENT_PX`, so it is a nudge at any speed — the sheet moved with it
-      // and moves back, which is how the user finds out the grip is a grip.
-      fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 292 }] });
-      fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 292 }] });
+    it('puts a sheet back that was only nudged', () => {
+      jest.useFakeTimers();
+      try {
+        open();
+        const grip = sheetOfHeight(300);
+        fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
+        // Under `DRAG_INTENT_PX`, so it is a nudge at any speed — the sheet moved with it
+        // and moves back, which is how the user finds out the grip is a grip.
+        fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 292 }] });
+        fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 292 }] });
 
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, SHADE_SETTLE_MS + 40));
-      });
-      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
-      expect(document.documentElement.dataset.shadePull).toBe('open');
+        // Fast-forwards the real `setTimeout` the grip's settle scheduled, rather than
+        // waiting out SHADE_SETTLE_MS on the wall clock.
+        act(() => {
+          jest.advanceTimersByTime(SHADE_SETTLE_MS + 40);
+        });
+        expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+        expect(document.documentElement.dataset.shadePull).toBe('open');
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
-    it('closes on a push that meant it, and only once the sheet has arrived', async () => {
-      open();
-      const grip = sheetOfHeight(300);
-      fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
-      fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 200 }] });
-      fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 200 }] });
-      expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    it('closes on a push that meant it, and only once the sheet has arrived', () => {
+      jest.useFakeTimers();
+      try {
+        open();
+        const grip = sheetOfHeight(300);
+        fireEvent.touchStart(grip, { touches: [{ clientX: 200, clientY: 300 }] });
+        fireEvent.touchMove(grip, { touches: [{ clientX: 200, clientY: 200 }] });
+        fireEvent.touchEnd(grip, { changedTouches: [{ clientX: 200, clientY: 200 }] });
+        expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
 
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, SHADE_SETTLE_MS + 40));
-      });
-      expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
-      // And the sheet takes its properties with it, or the next one opens parked.
-      expect(document.documentElement.dataset.shadePull).toBeUndefined();
+        act(() => {
+          jest.advanceTimersByTime(SHADE_SETTLE_MS + 40);
+        });
+        expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+        // And the sheet takes its properties with it, or the next one opens parked.
+        expect(document.documentElement.dataset.shadePull).toBeUndefined();
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('is still a tap: a grip that was not dragged closes on the click', () => {

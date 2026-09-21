@@ -14,10 +14,32 @@
  * process for the same module-load-constant reason.
  */
 
-import { describe, it, expect } from 'bun:test';
-import { checkHttpAuth, generateRemoteToken, isStaticAsset } from '@yaar/server/http/auth';
-import { checkWsAuth } from '@yaar/server/http/auth';
-import { IS_REMOTE } from '@yaar/server/config/env';
+import { describe, it, expect, afterAll } from 'bun:test';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+/**
+ * `FRONTEND_DIST` (`@yaar/server/config/paths`) is read once, at the first import of
+ * anything that pulls in `config.js` — which every `createFetchHandler()` call below does.
+ * Left alone it is "wherever this developer's `packages/frontend/dist/` happens to be,"
+ * so whether the static fallback for an unknown route answers 404 or 200 depended on
+ * whether `bun run build` had been run on this machine. This package's `--isolate` gives
+ * this file its own process and its own `process.env` (see the `yaar-testing` skill), so
+ * pinning it here cannot race any other file the way it would in the server package's
+ * shared `units` process — but it still has to land before `config.js` loads at all, and a
+ * static `import` of anything under `@yaar/server` is hoisted ahead of every other
+ * top-level statement in this file, env assignment included. Hence the imports below are
+ * dynamic and come *after* the assignment, the same device `websocket-session.test.ts`
+ * uses for its own module-load constant (`IS_REMOTE` there, this here).
+ */
+const noFrontendDist = mkdtempSync(join(tmpdir(), 'yaar-http-routing-nodist-'));
+process.env.FRONTEND_DIST = noFrontendDist;
+afterAll(() => rmSync(noFrontendDist, { recursive: true, force: true }));
+
+const { checkHttpAuth, generateRemoteToken, isStaticAsset, checkWsAuth } =
+  await import('@yaar/server/http/auth');
+const { IS_REMOTE } = await import('@yaar/server/config/env');
 
 // ── the premise every case below rests on ──────────────────────────────────
 
@@ -110,16 +132,15 @@ describe('createFetchHandler CORS + routing', () => {
   });
 
   it('returns 404 for completely unknown routes', async () => {
-    // In bun runtime, Bun.file().exists() works natively — no dist folder
-    // means static handler returns 404 for unknown routes.
+    // `FRONTEND_DIST` is pinned above at a directory that is guaranteed to hold no
+    // build, so the static fallback has exactly one honest answer here: no dist means
+    // 404, regardless of whether this machine happens to have run `bun run build`.
     const { createFetchHandler } = await import('@yaar/server/http/server');
     const handler = createFetchHandler();
     const req = new Request('http://localhost:8000/this-route-does-not-exist-at-all');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await handler(req, {} as any);
-    expect(res).toBeDefined();
-    // Static fallback with no dist → 404; or index.html if dist exists → 200
-    expect([200, 404]).toContain(res!.status);
+    expect(res?.status).toBe(404);
   });
 
   it('returns 200 for /health', async () => {
