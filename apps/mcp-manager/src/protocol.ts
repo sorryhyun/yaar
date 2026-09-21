@@ -10,22 +10,9 @@
 // its own `run` after the spread into `defineApp`.
 import { defineAppCommand } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import {
-  addServerByUrl,
-  refreshServerByName,
-  removeServerByName,
-  startScan,
-} from './actions';
+import { addServerByUrl, refreshServerByName, removeServerByName, startScan } from './actions';
 import { probeUrl } from './mcp';
-import {
-  serverTools,
-  servers,
-  setScanFrom,
-  setScanHost,
-  setScanPath,
-  setScanTo,
-  visibleDiscovered,
-} from './store';
+import { applyScanParams, serverTools, servers, visibleDiscovered } from './store';
 
 export const appState = {
   servers: {
@@ -33,8 +20,7 @@ export const appState = {
     get: () => servers(),
   },
   discovered: {
-    description:
-      'MCP servers found by the most recent scan or probe that are not yet configured.',
+    description: 'MCP servers found by the most recent scan or probe that are not yet configured.',
     get: () => visibleDiscovered(),
   },
 };
@@ -53,10 +39,7 @@ export const appCommands = {
     run: async (p) => {
       // Params double as form input: an agent's scan leaves the fields showing
       // what it scanned, so the user can re-run or adjust it by hand.
-      if (p.host !== undefined) setScanHost(p.host);
-      if (p.from !== undefined) setScanFrom(p.from);
-      if (p.to !== undefined) setScanTo(p.to);
-      if (p.path !== undefined) setScanPath(p.path);
+      applyScanParams(p);
       const found = await startScan();
       return {
         found: found.length,
