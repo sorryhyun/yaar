@@ -700,11 +700,20 @@ async function cleanup(): Promise<void> {
   }
 }
 
-process.on('SIGINT', async () => {
-  log('interrupted — cleaning up');
-  await cleanup();
-  process.exit(130);
-});
+// Not only Ctrl+C: `timeout`, a closed terminal and a killed background job all arrive as
+// SIGTERM or SIGHUP, and a run that died on one of those skipped `cleanup` and left its
+// headless Chrome running — still holding the profile, and a renderer still burning CPU.
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+  ['SIGHUP', 129],
+] as const) {
+  process.on(signal, async () => {
+    log(`${signal} — cleaning up`);
+    await cleanup();
+    process.exit(code);
+  });
+}
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
@@ -755,6 +764,9 @@ async function main() {
   const chromeBin = findChrome();
   if (!chromeBin) throw new Error('no Chrome/Chromium found (set CHROME_PATH)');
   const debugPort = await pickPort(9340);
+  // A run killed by SIGKILL (or before the handlers above) cannot clean up after itself,
+  // so the next one does: nothing else launches Chrome on this profile.
+  Bun.spawnSync(['pkill', '-f', `--user-data-dir=${CHROME_PROFILE_DIR}`]);
   rmSync(CHROME_PROFILE_DIR, { recursive: true, force: true });
   chrome = Bun.spawn(
     [

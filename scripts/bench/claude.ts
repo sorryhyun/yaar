@@ -99,7 +99,9 @@ async function waitHealth(port: number, timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) });
+      const r = await fetch(`http://127.0.0.1:${port}/health`, {
+        signal: AbortSignal.timeout(1000),
+      });
       if (r.ok) return;
     } catch {
       /* not up */
@@ -114,7 +116,9 @@ async function serverMemSnapshot(): Promise<string> {
   if (!server?.pid) return '';
   process.kill(server.pid, 'SIGUSR2');
   await Bun.sleep(400);
-  const text = await Bun.file(`${BENCH}/server.log`).text().catch(() => '');
+  const text = await Bun.file(`${BENCH}/server.log`)
+    .text()
+    .catch(() => '');
   const lines = text.split('\n').filter((l) => l.includes('mem-snapshot'));
   return lines.at(-1) ?? '';
 }
@@ -184,7 +188,9 @@ function median(xs: number[]): number {
   return s[Math.floor(s.length / 2)];
 }
 async function samplerSummary(): Promise<Map<string, Map<string, { rss: number; cpu: number }>>> {
-  const text = await Bun.file(`${BENCH}/resources.csv`).text().catch(() => '');
+  const text = await Bun.file(`${BENCH}/resources.csv`)
+    .text()
+    .catch(() => '');
   // columns: ts_ms,phase,group,pid,rss_mb,cpu_pct,cmd
   // sum per (phase,group,ts) then take the median across timestamps
   const byPhaseGroupTs = new Map<string, Map<number, { rss: number; cpu: number }>>();
@@ -253,7 +259,8 @@ async function writeReport(port: number): Promise<void> {
     const top = cpuText.match(/\*\*Top 10:\*\*.*/);
     const dur = cpuText.match(/\| ([\d.]+s) \| (\d+) \|/);
     md += `\n## Server CPU profile (bun --cpu-prof-md)\n\n`;
-    if (dur) md += `- duration ${dur[1]}, ${dur[2]} samples (≈${(Number(dur[2]) / 1000).toFixed(1)}s CPU) — a near-idle server means most CPU lives in subprocesses, not YAAR itself\n`;
+    if (dur)
+      md += `- duration ${dur[1]}, ${dur[2]} samples (≈${(Number(dur[2]) / 1000).toFixed(1)}s CPU) — a near-idle server means most CPU lives in subprocesses, not YAAR itself\n`;
     if (top) md += `- ${top[0].replace(/\*\*/g, '')}\n`;
     md += `- full flamegraph: bench/${cpuFiles.at(-1)}\n`;
   }
@@ -279,6 +286,9 @@ async function cleanup(): Promise<void> {
         chrome.kill();
       } catch {}
     }
+    // Bun.spawn starts no process group, so the group kill above usually throws, and a
+    // SIGTERM to the pid alone leaves macOS Chrome's helpers running. Sweep by profile.
+    Bun.spawnSync(['pkill', '-f', `--user-data-dir=${CHROME_PROFILE_DIR}`]);
   }
   if (sampler?.pid) {
     try {
@@ -295,17 +305,31 @@ async function cleanup(): Promise<void> {
   }
 }
 
-process.on('SIGINT', async () => {
-  log('interrupted — cleaning up');
-  await cleanup();
-  process.exit(130);
-});
+// Not only Ctrl+C: `timeout`, a closed terminal and a killed background job all arrive as
+// SIGTERM or SIGHUP, and a run that died on one of those skipped `cleanup` and left its
+// headless Chrome running — still holding the profile, and a renderer still burning CPU.
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+  ['SIGHUP', 129],
+] as const) {
+  process.on(signal, async () => {
+    log(`${signal} — cleaning up`);
+    await cleanup();
+    process.exit(code);
+  });
+}
 
 async function main() {
   await sh(['mkdir', '-p', BENCH]);
   // clear previous profile artifacts so we read the fresh one
   for (const f of require('node:fs').readdirSync(BENCH)) {
-    if (/^CPU\..*\.md$/.test(f) || f === 'server.log' || f === 'resources.csv' || f === 'sampler.log')
+    if (
+      /^CPU\..*\.md$/.test(f) ||
+      f === 'server.log' ||
+      f === 'resources.csv' ||
+      f === 'sampler.log'
+    )
       require('node:fs').rmSync(`${BENCH}/${f}`, { force: true });
   }
 
@@ -327,15 +351,12 @@ async function main() {
   // Only --cpu-prof-md: it honors an absolute --cpu-prof-dir. --heap-prof-dir
   // strips the leading slash (Bun quirk) and scatters files under a cwd-relative
   // path, and its output is redundant here — SIGUSR2 already samples the heap.
-  server = Bun.spawn(
-    ['bun', '--cpu-prof-md', `--cpu-prof-dir=${BENCH}`, 'src/main.ts'],
-    {
-      cwd: `${REPO}packages/server`,
-      env: { ...process.env, PROVIDER: 'claude', MCP_SKIP_AUTH: '1', PORT: String(port) },
-      stdout: serverFd,
-      stderr: serverFd,
-    },
-  );
+  server = Bun.spawn(['bun', '--cpu-prof-md', `--cpu-prof-dir=${BENCH}`, 'src/main.ts'], {
+    cwd: `${REPO}packages/server`,
+    env: { ...process.env, PROVIDER: 'claude', MCP_SKIP_AUTH: '1', PORT: String(port) },
+    stdout: serverFd,
+    stderr: serverFd,
+  });
 
   await waitHealth(port);
   log('server healthy');
@@ -368,7 +389,11 @@ async function main() {
   const chromeBin = findChrome();
   if (!chromeBin) throw new Error('No Chrome/Chromium found for the frontend');
   if (!DEBUG_PORT) DEBUG_PORT = await pickPort(9333);
-  log(`launching ${HEADLESS ? 'headless ' : ''}Chrome (${CHROME_PROFILE_NAME}) on debug port ${DEBUG_PORT} → ${url}`);
+  // A previous run killed before it could clean up may still hold this profile.
+  Bun.spawnSync(['pkill', '-f', `--user-data-dir=${CHROME_PROFILE_DIR}`]);
+  log(
+    `launching ${HEADLESS ? 'headless ' : ''}Chrome (${CHROME_PROFILE_NAME}) on debug port ${DEBUG_PORT} → ${url}`,
+  );
   chrome = Bun.spawn(
     [
       chromeBin,
