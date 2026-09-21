@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { retryConnection } from '@/hooks/useAgentConnection';
 import styles from '@/styles/overlays/LoadingScreen.module.css';
 
 /**
@@ -24,7 +24,6 @@ export function LoadingScreen() {
   const { t } = useTranslation();
   const connectionStatus = useDesktopStore((s) => s.connectionStatus);
   const connectionError = useDesktopStore((s) => s.connectionError);
-  const { retryConnection } = useAgentConnection();
   const [fading, setFading] = useState(false);
   const [visible, setVisible] = useState(true);
   const [stalled, setStalled] = useState(false);

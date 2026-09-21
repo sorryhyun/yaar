@@ -13,10 +13,9 @@
  * `packages/server/src/tests/message-delivery.test.ts`.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { renderHook, act } from '@testing-library/react';
 import { ClientEventType, type ClientEvent } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { reset } from '@/hooks/useAgentConnection';
 import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
 
 function fakeOpenSocket(): WebSocket & { sent: string[] } {
@@ -51,9 +50,7 @@ describe('reset — held until the server acknowledges it', () => {
   it('sends the reset with an id, and holds it in the outbox', () => {
     const ws = fakeOpenSocket();
     wsManager.ws = ws;
-    const hook = renderHook(() => useAgentConnection({ autoConnect: false }));
-
-    act(() => hook.result.current.reset('0'));
+    reset('0');
 
     const frame = framesOf(ws).find((f) => f.type === ClientEventType.RESET) as
       | { monitorId?: string; messageId?: string }
@@ -68,37 +65,29 @@ describe('reset — held until the server acknowledges it', () => {
     const outbox = useDesktopStore.getState().pendingOutbox();
     expect(outbox).toHaveLength(1);
     expect(outbox[0].messageId).toBe(messageId!);
-    hook.unmount();
   });
 
   it('keeps holding it when the socket could not take it, and clears the desktop anyway', () => {
     // No socket at all — the same outcome a dead peer produces, reached by the one door a
     // test can open. Before the outbox, this reset simply ceased to exist.
     wsManager.ws = null;
-    const hook = renderHook(() => useAgentConnection({ autoConnect: false }));
 
-    act(() => hook.result.current.reset('0'));
+    reset('0');
 
     expect(useDesktopStore.getState().pendingOutbox()).toHaveLength(1);
     // Still cleared on the spot. The ack is ordinarily immediate but `resetSession` is not,
     // and a reset button that leaves the old transcript up reads as one that did nothing.
     expect(useDesktopStore.getState().cliHistory['0']).toEqual([]);
-    hook.unmount();
   });
 
   it('lets go once the server acks it', () => {
     const ws = fakeOpenSocket();
     wsManager.ws = ws;
-    const hook = renderHook(() => useAgentConnection({ autoConnect: false }));
-
-    act(() => hook.result.current.reset('0'));
+    reset('0');
     const messageId = useDesktopStore.getState().pendingOutbox()[0].messageId;
 
-    act(() => {
-      useDesktopStore.getState().settleOutbox(messageId);
-    });
+    useDesktopStore.getState().settleOutbox(messageId);
 
     expect(useDesktopStore.getState().pendingOutbox()).toHaveLength(0);
-    hook.unmount();
   });
 });

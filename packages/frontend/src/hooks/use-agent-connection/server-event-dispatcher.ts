@@ -13,7 +13,6 @@ import { NO_AGENT_ACK, ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
 export interface ServerEventDispatchHandlers {
   applyActions: (actions: OSAction[]) => void;
-  setIsConnecting: (value: boolean) => void;
   setConnectionStatus: (
     status: 'connecting' | 'connected' | 'disconnected' | 'error',
     error?: string,
@@ -33,7 +32,6 @@ export interface ServerEventDispatchHandlers {
   setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
   /** Re-mint iframe tokens after reattaching to a session incarnation we did not leave. */
   refreshStaleIframeTokens: (sessionId: string) => void;
-  addDebugEntry: (entry: { direction: 'in'; type: string; data: ServerEvent }) => void;
   setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
   clearAgent: (agentId: string) => void;
   registerWindowAgent: (
@@ -113,30 +111,6 @@ function scopeToMonitor(monitorId: string): (action: OSAction) => OSAction {
 }
 
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
-  const shouldLog =
-    message.type === ServerEventType.ACTIONS ||
-    message.type === ServerEventType.SESSION_ATTACHED ||
-    message.type === ServerEventType.CONNECTION_STATUS ||
-    message.type === ServerEventType.ERROR ||
-    message.type === ServerEventType.AGENT_NOTICE ||
-    (message.type === ServerEventType.AGENT_RESPONSE &&
-      (message as { isComplete?: boolean }).isComplete) ||
-    // `pending` and `output` are one event per fragment — a firehose that would
-    // bury the debug panel, and they carry no information the `running` and
-    // `complete` events lack.
-    (message.type === ServerEventType.TOOL_PROGRESS &&
-      (message as { status?: string }).status !== 'running' &&
-      (message as { status?: string }).status !== 'pending' &&
-      (message as { status?: string }).status !== 'output');
-
-  if (shouldLog) {
-    handlers.addDebugEntry({
-      direction: 'in',
-      type: message.type,
-      data: message,
-    });
-  }
-
   switch (message.type) {
     case ServerEventType.ACTIONS: {
       const monitorId = (message as { monitorId?: string }).monitorId;
@@ -169,7 +143,6 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       // The join completed: this socket now carries a named session incarnation. Until
       // this arrives the transport is open but bound to nothing, so it is this event —
       // not the socket's open — that puts the UI into "connected".
-      handlers.setIsConnecting(false);
       handlers.setAttachment({
         sessionId: message.sessionId,
         sessionEpoch: message.sessionEpoch,
@@ -201,7 +174,6 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       handlers.applySnapshot(message.actions, message.agents);
       break;
     case ServerEventType.CONNECTION_STATUS:
-      handlers.setIsConnecting(false);
       handlers.setConnectionStatus(
         message.status === 'connected'
           ? 'connected'

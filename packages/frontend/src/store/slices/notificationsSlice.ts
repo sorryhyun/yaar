@@ -7,7 +7,7 @@ import type {
   NotificationsSliceState,
   DesktopStore,
 } from '../types';
-import type { OSAction, NotificationShowAction } from '@yaar/shared';
+import type { NotificationShowAction } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
 
 /**
@@ -32,11 +32,6 @@ export const applyNotificationAction = createApplyAction<
 
 export const createNotificationsSlice: SliceCreator<NotificationsSlice> = (set, _get) => ({
   notifications: {},
-
-  handleNotificationAction: (action: OSAction) =>
-    set((state) => {
-      applyNotificationAction(state, action);
-    }),
 
   dismissNotification: (id) =>
     set((state) => {

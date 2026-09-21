@@ -2,12 +2,7 @@
  * Dialogs slice - manages confirmation dialogs.
  */
 import type { SliceCreator, DialogsSlice, DialogsSliceState } from '../types';
-import type {
-  OSAction,
-  PermissionOptions,
-  DialogConfirmAction,
-  CapabilityLine,
-} from '@yaar/shared';
+import type { PermissionOptions, DialogConfirmAction, CapabilityLine } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
 
 /**
@@ -45,11 +40,6 @@ export const applyDialogAction = createApplyAction<
 
 export const createDialogsSlice: SliceCreator<DialogsSlice> = (set, _get) => ({
   dialogs: {},
-
-  handleDialogAction: (action: OSAction) =>
-    set((state) => {
-      applyDialogAction(state, action);
-    }),
 
   respondToDialog: (id, _confirmed) =>
     set((state) => {

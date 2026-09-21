@@ -18,7 +18,14 @@ import {
   selectFullscreenCardId,
   selectPanelWindows,
 } from '@/store';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import {
+  useAgentConnectionOwner,
+  sendMessage,
+  sendComponentAction,
+  sendToastAction,
+  interruptAgent,
+  interrupt,
+} from '@/hooks/useAgentConnection';
 import { useFormFactorSync } from '@/hooks/useFormFactorSync';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
@@ -65,8 +72,7 @@ export function DesktopSurface() {
   const accentColor = useDesktopStore((s) => s.accentColor);
   const iconSize = useDesktopStore((s) => s.iconSize);
   const theme = useDesktopStore((s) => s.theme);
-  const { sendMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } =
-    useAgentConnection({ autoConnect: false });
+  useAgentConnectionOwner();
   useFormFactorSync();
 
   // Rubber-band selection state

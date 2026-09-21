@@ -8,7 +8,7 @@
 import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types';
 import type { WindowAction, WindowCreateAction } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
-import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers';
+import { emptyContentByRenderer, toWindowKey } from '../helpers';
 import { notifyIframeClose } from '../iframe-bridge';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
@@ -349,7 +349,7 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
             applyStringUpdate(operation.data);
           }
         } else {
-          addDebugLogEntry(state, 'window.updateContent.invalid', {
+          console.warn('[window.updateContent] invalid operation for renderer', {
             windowId: key,
             renderer: targetRenderer,
             operation,
@@ -413,11 +413,6 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   windows: {},
   zOrder: [],
   focusedWindowId: null,
-
-  handleWindowAction: (action: WindowAction) =>
-    set((state) => {
-      applyWindowAction(state as DesktopStore, action);
-    }),
 
   // Guarded on `expected` so a token that the reconnect snapshot already refreshed is not
   // clobbered by a re-mint that was in flight for the dead one.

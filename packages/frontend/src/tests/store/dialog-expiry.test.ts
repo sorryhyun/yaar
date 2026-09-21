@@ -23,22 +23,22 @@ describe('dialog expiry', () => {
   });
 
   it('takes the dialog off the screen when the server stops waiting', () => {
-    const { handleDialogAction } = useDesktopStore.getState();
+    const { applyAction } = useDesktopStore.getState();
 
-    handleDialogAction(show);
+    applyAction(show);
     expect(useDesktopStore.getState().dialogs['dlg-1']).toBeDefined();
 
-    handleDialogAction({ type: 'dialog.close', id: 'dlg-1', reason: 'timeout' } as OSAction);
+    applyAction({ type: 'dialog.close', id: 'dlg-1', reason: 'timeout' } as OSAction);
 
     expect(useDesktopStore.getState().dialogs['dlg-1']).toBeUndefined();
   });
 
   it('leaves other dialogs alone', () => {
-    const { handleDialogAction } = useDesktopStore.getState();
+    const { applyAction } = useDesktopStore.getState();
 
-    handleDialogAction(show);
-    handleDialogAction({ ...show, id: 'dlg-2' } as OSAction);
-    handleDialogAction({ type: 'dialog.close', id: 'dlg-1' } as OSAction);
+    applyAction(show);
+    applyAction({ ...show, id: 'dlg-2' } as OSAction);
+    applyAction({ type: 'dialog.close', id: 'dlg-1' } as OSAction);
 
     expect(useDesktopStore.getState().dialogs['dlg-1']).toBeUndefined();
     expect(useDesktopStore.getState().dialogs['dlg-2']).toBeDefined();

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectDialogs } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { sendDialogFeedback } from '@/hooks/useAgentConnection';
 import type { DialogModel } from '@/types/state';
 import type { CapabilityLine } from '@yaar/shared';
 import styles from '@/styles/overlays/ConfirmDialog.module.css';
@@ -103,7 +103,6 @@ function DialogBox({
 export function ConfirmDialog() {
   const dialogs = useDesktopStore(useShallow(selectDialogs)) as DialogModel[];
   const respondToDialog = useDesktopStore((s) => s.respondToDialog);
-  const { sendDialogFeedback } = useAgentConnection();
 
   const handleResponse = (
     dialogId: string,

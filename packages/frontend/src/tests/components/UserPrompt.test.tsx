@@ -9,10 +9,8 @@ const sendUserPromptResponse = mock(
   ) => true,
 );
 
-// Mock useAgentConnection — must be before importing UserPrompt
-mock.module('@/hooks/useAgentConnection', () => ({
-  useAgentConnection: () => ({ sendUserPromptResponse }),
-}));
+// Stub the connection module — must be before importing UserPrompt
+mock.module('@/hooks/useAgentConnection', () => ({ sendUserPromptResponse }));
 
 const { UserPrompt } = await import('@/components/overlays/UserPrompt');
 

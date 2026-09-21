@@ -16,9 +16,7 @@ const sendDialogFeedback = mock(
   (_id: string, _confirmed: boolean, _remember?: 'once' | 'always' | 'deny_always') => {},
 );
 
-mock.module('@/hooks/useAgentConnection', () => ({
-  useAgentConnection: () => ({ sendDialogFeedback }),
-}));
+mock.module('@/hooks/useAgentConnection', () => ({ sendDialogFeedback }));
 
 const { ConfirmDialog } = await import('@/components/overlays/ConfirmDialog');
 

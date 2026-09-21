@@ -22,6 +22,7 @@ import type {
   WindowCreateAction,
   ActiveAgentSnapshot,
   UserClipboardAction,
+  AppBadgeAction,
 } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 // Import all slice creators
@@ -55,7 +56,7 @@ import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
 import { applyUserPromptAction } from './slices/userPromptsSlice';
-import { ACTIVITY_LOG_LIMIT } from './slices/debugSlice';
+import { logActivity, trimActivityLog } from './slices/debugSlice';
 import { handleClipboardAction } from '@/lib/clipboard';
 
 // Import iframe bridge (circular import — safe, only accessed at runtime)
@@ -95,6 +96,76 @@ function mapAgentsToMonitors(state: DesktopStore): Map<string, string | undefine
     note(agent.agentId, monitorOfWindowId(state.windows, agent.windowId));
   }
   return placed;
+}
+
+/**
+ * The actions that reach outside the store — the DOM, the clipboard, the settings
+ * endpoint — and each finish with a `set()` of their own. Running one inside an Immer
+ * recipe is a bug, so this hands back the work rather than doing it, and returns `null`
+ * for everything that belongs in `applySyncAction` instead.
+ *
+ * Being both the predicate and the work is the point: there is no second list of type
+ * strings to keep in step with these branches.
+ */
+function asyncActionRunner(action: OSAction): (() => void) | null {
+  const t = action.type;
+
+  if (t === 'window.capture') {
+    // Needs the live DOM. Server stamps a scoped handle on windowId — use it directly.
+    const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string };
+    if (!requestId) return () => {};
+    return () => captureWindow(windowId, requestId);
+  }
+
+  // The clipboard is reached through `navigator`, not through store state — same shape
+  // as `window.capture`: do the async work, answer the socket, hold nothing.
+  if (t.startsWith('user.clipboard.')) {
+    return () => handleClipboardAction(action as UserClipboardAction);
+  }
+
+  // `applyServerSettings` is a `set()` in its own right, so it cannot run inside one.
+  if (t === 'desktop.updateSettings') {
+    const { settings } = action as DesktopUpdateSettingsAction;
+    return () => useDesktopStore.getState().applyServerSettings(settings);
+  }
+
+  return null;
+}
+
+/**
+ * Everything else: a pure mutation of the Immer draft, routed by type prefix.
+ *
+ * This is the only routing table. It was two — one per entry point, sixty lines apart,
+ * every action type implemented twice — and they had already drifted: `desktop.refreshApps`
+ * was a slice action on one side and an inline `+= 1` on the other. Neither prefix routing
+ * nor the drift is checkable by the compiler, so the one thing worth not duplicating is
+ * the table itself.
+ */
+function applySyncAction(state: DesktopStore, action: OSAction): void {
+  const t = action.type;
+
+  if (t.startsWith('window.')) applyWindowAction(state, action as WindowAction);
+  else if (t.startsWith('notification.')) applyNotificationAction(state, action);
+  else if (t.startsWith('toast.')) applyToastAction(state, action);
+  else if (t.startsWith('dialog.')) applyDialogAction(state, action);
+  else if (t.startsWith('user.prompt.')) applyUserPromptAction(state, action);
+  else if (t === 'app.badge') {
+    const { appId, count } = action as AppBadgeAction;
+    if (count > 0) state.appBadges[appId] = count;
+    else delete state.appBadges[appId];
+  } else if (t === 'desktop.refreshApps') state.appsVersion += 1;
+  else if (t === 'desktop.createShortcut') {
+    state.shortcuts.push((action as DesktopCreateShortcutAction).shortcut);
+  } else if (t === 'desktop.removeShortcut') {
+    const sid = (action as DesktopRemoveShortcutAction).shortcutId;
+    state.shortcuts = state.shortcuts.filter((s) => s.id !== sid);
+  } else if (t === 'desktop.updateShortcut') {
+    const { shortcutId, updates } = action as DesktopUpdateShortcutAction;
+    const sc = state.shortcuts.find((s) => s.id === shortcutId);
+    if (sc) Object.assign(sc, updates);
+  } else {
+    console.warn(`[applyAction] Unhandled action type: ${t}`);
+  }
 }
 
 export const useDesktopStore = create<DesktopStore>()(
@@ -144,137 +215,48 @@ export const useDesktopStore = create<DesktopStore>()(
       });
     },
 
-    // Action router - routes OS actions to appropriate slice handlers
+    // Action router — one table, two entry points. `applyAction` is one action, straight
+    // from a UI gesture; `applyActions` is a server batch that must land in a single
+    // Immer transaction so a fifty-action turn is one re-render, not fifty.
     applyAction: (action: OSAction) => {
-      const store = useDesktopStore.getState();
-
-      // Log to activity log
-      store.addToActivityLog(action);
-
-      // Route to appropriate slice handler based on action type prefix
-      const actionType = action.type;
-
-      if (actionType === 'window.capture') {
-        // Handle capture async (outside Immer)
-        const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string };
-        if (requestId) {
-          // Server stamps scoped handle on windowId — use directly
-          captureWindow(windowId, requestId);
-        }
-        return;
-      }
-
-      // The clipboard is reached through `navigator`, not through store state — same
-      // shape as `window.capture`: do the async work, answer the socket, hold nothing.
-      if (actionType.startsWith('user.clipboard.')) {
-        handleClipboardAction(action as UserClipboardAction);
-        return;
-      }
-
-      if (actionType.startsWith('window.')) {
-        store.handleWindowAction(action as WindowAction);
-      } else if (actionType.startsWith('notification.')) {
-        store.handleNotificationAction(action);
-      } else if (actionType.startsWith('toast.')) {
-        store.handleToastAction(action);
-      } else if (actionType.startsWith('dialog.')) {
-        store.handleDialogAction(action);
-      } else if (actionType.startsWith('user.prompt.')) {
-        store.handleUserPromptAction(action);
-      } else if (actionType === 'app.badge') {
-        const { appId, count } = action as import('@yaar/shared').AppBadgeAction;
-        const [set] = a;
-        set((state) => {
-          if (count > 0) {
-            state.appBadges[appId] = count;
-          } else {
-            delete state.appBadges[appId];
-          }
-        });
-      } else if (actionType === 'desktop.refreshApps') {
-        store.bumpAppsVersion();
-      } else if (actionType === 'desktop.createShortcut') {
-        const { shortcut } = action as DesktopCreateShortcutAction;
-        const [set] = a;
-        set((state) => {
-          state.shortcuts.push(shortcut);
-        });
-      } else if (actionType === 'desktop.removeShortcut') {
-        const { shortcutId } = action as DesktopRemoveShortcutAction;
-        const [set] = a;
-        set((state) => {
-          state.shortcuts = state.shortcuts.filter((s) => s.id !== shortcutId);
-        });
-      } else if (actionType === 'desktop.updateShortcut') {
-        const { shortcutId, updates } = action as DesktopUpdateShortcutAction;
-        const [set] = a;
-        set((state) => {
-          const sc = state.shortcuts.find((s) => s.id === shortcutId);
-          if (sc) Object.assign(sc, updates);
-        });
-      } else if (actionType === 'desktop.updateSettings') {
-        const { settings } = action as DesktopUpdateSettingsAction;
-        store.applyServerSettings(settings);
-      } else {
-        console.warn(`[applyAction] Unhandled action type: ${actionType}`);
-      }
+      const [set] = a;
+      const runAsync = asyncActionRunner(action);
+      set((state) => {
+        const draft = state as DesktopStore;
+        logActivity(draft, action);
+        trimActivityLog(draft);
+        if (!runAsync) applySyncAction(draft, action);
+      });
+      runAsync?.();
     },
 
     applyActions: (actions: OSAction[]) => {
-      // Partition into sync (batchable) and async (must run outside Immer) actions
+      if (actions.length === 0) return;
+      const [set] = a;
+
+      // Partition *without running*: the async half reaches the DOM, the clipboard and
+      // the settings endpoint, and has to see the state the sync half leaves behind — so
+      // its work is held as a thunk until the recipe below has closed. The predicate and
+      // the work are the same function, which is what stops this partition drifting from
+      // the branches it has to match; it used to be a list of three type strings sixty
+      // lines away from them, and an action that grew its own `set()` without being added
+      // here would have been run inside an Immer recipe with nothing to catch it.
+      const deferred: Array<() => void> = [];
       const syncActions: OSAction[] = [];
-      const asyncActions: OSAction[] = [];
       for (const action of actions) {
-        if (
-          action.type === 'window.capture' ||
-          action.type === 'desktop.updateSettings' ||
-          action.type.startsWith('user.clipboard.')
-        )
-          asyncActions.push(action);
+        const runAsync = asyncActionRunner(action);
+        if (runAsync) deferred.push(runAsync);
         else syncActions.push(action);
       }
 
-      // Batch all sync actions into a single Immer transaction → 1 re-render
-      if (syncActions.length > 0) {
-        const [set] = a;
-        set((state) => {
-          for (const action of syncActions) {
-            state.activityLog.push(action);
-            const t = action.type;
-            if (t.startsWith('window.'))
-              applyWindowAction(state as DesktopStore, action as WindowAction);
-            else if (t.startsWith('notification.')) applyNotificationAction(state, action);
-            else if (t.startsWith('toast.')) applyToastAction(state, action);
-            else if (t.startsWith('dialog.')) applyDialogAction(state, action);
-            else if (t.startsWith('user.prompt.')) applyUserPromptAction(state, action);
-            else if (t === 'app.badge') {
-              const { appId, count } = action as import('@yaar/shared').AppBadgeAction;
-              if (count > 0) state.appBadges[appId] = count;
-              else delete state.appBadges[appId];
-            } else if (t === 'desktop.refreshApps') state.appsVersion += 1;
-            else if (t === 'desktop.createShortcut') {
-              state.shortcuts.push((action as DesktopCreateShortcutAction).shortcut);
-            } else if (t === 'desktop.removeShortcut') {
-              const sid = (action as DesktopRemoveShortcutAction).shortcutId;
-              state.shortcuts = state.shortcuts.filter((s) => s.id !== sid);
-            } else if (t === 'desktop.updateShortcut') {
-              const { shortcutId, updates } = action as DesktopUpdateShortcutAction;
-              const sc = state.shortcuts.find((s) => s.id === shortcutId);
-              if (sc) Object.assign(sc, updates);
-            } else {
-              console.warn(`[applyActions] Unhandled action type: ${t}`);
-            }
-          }
-          if (state.activityLog.length > ACTIVITY_LOG_LIMIT) {
-            state.activityLog = state.activityLog.slice(-ACTIVITY_LOG_LIMIT);
-          }
-        });
-      }
+      set((state) => {
+        const draft = state as DesktopStore;
+        for (const action of actions) logActivity(draft, action);
+        for (const action of syncActions) applySyncAction(draft, action);
+        trimActivityLog(draft);
+      });
 
-      // Handle async actions individually (e.g. window.capture needs DOM access)
-      for (const action of asyncActions) {
-        useDesktopStore.getState().applyAction(action);
-      }
+      for (const run of deferred) run();
     },
 
     /**
@@ -481,7 +463,7 @@ export const useDesktopStore = create<DesktopStore>()(
           });
 
           // Deliberately untouched when scoped:
-          //  - toasts, dialogs, selectedWindowIds, attachedImages, activityLog, debugLog —
+          //  - toasts, dialogs, selectedWindowIds, attachedImages, activityLog —
           //    transient or session-wide shell UI, with no monitor identity to scope by.
           //  - notifications — the model carries no monitorId (`notification.show` does not
           //    send one), so there is nothing to filter on; the notification center is a
@@ -505,7 +487,6 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingInteractions = [];
         state.pendingGestureMessages = [];
         state.activityLog = [];
-        state.debugLog = [];
         state.pendingFeedback = [];
         state.pendingAppProtocolResponses = [];
         state.pendingAppInteractions = [];
@@ -534,7 +515,6 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingInteractions = [];
         state.pendingGestureMessages = [];
         state.activityLog = [];
-        state.debugLog = [];
         state.pendingFeedback = [];
         state.pendingAppProtocolResponses = [];
         state.pendingAppInteractions = [];

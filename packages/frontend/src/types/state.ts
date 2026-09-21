@@ -113,14 +113,6 @@ export interface RestorePrompt {
   sessionDate: string;
 }
 
-export interface DebugEntry {
-  id: string;
-  timestamp: number;
-  direction: 'in' | 'out';
-  type: string;
-  data: unknown;
-}
-
 export interface ActiveAgent {
   id: string;
   status: string; // e.g., "Thinking...", "Running: read_file"

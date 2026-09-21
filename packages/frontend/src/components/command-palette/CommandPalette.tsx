@@ -14,7 +14,13 @@
  */
 import { useState, useCallback, useEffect, useMemo, useRef, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import {
+  useIsConnected,
+  sendMessage,
+  sendWindowMessage,
+  interrupt,
+  reset,
+} from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
 import type { MessageStatus } from '@/store/types';
 import { QrCodeModal } from '../overlays/QrCodeModal';
@@ -69,7 +75,7 @@ export function CommandPalette() {
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLButtonElement>(null);
   const sheetBodyRef = useRef<HTMLDivElement>(null);
-  const { isConnected, sendMessage, sendWindowMessage, interrupt, reset } = useAgentConnection();
+  const isConnected = useIsConnected();
   const activeAgents = useDesktopStore((state) => state.activeAgents);
   const applyAction = useDesktopStore((state) => state.applyAction);
   const hasDrawing = useDesktopStore((state) => state.hasDrawing);
@@ -291,16 +297,7 @@ export function CommandPalette() {
 
     sendMessage(trimmed);
     setInput('');
-  }, [
-    input,
-    isConnected,
-    sendMessage,
-    sendWindowMessage,
-    hasDrawing,
-    attachedImages.length,
-    pencilMode,
-    setPencilMode,
-  ]);
+  }, [input, isConnected, hasDrawing, attachedImages.length, pencilMode, setPencilMode]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -351,16 +348,7 @@ export function CommandPalette() {
         }
       }
     },
-    [
-      handleSubmit,
-      interrupt,
-      activeAgents,
-      applyAction,
-      t,
-      mentionMatches,
-      mentionIndex,
-      selectMention,
-    ],
+    [handleSubmit, activeAgents, applyAction, t, mentionMatches, mentionIndex, selectMention],
   );
 
   // Pull-up / pull-down on the handle. The handle is the bottom edge of the screen when
@@ -437,7 +425,7 @@ export function CommandPalette() {
           : t('commandPalette.toast.contextReset'),
       variant: 'info',
     });
-  }, [reset, applyAction, t, activeMonitorId, monitors]);
+  }, [applyAction, t, activeMonitorId, monitors]);
 
   return (
     <>

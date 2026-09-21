@@ -5,13 +5,11 @@ import { useDesktopStore } from '@/store';
 const sent: string[] = [];
 
 mock.module('@/hooks/useAgentConnection', () => ({
-  useAgentConnection: () => ({
-    isConnected: true,
-    sendMessage: (msg: string) => sent.push(msg),
-    sendWindowMessage: () => {},
-    interrupt: () => {},
-    reset: () => {},
-  }),
+  useIsConnected: () => true,
+  sendMessage: (msg: string) => sent.push(msg),
+  sendWindowMessage: () => {},
+  interrupt: () => {},
+  reset: () => {},
 }));
 
 const { CommandPalette } = await import('@/components/command-palette/CommandPalette');

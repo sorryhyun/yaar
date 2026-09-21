@@ -12,7 +12,6 @@ import type {
   UserPromptModel,
   ConnectionStatus,
   RestorePrompt,
-  DebugEntry,
   ActiveAgent,
   WindowAgent,
   RenderingFeedback,
@@ -22,7 +21,6 @@ import type {
 } from '@/types/state';
 import type {
   OSAction,
-  WindowAction,
   UserInteraction,
   AppProtocolResponse,
   DesktopShortcut,
@@ -41,7 +39,6 @@ export type {
   UserPromptModel,
   ConnectionStatus,
   RestorePrompt,
-  DebugEntry,
   ActiveAgent,
   WindowAgent,
   RenderingFeedback,
@@ -65,7 +62,6 @@ export interface WindowsSliceActions {
   userMoveWindow: (windowId: string, x: number, y: number) => void;
   userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void;
   userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
-  handleWindowAction: (action: WindowAction) => void;
   queueBoundsUpdate: (windowId: string, action?: 'window.move' | 'window.resize') => void;
   /** Flag an agent-driven change the store can't see itself (an App Protocol command). */
   markWindowChanged: (windowId: string) => void;
@@ -81,7 +77,6 @@ export interface NotificationsSliceState {
 
 export interface NotificationsSliceActions {
   dismissNotification: (id: string) => void;
-  handleNotificationAction: (action: OSAction) => void;
 }
 
 export type NotificationsSlice = NotificationsSliceState & NotificationsSliceActions;
@@ -92,7 +87,6 @@ export interface ToastsSliceState {
 
 export interface ToastsSliceActions {
   dismissToast: (id: string) => void;
-  handleToastAction: (action: OSAction) => void;
 }
 
 export type ToastsSlice = ToastsSliceState & ToastsSliceActions;
@@ -103,7 +97,6 @@ export interface DialogsSliceState {
 
 export interface DialogsSliceActions {
   respondToDialog: (id: string, confirmed: boolean) => void;
-  handleDialogAction: (action: OSAction) => void;
 }
 
 export type DialogsSlice = DialogsSliceState & DialogsSliceActions;
@@ -113,7 +106,6 @@ export interface UserPromptsSliceState {
 }
 
 export interface UserPromptsSliceActions {
-  handleUserPromptAction: (action: OSAction) => void;
   dismissUserPrompt: (id: string) => void;
 }
 
@@ -150,11 +142,9 @@ export type ConnectionSlice = ConnectionSliceState & ConnectionSliceActions;
 
 export interface DebugSliceState {
   activityLog: OSAction[];
-  debugLog: DebugEntry[];
 }
 
 export interface DebugSliceActions {
-  addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void;
   addToActivityLog: (action: OSAction) => void;
 }
 

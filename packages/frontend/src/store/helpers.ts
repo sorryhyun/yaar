@@ -1,7 +1,7 @@
 /**
  * Helper functions for the desktop store.
  */
-import type { DebugSliceState, DesktopStore } from './types';
+import type { DesktopStore } from './types';
 
 /** Generate a unique ID with a prefix (e.g. generateId('cli') → 'cli-lx3k9f2-a7b3m'). */
 export function generateId(prefix: string): string {
@@ -94,20 +94,6 @@ export function emptyContentByRenderer(renderer: string): unknown {
     default:
       return null;
   }
-}
-
-/**
- * Add a debug log entry to the state (mutates state via immer).
- */
-export function addDebugLogEntry(state: DebugSliceState, type: string, data: unknown): void {
-  state.debugLog.push({
-    id: generateId('debug'),
-    timestamp: Date.now(),
-    direction: 'in',
-    type,
-    data,
-  });
-  state.debugLog = capArray(state.debugLog, 100);
 }
 
 /**

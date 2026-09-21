@@ -9,7 +9,7 @@ import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectUserPrompts } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { sendUserPromptResponse } from '@/hooks/useAgentConnection';
 import type { UserPromptModel } from '@/types/state';
 import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/overlays/UserPrompt.module.css';
@@ -165,7 +165,6 @@ export function UserPrompt() {
   const monitors = useDesktopStore(useShallow((s) => s.monitors));
   const activeMonitorId = useDesktopStore((s) => s.activeMonitorId);
   const switchMonitor = useDesktopStore((s) => s.switchMonitor);
-  const { sendUserPromptResponse } = useAgentConnection();
 
   /**
    * Take the box down only once the answer is on the wire, and follow the agent to its own

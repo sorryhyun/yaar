@@ -50,7 +50,6 @@ function createSocketHandlers() {
 function createHandlers() {
   return {
     applyActions: mock(() => {}),
-    setIsConnecting: mock(() => {}),
     setConnectionStatus: mock(() => {}),
     setConnectionError: mock(() => {}),
     setSession: mock(() => {}),
@@ -58,7 +57,6 @@ function createHandlers() {
     checkForPreviousSession: mock(() => {}),
     setMonitors: mock(() => {}),
     refreshStaleIframeTokens: mock(() => {}),
-    addDebugEntry: mock(() => {}),
     setAgentActive: mock(() => {}),
     clearAgent: mock(() => {}),
     registerWindowAgent: mock(() => {}),
@@ -417,8 +415,6 @@ describe('server event dispatcher', () => {
     // what the agent is doing — `running` already said "Running: command".
     expect(handlers.finalizeCliStreaming).not.toHaveBeenCalled();
     expect(handlers.setAgentActive).not.toHaveBeenCalled();
-    // And it must not reach the debug panel, which one chunk per line would bury.
-    expect(handlers.addDebugEntry).not.toHaveBeenCalled();
   });
 
   it('does not let an agent error report the connection as down', () => {

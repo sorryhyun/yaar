@@ -2,7 +2,7 @@
  * Toasts slice - manages toast notifications.
  */
 import type { SliceCreator, ToastsSlice, ToastsSliceState, DesktopStore } from '../types';
-import type { OSAction, ToastShowAction } from '@yaar/shared';
+import type { ToastShowAction } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
 
 /**
@@ -34,11 +34,6 @@ export const applyToastAction = createApplyAction<
 
 export const createToastsSlice: SliceCreator<ToastsSlice> = (set, _get) => ({
   toasts: {},
-
-  handleToastAction: (action: OSAction) =>
-    set((state) => {
-      applyToastAction(state, action);
-    }),
 
   dismissToast: (id) =>
     set((state) => {

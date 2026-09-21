@@ -2,14 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { render, screen, cleanup, act, fireEvent } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 
-// Mock useAgentConnection — must be before importing CommandPalette
+// Stub the connection module — must be before importing CommandPalette
 mock.module('@/hooks/useAgentConnection', () => ({
-  useAgentConnection: () => ({
-    isConnected: true,
-    sendMessage: mock(() => {}),
-    interrupt: mock(() => {}),
-    reset: mock(() => {}),
-  }),
+  useIsConnected: () => true,
+  sendMessage: mock(() => {}),
+  sendWindowMessage: mock(() => {}),
+  interrupt: mock(() => {}),
+  reset: mock(() => {}),
 }));
 
 const { CommandPalette } = await import('@/components/command-palette/CommandPalette');
