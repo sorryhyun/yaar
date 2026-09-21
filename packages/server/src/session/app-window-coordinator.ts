@@ -231,6 +231,25 @@ export class AppWindowCoordinator {
     return next;
   }
 
+  /**
+   * The tab whose capture of this window should win, or null when any tab's will do.
+   *
+   * A capture goes to every desktop, and each one rasterizes its *own* copy of the iframe.
+   * Those copies drift apart the moment an agent acts on one: devtools' `previewEval`
+   * clicked a sheet open in the pinned copy, and the screenshot that came back first was
+   * the companion tab's, where nothing had been clicked — the same picture three times
+   * running while the DOM the agent was measuring changed under it. So the copy the agent
+   * has been commanding is the one whose picture counts, while it can still paint.
+   *
+   * Read-only: a capture never moves the pin, so it cannot cause the switch it avoids.
+   */
+  captureResponder(windowId: string): ConnectionId | null {
+    const windowKey = this.resolveKey(windowId);
+    const pin = this.pinned.get(windowKey);
+    if (!pin || !this.deps.hasConnection(pin) || !this.canAnswer(pin)) return null;
+    return (this.readyConnections.get(windowKey) ?? []).includes(pin) ? pin : null;
+  }
+
   /** Whether a connection's tab can run script — silence counts as yes, see client-presence. */
   private canAnswer(connectionId: ConnectionId): boolean {
     const state = connectionPresence(this.deps.sessionId, connectionId);

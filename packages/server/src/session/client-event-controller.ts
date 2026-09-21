@@ -45,6 +45,23 @@ import { refreshRestoredWindowActions } from '../logging/window-restore.js';
 
 const log = createLogger('ClientEventController');
 
+/** One capture request's answers so far, while a better one may still arrive. */
+interface HeldCapture {
+  timer: ReturnType<typeof setTimeout>;
+  /** Tabs that have answered, however they answered. */
+  answered: Set<ConnectionId>;
+  /** The first image from a tab whose picture is not the one that counts. */
+  standIn?: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>;
+  /** The first failure, which stands only if no image arrives. */
+  failure?: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>;
+}
+
+/** Rides on a stand-in image, which shows the app but not the agent's work in it. */
+const OTHER_COPY_NOTE =
+  'other-copy: this image is from a different open copy of the window than the one your ' +
+  'app commands and evals ran in (that tab could not capture). It has its own in-memory ' +
+  'state, so anything you changed through commands or evals may not appear here.';
+
 export interface ClientEventDeps {
   sessionId: SessionId;
   windowState: WindowStateRegistry;
@@ -83,11 +100,8 @@ export interface ClientEventDeps {
 }
 
 export class ClientEventController {
-  /** Not-mounted capture failures held back while another tab may still answer. */
-  private readonly heldCaptureFailures = new Map<
-    string,
-    { timer: ReturnType<typeof setTimeout>; from: Set<ConnectionId> }
-  >();
+  /** Capture answers held back while a better tab may still answer. */
+  private readonly heldCaptures = new Map<string, HeldCapture>();
 
   constructor(private readonly deps: ClientEventDeps) {}
 
@@ -334,7 +348,30 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>,
     connectionId: ConnectionId,
   ): void {
-    if (event.renderer === 'capture' && !event.success) {
+    if (event.renderer === 'capture') {
+      this.handleCaptureFeedback(event, connectionId);
+      return;
+    }
+    this.resolveRenderingFeedback(event);
+  }
+
+  /**
+   * A capture goes to every desktop in the session, and each answers for its own copy of
+   * the window. Two answers used to lose to whichever came first, and both were wrong:
+   *
+   * - A tab without the window answers "not-mounted" in milliseconds while the one that
+   *   has it is still rasterizing — so that failure is held until someone does better.
+   * - A tab that *has* the window can still be the wrong one. The agent's app requests are
+   *   pinned to one copy (`AppWindowCoordinator.captureResponder`); every other copy is
+   *   the same app with its own in-memory state, untouched by what the agent just did. Its
+   *   image is held as a stand-in while the pinned copy paints, used only if that copy
+   *   cannot, and labelled when it is.
+   */
+  private handleCaptureFeedback(
+    event: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>,
+    connectionId: ConnectionId,
+  ): void {
+    if (!event.success) {
       // The feedback frame is not in the session log, so this line is the only place a
       // failed capture's reason survives outside the agent's tool result.
       log.info('capture failed in a tab', {
@@ -344,39 +381,67 @@ export class ClientEventController {
         captureFailure: event.captureFailure,
         error: event.error,
       });
-      // A capture goes to every desktop in the session, and a tab without the window
-      // answers in milliseconds while the one that has it is still rasterizing — so the
-      // fast wrong answer used to win every time. It now waits for a better one.
-      if (event.captureFailure === 'not-mounted') {
-        let held = this.heldCaptureFailures.get(event.requestId);
-        if (!held) {
-          held = {
-            // Only for a tab that never answers at all (backgrounded, frozen): every tab
-            // that does answer is counted below, so this rarely runs to the end.
-            timer: setTimeout(() => {
-              this.heldCaptureFailures.delete(event.requestId);
-              this.resolveRenderingFeedback(event);
-            }, deadlines.captureNotMountedGraceMs),
-            from: new Set(),
-          };
-          this.heldCaptureFailures.set(event.requestId, held);
-        }
-        held.from.add(connectionId);
-        // Every desktop has said it does not have the window: nobody else will answer.
-        if (held.from.size >= this.deps.connectionCount()) {
-          clearTimeout(held.timer);
-          this.heldCaptureFailures.delete(event.requestId);
-          this.resolveRenderingFeedback(event);
-        }
-        return;
-      }
     }
-    const held = this.heldCaptureFailures.get(event.requestId);
+    const preferred = this.deps.appWindows.captureResponder(event.windowId);
+    const fromPreferred = preferred !== null && preferred === connectionId;
+    const held = this.heldCaptures.get(event.requestId);
+
+    // The answer that counts: an image from the copy the agent has been working in, or from
+    // any tab when it has not been working in one. A real failure from that copy stands
+    // too (a tainted canvas is tainted in every copy), unless another tab's image is held.
+    const decisive =
+      (preferred === null || fromPreferred) &&
+      (event.success || event.captureFailure !== 'not-mounted');
+    if (decisive) {
+      this.settleCapture(event.requestId, event.success ? event : (held?.standIn ?? event));
+      return;
+    }
+
+    const entry = held ?? this.holdCapture(event.requestId, preferred !== null);
+    entry.answered.add(connectionId);
+    if (event.success) {
+      entry.standIn ??= preferred
+        ? { ...event, captureDegraded: [...(event.captureDegraded ?? []), OTHER_COPY_NOTE] }
+        : event;
+    } else {
+      entry.failure ??= event;
+    }
+
+    // Nobody better is coming: the pinned copy said it has no window while another tab's
+    // image is in hand, or every desktop has now answered.
+    if ((fromPreferred && entry.standIn) || entry.answered.size >= this.deps.connectionCount()) {
+      this.settleCapture(event.requestId, entry.standIn ?? entry.failure ?? event);
+    }
+  }
+
+  private holdCapture(requestId: string, waitingOnPreferred: boolean): HeldCapture {
+    const entry: HeldCapture = {
+      // Only for a tab that never answers at all (backgrounded, frozen): every tab that
+      // does answer is counted, so this rarely runs to the end.
+      timer: setTimeout(
+        () => {
+          const current = this.heldCaptures.get(requestId);
+          const outcome = current?.standIn ?? current?.failure;
+          if (outcome) this.settleCapture(requestId, outcome);
+        },
+        waitingOnPreferred ? deadlines.capturePreferredGraceMs : deadlines.captureNotMountedGraceMs,
+      ),
+      answered: new Set(),
+    };
+    this.heldCaptures.set(requestId, entry);
+    return entry;
+  }
+
+  private settleCapture(
+    requestId: string,
+    outcome: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>,
+  ): void {
+    const held = this.heldCaptures.get(requestId);
     if (held) {
       clearTimeout(held.timer);
-      this.heldCaptureFailures.delete(event.requestId);
+      this.heldCaptures.delete(requestId);
     }
-    this.resolveRenderingFeedback(event);
+    this.resolveRenderingFeedback(outcome);
   }
 
   private resolveRenderingFeedback(

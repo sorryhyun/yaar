@@ -348,6 +348,53 @@ describe('S7b — a capture is not decided by the tab that does not have the win
     expect(outcome.value?.imageData).toBe('cGl4ZWxz');
   });
 
+  /** Two tabs with the window registered, pinned to `second` by a command it answered. */
+  async function bootPinned() {
+    const h = await boot({
+      deadlines: {
+        renderFeedbackMs: 1500,
+        captureNotMountedGraceMs: 300,
+        capturePreferredGraceMs: 800,
+      },
+    });
+    harness = h;
+    const windowKey = h.seedIframeWindow('devtools-preview');
+    const first = h.client;
+    const second = await h.connect('0');
+    answerAs(first, 'first');
+    answerAs(second, 'second');
+    await first.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
+    await second.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
+    expect(await runCommand(h, windowKey, 'openSheet', 'm1')).toBe('second');
+    return { h, windowKey, first, second };
+  }
+
+  it("the copy the agent's commands ran in wins over a faster copy that never saw them", async () => {
+    const { h, windowKey, first, second } = await bootPinned();
+    // RED before the fix: the untouched copy answered first and its picture was returned —
+    // the same stale screenshot every time, however the pinned copy's DOM changed.
+    answerCapture(first, { success: true, imageData: 'dW50b3VjaGVk' });
+    answerCapture(second, { success: true, imageData: 'c2hlZXRvcGVu' }, 100);
+
+    const outcome = await capture(h, windowKey);
+
+    expect(outcome.value?.imageData).toBe('c2hlZXRvcGVu');
+    expect((outcome.value as { captureDegraded?: string[] }).captureDegraded).toBeUndefined();
+  });
+
+  it("another copy's image stands in when the pinned copy cannot paint — and says so", async () => {
+    const { h, windowKey, first, second } = await bootPinned();
+    answerCapture(second, { success: false, captureFailure: 'not-mounted' });
+    answerCapture(first, { success: true, imageData: 'dW50b3VjaGVk' }, 50);
+
+    const outcome = (await capture(h, windowKey)) as {
+      value?: { imageData?: string; captureDegraded?: string[] };
+    };
+
+    expect(outcome.value?.imageData).toBe('dW50b3VjaGVk');
+    expect(outcome.value?.captureDegraded?.some((n) => n.startsWith('other-copy:'))).toBe(true);
+  });
+
   it('when every tab lacks the window, the failure stands at once — no waiting out the grace', async () => {
     // A grace far longer than the capture takes: if the failure waited it out, the turn
     // would miss the settle bound below.

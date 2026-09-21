@@ -94,6 +94,14 @@ export interface Deadlines {
    */
   captureNotMountedGraceMs: number;
   /**
+   * Upper bound on holding another tab's capture while the tab the agent has been commanding
+   * is still rasterizing its own copy (`ClientEventController.handleCaptureFeedback`). That
+   * tab's frontend gives up and answers after 2s of its own, so this is only a backstop for
+   * one that goes quiet — and short enough that the held image still beats the request's
+   * own deadline.
+   */
+  capturePreferredGraceMs: number;
+  /**
    * Default wait for the desktop to answer a clipboard read/write.
    *
    * Longer than `renderFeedbackMs` even though the work is trivial: the *first* read from
@@ -113,6 +121,7 @@ const PRODUCTION_DEADLINES: Readonly<Deadlines> = Object.freeze({
   userPromptMs: MAX_REQUEST_DEADLINE_MS,
   renderFeedbackMs: 3_000,
   captureNotMountedGraceMs: 300,
+  capturePreferredGraceMs: 2_500,
   clipboardMs: 30_000,
 });
 

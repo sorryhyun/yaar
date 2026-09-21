@@ -64,6 +64,7 @@ const HARNESS_DEADLINES: Deadlines = {
   userPromptMs: 150,
   renderFeedbackMs: 150,
   captureNotMountedGraceMs: 40,
+  capturePreferredGraceMs: 100,
   clipboardMs: 150,
 };
 
