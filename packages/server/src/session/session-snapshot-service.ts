@@ -24,6 +24,8 @@ export interface SnapshotAgent {
   id: string;
   label: string;
   busy: boolean;
+  /** The running turn's role — the key streaming events use. Absent between turns. */
+  role?: string;
   monitorId?: string;
   /** The roster's tier — the client cannot derive it here, see {@link ActiveAgentSnapshot}. */
   type: AgentKind;
@@ -63,7 +65,10 @@ export class SessionSnapshotService {
       .listAgents()
       .filter((a) => a.busy)
       .map((a) => ({
-        agentId: a.id,
+        // The turn's role, the key the client's streaming events use — so the completion
+        // that ends this turn clears the entry this snapshot creates. Keyed by instanceId,
+        // a resync taken mid-turn left a row nothing would ever remove (#113).
+        agentId: a.role ?? a.id,
         status: a.label,
         kind: a.type,
         ...(a.monitorId ? { monitorId: a.monitorId } : {}),

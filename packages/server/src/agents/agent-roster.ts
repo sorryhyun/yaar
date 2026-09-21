@@ -68,6 +68,13 @@ export interface AgentEntry {
   /** Human-readable name: the monitorId, the appId, or the current role. */
   label: string;
   busy: boolean;
+  /**
+   * The role of the turn running right now, absent between turns. This — not `id` — is
+   * the `agentId` every streaming event carries, so it is the key a client that tracks
+   * activity from those events must be told, or the turn's completion cannot find the
+   * entry a resync created (#113).
+   */
+  role?: string;
   monitorId?: string;
   appId?: string;
   /** Sub-agents only — the id its owning app spawned it under. */
@@ -151,6 +158,7 @@ export function listAgents(members: Iterable<RosterMember>): AgentEntry[] {
         entries.push({ id, type, label: agent.currentRole ?? 'ephemeral', busy, usage });
         break;
     }
+    if (agent.currentRole) entries[entries.length - 1]!.role = agent.currentRole;
   }
   return entries;
 }

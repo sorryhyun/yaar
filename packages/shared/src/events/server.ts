@@ -312,9 +312,12 @@ export interface MonitorsEvent {
 /** An agent the server considers to be running right now. */
 export interface ActiveAgentSnapshot {
   /**
-   * The pool's instanceId — **not** a role, unlike the `agentId` on the streaming
-   * events. That is why {@link ActiveAgentSnapshot.kind} has to be sent: an instanceId
-   * carries no prefix to read a tier off.
+   * The role of the agent's running turn — the same `agentId` its streaming events
+   * carry, so the completion that ends the turn clears the entry this snapshot made.
+   * Falls back to the pool's instanceId for an agent busy with no turn role (and is
+   * always the instanceId from an older server, which is how #113's phantom rows were
+   * born). {@link ActiveAgentSnapshot.kind} is sent because neither can be relied on
+   * to carry a tier prefix.
    */
   agentId: string;
   status: string;
