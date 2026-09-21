@@ -16,6 +16,7 @@ import {
   solidHtmlSourcePlugin,
 } from '../bundled/plugins.js';
 import { toForwardSlash } from '../bundled/registry.js';
+import { ortVersionDefine } from '../bundled/ort-version.js';
 import type { ThreeRenderer } from '../bundled/three-renderer.js';
 import type { AppSourceCache } from './source-cache.js';
 
@@ -51,6 +52,7 @@ export async function buildAppBundle(
     // Resolve with { success: false, logs } instead of throwing, so errors
     // keep their file/line/column positions (the catch path loses them).
     throw: false,
+    define: ortVersionDefine(),
     plugins: [
       bundledLibraryPluginBun(options.bundles, options.three),
       cssFilePlugin(),

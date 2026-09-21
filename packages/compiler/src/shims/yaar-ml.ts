@@ -41,6 +41,28 @@
 import type * as Ort from 'onnxruntime-web/webgpu';
 
 /**
+ * The onnxruntime-web version this shim was compiled against, stamped in by the
+ * compiler's `define` (`bundled/ort-version.ts`). Empty if the compiler could not
+ * resolve ORT.
+ */
+declare const __YAAR_ORT_VERSION__: string;
+
+/**
+ * A `/api/ml-runtime/` URL that changes when ORT does.
+ *
+ * The route serves these `immutable` for a year under file names that are identical
+ * across ORT releases, so without the `?v=` a browser keeps the first ORT it ever
+ * fetched — measured: after the 1.27 → 1.30 bump the server served 1.30 and the app
+ * still ran the cached 1.27 bundle. The route reads only the pathname, so the query is
+ * pure cache key. Every runtime URL goes through here, the `.wasm` included: a new
+ * bundle driving a cached old `.wasm` would be worse than a stale pair.
+ */
+function runtimeUrl(file: string): string {
+  const v = typeof __YAAR_ORT_VERSION__ === 'string' ? __YAAR_ORT_VERSION__ : '';
+  return `/api/ml-runtime/${file}${v ? `?v=${encodeURIComponent(v)}` : ''}`;
+}
+
+/**
  * ORT must be a real script at a real URL, because `env.wasm.proxy` needs one.
  *
  * In proxy mode ORT runs the session on a worker it spawns from *its own script
@@ -53,7 +75,7 @@ import type * as Ort from 'onnxruntime-web/webgpu';
  * serves `.mjs` as `application/javascript`) gives it a script URL it can spawn
  * itself from, and lets `wasmPaths` resolve alongside it.
  */
-const ORT_URL = '/api/ml-runtime/ort.webgpu.bundle.min.mjs';
+const ORT_URL = runtimeUrl('ort.webgpu.bundle.min.mjs');
 
 /**
  * The full-CPU flavor, for sessions that resolve to the wasm EP alone.
@@ -70,7 +92,7 @@ const ORT_URL = '/api/ml-runtime/ort.webgpu.bundle.min.mjs';
  * `Tensor` exported from the flavor above (verified: `s.run` reads
  * type/data/dims, never `instanceof`).
  */
-const ORT_WASM_URL = '/api/ml-runtime/ort.wasm.bundle.min.mjs';
+const ORT_WASM_URL = runtimeUrl('ort.wasm.bundle.min.mjs');
 
 // The specifier has to be opaque to Bun's bundler: a literal `import(ORT_URL)`
 // gets resolved at build time (and fails — it's a server route, not a module on
@@ -87,7 +109,7 @@ const ort = await importModule(ORT_URL);
 let _wasmOrt: Promise<typeof Ort> | undefined;
 function wasmFlavor(): Promise<typeof Ort> {
   _wasmOrt ??= importModule(ORT_WASM_URL).then((m) => {
-    configureOrtEnv(m);
+    configureOrtEnv(m, 'ort-wasm-simd-threaded');
     return m;
   });
   return _wasmOrt;
@@ -187,11 +209,16 @@ function authorizeExternalData(
 
 // ── Runtime configuration (runs once per flavor) ─────────────────────────────
 
-function configureOrtEnv(rt: typeof Ort): void {
+function configureOrtEnv(rt: typeof Ort, artifact: string): void {
   // ORT loads its `.wasm` binaries at runtime from this same-origin static route
   // (served by the server from onnxruntime-web/dist). Must be set before any
-  // session is created.
-  rt.env.wasm.wasmPaths = '/api/ml-runtime/';
+  // session is created. The object form rather than a '/api/ml-runtime/' prefix,
+  // because a prefix cannot carry the `?v=` (see `runtimeUrl`) — which is also why
+  // each flavor names its own artifact pair.
+  rt.env.wasm.wasmPaths = {
+    mjs: runtimeUrl(`${artifact}.mjs`),
+    wasm: runtimeUrl(`${artifact}.wasm`),
+  };
   // YAAR iframes are not cross-origin isolated (no COOP/COEP) → SharedArrayBuffer
   // is unavailable, so multithreaded wasm cannot run. Pin to a single thread; the
   // WebGPU EP does not need threads anyway.
@@ -228,7 +255,7 @@ function configureOrtEnv(rt: typeof Ort): void {
   rt.env.logLevel = 'error';
 }
 
-configureOrtEnv(ort);
+configureOrtEnv(ort, 'ort-wasm-simd-threaded.asyncify');
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

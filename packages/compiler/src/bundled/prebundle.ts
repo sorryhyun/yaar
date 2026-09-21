@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 import { BUNDLED_LIBRARIES, BUNDLED_SHIMS, resolveBrowserEntry } from './registry.js';
 import { MODULE_ROOT } from '../paths.js';
 import { formatBuildLogs } from '../build/build-app.js';
+import { ortVersionDefine } from './ort-version.js';
 
 /** Where devDependencies for bundled libraries are installed (this package). */
 const ANCHOR = MODULE_ROOT;
@@ -134,6 +135,7 @@ export async function prebundleLibrary(name: string): Promise<string> {
     minify: true,
     format: 'esm',
     target: 'browser',
+    define: ortVersionDefine(),
     plugins: prebundlePlugins(name),
     external: solidExternals(name),
   });

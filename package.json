@@ -32,7 +32,7 @@
       "matter-js": "^0.20.0",
       "mediabunny": "^1.51.0",
       "mermaid": "^11.16.0",
-      "onnxruntime-web": "^1.27.0",
+      "onnxruntime-web": "^1.30.0",
       "pixi.js": "^8.17.1",
       "prismjs": "^1.30.0",
       "solid-js": "^1.9.12",

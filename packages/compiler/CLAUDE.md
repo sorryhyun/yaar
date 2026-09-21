@@ -36,6 +36,7 @@ src/
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 │   ├── three-renderer.ts  # app.json `"three": "webgpu"` — which three build `@bundled/three` means (readThreeRenderer)
 │   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent (+ design-tokens pseudo-library)
+│   ├── ort-version.ts     # getOrtVersion() + the `define` that stamps it into yaar-ml's `?v=` runtime URLs
 │   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
 ├── guards/
 │   ├── guard-report.ts    # createAppSourceFile/walk/snippet/format — the shape all three guards share (ASCII rule lives here)
@@ -372,7 +373,7 @@ so an app that never renders a diagram or markdown does not pull the library in 
 
 ## Build Manifest & Staleness
 
-`isAppStale(appPath)` compares current source/app.json SHA-256 hashes against `dist/.build-manifest.json`. Apps recompile only when stale or compiler version bumps (`COMPILER_VERSION`).
+`isAppStale(appPath)` compares current source/app.json SHA-256 hashes against `dist/.build-manifest.json`. Apps recompile only when stale or compiler version bumps (`COMPILER_VERSION`). A `yaar-ml` app also goes stale when the installed onnxruntime-web differs from the manifest's `ortVersion`.
 
 ## Key Patterns
 

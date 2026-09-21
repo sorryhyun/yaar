@@ -8,6 +8,7 @@
 
 import { readdir, stat } from 'fs/promises';
 import { join, basename } from 'path';
+import { getOrtVersion } from '../bundled/ort-version.js';
 
 /**
  * Bump this to force a full rebuild of all apps.
@@ -150,13 +151,21 @@ import { join, basename } from 'path';
  * than ~400px wide. The injected copy hot-upgrades the baked one, so a same-origin app
  * gets this without a rebuild — but an origin-isolated app is not same-origin, nothing
  * is injected into it, and the copy in `dist/` is the only one it has.
+ *
+ * '34': the `yaar-ml` shim puts the ORT version on every `/api/ml-runtime/` URL (`?v=`).
+ * Those artifacts are served `immutable` under version-less names, so an app built
+ * before this keeps asking for the bare URL and runs whichever ORT the browser cached
+ * first. From here on an ORT bump does not need a bump here: the manifest records
+ * `ortVersion`, and `isAppStale` compares it.
  */
-export const COMPILER_VERSION = '33';
+export const COMPILER_VERSION = '34';
 
 export interface BuildManifest {
   sourceHash: string;
   appJsonHash: string;
   compilerVersion: string;
+  /** The onnxruntime-web version stamped into a `yaar-ml` app's shim; absent for other apps. */
+  ortVersion?: string;
   compiledAt: string;
 }
 
@@ -238,6 +247,9 @@ export async function isAppStale(appPath: string): Promise<boolean> {
   const manifest = await readBuildManifest(appPath);
   if (!manifest) return true;
   if (manifest.compilerVersion !== COMPILER_VERSION) return true;
+  // A yaar-ml app's runtime URLs carry the ORT version it was built against.
+  const ortVersion = getOrtVersion();
+  if (manifest.ortVersion && ortVersion && manifest.ortVersion !== ortVersion) return true;
 
   const [sourceHash, appJsonHash] = await Promise.all([
     computeSourceHash(appPath),

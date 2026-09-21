@@ -10,6 +10,7 @@ import { join } from 'path';
 import { buildAppBundle, formatBuildLogs, siblingAssetError } from './build/build-app.js';
 import { AppSourceCache } from './build/source-cache.js';
 import { readThreeRenderer, type ThreeRenderer } from './bundled/three-renderer.js';
+import { getOrtVersion } from './bundled/ort-version.js';
 import { formatProtocolError } from './protocol/extract-protocol-ast.js';
 import { extractProtocolFromDir } from './protocol/extract-protocol-dir.js';
 import { getCompilerConfig } from './config.js';
@@ -374,6 +375,9 @@ export async function compileTypeScript(
         sourceHash,
         appJsonHash,
         compilerVersion: COMPILER_VERSION,
+        ortVersion: options.bundles?.includes('yaar-ml')
+          ? (getOrtVersion() ?? undefined)
+          : undefined,
         compiledAt: new Date().toISOString(),
       });
     } catch {
