@@ -273,6 +273,14 @@ export const APP_MSG = {
   arrowDragMove: 'yaar:arrow-drag-move',
   arrowDragEnd: 'yaar:arrow-drag-end',
   keydown: 'yaar:keydown',
+  /**
+   * A sideways drag on the frame's content that nothing inside it had a use for, handed
+   * to the phone shell's monitor pan (`PhoneGestures`) — touches inside an iframe never
+   * reach the desktop's own listeners. `{ phase: 'start' | 'move' | 'end' | 'cancel',
+   * dx, dy }`, travel in screen pixels from where the finger landed: screen, not client,
+   * because the pan moves the frame along with the finger.
+   */
+  touchPan: 'yaar:touch-pan',
 
   // Console capture (iframe-scripts/console-capture.ts).
   console: 'yaar:console',

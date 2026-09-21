@@ -88,6 +88,98 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     });
   });
 
+  // Sideways touch drags — the phone shell pans between monitors (and to the CLI) on a
+  // sideways drag, but a touch inside an app frame never reaches its listeners, so an
+  // app card was only pannable from the 20px gutters at the screen's edges. A drag that
+  // nothing in here has a use for is claimed and its travel handed out; the rule for
+  // "has a use for" mirrors the shell's own \`panBlockFrom\` in PhoneGestures.tsx, plus
+  // the two signals only the app has: a \`touch-action\` that keeps horizontal pans for
+  // itself, and a touchmove the app already cancelled. Touch screens only, so a desktop
+  // is never asked to give up a drag it has no pan for.
+  var coarse = false;
+  try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch(ex) {}
+  var pan = null;
+
+  function panBlock(el) {
+    var block = { left: false, right: false };
+    for (var node = el && el.nodeType === 1 ? el : null; node; node = node.parentElement) {
+      if (node.hasAttribute('data-no-pan')) return null;
+      if (node.getAttribute('role') === 'slider') return null;
+      if (node.tagName === 'INPUT' && String(node.type).toLowerCase() === 'range') return null;
+      var style = getComputedStyle(node);
+      var ta = style.touchAction;
+      if (ta && ta !== 'auto' && ta !== 'manipulation' && ta.indexOf('pan-x') === -1) return null;
+      if (node.scrollWidth > node.clientWidth + 1 &&
+          (style.overflowX === 'auto' || style.overflowX === 'scroll')) {
+        var at = Math.abs(node.scrollLeft);
+        if (at > 1) block.right = true;
+        if (at < node.scrollWidth - node.clientWidth - 1) block.left = true;
+        if (block.left && block.right) return null;
+      }
+    }
+    return block;
+  }
+
+  function postPan(phase, dx, dy) {
+    window.parent.postMessage({ type: '${APP_MSG.touchPan}', phase: phase, dx: dx, dy: dy }, '*');
+  }
+
+  if (coarse) {
+    document.addEventListener('touchstart', function(e) {
+      if (pan && pan.claimed) postPan('cancel', 0, 0);
+      pan = null;
+      var t = e.touches[0];
+      if (!t || e.touches.length > 1) return;
+      var block = panBlock(e.target);
+      if (!block) return;
+      pan = { x: t.screenX, y: t.screenY, block: block, axis: null, claimed: false };
+    }, { capture: true, passive: true });
+
+    // Bubble phase on \`window\`: every app handler has run, so one that cancelled the
+    // move has already said the drag is its own.
+    window.addEventListener('touchmove', function(e) {
+      var t = e.touches[0];
+      if (!pan || !t) return;
+      var dx = t.screenX - pan.x, dy = t.screenY - pan.y;
+      if (!pan.axis) {
+        // DRAG_INTENT_PX / DRAG_AXIS_RATIO from the shell's lib/gestures.ts.
+        var ax = Math.abs(dx), ay = Math.abs(dy);
+        if (ax >= 10 && ax >= ay * 1.2) pan.axis = 'x';
+        else if (ay >= 10) pan.axis = 'y';
+        else return;
+        if (pan.axis === 'y' || e.defaultPrevented || pan.block[dx > 0 ? 'right' : 'left']) {
+          pan = null;
+          return;
+        }
+        pan.claimed = true;
+        postPan('start', dx, dy);
+      }
+      if (e.cancelable) e.preventDefault();
+      postPan('move', dx, dy);
+    }, { passive: false });
+
+    window.addEventListener('touchend', function(e) {
+      var p = pan;
+      pan = null;
+      var t = e.changedTouches[0];
+      if (!p || !t) return;
+      var dx = t.screenX - p.x, dy = t.screenY - p.y;
+      // A fast flick can arrive as start and end with no move between: the shell decides
+      // from the travel alone whether that was a swipe. SWIPE_MIN_PX / SWIPE_AXIS_RATIO.
+      if (!p.claimed) {
+        if (p.axis || Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+        if (p.block[dx > 0 ? 'right' : 'left']) return;
+        postPan('start', 0, 0);
+      }
+      postPan('end', dx, dy);
+    }, true);
+
+    window.addEventListener('touchcancel', function() {
+      if (pan && pan.claimed) postPan('cancel', 0, 0);
+      pan = null;
+    }, true);
+  }
+
   // Left click — notify parent so it can dismiss overlays, etc.
   document.addEventListener('click', function() {
     window.parent.postMessage({ type: '${APP_MSG.click}' }, '*');

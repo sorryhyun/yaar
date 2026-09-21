@@ -65,19 +65,35 @@
   color-scheme: normal;
 }
 
+/* A small chip over the frame, not a scrim across it, and only for a load slow enough to
+   need saying. A full-window backdrop that appears on mount and drops on `load` stepped
+   the brightness twice per open — card, darker scrim, the app dimmed under it, the app —
+   which on a phone, where the window is the whole screen, read as the screen flickering.
+   Under the delay a load goes straight from the empty card to the app. */
 .iframeLoading {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-lg);
   background: var(--bg-modal-backdrop);
   color: var(--color-subtext);
   font-size: var(--text-base);
+  white-space: nowrap;
   z-index: 1;
   pointer-events: none;
+  /* Longhands: Bun's CSS-modules pass leaves the name in an `animation` shorthand that
+     holds a var() unscoped, so it would point at no keyframes and show at once. */
+  animation-name: iframeLoadingIn;
+  animation-duration: var(--duration-normal);
+  animation-timing-function: ease-out;
+  animation-delay: 400ms;
+  animation-fill-mode: both;
 }
 
 .iframeLoadingSpinner {
@@ -147,6 +163,15 @@
 /* Keyframes live in the module that names them: the CSS-modules pass scopes an
    animation name at both its definition and its references, so a name defined in a
    global stylesheet is unreachable from here. */
+@keyframes iframeLoadingIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);

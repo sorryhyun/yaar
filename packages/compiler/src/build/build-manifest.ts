@@ -157,8 +157,13 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * before this keeps asking for the bare URL and runs whichever ORT the browser cached
  * first. From here on an ORT bump does not need a bump here: the manifest records
  * `ortVersion`, and `isAppStale` compares it.
+ *
+ * '35': the contextmenu script forwards a sideways touch drag the app has no use for
+ * (`APP_MSG.touchPan`), so the phone shell's monitor pan works over an app card and not
+ * only from the screen-edge gutters. `installGuard` lets the first copy win, so the
+ * baked one in an unrebuilt `dist/` shadows the injected upgrade even same-origin.
  */
-export const COMPILER_VERSION = '34';
+export const COMPILER_VERSION = '35';
 
 export interface BuildManifest {
   sourceHash: string;

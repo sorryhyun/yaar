@@ -73,6 +73,7 @@ type RoutedMessageKey =
   | 'cursorMove'
   | 'keydown'
   | 'fileDrop'
+  | 'touchPan'
   // IFRAME_APP_PROTOCOL_SCRIPT — the fire-and-forget iframe → parent messages.
   | 'ready'
   | 'interaction'

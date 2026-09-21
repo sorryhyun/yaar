@@ -11,9 +11,10 @@
  *   too: a phone card is the whole screen, so a pan that stopped at a card's edge was a
  *   pan with nowhere left to start from. What it gives way to is not the card but the
  *   drag the card had a use for — a sideways scroller keeps the direction it can still
- *   scroll in, and hands back the one it cannot. The side gutters stay for the case this
- *   document hears nothing about at all: an app card is an iframe, so a touch inside one
- *   reaches no listener here.
+ *   scroll in, and hands back the one it cannot. An app card is an iframe, so a touch
+ *   inside one reaches no listener here; the frame's own script makes the same decision
+ *   and forwards the drag (`APP_MSG.touchPan`). The side gutters stay for a frame that
+ *   carries no such script — an external page.
  * - **Pull down from the top** brings down the notification shade — which on a phone is
  *   also where the connection and agent readings live — and it comes down with the
  *   finger rather than after it, for the same reason the pan does: a sheet that appears
@@ -36,7 +37,7 @@
  * which is already the bottom edge of the screen.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DEFAULT_MONITOR_ID } from '@yaar/shared';
+import { APP_MSG, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import {
   EDGE_GUTTER_PX,
@@ -51,6 +52,7 @@ import {
 } from '@/lib/gestures';
 import { settleShadePull, trackShadePull } from '@/lib/shade-pull';
 import { clearGestureVars, gestureLayerRef, setGestureVar } from '@/lib/gesture-layer';
+import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { resolveWallpaper } from '@/constants/appearance';
 import styles from '@/styles/desktop/PhoneGestures.module.css';
 
@@ -375,12 +377,55 @@ export function PhoneGestures() {
       else if (peekRef.current) clearPeek();
     };
 
+    // An app card is an iframe, and a touch inside one reaches none of the listeners
+    // above. The frame's own script (iframe-scripts/contextmenu.ts) claims a sideways drag
+    // nothing in the app had a use for and hands its travel out here, so the pan runs the
+    // same way from over an app as from over anything else.
+    let framePan: { at: number; moved: boolean } | null = null;
+    const offFramePan = iframeMessages.on(APP_MSG.touchPan, ({ data, source }) => {
+      if (!source) return;
+      const dx = Number(data.dx) || 0;
+      const dy = Number(data.dy) || 0;
+      if (data.phase === 'start') {
+        const { paletteSheetOpen, notificationShadeOpen } = useDesktopStore.getState();
+        framePan =
+          paletteSheetOpen || notificationShadeOpen
+            ? null
+            : { at: performance.now(), moved: false };
+        if (framePan && settle.current) clearPeek();
+        return;
+      }
+      const pan = framePan;
+      if (!pan) return;
+      if (data.phase === 'move') {
+        pan.moved = true;
+        trackPan(dx);
+        return;
+      }
+      framePan = null;
+      if (data.phase === 'cancel') {
+        if (pan.moved) finishPan(0, 0);
+        return;
+      }
+      if (pan.moved) {
+        finishPan(dx, performance.now() - pan.at);
+        return;
+      }
+      // A flick that arrived as start and end alone, as in onTouchEnd.
+      const direction = swipeDirection(dx, dy);
+      if (direction !== 'left' && direction !== 'right') return;
+      const right = direction === 'right';
+      const target = neighbour(right ? -1 : 1, right ? 'left' : 'right');
+      if (target) commit(target.target);
+    });
+
     document.addEventListener('touchstart', onTouchStart, true);
     // Not passive: a pan that has claimed the axis has to stop the page scrolling with it.
     document.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
     document.addEventListener('touchend', onTouchEnd, true);
     document.addEventListener('touchcancel', onTouchCancel, true);
     return () => {
+      offFramePan();
       document.removeEventListener('touchstart', onTouchStart, true);
       document.removeEventListener('touchmove', onTouchMove, true);
       document.removeEventListener('touchend', onTouchEnd, true);
