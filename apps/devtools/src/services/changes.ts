@@ -6,7 +6,6 @@ import {
   setOpenFileContent,
   setOpenFileImage,
   setOpenFilePath,
-  setTypecheckState,
   onRemoteFileChanges,
   fileChanges,
   setFileChanges,
@@ -97,9 +96,11 @@ export function currentChange(): FileChange | null {
  * Catch up on changes another copy of this window made.
  *
  * The history itself arrives through the shared signal. What does not is everything
- * else the writing copy did alongside it — its editor buffer, its file list, its
- * typecheck reset — so this copy redoes those for the project it has open, and keeps
- * following the newest entry the same way `recordChange` does.
+ * else the writing copy did alongside it — its editor buffer, its file list — so this
+ * copy redoes those for the project it has open, and keeps following the newest entry
+ * the same way `recordChange` does. The typecheck reset is not redone: that verdict is
+ * itself shared, and resetting it from here would overwrite the writing copy's next
+ * typecheck with a stale `unknown`.
  */
 onRemoteFileChanges((next, prev) => {
   const known = new Set(prev.map((c) => c.id));
@@ -126,6 +127,5 @@ onRemoteFileChanges((next, prev) => {
       setOpenFileContent(change.after);
     }
   }
-  setTypecheckState('unknown');
   void refreshFiles(projectId);
 });

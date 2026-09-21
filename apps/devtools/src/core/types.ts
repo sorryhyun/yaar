@@ -93,3 +93,9 @@ export interface StaticProtocolInfo {
   /** False when the compile response carried no protocol fields at all (older dev API). */
   reported: boolean;
 }
+
+/** Which file the editor has open, as every copy of the window sees it. */
+export interface SharedOpenFile {
+  projectId: string;
+  path: string;
+}

@@ -13,6 +13,8 @@ import {
   setOpenFileImage,
   setStatusText,
   setTypecheckState,
+  setSharedOpenFile,
+  onRemoteOpenFile,
 } from '../core';
 import {
   projectPath,
@@ -289,9 +291,17 @@ export async function readImageFile(
   }
 }
 
-export async function openFile(path: string): Promise<void> {
+/**
+ * Open a file in the editor.
+ *
+ * `share: false` loads it into this copy only, for a copy that is catching up with
+ * what another copy opened — writing the pointer back from there is how two copies
+ * would take turns overwriting each other.
+ */
+export async function openFile(path: string, { share = true } = {}): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
+  if (share) setSharedOpenFile({ projectId: proj.id, path });
   if (isImagePath(path)) {
     // Reading an image as text yields a wall of base64 (or mojibake). Read the bytes
     // and hand the editor a data URL instead.
@@ -321,6 +331,20 @@ export async function openFile(path: string): Promise<void> {
     });
   }
 }
+
+/**
+ * Follow a file another copy of this window opened — the agent's `openFile` runs in
+ * whichever copy the server picked, which is not necessarily the one on screen.
+ *
+ * A pointer into some other project is left for the workspace follow
+ * (services/projects), which reads it once this copy has switched. A cleared pointer
+ * needs nothing: the delete or project close that cleared it reaches this copy
+ * through the change history or the workspace, and each clears the editor itself.
+ */
+onRemoteOpenFile((next) => {
+  if (!next || next.projectId !== activeProject()?.id || next.path === openFilePath()) return;
+  void openFile(next.path, { share: false });
+});
 
 /**
  * A file's current text, or null when there is nothing there to read.
@@ -529,6 +553,7 @@ export async function deleteFile(path: string): Promise<void> {
       setOpenFilePath(null);
       setOpenFileContent(null);
       setOpenFileImage(null);
+      setSharedOpenFile(null);
     });
   }
   // Deleting a file is how an import breaks, so the last verdict no longer holds.

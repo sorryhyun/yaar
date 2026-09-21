@@ -1,6 +1,12 @@
 export {};
 import { invoke } from '@bundled/yaar';
-import { consoleLogs, setConsoleLogs, previewWindowId, type ConsoleEntry } from '../core';
+import {
+  consoleLogs,
+  setConsoleLogs,
+  previewWindowId,
+  onRemoteBuild,
+  type ConsoleEntry,
+} from '../core';
 
 // The preview console buffer: local mutations plus the poll that keeps the
 // panel live while a preview window is open.
@@ -8,6 +14,11 @@ import { consoleLogs, setConsoleLogs, previewWindowId, type ConsoleEntry } from 
 export function clearConsoleLogs(): void {
   setConsoleLogs([]);
 }
+
+// A compile in another copy of this window clears the buffer here too, as `compile`
+// does in its own copy. The poll alone would not: it keeps evaluation lines across
+// snapshots, so the previous build's evaluations would outlive it in this copy only.
+onRemoteBuild(() => setConsoleLogs([]));
 
 export function addConsoleEntry(entry: ConsoleEntry): void {
   setConsoleLogs((prev) => {

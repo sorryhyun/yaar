@@ -1,8 +1,10 @@
 export {};
 import { createSignal, batch, type Accessor, type Setter } from '@bundled/solid-js';
+import { throttle } from '@bundled/lodash';
 import {
   app,
   appStorage,
+  createSharedSignal,
   invoke,
   read,
   del,
@@ -130,6 +132,63 @@ export interface WorkerSlot {
    * of its next task — the server takes no message while no turn is running.
    */
   pendingFeedback: string[];
+  /** Draw what another copy of this window reports for this slot. */
+  adopt: (view: SlotView) => void;
+}
+
+// Sharing the panel across copies of this window. The workers belong to whichever
+// copy started them: its stream feeds their drafts and its commands settle their
+// tasks. The agent's commands run in the copy the server picked, which on a phone is
+// the companion tab's, so the copy on screen showed an empty Worker panel while
+// three workers ran.
+//
+// What is shared is what the panel draws, as one snapshot, written by the copy
+// doing the work. Throttled rather than written per frame: a draft grows by a
+// token at a time, and each write resends the whole snapshot, so another copy sees
+// a live draft that advances twice a second. The bookkeeping behind the commands —
+// in-flight records, waiters, proposals, settled results — is not shared: only the
+// copy that owns the workers can act on it.
+
+/** What one slot looks like on the panel. */
+export interface SlotView {
+  id: string;
+  status: WorkerStatus;
+  draft: string;
+  thinking: string;
+  task: WorkerTaskRecord | null;
+}
+
+interface WorkerView {
+  cap: number;
+  entries: WorkerEntry[];
+  slots: SlotView[];
+}
+
+const SHARE_INTERVAL_MS = 500;
+/** The transcript has no cap of its own; the shared copy of it does. */
+const MAX_SHARED_ENTRIES = 200;
+
+const [, setSharedView, sharedViewReady] = createSharedSignal<WorkerView | null>('worker', null, {
+  onRemote: (view) => adoptView(view),
+});
+
+// Deferred a microtask so a batch of setters is read once it has landed.
+const publishView = throttle(
+  () => queueMicrotask(() => setSharedView(currentView())),
+  SHARE_INTERVAL_MS,
+);
+
+/**
+ * A setter that also schedules the snapshot. Only the mutation sites hold these;
+ * adopting a remote snapshot goes through the raw setters, so a copy that follows
+ * never writes back what it was just sent.
+ */
+function published<T>(set: Setter<T>): Setter<T> {
+  return ((...args: unknown[]) => {
+    const out = (set as (...a: unknown[]) => unknown)(...args);
+    publishView();
+    return out;
+  }) as Setter<T>;
 }
 
 function makeSlot(id: string, index: number): WorkerSlot {
@@ -137,29 +196,78 @@ function makeSlot(id: string, index: number): WorkerSlot {
   const [draft, setDraft] = createSignal('');
   const [thinking, setThinking] = createSignal('');
   const [activeTask, setActiveTask] = createSignal<WorkerTaskRecord | null>(null);
-  return {
+  const slot: WorkerSlot = {
     id,
     label: `W${index + 1}`,
     status,
-    setStatus,
+    setStatus: published(setStatus),
     draft,
-    setDraft,
+    setDraft: published(setDraft),
     thinking,
-    setThinking,
+    setThinking: published(setThinking),
     activeTask,
-    setActiveTask,
+    setActiveTask: published(setActiveTask),
     inflight: null,
     reserved: false,
     stopStream: null,
     spawning: null,
     pendingFeedback: [],
+    adopt: (view) => {
+      // Another copy retired this worker (its Reset). A stream still attached here
+      // points at a session that no longer exists, and would stop the next task
+      // from spawning a new one — `ensureWorker` keys on it.
+      if (view.status === 'offline' && slot.stopStream) {
+        slot.stopStream();
+        slot.stopStream = null;
+      }
+      batch(() => {
+        setStatus(view.status);
+        setDraft(view.draft);
+        setThinking(view.thinking);
+        setActiveTask(view.task);
+      });
+    },
   };
+  return slot;
 }
 
 export const workerSlots: WorkerSlot[] = WORKER_IDS.map(makeSlot);
 
 export const [workerCap, setWorkerCapSignal] = createSignal(DEFAULT_WORKER_CAP);
-export const [workerEntries, setWorkerEntries] = createSignal<WorkerEntry[]>([]);
+const [workerEntries, setWorkerEntriesRaw] = createSignal<WorkerEntry[]>([]);
+export { workerEntries };
+export const setWorkerEntries = published(setWorkerEntriesRaw);
+
+function currentView(): WorkerView {
+  return {
+    cap: workerCap(),
+    entries: workerEntries().slice(-MAX_SHARED_ENTRIES),
+    slots: workerSlots.map((s) => ({
+      id: s.id,
+      status: s.status(),
+      draft: s.draft(),
+      thinking: s.thinking(),
+      task: s.activeTask(),
+    })),
+  };
+}
+
+function adoptView(view: WorkerView | null): void {
+  if (!view || !Array.isArray(view.entries) || !Array.isArray(view.slots)) return;
+  // A copy with workers of its own keeps drawing those; two copies each running
+  // tasks is a case the snapshot cannot merge, and its own are the ones it can act on.
+  if (workerSlots.some((s) => s.inflight || s.reserved || s.spawning)) return;
+  batch(() => {
+    if (typeof view.cap === 'number') setWorkerCapSignal(clampCap(view.cap));
+    setWorkerEntriesRaw(view.entries);
+    for (const v of view.slots) slotById(v.id)?.adopt(v);
+  });
+}
+
+// A copy that mounts while another is working gets the snapshot here — `onRemote`
+// does not run for the initial load.
+void sharedViewReady.then((view) => adoptView(view));
+
 /**
  * The most recently settled task. Older settled records stay reachable by id
  * through `settledTasks` so a caller fanning out several tasks can collect each.
@@ -207,7 +315,11 @@ function appendEntry(slot: WorkerSlot, kind: WorkerEntry['kind'], text: string):
   setWorkerEntries([...workerEntries(), { kind, text, timestamp: Date.now(), worker: slot.id }]);
 }
 
-/** Load the persisted concurrency cap. Absent or unreadable keeps the default. */
+/**
+ * Load the persisted concurrency cap. Absent or unreadable keeps the default. Runs on
+ * every mount, so it does not publish: a copy mounting late would otherwise send its
+ * empty panel over the one another copy is drawing.
+ */
 export async function loadWorkerConfig(): Promise<void> {
   try {
     const raw = await appStorage.readJsonOr<{ maxWorkers?: unknown }>(CONFIG_PATH, {});
@@ -225,6 +337,7 @@ function clampCap(n: number): number {
 export async function setWorkerCap(n: number): Promise<number> {
   const cap = clampCap(n);
   setWorkerCapSignal(cap);
+  publishView();
   await appStorage.save(CONFIG_PATH, JSON.stringify({ maxWorkers: cap }, null, 2));
   return cap;
 }
@@ -1188,6 +1301,24 @@ export async function interruptWorker(
     };
   } else {
     slot = running[0];
+  }
+  if (slot && !slot.inflight && slot.status() === 'running') {
+    // Drawn from another copy's snapshot: the turn is real, but its record lives
+    // there. Stopping the worker ends the turn, and that copy settles it.
+    const taskId = slot.activeTask()?.id ?? null;
+    try {
+      await invoke(`yaar://apps/self/agents/${slot.id}`, { action: 'interrupt' });
+    } catch {
+      /* already idle */
+    }
+    return {
+      done: false,
+      taskId,
+      worker: slot.id,
+      status: slot.status(),
+      elapsedMs: null,
+      error: 'That task runs in another copy of this window; its worker was told to stop.',
+    };
   }
   if (!slot || !slot.inflight) {
     return {

@@ -1,5 +1,5 @@
 export {};
-import { createSignal, createEffect, onCleanup, Show } from '@bundled/solid-js';
+import { createSignal, createEffect, on, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
@@ -63,6 +63,13 @@ function highlight(code: string, lang: string): string {
 
 const [isDirty, setIsDirty] = createSignal(false);
 const [localContent, setLocalContent] = createSignal<string>('');
+/**
+ * The file the unsaved buffer was typed into. The open file can change under a pending
+ * autosave — a click in the tree, or the agent opening a file from another copy of this
+ * window — and the save has to land where the text came from, not on whatever is open
+ * by the time the timer fires.
+ */
+let bufferPath: string | null = null;
 const [highlightedHtml, setHighlightedHtml] = createSignal('');
 const [showLineNumbers, setShowLineNumbers] = createPersistedSignal(
   'preferences/show-line-numbers.json',
@@ -105,7 +112,7 @@ createEffect(() => {
 // The actual write. Guarded by the dirty flag, so it is a no-op when there is
 // nothing pending — which makes it safe to call after a flush().
 function performSave() {
-  const path = openFilePath();
+  const path = bufferPath;
   if (path && isDirty()) {
     // The write is fire-and-forget so typing never waits on storage, which makes a
     // rejection nobody catches the failure mode — an autosave that silently stopped
@@ -132,6 +139,14 @@ function saveNow() {
   debouncedSave.flush();
   performSave();
 }
+
+// Switching files writes the pending edit out first, so the buffer that was being
+// typed does not stay on screen over the newly opened file until the timer fires.
+createEffect(
+  on(openFilePath, (path) => {
+    if (isDirty() && bufferPath !== path) saveNow();
+  }),
+);
 
 function lineNumbers(): string {
   const total = Math.max(1, currentContent().split('\n').length);
@@ -266,6 +281,7 @@ ${lineNumbers}</pre
           onInput=${(e: Event) => {
             const val = (e.target as HTMLTextAreaElement).value;
             setLocalContent(val);
+            bufferPath = openFilePath();
             setIsDirty(true);
             const lang = getLanguage(openFilePath());
             setHighlightedHtml(highlight(val, lang));
@@ -299,6 +315,7 @@ ${lineNumbers}</pre
               ta.value = val.substring(0, start) + '  ' + val.substring(end);
               ta.selectionStart = ta.selectionEnd = start + 2;
               setLocalContent(ta.value);
+              bufferPath = openFilePath();
               setIsDirty(true);
               const lang = getLanguage(openFilePath());
               setHighlightedHtml(highlight(ta.value, lang));

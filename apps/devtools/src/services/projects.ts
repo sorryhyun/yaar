@@ -21,6 +21,9 @@ import {
   setStatusText,
   openTabs,
   setOpenTabs,
+  sharedOpenFile,
+  sharedOpenFileReady,
+  setSharedOpenFile,
   type ProjectMeta,
 } from '../core';
 import { previewWindowIdFor, projectPath } from '../lib/paths';
@@ -193,13 +196,17 @@ async function readWorkspace(): Promise<{ tabs: string[]; activeId: string } | n
 /**
  * Reopen what was open, once the project list is in. Nothing is written back here; the
  * next open or close does that.
+ *
+ * Opened as a follower: a copy mounting while another copy of this window is already
+ * up must adopt that copy's build, preview and open file, not reset them. A window
+ * that has just opened has nothing shared yet, so for it the two are the same.
  */
 export async function restoreWorkspace(): Promise<void> {
   try {
     const workspace = await readWorkspace();
     if (!workspace) return;
     setOpenTabs(workspace.tabs);
-    await openProject(workspace.activeId);
+    await openProject(workspace.activeId, { record: false });
   } catch (err) {
     // A workspace that cannot be read is not worth a status line: the user still has
     // every project in the picker, and the next open writes a good one.
@@ -417,6 +424,15 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
   return { id, appId: typeof meta.appId === 'string' ? meta.appId : appId, agentsMd };
 }
 
+/**
+ * Switch the active project.
+ *
+ * `record: false` is a copy following another copy of this window (or restoring).
+ * It changes only what is this copy's own — the listing, the editor — and writes
+ * nothing shared: the copy that switched already reset the shared build state and
+ * picked the open file, and a follower writing them again could land after that
+ * copy's next compile and erase it.
+ */
 export async function openProject(
   id: string,
   { record = true }: { record?: boolean } = {},
@@ -425,28 +441,44 @@ export async function openProject(
   if (!proj) return;
   if (!openTabs().includes(id)) setOpenTabs([...openTabs(), id]);
   setActiveProject(proj);
-  // The static manifest belongs to whichever project was last compiled — drop it
-  // on switch so the manifest command never reports another project's protocol.
-  setStaticProtocol(null);
-  // Same reasoning for the type-check verdict: it was reached about the project
-  // being switched away from. `diagnostics` is left standing until the next
-  // typecheck writes it, but `compileStatus` no longer reads it as current.
-  setTypecheckState('unknown');
-  // The preview binding is project-scoped in the same way. Both the window id and the
-  // build URL describe the project being switched *away from*; left set, `previewOpen`
-  // reports `open: true, stale: false` while previewQuery/previewCommand/previewEval
-  // silently answer about a different app.
-  // Unbind rather than close: the window belongs to the other project, and openPreview
-  // already closes by id before it re-creates, so switching back cannot collide.
-  setPreviewUrl(null);
-  setPreviewWindowId(null);
+  if (record) {
+    batch(() => {
+      // The static manifest belongs to whichever project was last compiled — drop it
+      // on switch so the manifest command never reports another project's protocol.
+      setStaticProtocol(null);
+      // Same reasoning for the type-check verdict: it was reached about the project
+      // being switched away from. `diagnostics` is left standing until the next
+      // typecheck writes it, but `compileStatus` no longer reads it as current.
+      setTypecheckState('unknown');
+      // The preview binding is project-scoped in the same way. Both the window id and
+      // the build URL describe the project being switched *away from*; left set,
+      // `previewOpen` reports `open: true, stale: false` while
+      // previewQuery/previewCommand/previewEval silently answer about a different app.
+      // Unbind rather than close: the window belongs to the other project, and
+      // openPreview already closes by id before it re-creates, so switching back cannot
+      // collide.
+      setPreviewUrl(null);
+      setPreviewWindowId(null);
+    });
+  }
   await refreshFiles(id);
-  await openFile('src/main.ts');
-  if (record) saveWorkspace();
-  setStatusText(`Opened "${proj.name}"`);
+  if (record) {
+    await openFile('src/main.ts');
+    saveWorkspace();
+    setStatusText(`Opened "${proj.name}"`);
+    return;
+  }
+  // The copy that switched may have opened something other than main.ts by now. The
+  // pointer may also still be loading, when this copy has only just mounted.
+  await sharedOpenFileReady;
+  const shared = sharedOpenFile();
+  await openFile(shared?.projectId === id ? shared.path : 'src/main.ts', { share: false });
 }
 
-/** Clear project-scoped UI state when no project remains open. */
+/**
+ * Clear project-scoped UI state when no project remains open. `record: false` clears
+ * only this copy's half, as in `openProject`.
+ */
 function clearActiveProjectState({ record = true }: { record?: boolean } = {}): void {
   batch(() => {
     setActiveProject(null);
@@ -454,11 +486,14 @@ function clearActiveProjectState({ record = true }: { record?: boolean } = {}): 
     setOpenFilePath(null);
     setOpenFileContent(null);
     setOpenFileImage(null);
-    setDiagnostics([]);
-    setBundleStatus('idle');
-    setTypecheckState('unknown');
-    setPreviewUrl(null);
-    setStaticProtocol(null);
+    if (record) {
+      setSharedOpenFile(null);
+      setDiagnostics([]);
+      setBundleStatus('idle');
+      setTypecheckState('unknown');
+      setPreviewUrl(null);
+      setStaticProtocol(null);
+    }
   });
   if (record) saveWorkspace();
 }
