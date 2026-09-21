@@ -44,6 +44,29 @@
   color: var(--color-text);
 }
 
+/* The phone's context reset, at the far end of the status row. Quiet until pressed:
+   it is destructive, and the row is otherwise a reading. */
+.resetButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.resetButton:hover,
+.resetButton:active {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+
 /* The agent census under it. Capped and scrollable on its own: ten agents plus their
    sub-agents would otherwise push the notifications off a 70vh sheet. Empty when the
    pool is — `AgentRoster` renders nothing then, which leaves this box childless. */

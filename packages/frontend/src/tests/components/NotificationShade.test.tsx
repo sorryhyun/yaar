@@ -69,6 +69,12 @@ describe('NotificationShade', () => {
     expect(screen.getByText('Running: Bash')).toBeInTheDocument();
   });
 
+  // Issue #117: the phone's context reset lives here, not in the palette row.
+  it('carries the context reset in its top row', () => {
+    open();
+    expect(screen.getByTitle('Reset windows and context')).toBeInTheDocument();
+  });
+
   it('is where a disconnection is reported now that the phone has no status pill', () => {
     useDesktopStore.setState({ connectionStatus: 'disconnected' });
     open();

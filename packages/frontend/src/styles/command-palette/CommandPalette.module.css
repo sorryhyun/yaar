@@ -387,19 +387,18 @@
 }
 
 /* Typing, the cluster steps aside so the textarea gets the row — all of it but the
-   reset, which stays. It is the one control there is no other way to reach on a phone
-   (no menu bar, no keyboard shortcut), and the moment it is wanted is the moment the
-   user is typing into a context they have decided to be rid of. */
+   pen, which stays. It holds the slot the reset used to (the reset lives in the
+   pull-down shade on a phone), and a sketch is something to add to the message being
+   typed, so it is wanted exactly while typing. */
 :global(html[data-form-factor='mobile']) .container[data-expanded='true'] .actionButtons > * {
   display: none;
 }
 
-:global(html[data-form-factor='mobile']) .container[data-expanded='true'] .resetButton {
+:global(html[data-form-factor='mobile']) .container[data-expanded='true'] .pencilButton {
   display: flex;
 }
 
 :global(html[data-form-factor='mobile']) .qrButton,
-:global(html[data-form-factor='mobile']) .resetButton,
 :global(html[data-form-factor='mobile']) .closeAllButton,
 :global(html[data-form-factor='mobile']) .pencilButton {
   width: 36px;

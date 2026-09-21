@@ -31,6 +31,29 @@ describe('CommandPalette', () => {
     expect(screen.getByTitle('Reset windows and context')).toBeInTheDocument();
   });
 
+  // Issue #117: on a phone the reset moved to the pull-down shade and the pen took its
+  // slot. The desktop palette keeps both, in their old order.
+  it('keeps the reset ahead of the pen on a desktop', () => {
+    render(<CommandPalette />);
+    const reset = screen.getByTitle('Reset windows and context');
+    const pen = screen.getByTitle('Draw on screen');
+    expect(reset.compareDocumentPosition(pen) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('puts the pen where the reset was on a phone, and no reset', () => {
+    useDesktopStore.setState({ formFactor: 'mobile' });
+    try {
+      const { container } = render(<CommandPalette />);
+      expect(screen.queryByTitle('Reset windows and context')).not.toBeInTheDocument();
+      const pen = screen.getByTitle('Draw on screen');
+      const closeAll = screen.getByTitle('Close all windows');
+      expect(pen.compareDocumentPosition(closeAll) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(container.querySelectorAll('[title="Draw on screen"]').length).toBe(1);
+    } finally {
+      useDesktopStore.setState({ formFactor: 'desktop' });
+    }
+  });
+
   it('renders the input field', () => {
     render(<CommandPalette />);
     expect(screen.getByRole('textbox')).toBeInTheDocument();

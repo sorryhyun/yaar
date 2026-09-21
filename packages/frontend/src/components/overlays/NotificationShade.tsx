@@ -35,6 +35,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectNotifications, selectTaskbarWindows } from '@/store';
 import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
+import { ContextResetButton } from '../command-palette/ContextResetButton';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { Taskbar } from '../taskbar/Taskbar';
 import { useDismissable } from '@/hooks/useDismissable';
@@ -150,9 +151,12 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
         role="dialog"
         aria-label={t('status.title')}
       >
-        {/* What the desktop keeps in its status pill all session. */}
+        {/* What the desktop keeps in its status pill all session — and the reset, which
+            the desktop keeps in the palette but a phone keeps up here, out of the way of
+            the thumb that lives on the palette row. */}
         <div className={styles.status}>
           <ConnectionStatus />
+          <ContextResetButton className={styles.resetButton} />
         </div>
         <div className={styles.roster}>
           <AgentRoster interrupt={interrupt} interruptAgent={interruptAgent} />
