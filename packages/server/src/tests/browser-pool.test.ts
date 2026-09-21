@@ -169,31 +169,14 @@ describe('BrowserPool', () => {
     expect(pool.getStats().activeSessions).toBe(fulfilled.length);
   });
 
-  // The size+pendingSessions guard above holds under concurrency (no `await` sits
-  // between its own check and its `pendingSessions++` reservation, so 8 calls fired
-  // at once still cap at exactly 5 successes). But firing those 8 at once on a *cold*
-  // pool (nothing launched yet) surfaces a real, separate TOCTOU bug one layer down,
-  // in `HeadlessServerBrowser.getChrome()` (lib/browser/pool.ts): it checks
-  // `this.chromePath === undefined` and, if so, `await findChrome()` — genuinely
-  // suspending — *before* it sets `this.initPromise`. Every concurrent call that
-  // starts while `chromePath` is still undefined passes both of getChrome's early
-  // returns (`this.chrome` and `this.initPromise` are both still unset) and reaches
-  // that same await; when each resumes, it does not re-check `initPromise` (it
-  // already read that field as null before suspending), so it proceeds to call
-  // `launchChrome()` and overwrite `this.initPromise`/`this.chrome` itself. The last
-  // one to resolve wins the `this.chrome` slot; every earlier instance is orphaned —
-  // in production, a real, un-tracked Chrome process leaked per extra launch, none of
-  // which `releaseProcess()`/`cleanupChrome()` will ever reach. Confirmed by instrumenting
-  // this test: `mockLaunchChrome` was called 5 times (once per successful
-  // `createSession`) instead of once. Not fixed here — out of scope for a test-only
-  // change — just documented so it isn't silently "fixed" as flaky or reintroduced.
-  it.failing(
-    'launches Chrome only once for concurrent createSession calls on a cold pool',
-    async () => {
-      await Promise.allSettled(Array.from({ length: 8 }, () => pool.createSession()));
-      expect(mockLaunchChrome).toHaveBeenCalledTimes(1);
-    },
-  );
+  // One layer down: on a cold pool, getChrome() awaits findChrome() before anything is
+  // launched. It used to claim initPromise only after that await, so every caller that
+  // arrived during the lookup launched its own Chrome and all but the last were orphaned
+  // (8 concurrent calls -> 5 launches). The claim now happens before the first await.
+  it('launches Chrome only once for concurrent createSession calls on a cold pool', async () => {
+    await Promise.allSettled(Array.from({ length: 8 }, () => pool.createSession()));
+    expect(mockLaunchChrome).toHaveBeenCalledTimes(1);
+  });
 
   it('findByWindowId returns the correct session', async () => {
     const { session: s1 } = await pool.createSession();

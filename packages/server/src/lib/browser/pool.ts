@@ -67,14 +67,16 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
     if (this.chrome) return this.chrome;
     if (this.initPromise) return this.initPromise;
 
-    if (this.chromePath === undefined) {
-      this.chromePath = await findChrome();
-    }
-    if (!this.chromePath) {
-      throw new Error('Chrome/Chromium not found. Set CHROME_PATH or install Chrome.');
-    }
-
+    // initPromise is claimed before the first await: every caller that arrives while the
+    // binary lookup is still pending joins this launch instead of starting its own, which
+    // would leave all but the last Chrome running with nothing tracking its PID.
     this.initPromise = (async () => {
+      if (this.chromePath === undefined) {
+        this.chromePath = await findChrome();
+      }
+      if (!this.chromePath) {
+        throw new Error('Chrome/Chromium not found. Set CHROME_PATH or install Chrome.');
+      }
       await cleanupStaleChrome();
       // Stale cleanup first, and that ordering is load-bearing now that the profile
       // persists: an orphaned Chrome from a crashed run still holds this directory's
@@ -89,6 +91,10 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
       console.log(`[browser] Chrome launched on port ${instance.port}`);
       return instance;
     })();
+    // A failed launch must not be cached: the next caller gets a fresh attempt.
+    this.initPromise.catch(() => {
+      this.initPromise = null;
+    });
 
     return this.initPromise;
   }
