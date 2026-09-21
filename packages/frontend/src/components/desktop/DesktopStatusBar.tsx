@@ -8,12 +8,12 @@
  * overflowed the pill, and the pool admits ten (`MAX_AGENTS`) plus sub-agents under
  * them. The status text still exists, one hover or one click away, in the panel below.
  *
- * None of it is on screen on a phone. A pill pinned to the top edge costs a strip of a
- * 412px screen for the whole session to say "Connected", and a dot that is there
- * whatever the user is doing is the kind of chrome a phone has no room for — so the
- * phone shows all of this, the connection reading included, in the pull-down shade
- * instead (`NotificationShade`). Nothing stays behind, not even for a disconnection:
- * the pull-down is the one place a phone reports on itself.
+ * A phone gets only a glance of it. A pill pinned to the top edge costs a strip of a
+ * 412px screen for the whole session to say "Connected", so the full census, the
+ * roster and its stop buttons live in the pull-down shade (`NotificationShade`). What
+ * stays on screen is {@link PhoneStatusBadge}: a corner reading of which monitor this is
+ * and how many agents are working — the two things a phone user otherwise has to pull
+ * the shade down to learn after every swipe.
  */
 import { useDesktopStore } from '@/store';
 import type { ActiveAgent } from '@/types/state';
@@ -73,6 +73,41 @@ function chipTitle(agent: ActiveAgent, now: number): string {
   return `${agent.kind} · ${where} — ${agent.status}${elapsed ? ` ${elapsed}` : ''}${subs}`;
 }
 
+/**
+ * The phone's stand-in for the pill: the active monitor's number and a count of working
+ * agents, top-right, in the type size of a system status bar.
+ *
+ * It is a reading, not a control — `pointer-events: none` in the CSS — because the top
+ * edge belongs to the shade's pull-down and the right edge to the monitor-swipe gutter,
+ * and a badge that ate either touch would break the gesture it sits on. The dot takes
+ * the connection color, so a dropped connection is visible without a pull; the word
+ * "Connected" is not worth its width here.
+ */
+function PhoneStatusBadge({ agentCount }: { agentCount: number }) {
+  const connectionStatus = useDesktopStore((s) => s.connectionStatus);
+  // The number the monitor tabs show ("Monitor 2" → "2"), not the id: ids start at '0'.
+  const monitorNumber = useDesktopStore(
+    (s) => s.monitors.findIndex((m) => m.id === s.activeMonitorId) + 1,
+  );
+  const monitorCount = useDesktopStore((s) => s.monitors.length);
+
+  return (
+    <div className={styles.phoneStatusBadge} aria-hidden="true">
+      <span className={styles.statusDot} data-status={connectionStatus} />
+      <span className={styles.phoneStatusMonitor}>
+        M{monitorNumber || 1}
+        {monitorCount > 1 && <span className={styles.phoneStatusDim}>/{monitorCount}</span>}
+      </span>
+      {agentCount > 0 && (
+        <span className={styles.phoneStatusAgents}>
+          <span className={styles.phoneStatusPulse} />
+          {agentCount}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBarProps) {
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const activeAgents = useDesktopStore((s) => s.activeAgents);
@@ -85,9 +120,9 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
 
   const now = useElapsedNow(agentList.length > 0);
 
-  // The phone's rule, in one place: this bar is a desktop thing. Everything it would
-  // have said is a pull-down away.
-  if (isMobile) return null;
+  // The phone's rule, in one place: the bar is a desktop thing. A corner badge stands in
+  // for it; everything else it would have said is a pull-down away.
+  if (isMobile) return <PhoneStatusBadge agentCount={agentList.length} />;
   const census = agentList.length > 0;
 
   return (

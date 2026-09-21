@@ -604,18 +604,62 @@
 /* ============ Phone ============
    The icon column that wraps sideways on a desktop becomes a home-screen grid: four
    across, scrolling vertically, stopping above the palette. */
-:global(html[data-form-factor='mobile']) .statusBar {
-  top: calc(env(safe-area-inset-top, 0px) + var(--space-2));
-  max-width: calc(100vw - 2 * var(--space-3));
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
+/* The phone's corner reading in place of the pill (see PhoneStatusBadge). Touches pass
+   through: the top edge is the shade's pull-down, the right edge the monitor swipe. */
+.phoneStatusBadge {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-1));
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 var(--space-2);
+  background: var(--bg-dark-overlay-strong);
+  border-radius: var(--radius-full);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(10px);
+  z-index: var(--z-modal);
+  pointer-events: none;
+  user-select: none;
+}
+
+.phoneStatusBadge .statusDot {
+  width: 6px;
+  height: 6px;
+}
+
+.phoneStatusBadge .statusDot[data-status='connected'] {
+  box-shadow: none;
+}
+
+.phoneStatusDim {
+  opacity: 0.6;
+}
+
+.phoneStatusAgents {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.phoneStatusPulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pulse 1.2s infinite;
 }
 
 :global(html[data-form-factor='mobile']) .desktopIcons {
   --icon-size: 48px;
-  /* No pill to clear: the phone's status lives in the pull-down shade, so the grid
-     starts at the top edge and gets a row back. */
-  top: calc(env(safe-area-inset-top, 0px) + var(--space-3));
+  /* No pill to clear — the phone's status lives in the pull-down shade — only the
+     corner badge's 20px, so the grid starts just under it and keeps its rows. */
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-8));
   left: var(--space-2);
   right: var(--space-2);
   bottom: var(--palette-h, 0px);

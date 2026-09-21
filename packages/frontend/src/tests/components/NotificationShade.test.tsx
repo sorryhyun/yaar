@@ -209,25 +209,66 @@ describe('NotificationShade', () => {
 });
 
 describe('DesktopStatusBar on a phone', () => {
+  const agent = (id: string, monitorId: string) => ({
+    id,
+    kind: 'monitor',
+    monitorId,
+    status: 'Running: Bash',
+    statusSince: Date.now(),
+    subagentCount: 0,
+  });
+
   beforeEach(() => {
     useDesktopStore.setState({
       formFactor: 'mobile',
       activeAgents: {},
       connectionStatus: 'connected',
       providerType: 'claude',
+      monitors: [{ id: '0', label: 'Monitor 1', createdAt: 0 }],
+      activeMonitorId: '0',
     });
   });
 
   afterEach(cleanup);
 
-  it('says nothing at all — the shade has it', () => {
-    const { container } = render(<DesktopStatusBar interrupt={noop} interruptAgent={noop} />);
-    expect(container.innerHTML).toBe('');
+  const renderBar = () => render(<DesktopStatusBar interrupt={noop} interruptAgent={noop} />);
+
+  it('shows only the corner badge — no pill, no connection word, no stop buttons', () => {
+    useDesktopStore.setState({ activeAgents: { a: agent('a', '0') } as never });
+    const { container } = renderBar();
+    expect(container.textContent).toBe('M11');
+    expect(screen.queryByText(/connected/i)).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
   });
 
-  it('stays quiet even when the connection is down, dot and all', () => {
+  it('numbers the monitor by position, and counts monitors only when there are several', () => {
+    useDesktopStore.setState({
+      monitors: [
+        { id: '0', label: 'Monitor 1', createdAt: 0 },
+        { id: '3', label: 'Monitor 2', createdAt: 0 },
+      ],
+      activeMonitorId: '3',
+    });
+    const { container } = renderBar();
+    expect(container.textContent).toBe('M2/2');
+  });
+
+  it('counts every working agent, across monitors, and drops the count when idle', () => {
+    useDesktopStore.setState({
+      activeAgents: { a: agent('a', '0'), b: agent('b', '1'), c: agent('c', '1') } as never,
+    });
+    const { container } = renderBar();
+    expect(container.textContent).toBe('M13');
+
+    act(() => useDesktopStore.setState({ activeAgents: {} }));
+    expect(container.textContent).toBe('M1');
+  });
+
+  it('carries the connection state on its dot', () => {
     useDesktopStore.setState({ connectionStatus: 'disconnected' });
-    const { container } = render(<DesktopStatusBar interrupt={noop} interruptAgent={noop} />);
-    expect(container.innerHTML).toBe('');
+    const { container } = renderBar();
+    expect(container.querySelector('[data-status]')?.getAttribute('data-status')).toBe(
+      'disconnected',
+    );
   });
 });
