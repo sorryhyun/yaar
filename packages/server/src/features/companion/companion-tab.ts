@@ -81,9 +81,15 @@ export function wantsCompanionTab(): boolean {
   return process.platform === 'android';
 }
 
-/** The URL the companion opens: our own desktop, forced to the layout that mounts every window. */
+/**
+ * The URL the companion opens: our own desktop, forced to the layout that mounts every window.
+ *
+ * `companion=1` is how its socket says what it is (`role=companion`), so the server can
+ * answer app commands from the tab the user is looking at and fall back to this one only
+ * when that tab cannot run script (`AppWindowCoordinator.rankResponders`).
+ */
 function companionUrl(port: number): string {
-  const base = `http://127.0.0.1:${port}/?ui=desktop`;
+  const base = `http://127.0.0.1:${port}/?ui=desktop&companion=1`;
   // Remote mode gates the desktop on a token even from loopback, the same way the Chrome
   // that `LAUNCH_CHROME=1` opens is handed one rather than asked to paste it.
   const token = IS_REMOTE ? getRemoteInfo()?.token : null;

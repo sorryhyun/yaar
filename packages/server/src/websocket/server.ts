@@ -10,7 +10,7 @@ import type { LiveSessionOptions } from '../session/live-session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
-import { forgetConnectionPresence } from '../session/client-presence.js';
+import { forgetConnectionPresence, noteCompanionConnection } from '../session/client-presence.js';
 import {
   ClientEventType,
   ServerEventType,
@@ -54,6 +54,11 @@ export interface WsData {
   connectionId: string;
   sessionId: string | null;
   monitorId: string | null;
+  /**
+   * `kind: 'frontend'` only — the server's own companion desktop rather than a tab a
+   * person is looking at. It answers app commands only when no user tab can.
+   */
+  companion?: boolean;
   /** `kind: 'screencast'` only — which browser session's pixels this socket carries. */
   browserId?: string;
   /** `kind: 'screencast'` only — JPEG quality and long-edge cap for this stream. */
@@ -158,6 +163,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // Bun's ServerWebSocket has the same send/readyState API as our YaarWebSocket
       session.addConnection(connectionId, ws);
       broadcastCenter.subscribe(connectionId, ws, session.sessionId);
+      if (ws.data.companion) noteCompanionConnection(session.sessionId, connectionId);
 
       // Auto-subscribe to monitor if specified in query params. A connection that names
       // no monitor receives no monitor-scoped events until it sends SUBSCRIBE_MONITOR —
@@ -365,6 +371,7 @@ export function prepareWsData(url: URL): { authorized: boolean; data: WsData } {
       connectionId: generateConnectionId(),
       sessionId: url.searchParams.get('sessionId'),
       monitorId: url.searchParams.get('monitorId'),
+      companion: url.searchParams.get('role') === 'companion',
     },
   };
 }

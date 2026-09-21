@@ -20,7 +20,13 @@ import type { ClientEventOf } from './client-event-router.js';
 import type { AppProtocolRequestData } from './emitter-channels.js';
 import type { SessionId } from './types.js';
 import type { ConnectionId } from './broadcast-center.js';
-import { connectionPresence, hasBeenAway } from './client-presence.js';
+import {
+  connectionPresence,
+  hasBeenAway,
+  isCompanionConnection,
+  visibleFor,
+} from './client-presence.js';
+import { deadlines } from '../config.js';
 import type { WindowStateRegistry } from './window-state.js';
 import { actionEmitter } from './action-emitter.js';
 import { createLogger } from '../observability/log.js';
@@ -222,6 +228,16 @@ export class AppWindowCoordinator {
     const pin = this.pinned.get(windowKey);
     const pinAlive = !!pin && registered.includes(pin);
     if (pinAlive) {
+      // The one move a pin makes while it can still answer: off the companion, back to
+      // the tab the user is looking at, once that tab has settled. Answering from the
+      // companion keeps working, but the user watches the agent act on a copy they
+      // cannot see.
+      const userTab = this.isCompanion(pin) ? this.settledUserTab(registered) : null;
+      if (userTab) {
+        this.pinned.set(windowKey, userTab);
+        this.announceSwitch(windowKey, 'returned');
+        return userTab;
+      }
       if (this.canAnswer(pin) || !registered.some((id) => this.canAnswer(id))) return pin;
     }
 
@@ -229,6 +245,24 @@ export class AppWindowCoordinator {
     this.pinned.set(windowKey, next);
     if (pin && pin !== next) this.announceSwitch(windowKey, pinAlive ? 'away' : 'gone');
     return next;
+  }
+
+  private isCompanion(connectionId: ConnectionId): boolean {
+    return isCompanionConnection(this.deps.sessionId, connectionId);
+  }
+
+  /**
+   * A registered user tab that has been in front for at least `userTabSettleMs`, or
+   * null. The settle keeps a phone flicking between apps from dragging the pin back and
+   * forth: each move hands the agent a copy that did not see the last one's commands.
+   */
+  private settledUserTab(registered: ConnectionId[]): ConnectionId | null {
+    const settled = registered.filter((id) => {
+      if (this.isCompanion(id)) return false;
+      const shown = visibleFor(this.deps.sessionId, id);
+      return shown !== undefined && shown >= deadlines.userTabSettleMs;
+    });
+    return settled.length > 0 ? this.rankResponders(settled)[0]! : null;
   }
 
   /**
@@ -257,15 +291,21 @@ export class AppWindowCoordinator {
   }
 
   /**
-   * Best first: a tab in front before one in the background; among those in front, one
-   * that has never been away before one that has — a tab that backgrounds once (a phone)
-   * will do it again, while an always-visible desktop (the companion) will not, and every
-   * pin that lands on the steady one is a switch that never has to happen. Newest
-   * registration breaks ties: it is the document most likely to still be alive.
+   * Best first: a tab in front before one in the background, and among those in front, a
+   * user's tab before the companion desktop.
+   *
+   * The companion used to win that second comparison, as the tab that never backgrounds —
+   * every pin on it was a switch that never had to happen. But it is the copy nobody is
+   * looking at: with a phone attached, every command the agent ran changed a screen the
+   * user could not see, and the phone showed nothing happening. So the companion is the
+   * fallback for a phone that cannot run script, not the first pick. Among user tabs, one
+   * that has never been away still beats one that has, and the newest registration breaks
+   * ties: it is the document most likely to still be alive.
    */
   private rankResponders(registered: ConnectionId[]): ConnectionId[] {
     const tier = (id: ConnectionId): number => {
-      if (!this.canAnswer(id)) return 2;
+      if (!this.canAnswer(id)) return 3;
+      if (this.isCompanion(id)) return 2;
       return hasBeenAway(this.deps.sessionId, id) ? 1 : 0;
     };
     return registered
@@ -274,11 +314,13 @@ export class AppWindowCoordinator {
       .map((entry) => entry.id);
   }
 
-  private announceSwitch(windowKey: string, reason: 'away' | 'gone'): void {
+  private announceSwitch(windowKey: string, reason: 'away' | 'gone' | 'returned'): void {
     const why =
       reason === 'gone'
         ? 'the tab that was answering disconnected'
-        : 'the tab that was answering went to the background';
+        : reason === 'returned'
+          ? "the user's own tab is back in front"
+          : 'the tab that was answering went to the background';
     log.warn('app window responder changed', {
       sessionId: this.deps.sessionId,
       windowId: windowKey,

@@ -278,6 +278,59 @@ describe('S7 — one app protocol request, one responder', () => {
   });
 });
 
+/**
+ * The companion desktop is the fallback responder, not the first pick.
+ *
+ * It is the tab that never backgrounds, which once made it the steadiest pin. It is also
+ * the copy nobody is looking at: with a phone attached, the agent's commands ran there and
+ * the phone showed nothing happening. So a user's tab in front answers, the companion
+ * covers for it while it cannot run script, and the window moves back once it returns.
+ */
+describe('S7d — the tab the user is looking at answers, the companion covers for it', () => {
+  /** A phone and the companion desktop, both registered; the companion registered last. */
+  async function bootPhoneAndCompanion() {
+    const h = await boot();
+    harness = h;
+    const windowKey = h.seedIframeWindow('github');
+    const phone = h.client;
+    const companion = await h.connect('0', { companion: true });
+    answerAs(phone, 'phone');
+    answerAs(companion, 'companion');
+    await phone.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
+    await companion.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
+    return { h, windowKey, phone, companion };
+  }
+
+  it('a visible phone answers, even though the companion registered later and never backgrounds', async () => {
+    const { h, windowKey, phone, companion } = await bootPhoneAndCompanion();
+    // The phone has backgrounded before — which used to rank it below the companion.
+    await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
+    await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
+
+    const answeredBy = await runCommand(h, windowKey, 'openFile', 'm1');
+
+    expect(commandFrames(companion)).toHaveLength(0);
+    expect(answeredBy).toBe('phone');
+  });
+
+  it('the companion covers while the phone is away, and the window moves back when it returns', async () => {
+    const { h, windowKey, phone, companion } = await bootPhoneAndCompanion();
+    await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
+
+    const covered = await runCommand(h, windowKey, 'compile', 'm1');
+    expect(covered).toContain('companion');
+    expect(commandFrames(companion).map((r) => r.command)).toEqual(['compile']);
+
+    await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
+    const back = await runCommand(h, windowKey, 'deploy', 'm2');
+
+    expect(commandFrames(phone).map((r) => r.command)).toEqual(['deploy']);
+    expect(back).toContain('phone');
+    // The move is a jump between copies like any other, so the agent is told.
+    expect(back).toContain('different open copy of this app window');
+  });
+});
+
 describe('S7b — a capture is not decided by the tab that does not have the window', () => {
   /** Answer every window.capture this tab receives with `feedback`, after `delayMs`. */
   function answerCapture(

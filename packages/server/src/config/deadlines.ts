@@ -102,6 +102,13 @@ export interface Deadlines {
    */
   capturePreferredGraceMs: number;
   /**
+   * How long a user's tab must have been back in front before an app window's responder
+   * moves to it off the companion desktop (`AppWindowCoordinator.settledUserTab`). Long
+   * enough that a phone flicking through the app switcher does not drag the pin back and
+   * forth; short enough that the user sees the agent's next command land on their screen.
+   */
+  userTabSettleMs: number;
+  /**
    * Default wait for the desktop to answer a clipboard read/write.
    *
    * Longer than `renderFeedbackMs` even though the work is trivial: the *first* read from
@@ -122,6 +129,7 @@ const PRODUCTION_DEADLINES: Readonly<Deadlines> = Object.freeze({
   renderFeedbackMs: 3_000,
   captureNotMountedGraceMs: 300,
   capturePreferredGraceMs: 2_500,
+  userTabSettleMs: 2_000,
   clipboardMs: 30_000,
 });
 

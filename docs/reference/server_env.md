@@ -425,6 +425,13 @@ side effects on mount runs them twice. It is not paid for unless it is buying so
   the desktop layout is the one that keeps every window mounted.
 - **Pinned against the idle sweep.** Nothing touches this tab between captures, so `cleanupIdle`
   would collect it precisely when it is about to be needed (`BrowserSession.pinned`).
+- **`companion=1`, and a socket that says `role=companion`.** App protocol commands go to one
+  copy of each window, and the companion is the one copy nobody looks at: ranked first, as the
+  tab that never backgrounds, it ran every command while the phone showed nothing happening. So
+  it is the **fallback** responder — a user's tab in front answers, the companion covers while
+  that tab cannot run script, and the window moves back once the tab has been in front for
+  `userTabSettleMs` (`AppWindowCoordinator.rankResponders` / `settledUserTab`). State an app
+  must show on both copies regardless goes in `createSharedSignal` (see `apps/CLAUDE.md`).
 
 A box with no Chromium simply goes without, and says so once.
 

@@ -65,6 +65,7 @@ const HARNESS_DEADLINES: Deadlines = {
   renderFeedbackMs: 150,
   captureNotMountedGraceMs: 40,
   capturePreferredGraceMs: 100,
+  userTabSettleMs: 0,
   clipboardMs: 150,
 };
 
@@ -108,8 +109,11 @@ export interface Harness {
    * app-protocol handlers and the frontend both address it by.
    */
   seedIframeWindow(rawId: string, opts?: { appId?: string; monitorId?: string }): string;
-  /** Open another connection to the same session (reconnect / multi-tab scenarios). */
-  connect(monitorId?: string): Promise<FakeClient>;
+  /**
+   * Open another connection to the same session (reconnect / multi-tab scenarios).
+   * `companion` makes it the server's parked companion desktop.
+   */
+  connect(monitorId?: string, opts?: { companion?: boolean }): Promise<FakeClient>;
   dispose(): Promise<void>;
 }
 
@@ -194,8 +198,10 @@ export async function boot(
       return session.windowState.getWindow(rawId)?.id ?? `${monitorId}/${rawId}`;
     },
 
-    async connect(monitorId = '0') {
+    async connect(monitorId = '0', opts: { companion?: boolean } = {}) {
       const extra = new FakeClient(handlers, sessionId, monitorId);
+      // What `prepareWsData` reads off `role=companion`: the server's own parked desktop.
+      if (opts.companion) extra.data.companion = true;
       await extra.open();
       clients.push(extra);
       return extra;

@@ -85,6 +85,13 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
  * SUBSCRIBE_MONITOR would be dropped, which for a reconnect into a live session is
  * exactly the moment there is something to miss.
  */
+/**
+ * Whether this page is the server's companion desktop. Read at load, before a remote
+ * hash connection's `replaceState` drops the query string.
+ */
+const IS_COMPANION =
+  new URLSearchParams(globalThis.location?.search ?? '').get('companion') === '1';
+
 export function buildWsUrl(sessionId?: string | null, monitorId?: string | null): string {
   const conn = getRemoteConnection();
 
@@ -103,6 +110,7 @@ export function buildWsUrl(sessionId?: string | null, monitorId?: string | null)
   if (sessionId) url.searchParams.set('sessionId', sessionId);
   if (monitorId) url.searchParams.set('monitorId', monitorId);
   if (conn) url.searchParams.set('token', conn.token);
+  if (IS_COMPANION) url.searchParams.set('role', 'companion');
   return url.toString();
 }
 

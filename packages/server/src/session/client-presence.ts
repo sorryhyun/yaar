@@ -40,6 +40,43 @@ interface ConnectionPresence {
 
 const sessions = new Map<SessionId, Map<ConnectionId, ConnectionPresence>>();
 
+/** Connections that are the server's companion desktop, per session. */
+const companions = new Map<SessionId, Set<ConnectionId>>();
+
+/** Record that a connection is the companion desktop — said once, at connect. */
+export function noteCompanionConnection(sessionId: SessionId, connectionId: ConnectionId): void {
+  let set = companions.get(sessionId);
+  if (!set) {
+    set = new Set();
+    companions.set(sessionId, set);
+  }
+  set.add(connectionId);
+}
+
+/**
+ * Whether a connection is the companion desktop: always visible, and never the screen a
+ * person is watching, so it is the fallback responder rather than the first pick.
+ */
+export function isCompanionConnection(sessionId: SessionId, connectionId: ConnectionId): boolean {
+  return companions.get(sessionId)?.has(connectionId) ?? false;
+}
+
+/**
+ * How long a connection has been able to answer since it last came back: `Infinity` if it
+ * has never been away — or never reported, silence counting as able, as it does for
+ * `connectionPresence`'s callers — and `undefined` while it is away.
+ */
+export function visibleFor(
+  sessionId: SessionId,
+  connectionId: ConnectionId,
+  now: number = Date.now(),
+): number | undefined {
+  const presence = sessions.get(sessionId)?.get(connectionId);
+  if (!presence) return Infinity;
+  if (presence.state !== 'visible') return undefined;
+  return presence.returnedAt === null ? Infinity : now - presence.returnedAt;
+}
+
 /** Record what a connection just said about itself. */
 export function noteClientPresence(
   sessionId: SessionId,
@@ -89,6 +126,9 @@ export function hasBeenAway(sessionId: SessionId, connectionId: ConnectionId): b
 }
 
 export function forgetConnectionPresence(sessionId: SessionId, connectionId: ConnectionId): void {
+  const companionSet = companions.get(sessionId);
+  companionSet?.delete(connectionId);
+  if (companionSet?.size === 0) companions.delete(sessionId);
   const byConnection = sessions.get(sessionId);
   if (!byConnection) return;
   byConnection.delete(connectionId);
@@ -98,11 +138,13 @@ export function forgetConnectionPresence(sessionId: SessionId, connectionId: Con
 /** Drop a whole session's presence when the session goes away. */
 export function forgetSessionPresence(sessionId: SessionId): void {
   sessions.delete(sessionId);
+  companions.delete(sessionId);
 }
 
 /** Tests only — the registry is process-wide. */
 export function resetClientPresenceForTest(): void {
   sessions.clear();
+  companions.clear();
 }
 
 function seconds(ms: number): string {
