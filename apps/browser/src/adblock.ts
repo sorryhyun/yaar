@@ -25,7 +25,7 @@
  */
 import { createSignal } from '@bundled/solid-js';
 import * as z from '@bundled/zod';
-import { appStorage, createPersistedSignal, safeParseOr } from '@bundled/yaar';
+import { appStorage, createPersistedSignal, createSharedSignal, safeParseOr } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { activeBrowserId, currentUrl } from './store';
 import {
@@ -110,7 +110,12 @@ const RulesSchema = z.looseObject({
   minCoverage: z.optional(z.number()),
 });
 
-const [rules, setRules] = createSignal<BlockRules>(DEFAULT_RULES);
+// Shared: set_ad_block (site scope) and add_block_rule write this, and the
+// toolbar shield reads `allowDomains` (via currentSiteExempt) to decide its own
+// dimmed/on look — a follower on the stale rules would show the wrong shield icon
+// for a site the agent just exempted. Not high-frequency: these are rare,
+// deliberate edits, not something set on every keystroke or poll tick.
+const [rules, setRules] = createSharedSignal<BlockRules>('adBlockRules', DEFAULT_RULES);
 const [blockedCount, setBlockedCount] = createSignal(0);
 /** Requests Chrome refused on the page on screen; part of the badge. */
 const [networkBlocked, setNetworkBlocked] = createSignal(0);
@@ -128,14 +133,32 @@ export interface PopupTab {
  * A plain boolean rather than part of blocklist.json: it is flipped by a toolbar
  * click, and `createPersistedSignal` is exactly the write-on-every-set shape a
  * toggle wants.
+ *
+ * Also shared across copies, since the toolbar shield (`shieldState` in view.ts)
+ * reads it to decide its own on/off/exempt look — without this, a copy other than
+ * the one that ran set_ad_block (or clicked the toolbar toggle) would show the
+ * wrong shield state for the page it has open. `createPersistedSignal` and
+ * `createSharedSignal` don't compose into one primitive, so this is two signals:
+ * the persisted one is the one the view actually reads, and the shared one only
+ * carries the value across — its `onRemote` calls the *local* setter, never the
+ * shared one, so adopting a remote value never re-broadcasts it.
  */
-export const [adBlockEnabled, setAdBlockEnabled, adBlockReady] = createPersistedSignal<boolean>(
+const [adBlockEnabled, setAdBlockEnabledLocal, adBlockReady] = createPersistedSignal<boolean>(
   'adblock-enabled.json',
   true,
   { label: 'ad blocker setting' },
 );
+const [, setAdBlockEnabledShared] = createSharedSignal<boolean>('adBlockEnabled', true, {
+  onRemote: (enabled) => setAdBlockEnabledLocal(enabled),
+});
 
-export { blockedCount, networkBlocked, popupTabs, rules };
+/** The one write site: toggleAdBlock and set_ad_block (global scope), below. */
+function setAdBlockEnabled(enabled: boolean): void {
+  setAdBlockEnabledLocal(enabled);
+  setAdBlockEnabledShared(enabled);
+}
+
+export { adBlockEnabled, adBlockReady, blockedCount, networkBlocked, popupTabs, rules };
 
 /** Merge a stored partial over the defaults so a missing key is a default, not a hole. */
 function merge(raw: unknown): BlockRules {

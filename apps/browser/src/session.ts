@@ -7,12 +7,19 @@
  * needs the same switches the agent has.
  */
 import * as web from '@bundled/yaar-web';
-import { activeBrowserId, setActiveBrowserId, resetDisplay, clearDisplay } from './store';
+import {
+  activeBrowserId,
+  setActiveBrowserId,
+  onRemoteBrowserId,
+  resetDisplay,
+  clearDisplay,
+} from './store';
 import { connectSSE, startPolling, stopPolling } from './sse';
 import { refreshScreenshot } from './actions';
 import {
   liveMode,
   setLiveMode,
+  onRemoteLiveMode,
   setQuality,
   connectLive,
   disconnectLive,
@@ -57,11 +64,13 @@ export async function browserOpts(): Promise<{ browserId: string }> {
 }
 
 /**
- * Attach to a different browser at runtime.
- * Orchestrates store + SSE together (defined here to avoid circular deps).
+ * Point this copy's own SSE/live connections at `browserId` — everything `attach`
+ * does besides the write itself. Runs on the copy that just wrote
+ * `activeBrowserId` (from `attach`, below) and again, via `onRemoteBrowserId`, on
+ * every other copy once the value lands — a follower has its own SSE/live
+ * connections to re-target, not just a signal to read.
  */
-export function attach(browserId: string): void {
-  setActiveBrowserId(browserId);
+function reconnectDisplay(browserId: string): void {
   resetDisplay('Connecting...');
   connectSSE(browserId);
   if (liveMode()) {
@@ -71,6 +80,17 @@ export function attach(browserId: string): void {
     stopPolling();
     connectLive(browserId);
   }
+}
+
+onRemoteBrowserId((browserId) => reconnectDisplay(browserId));
+
+/**
+ * Attach to a different browser at runtime.
+ * Orchestrates store + SSE together (defined here to avoid circular deps).
+ */
+export function attach(browserId: string): void {
+  setActiveBrowserId(browserId);
+  reconnectDisplay(browserId);
 }
 
 /**
@@ -99,6 +119,19 @@ export async function setLive(enabled: boolean): Promise<void> {
     startPolling(activeBrowserId());
   }
 }
+
+// A follower's own live/still connection is the same kind of per-copy resource as
+// its SSE connection above: liveMode is shared so every copy shows the same mode,
+// but showing it means each copy opens (or closes) its *own* screencast socket.
+onRemoteLiveMode((enabled) => {
+  if (enabled) {
+    stopPolling();
+    connectLive(activeBrowserId());
+  } else {
+    disconnectLive();
+    startPolling(activeBrowserId());
+  }
+});
 
 /** The toolbar's ◉ Live button. */
 export async function toggleLive(): Promise<void> {

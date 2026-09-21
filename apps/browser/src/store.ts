@@ -1,4 +1,5 @@
 import { createSignal, createMemo } from '@bundled/solid-js';
+import { createSharedSignal } from '@bundled/yaar';
 import { parseHttpUrl } from './url';
 
 const params = new URLSearchParams(window.location.search);
@@ -18,7 +19,36 @@ export const parsedInitialUrl = parseHttpUrl(params.get('url') ?? '') ?? 'about:
  */
 export const initialLive = params.get('live') === '1';
 
-export const [activeBrowserId, setActiveBrowserId] = createSignal(initialBrowserId);
+const remoteBrowserIdListeners: ((next: string, prev: string) => void)[] = [];
+
+/**
+ * Which remote browser/tab this window is driving — set by attach/switch_tab/
+ * new_tab/close_tab (session.ts) and by ensureBrowserId's lazy session creation.
+ * Shared across copies: every command lands only on the copy the server pinned to
+ * answer, but every copy's own SSE/live connection is addressed by this id, so a
+ * follower left on the old value would go on streaming a tab the agent moved away
+ * from. `session.ts` (which owns connectSSE/connectLive) registers the reconnect
+ * via `onRemoteBrowserId` rather than this module reaching for them, to avoid a
+ * cycle back into itself.
+ */
+export const [activeBrowserId, setActiveBrowserId] = createSharedSignal<string>(
+  'activeBrowserId',
+  initialBrowserId,
+  { onRemote: (next, prev) => remoteBrowserIdListeners.forEach((fn) => fn(next, prev)) },
+);
+
+/** Run `fn` when another copy of this window points the app at a different browser. */
+export function onRemoteBrowserId(fn: (next: string, prev: string) => void): void {
+  remoteBrowserIdListeners.push(fn);
+}
+
+// currentUrl/pageTitle/showScreenshot are NOT shared: each copy already runs its
+// own SSE connection and 200ms poll (see sse.ts) against activeBrowserId, so once
+// that id agrees across copies, these converge on their own from the same server
+// stream. Sharing them too would mean broadcasting on every poll tick (a copy's
+// own <img> load fires up to 5x/sec) — exactly the high-frequency case shared
+// signals are not for — and would double-write on every navigation, once from
+// each copy's own SSE frame and once from the adopted remote value.
 export const [currentUrl, setCurrentUrl] = createSignal(parsedInitialUrl);
 export const [pageTitle, setPageTitle] = createSignal('');
 export const [loading, setLoading] = createSignal(false);

@@ -4,6 +4,7 @@
  * a cycle.
  */
 import { createSignal } from '@bundled/solid-js';
+import { createSharedSignal } from '@bundled/yaar';
 
 export interface LiveStats {
   fps: number;
@@ -41,7 +42,27 @@ export interface LiveTab {
 }
 
 export const [liveTabs, setLiveTabs] = createSignal<LiveTab[]>([]);
-export const [liveMode, setLiveMode] = createSignal(false);
+
+const remoteLiveModeListeners: ((enabled: boolean, prev: boolean) => void)[] = [];
+
+/**
+ * Whether this window shows the live screencast or the still poll — set by
+ * set_live_mode and the toolbar's ◉ button (session.ts's `setLive`, the one write
+ * site). Shared across copies: it decides which of two render paths the view is
+ * on, and a follower left on the old path would show a still screenshot while the
+ * agent drives a screencast it can't see. `session.ts` registers the actual
+ * connect/disconnect via `onRemoteLiveMode` rather than this module reaching for
+ * them, to avoid a cycle back into itself.
+ */
+export const [liveMode, setLiveMode] = createSharedSignal('liveMode', false, {
+  onRemote: (enabled, prev) => remoteLiveModeListeners.forEach((fn) => fn(enabled, prev)),
+});
+
+/** Run `fn` when another copy of this window flips into or out of live mode. */
+export function onRemoteLiveMode(fn: (enabled: boolean, prev: boolean) => void): void {
+  remoteLiveModeListeners.push(fn);
+}
+
 export const [quality, setQuality] = createSignal<QualityPreset>('high');
 export const [liveStatus, setLiveStatus] = createSignal('');
 /**
