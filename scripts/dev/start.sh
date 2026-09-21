@@ -312,6 +312,15 @@ if [ -n "$REMOTE" ] && [ "$REMOTE" != "0" ]; then
   bun run --filter @yaar/frontend build
 fi
 
+# Phone mode gets the phone's companion too. On Android the server parks a second,
+# always-visible desktop in its own Chromium (features/companion/companion-tab.ts), so
+# every app window has two live iframes behind it — the setup the app-window responder
+# pinning exists for. Without it here, a phone bug that needs two tabs cannot reproduce
+# on a PC. YAAR_COMPANION_TAB=0 still turns it off.
+if [ "${MOBILE:-0}" = "1" ]; then
+  export YAAR_COMPANION_TAB="${YAAR_COMPANION_TAB:-1}"
+fi
+
 # Start server (in dev mode, server builds + watches frontend automatically)
 echo "Starting server..."
 PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" bun run --filter @yaar/server dev --elide-lines=0 2>&1 &
