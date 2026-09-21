@@ -12,7 +12,10 @@ paths:
 
 - Per-package: `bun run --filter @yaar/<pkg> test` — `<pkg>` is `frontend`, `server`, `shared`,
   `lib`, `compiler`, or `tests` (the integration/security package). Each has its own `test` script in
-  its `package.json`.
+  its `package.json`. **Use the script, not a bare `bun test`**: the three packages whose suites
+  call `mock.module` — `frontend`, `compiler`, `tests` — pass `--isolate` in that script for the
+  reason the `units` partition does (below), and a bare `bun test` over one of them silently
+  reintroduces cross-file module leakage.
 - Single path from repo root: `bun test <path>`. Works for any path that is *one* partition
   (see below); a mixed path is refused.
 - Full run: `bun run test` (root `package.json`, = `bun run --filter '*' test`) — what CI runs
@@ -38,7 +41,12 @@ and `packages/server/bunfig.toml`. Full incident history and rationale:
 
 `mock.module` used to be a fourth reason — process-global, no teardown, so every file installing
 one got its own process. `bun test --isolate` clears the module registry between files, which
-retired that rule and 15 processes with it. Two consequences worth knowing: the `units` partition
+retired that rule and 15 processes with it. **The dependency on `--isolate` is not the server's
+alone.** Any suite mixing a `mock.module` file with a file that imports the same module for real
+needs it: the frontend ran without it and four component tests that stub
+`@/hooks/useAgentConnection` broke `reset-delivery.test.tsx`, three files later in sort order,
+which failed pointing at a hook that was fine. `frontend`, `compiler` and `tests` therefore pass
+`--isolate` in their own `test` scripts. Two consequences worth knowing: the `units` partition
 now **depends on** `--isolate` (the runner passes it explicitly), and the guard cannot fire inside
 an isolated process at all — each file there gets a fresh global, a fresh `process.env`, and a
 `Bun.argv` naming only itself, so it can't tell a second file exists. The guard covers the plain

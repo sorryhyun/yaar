@@ -10,7 +10,7 @@
     "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared",
     "typecheck": "tsc --noEmit",
     "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@yaar/shared": "workspace:*",

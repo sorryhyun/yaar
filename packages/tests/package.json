@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared lib compiler",
-    "test": "bun test",
+    "test": "bun test --isolate",
     "bench": "bun run src/benchmarks/context-tape.bench.ts && bun run src/benchmarks/fingerprint.bench.ts && bun run src/benchmarks/startup.bench.ts",
     "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared lib compiler",
     "typecheck": "tsc --noEmit"

@@ -135,3 +135,12 @@ Bidirectional agent-to-iframe communication. Frontend relays between server (Web
 ## Testing
 
 Bun test + Testing Library + happy-dom. Store tests use `useDesktopStore.getState()` directly. Reset store in `beforeEach` for isolation.
+
+The package's `test` script passes **`--isolate`**, and four component tests depend on it.
+`mock.module` is process-global with no teardown, so `ConfirmDialog`, `UserPrompt` and the two
+`CommandPalette` files — each replacing `@/hooks/useAgentConnection` with a stub carrying only
+the one callback it asserts on — replace it *for every file that loads after them*. `components/`
+sorts before `hooks/`, so `reset-delivery.test.tsx` got a hook whose `reset` was `undefined` and
+failed three cases on a bug in neither the hook nor itself. `--isolate` gives each file a fresh
+module registry, which is the same fix the server's `units` partition already relies on — see the
+header of `scripts/test/partitions.ts`. Drop the flag and those three come back.
