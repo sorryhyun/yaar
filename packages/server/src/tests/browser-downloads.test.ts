@@ -50,7 +50,8 @@ async function landFile(dir: string, name: string, bytes: number): Promise<void>
 
 let live: DownloadCapture[] = [];
 function capture(onComplete: (d: CapturedDownload) => void = () => {}): DownloadCapture {
-  const c = new DownloadCapture(onComplete);
+  // Fast settle, and a sweep so no wait depends on fs.watch latency under a loaded run.
+  const c = new DownloadCapture(onComplete, { settleIntervalMs: 10, sweepIntervalMs: 25 });
   live.push(c);
   return c;
 }
@@ -59,8 +60,8 @@ function capture(onComplete: (d: CapturedDownload) => void = () => {}): Download
  * Wait until the watcher and the settle loop have produced what `check` looks for.
  *
  * Polled, not slept: a watch event's latency is the machine's, and under a full test
- * run it outgrew the fixed 600ms this used to be. The common case returns in the
- * ~150ms one settle sample takes.
+ * run it outgrew the fixed 600ms this used to be. The common case returns in a few
+ * tens of ms: one sweep plus one settle sample.
  */
 async function until(check: () => boolean, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -71,10 +72,10 @@ async function until(check: () => boolean, timeoutMs = 5_000): Promise<void> {
 }
 
 /**
- * For asserting that nothing happened, which no condition can wait for. Longer than one
- * settle sample, so a record that was going to be made would have been.
+ * For asserting that nothing happened, which no condition can wait for. Several sweep and
+ * settle periods, so a record that was going to be made would have been.
  */
-const quiet = () => Bun.sleep(400);
+const quiet = () => Bun.sleep(150);
 
 afterEach(async () => {
   for (const c of live) await c.dispose();

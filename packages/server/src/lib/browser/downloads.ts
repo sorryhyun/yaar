@@ -106,7 +106,23 @@ export class DownloadCapture {
   private finished: CapturedDownload[] = [];
   private waiters: Waiter[] = [];
 
-  constructor(private readonly onComplete: (d: CapturedDownload) => void) {}
+  private readonly settleIntervalMs: number;
+  private readonly sweepIntervalMs: number | undefined;
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * `timing` exists for tests. The settle interval is paid once per completed file, and
+   * `fs.watch` latency is the machine's: under a full test run macOS delivered events late
+   * enough that waits hit their deadlines. A periodic sweep makes detection independent of
+   * the watcher, and production keeps relying on the watcher plus `waitForNext`'s own sweep.
+   */
+  constructor(
+    private readonly onComplete: (d: CapturedDownload) => void,
+    timing: { settleIntervalMs?: number; sweepIntervalMs?: number } = {},
+  ) {
+    this.settleIntervalMs = timing.settleIntervalMs ?? SETTLE_INTERVAL_MS;
+    this.sweepIntervalMs = timing.sweepIntervalMs;
+  }
 
   /** Whether Chrome accepted the download-behavior command on this socket. */
   get available(): boolean {
@@ -181,6 +197,9 @@ export class DownloadCapture {
     } catch {
       this.watcher = null;
     }
+    if (this.sweepIntervalMs !== undefined && !this.sweepTimer) {
+      this.sweepTimer = setInterval(() => void this.sweep(), this.sweepIntervalMs);
+    }
     void this.sweep();
   }
 
@@ -237,7 +256,7 @@ export class DownloadCapture {
       if (this.seen.get(name) === key) return;
       if (st.size > 0 && st.size === bytes) break;
       bytes = st.size;
-      await Bun.sleep(SETTLE_INTERVAL_MS);
+      await Bun.sleep(this.settleIntervalMs);
     }
     if (bytes <= 0) return;
     this.seen.set(name, key);
@@ -347,6 +366,8 @@ export class DownloadCapture {
     this.dir = null;
     this.watcher?.close();
     this.watcher = null;
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
     this.finished = [];
     this.seen.clear();
     this.pending.clear();
