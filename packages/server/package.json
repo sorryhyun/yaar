@@ -16,23 +16,23 @@
     "test": "bun run scripts/run-tests.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.278",
-    "@modelcontextprotocol/client": "2.0.0",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
     "@yaar/compiler": "workspace:*",
     "@yaar/lib": "workspace:*",
     "@yaar/shared": "workspace:*",
     "onnxruntime-web": "catalog:",
-    "qrcode-terminal": "^0.12.0",
-    "ws": "^8.21.3",
-    "yaml": "^2.8.2",
+    "qrcode-terminal": "catalog:",
+    "ws": "catalog:",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
     "@types/node": "catalog:",
-    "@types/qrcode-terminal": "^0.12.2",
-    "@types/ws": "^8.5.13",
+    "@types/qrcode-terminal": "catalog:",
+    "@types/ws": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "bun-types": "catalog:",
@@ -42,14 +42,11 @@
     "typescript-eslint": "catalog:"
   },
   "peerDependencies": {
-    "@openai/codex": ">=0.145.0"
+    "@openai/codex": "catalog:"
   },
   "peerDependenciesMeta": {
     "@openai/codex": {
       "optional": true
     }
-  },
-  "engines": {
-    "bun": ">=1.4.2"
   }
 }

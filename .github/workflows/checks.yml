@@ -75,6 +75,13 @@ jobs:
       - name: Check scripts parse
         run: bun run check:scripts
 
+      # Every dependency range in the repo is written once, in the root catalog; a
+      # workspace may only say `catalog:` or `workspace:*`. Nothing else notices a
+      # second copy — `@types/three` trailed `three` by a minor for several releases
+      # and install, typecheck and test were all happy — so it is checked here.
+      - name: Check dependency versions come from the catalog
+        run: bun run check:deps
+
       # Warns when a reference doc's **Source:** file changed after the doc's last
       # update. Broken pointers and bundled-library list drift still fail the check.
       # Run `bun run check:docs:strict` when stale-source warnings should also fail.

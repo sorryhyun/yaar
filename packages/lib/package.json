@@ -81,7 +81,7 @@
   },
   "dependencies": {
     "@yaar/shared": "workspace:*",
-    "node-poppler": "^9.1.1"
+    "node-poppler": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
@@ -92,8 +92,5 @@
     "globals": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:"
-  },
-  "engines": {
-    "bun": ">=1.4.2"
   }
 }

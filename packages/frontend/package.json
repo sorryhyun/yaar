@@ -15,33 +15,31 @@
   "dependencies": {
     "@yaar/shared": "workspace:*",
     "dompurify": "catalog:",
-
-    "i18next": "^25.8.11",
-    "immer": "^11.0.3",
+    "i18next": "catalog:",
+    "immer": "catalog:",
     "marked": "catalog:",
     "mermaid": "catalog:",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "react-i18next": "^16.5.4",
-    "zustand": "^5.0.11"
+    "qrcode": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-i18next": "catalog:",
+    "zustand": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@types/dompurify": "^3.2.0",
-    "@types/qrcode": "^1.5.6",
-    "@types/react": "^19.2.3",
-    "@types/react-dom": "^19.2.3",
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/qrcode": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
+    "bun-types": "catalog:",
     "eslint": "catalog:",
-    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-hooks": "catalog:",
     "globals": "catalog:",
-    "happy-dom": "^20.8.9",
+    "happy-dom": "catalog:",
     "typescript": "catalog:",
-    "typescript-eslint": "catalog:",
-    "bun-types": "catalog:"
+    "typescript-eslint": "catalog:"
   }
 }

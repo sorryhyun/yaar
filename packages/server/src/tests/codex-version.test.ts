@@ -156,8 +156,20 @@ describe('the @openai/codex peer range', () => {
   // `bun add @openai/codex` can install a binary the three runtime gates then refuse.
   const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
+  // Like every other range in the repo, the peer range itself lives in the root catalog and
+  // this package.json only points at it (`scripts/check/deps.ts` enforces that). So the
+  // drift this suite guards is now a two-hop chain — CODEX_MIN_VERSION → catalog → here —
+  // and the assertion has to walk it, or it would pass on the literal string "catalog:".
+  const root = JSON.parse(
+    readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8'),
+  );
+  const peerRange = (name: string): string | undefined => {
+    const declared = pkg.peerDependencies?.[name];
+    return declared === 'catalog:' ? root.workspaces?.catalog?.[name] : declared;
+  };
+
   it('admits exactly the versions CODEX_MIN_VERSION admits', () => {
-    expect(pkg.peerDependencies?.['@openai/codex']).toBe(`>=${CODEX_MIN_VERSION}`);
+    expect(peerRange('@openai/codex')).toBe(`>=${CODEX_MIN_VERSION}`);
   });
 
   it('is optional, so installing YAAR never downloads a 275 MB binary', () => {
