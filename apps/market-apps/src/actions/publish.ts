@@ -10,6 +10,7 @@ import {
   setConfirmBusy,
   setLastPublish,
   setPendingPublish,
+  setSharedLastPublish,
   setStatus,
   setTermsAgreed,
   termsAgreed,
@@ -169,6 +170,7 @@ export async function publishForAgent(params: {
   }
 
   setLastPublish(result);
+  setSharedLastPublish(result);
   setStatus(result.published ? result.message : `Publish failed: ${result.message}`);
   if (result.published) void refreshAccount();
   return result;

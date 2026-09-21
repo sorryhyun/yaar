@@ -30,6 +30,9 @@ import {
   setSearchMode,
   setStatus,
   touch,
+  setSharedCatalog,
+  setSharedStatus,
+  setSharedFilters,
 } from './store/index.js';
 import type { SearchMode } from './store/index.js';
 
@@ -166,6 +169,11 @@ export default defineApp({
         if (p.installedApps) setInstalledApps(p.installedApps);
         if (p.status) setStatus(p.status);
         else touch();
+        // Written unconditionally, even for a call that only patches one array —
+        // the shared payload is the full pair, and a follower has no other way to
+        // reconstruct data that came from the agent rather than the host.
+        setSharedCatalog({ marketApps: marketApps(), installedApps: installedApps() });
+        if (p.status) setSharedStatus(p.status);
         return { marketCount: marketApps().length, installedCount: installedApps().length };
       },
     },
@@ -178,6 +186,7 @@ export default defineApp({
       },
       run: (p) => {
         setStatus(p.status);
+        setSharedStatus(p.status);
       },
     },
     setHideInstalled: {
@@ -189,6 +198,11 @@ export default defineApp({
       },
       run: (p) => {
         setHideInstalled(p.hide);
+        setSharedFilters({
+          hideInstalled: hideInstalled(),
+          search: search(),
+          searchMode: searchMode(),
+        });
         return { hideInstalled: hideInstalled() };
       },
     },
@@ -201,6 +215,11 @@ export default defineApp({
       },
       run: (p) => {
         setSearch(p.query);
+        setSharedFilters({
+          hideInstalled: hideInstalled(),
+          search: search(),
+          searchMode: searchMode(),
+        });
         return { search: search() };
       },
     },
@@ -218,6 +237,11 @@ export default defineApp({
       },
       run: (p) => {
         setSearchMode(p.mode as SearchMode);
+        setSharedFilters({
+          hideInstalled: hideInstalled(),
+          search: search(),
+          searchMode: searchMode(),
+        });
         return { searchMode: searchMode() };
       },
     },
@@ -260,6 +284,8 @@ export default defineApp({
         setMarketApps([]);
         setInstalledApps([]);
         setStatus('Cleared');
+        setSharedCatalog({ marketApps: [], installedApps: [] });
+        setSharedStatus('Cleared');
       },
     },
   },

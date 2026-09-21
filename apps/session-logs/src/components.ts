@@ -2,7 +2,7 @@ import html from '@bundled/solid-js/html';
 import { downloadBlob } from '@bundled/yaar';
 import type { SessionSummary } from './types';
 import { state } from './store';
-import { loadDetail } from './api';
+import { selectSession } from './api';
 import { TranscriptSection } from './transcript';
 import { metaExpanded, toggleMeta, narrow, closeDrawer } from './ui';
 import {
@@ -19,7 +19,7 @@ export const SessionItem = (s: SessionSummary) => {
   const isCurrent = () => state.currentSessionId === s.sessionId;
 
   const open = () => {
-    void loadDetail(s.sessionId);
+    void selectSession(s.sessionId);
     // Narrow layout: the list is an overlay on top of the transcript, so
     // picking a session has to get out of the way to show it.
     if (narrow()) closeDrawer();

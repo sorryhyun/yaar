@@ -1,5 +1,12 @@
 import { read, withLoading, errMsg } from '@bundled/yaar';
-import { state, setState } from './store';
+import {
+  state,
+  setState,
+  setSharedSessions,
+  onRemoteSessions,
+  setSharedSelectedSession,
+  onRemoteSelectedSession,
+} from './store';
 import type { SessionSummary, SessionDetail, ParsedMessage } from './types';
 
 export async function loadSessions(): Promise<void> {
@@ -15,6 +22,13 @@ export async function loadSessions(): Promise<void> {
       arr.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
       setState('sessions', arr);
       setState('totalCount', arr.length);
+      // Written once, after the fields above have their final value — this is the
+      // sole write site, so `onRemoteSessions` below only ever applies, never re-sends.
+      setSharedSessions({
+        sessions: arr,
+        currentSessionId: state.currentSessionId,
+        totalCount: arr.length,
+      });
     },
     (msg) => {
       console.error('Failed to load sessions', msg);
@@ -23,6 +37,20 @@ export async function loadSessions(): Promise<void> {
   );
 }
 
+/** Catch up on a list another copy of this window reloaded. */
+onRemoteSessions((next) => {
+  setState('sessions', next.sessions);
+  setState('currentSessionId', next.currentSessionId);
+  setState('totalCount', next.totalCount);
+});
+
+/**
+ * Fetch and apply one session's detail, transcript and messages locally.
+ *
+ * Local-only — never writes the shared signal — so it doubles as the handler for a
+ * selection another copy made (`onRemoteSelectedSession` below), with no risk of
+ * bouncing the write back. `selectSession` is the actual mutation site.
+ */
 export async function loadDetail(sessionId: string): Promise<void> {
   setState('selectedId', sessionId);
   setState('detail', null);
@@ -45,6 +73,18 @@ export async function loadDetail(sessionId: string): Promise<void> {
   loadTranscript(sessionId);
   loadMessages(sessionId);
 }
+
+/**
+ * Select a session and share which one: the transcript and message log behind it
+ * are loaded by `loadDetail` itself (potentially megabytes), so only the id — a
+ * cheap pointer a follower re-fetches through the same `loadDetail` — travels.
+ */
+export async function selectSession(sessionId: string): Promise<void> {
+  await loadDetail(sessionId);
+  setSharedSelectedSession(sessionId);
+}
+
+onRemoteSelectedSession((sessionId) => void loadDetail(sessionId));
 
 export async function loadTranscript(sessionId: string): Promise<void> {
   try {

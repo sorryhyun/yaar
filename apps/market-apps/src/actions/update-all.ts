@@ -8,10 +8,11 @@ import {
   installedVersionOf,
   outdatedApps,
   recordMarketplaceInstall,
+  setSharedUpdateRun,
   setStatus,
   setUpdateRun,
 } from '../store/index.js';
-import type { DisplayApp, UpdateOutcome } from '../types.js';
+import type { DisplayApp, UpdateOutcome, UpdateRun } from '../types.js';
 import { reconcileInstalledFromHost } from './catalog.js';
 import { runAction } from './run-action.js';
 
@@ -43,6 +44,12 @@ let runInFlight = false;
 /** Host rejections arrive as Errors; anything else is stringified rather than dropped. */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** The one place `updateRun` changes — local and shared move together, always. */
+function publishUpdateRun(run: UpdateRun): void {
+  setUpdateRun(run);
+  setSharedUpdateRun(run);
 }
 
 function versionArrow(app: DisplayApp): string {
@@ -122,7 +129,7 @@ async function runUpdates(targets: DisplayApp[], confirm: boolean): Promise<Upda
     async () => {
       try {
         for (const [index, app] of targets.entries()) {
-          setUpdateRun({
+          publishUpdateRun({
             active: true,
             total,
             completed: index,
@@ -160,7 +167,7 @@ async function runUpdates(targets: DisplayApp[], confirm: boolean): Promise<Upda
       } finally {
         // In a finally so that an unexpected throw cannot leave `active` true, which
         // would leave the Update All button disabled for the lifetime of the window.
-        setUpdateRun({
+        publishUpdateRun({
           active: false,
           total,
           completed: results.length,

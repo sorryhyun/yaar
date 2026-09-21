@@ -4,7 +4,7 @@ import { appStorage, defineApp, read } from '@bundled/yaar';
 import './styles/index';
 
 import { state, setState } from './store';
-import { loadSessions, loadDetail, readBlob } from './api';
+import { loadSessions, selectSession, readBlob } from './api';
 import { getDateKey, formatDateLabel, providerLabel, toPlain } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
 import { narrow, sidebarVisible, toggleSidebar, closeDrawer, watchViewport } from './ui';
@@ -249,7 +249,7 @@ export default defineApp({
       },
       run: async (params) => {
         const sessionId = String(params.sessionId);
-        await loadDetail(sessionId);
+        await selectSession(sessionId);
         return { success: true, sessionId };
       },
     },

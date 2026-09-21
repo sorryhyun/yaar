@@ -3,6 +3,7 @@
 // import from this file, so there is exactly one definition of each signal.
 
 import { createSignal } from '@bundled/solid-js';
+import { createSharedSignal } from '@bundled/yaar';
 import { GITHUB_STATUS_HEALTHY, IDLE_UPDATE_RUN, SIGNED_OUT_ACCOUNT } from '../constants.js';
 import type {
   Account,
@@ -82,3 +83,61 @@ export function setStatus(next: string, stamp = true): void {
   setStatusText(next);
   if (stamp) touch();
 }
+
+// ── Shared across copies of this window ─────────────────────────────────
+//
+// A protocol command runs in whichever copy the server picked to answer, so a
+// plain signal only updates that copy's screen. These cover the state a command
+// sets that a follower has no other way to reconstruct. The normal catalog
+// refresh, single-app install/uninstall, account and GitHub-status polling are
+// deliberately left alone: those are freely re-fetchable from the host, so a
+// follower is at worst one refresh behind rather than permanently wrong.
+
+/** Written only by `setData`/`clearData` — the two commands that hand the app data
+ * with no host round trip behind it, so a follower cannot re-fetch its way there. */
+export const [sharedCatalog, setSharedCatalog] = createSharedSignal<{
+  marketApps: ListedApp[];
+  installedApps: InstalledApp[];
+} | null>('catalog', null, {
+  onRemote: (next) => {
+    if (!next) return;
+    setMarketApps(next.marketApps);
+    setInstalledApps(next.installedApps);
+  },
+});
+
+/** Written by `setData`, `setStatus` and `clearData` — an arbitrary or synthesized
+ * line a follower could not otherwise recompute (unlike a normal action's status,
+ * which just narrates a host call the follower could make for itself). */
+export const [sharedStatus, setSharedStatus] = createSharedSignal<string | null>('status', null, {
+  onRemote: (text) => text != null && setStatus(text),
+});
+
+/** Written by `setHideInstalled`, `setSearch` and `setSearchMode`. */
+export const [sharedFilters, setSharedFilters] = createSharedSignal<{
+  hideInstalled: boolean;
+  search: string;
+  searchMode: SearchMode;
+} | null>('filters', null, {
+  onRemote: (next) => {
+    if (!next) return;
+    setHideInstalled(next.hideInstalled);
+    setSearch(next.search);
+    setSearchMode(next.searchMode);
+  },
+});
+
+/** Written wherever `setUpdateRun` runs (actions/update-all.ts) — the `updateAll`
+ * command's progress, whether it was started by the agent or the header button. */
+export const [sharedUpdateRun, setSharedUpdateRun] = createSharedSignal<UpdateRun | null>(
+  'update-run',
+  null,
+  { onRemote: (next) => next && setUpdateRun(next) },
+);
+
+/** Written once, by the `publish` command's own settle point (actions/publish.ts). */
+export const [sharedLastPublish, setSharedLastPublish] = createSharedSignal<PublishResult | null>(
+  'last-publish',
+  null,
+  { onRemote: (next) => next && setLastPublish(next) },
+);

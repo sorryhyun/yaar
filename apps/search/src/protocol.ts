@@ -1,6 +1,14 @@
 export {};
+import { batch } from '@bundled/solid-js';
 import { appStorage, invoke, del, list, storage, errMsg } from '@bundled/yaar';
-import { state, setState } from './store';
+import {
+  state,
+  setState,
+  setSharedSearch,
+  onRemoteSearch,
+  setSharedSelection,
+  onRemoteSelection,
+} from './store';
 import { isGeneratedPath } from './paths';
 import type { SearchResult, SearchMatch } from './types';
 
@@ -83,6 +91,7 @@ export async function performSearch(
   setState('previewPath', null);
   setState('previewContent', null);
   setState('previewHighlightLine', null);
+  setSharedSelection(null);
   try {
     validateSearchPattern(pattern);
     const normalizedScope = cleanPath(scope ?? '');
@@ -112,7 +121,42 @@ export async function performSearch(
   } finally {
     setState('searching', false);
   }
+  // Written once, after every local field has its final value — this is the sole
+  // write site, so `onRemoteSearch` below only ever applies, never re-sends.
+  setSharedSearch({
+    query: state.query,
+    glob: state.glob,
+    scope: state.scope,
+    resultScope: state.resultScope,
+    matches: state.matches.map((m) => ({ file: m.file, line: m.line, content: m.content })),
+    includeBuilt: state.includeBuilt,
+    truncated: state.truncated,
+    excluded: state.excluded,
+    statusText: state.statusText,
+  });
 }
+
+/**
+ * Catch up on a search another copy of this window ran: adopt its results and
+ * drop the (now stale) selection the same way a fresh local search would.
+ */
+onRemoteSearch((next) => {
+  batch(() => {
+    setState('query', next.query);
+    setState('glob', next.glob);
+    setState('scope', next.scope);
+    setState('resultScope', next.resultScope);
+    setState('matches', next.matches);
+    setState('includeBuilt', next.includeBuilt);
+    setState('truncated', next.truncated);
+    setState('excluded', next.excluded);
+    setState('statusText', next.statusText);
+    setState('selectedIndex', null);
+    setState('previewPath', null);
+    setState('previewContent', null);
+    setState('previewHighlightLine', null);
+  });
+});
 
 /** Callback set by main.ts to scroll preview after content loads. */
 let _onPreviewLoaded: (() => void) | null = null;
@@ -120,7 +164,21 @@ export function setOnPreviewLoaded(fn: () => void) {
   _onPreviewLoaded = fn;
 }
 
-export async function selectResult(index: number) {
+/**
+ * Apply a selection (or its absence) to the local store and load the preview.
+ * Local-only — never writes the shared signal — so it doubles as the handler for
+ * a selection another copy made, with no risk of bouncing the write back.
+ */
+async function applySelection(index: number | null) {
+  if (index === null) {
+    batch(() => {
+      setState('selectedIndex', null);
+      setState('previewPath', null);
+      setState('previewContent', null);
+      setState('previewHighlightLine', null);
+    });
+    return;
+  }
   const match = state.matches[index];
   if (!match) return;
   setState('selectedIndex', index);
@@ -136,6 +194,13 @@ export async function selectResult(index: number) {
     setState('previewContent', '(unable to read file)');
   }
   requestAnimationFrame(() => _onPreviewLoaded?.());
+}
+
+onRemoteSelection((index) => void applySelection(index));
+
+export async function selectResult(index: number) {
+  await applySelection(index);
+  setSharedSelection(index);
 }
 
 // ── Result normalization ─────────────────────────────────────────────────────
