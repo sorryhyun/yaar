@@ -102,7 +102,8 @@ export class ClientEventController {
       [ClientEventType.DIALOG_FEEDBACK]: (event) => this.handleDialogFeedback(event),
       [ClientEventType.APP_PROTOCOL_RESPONSE]: (event) =>
         actionEmitter.resolveAppProtocolResponse(event.requestId, event.response),
-      [ClientEventType.APP_PROTOCOL_READY]: (event) => this.deps.appWindows.handleReady(event),
+      [ClientEventType.APP_PROTOCOL_READY]: (event, connectionId) =>
+        this.deps.appWindows.handleReady(event, connectionId),
       [ClientEventType.APP_EVENT]: (event) => this.deps.appWindows.handleAppEvent(event),
       [ClientEventType.TOAST_ACTION]: (event) => this.handleToastAction(event),
       [ClientEventType.USER_PROMPT_RESPONSE]: (event) => this.handleUserPromptResponse(event),

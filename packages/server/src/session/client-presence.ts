@@ -66,6 +66,18 @@ export function noteClientPresence(
   });
 }
 
+/**
+ * What one connection last said about itself, or `undefined` if it never said — an older
+ * client, or one that has not reported yet. Callers ranking connections treat that as
+ * "could answer": silence is not evidence of being away.
+ */
+export function connectionPresence(
+  sessionId: SessionId,
+  connectionId: ConnectionId,
+): ClientPresenceState | undefined {
+  return sessions.get(sessionId)?.get(connectionId)?.state;
+}
+
 /** Drop a connection's presence when its socket closes. */
 export function forgetConnectionPresence(sessionId: SessionId, connectionId: ConnectionId): void {
   const byConnection = sessions.get(sessionId);

@@ -19,6 +19,8 @@ import type { ClientEventType } from '@yaar/shared';
 import type { ClientEventOf } from './client-event-router.js';
 import type { AppProtocolRequestData } from './emitter-channels.js';
 import type { SessionId } from './types.js';
+import type { ConnectionId } from './broadcast-center.js';
+import { connectionPresence } from './client-presence.js';
 import type { WindowStateRegistry } from './window-state.js';
 import { actionEmitter } from './action-emitter.js';
 import { createLogger } from '../observability/log.js';
@@ -40,39 +42,176 @@ export interface AppWindowCoordinatorDeps {
   sessionId: SessionId;
   windowState: WindowStateRegistry;
   broadcast(event: ServerEvent): void;
+  /** Deliver to one connection — an app protocol request has exactly one responder. */
+  sendTo(connectionId: ConnectionId, event: ServerEvent): void;
+  /** Whether that socket is still attached to this session. */
+  hasConnection(connectionId: ConnectionId): boolean;
   /** Lazy — the pool does not exist until the first message that needs it. */
   getPool(): AppChannelTarget | null;
 }
 
 export class AppWindowCoordinator {
+  /**
+   * Per window key, the connections whose copy of the iframe has registered, oldest first.
+   *
+   * Every connected desktop mounts every window, so two tabs on one session means two
+   * documents behind one key — and a request broadcast to both runs the handler in both.
+   * For a query that is only wasted work; for a command it is the side effect twice (two
+   * identical GitHub issues filed in the same second, from one `createIssue`). So a request
+   * goes to exactly one of these, and this list is how the coordinator knows which ones
+   * could take it.
+   */
+  private readonly readyConnections = new Map<string, ConnectionId[]>();
+
+  /**
+   * Requests sent to one connection and not yet known to be settled, so a responder that
+   * disconnects mid-request can be replaced rather than waited out. Pruned lazily against
+   * the pending store — an entry whose ask already settled is simply dropped.
+   */
+  private readonly inFlight = new Map<
+    string,
+    {
+      connectionId: ConnectionId;
+      windowKey: string;
+      event: ServerEvent;
+      request: AppProtocolRequestData['request'];
+    }
+  >();
+
   constructor(private readonly deps: AppWindowCoordinatorDeps) {}
 
-  /** A tool asking an iframe app something — relayed to the frontend that hosts it. */
+  /**
+   * A tool asking an iframe app something — relayed to ONE frontend that hosts it.
+   *
+   * Only when no connection has registered this window is it broadcast, which is the old
+   * behaviour and the only honest fallback: the server cannot name a responder, and every
+   * path that reaches here has already waited on readiness (`requireAppReady`), so this is
+   * the rare case of a registration whose connection has since gone.
+   */
   handleProtocolRequest(data: AppProtocolRequestData): void {
-    this.deps.broadcast({
+    const event: ServerEvent = {
       type: ServerEventType.APP_PROTOCOL_REQUEST,
       requestId: data.requestId,
       windowId: data.windowId,
       request: data.request,
       timeoutMs: data.timeoutMs,
+    };
+    const windowKey = this.resolveKey(data.windowId);
+    const responder = this.pickResponder(windowKey);
+    if (!responder) {
+      this.deps.broadcast(event);
+      return;
+    }
+    this.pruneSettled();
+    this.inFlight.set(data.requestId, {
+      connectionId: responder,
+      windowKey,
+      event,
+      request: data.request,
     });
+    this.deps.sendTo(responder, event);
+  }
+
+  /** Drop in-flight records whose ask has already been answered, expired, or cancelled. */
+  private pruneSettled(): void {
+    for (const requestId of this.inFlight.keys()) {
+      if (!actionEmitter.isAppRequestPending(requestId)) this.inFlight.delete(requestId);
+    }
+  }
+
+  /**
+   * The responder for these requests is gone: hand each one that is still waiting to
+   * another registered tab, so the agent gets an answer instead of a timeout.
+   *
+   * Except a command the app declared `replay: 'never'`. The tab that disconnected may
+   * well have run it and lost only the reply — re-sending then is the very duplicate this
+   * coordinator exists to prevent. That one is left to its deadline: a timeout the agent
+   * can check on is recoverable, a second GitHub issue is not.
+   */
+  private reassignFrom(connectionId: ConnectionId): void {
+    for (const [requestId, flight] of this.inFlight) {
+      if (flight.connectionId !== connectionId) continue;
+      if (!actionEmitter.isAppRequestPending(requestId)) {
+        this.inFlight.delete(requestId);
+        continue;
+      }
+      const oneShot =
+        flight.request.kind === 'command' &&
+        this.deps.windowState.getNoReplayCommands(flight.windowKey).has(flight.request.command);
+      const next = oneShot ? null : this.pickResponder(flight.windowKey);
+      if (!next) {
+        log.info('responder disconnected mid-request; not re-sent', {
+          sessionId: this.deps.sessionId,
+          requestId,
+          windowId: flight.windowKey,
+          reason: oneShot ? 'one-shot command' : 'no other registered tab',
+        });
+        this.inFlight.delete(requestId);
+        continue;
+      }
+      log.info('responder disconnected mid-request; re-sent to another tab', {
+        sessionId: this.deps.sessionId,
+        requestId,
+        windowId: flight.windowKey,
+      });
+      flight.connectionId = next;
+      this.deps.sendTo(next, flight.event);
+    }
+  }
+
+  /**
+   * The connection to ask: a registered one whose tab is in front, else any registered
+   * one — newest first in both tiers, since the newest registration is the document most
+   * likely to still be alive (a reconnect re-announces under its new connection id).
+   *
+   * A backgrounded phone and a visible desktop both registered is the case this exists
+   * for: the phone cannot run script, so asking it is a guaranteed timeout, while asking
+   * both is a duplicated side effect the moment the phone wakes.
+   */
+  private pickResponder(windowKey: string): ConnectionId | null {
+    const registered = (this.readyConnections.get(windowKey) ?? []).filter((id) =>
+      this.deps.hasConnection(id),
+    );
+    if (registered.length === 0) return null;
+    for (let i = registered.length - 1; i >= 0; i--) {
+      const state = connectionPresence(this.deps.sessionId, registered[i]!);
+      if (state === undefined || state === 'visible') return registered[i]!;
+    }
+    return registered[registered.length - 1]!;
+  }
+
+  /**
+   * The key readiness is filed under — see `handleReady` for why it keeps the monitor scope.
+   *
+   * Windows stored under a bare raw id (devtools preview windows, created via the
+   * iframe-SDK proxy with no monitor) still resolve: getWindow() matches them exactly,
+   * and the fallback strips a scope they never had.
+   */
+  private resolveKey(windowId: string): string {
+    return (
+      this.deps.windowState.getWindow(windowId)?.id ??
+      this.deps.windowState.handleMap.getRawWindowId(windowId)
+    );
   }
 
   /** An iframe reporting that its app has registered and can be commanded. */
-  handleReady(event: ClientEventOf<typeof ClientEventType.APP_PROTOCOL_READY>): void {
+  handleReady(
+    event: ClientEventOf<typeof ClientEventType.APP_PROTOCOL_READY>,
+    connectionId: ConnectionId,
+  ): void {
     // The frontend reports the monitor-scoped key (e.g. "0/ai-chat", from the window
     // element's data-window-id). Keep that scope: readiness is per window, and the raw
     // AI-facing id ("ai-chat") names one window *per monitor*, so collapsing to it would
     // let monitor 0's registration mark monitor 1's window ready — leaving monitor 1's
     // agent talking to an iframe that never registered. app_query/app_command wait on
     // the same resolved key (see requireAppReady).
-    //
-    // Windows stored under a bare raw id (devtools preview windows, created via the
-    // iframe-SDK proxy with no monitor) still resolve: getWindow() matches them exactly,
-    // and the fallback below strips a scope they never had.
-    const windowKey =
-      this.deps.windowState.getWindow(event.windowId)?.id ??
-      this.deps.windowState.handleMap.getRawWindowId(event.windowId);
+    const windowKey = this.resolveKey(event.windowId);
+    // Newest last: re-registering moves a connection to the end rather than duplicating it.
+    const connections = (this.readyConnections.get(windowKey) ?? []).filter(
+      (id) => id !== connectionId,
+    );
+    connections.push(connectionId);
+    this.readyConnections.set(windowKey, connections);
     const wasReady = this.deps.windowState.getWindow(windowKey)?.appProtocol ?? false;
     // The replay policy is recorded from the same frame that decides the replay below, and
     // before it. That ordering is the whole reason this is correct: the commands about to
@@ -88,8 +227,12 @@ export class AppWindowCoordinator {
     // Replay stored commands only on re-registration (reload/remount), not first time —
     // and never on a re-announce, where the desktop is repeating a registration it
     // already witnessed and the iframe never remounted (see AppProtocolReadyEvent).
+    //
+    // Replayed to the registering connection only: it is the document that remounted and
+    // lost its state. Every other tab's copy kept its own, and re-sending to it would
+    // re-apply commands it has already run.
     if (wasReady && !event.reannounce) {
-      this.replayCommands(windowKey);
+      this.replayCommands(windowKey, connectionId);
     }
   }
 
@@ -99,6 +242,18 @@ export class AppWindowCoordinator {
    */
   forgetReady(windowId: string): void {
     actionEmitter.forgetAppReady(this.deps.sessionId, windowId);
+    this.readyConnections.delete(windowId);
+  }
+
+  /** A socket closed: whatever its iframes registered can no longer answer. */
+  forgetConnection(connectionId: ConnectionId): void {
+    for (const [windowKey, connections] of this.readyConnections) {
+      const remaining = connections.filter((id) => id !== connectionId);
+      if (remaining.length === 0) this.readyConnections.delete(windowKey);
+      else this.readyConnections.set(windowKey, remaining);
+    }
+    // After the registrations are gone, so the dead connection cannot be picked again.
+    this.reassignFrom(connectionId);
   }
 
   /** An app emitted on a declared channel. */
@@ -158,7 +313,7 @@ export class AppWindowCoordinator {
    * spelling-list framing is the right one: a missed skip re-applies a non-idempotent
    * command, while an over-skip merely leaves a piece of state unrestored.
    */
-  private replayCommands(windowId: string): void {
+  private replayCommands(windowId: string, connectionId: ConnectionId): void {
     const commands = this.deps.windowState.getAppCommands(windowId);
     if (commands.length === 0) return;
 
@@ -185,7 +340,7 @@ export class AppWindowCoordinator {
     );
     for (let i = 0; i < replayable.length; i++) {
       const request = replayable[i]!;
-      this.deps.broadcast({
+      this.deps.sendTo(connectionId, {
         type: ServerEventType.APP_PROTOCOL_REQUEST,
         requestId: `replay-${windowId}-${Date.now()}-${i}`,
         windowId,

@@ -247,6 +247,8 @@ export class LiveSession {
       sessionId,
       windowState: this.windowState,
       broadcast: (event) => this.broadcast(event),
+      sendTo: (connectionId, event) => this.sendTo(connectionId, event),
+      hasConnection: (connectionId) => this.connections.has(connectionId),
       getPool: () => this.pool,
     });
 
@@ -416,6 +418,7 @@ export class LiveSession {
 
   removeConnection(connectionId: ConnectionId): void {
     this.connections.delete(connectionId);
+    this.appWindows.forgetConnection(connectionId);
     this.log.info('connection removed', { connectionId, total: this.connections.size });
   }
 

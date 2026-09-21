@@ -82,6 +82,11 @@ export class PendingStore<TResult, TMeta = void> {
     });
   }
 
+  /** Whether this id is still waiting — neither answered, expired, nor cancelled. */
+  has(id: string): boolean {
+    return this.entries.has(id);
+  }
+
   /**
    * Resolve a pending entry. Returns whether the entry existed and its metadata.
    *

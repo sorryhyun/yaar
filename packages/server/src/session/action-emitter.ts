@@ -761,6 +761,15 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   }
 
   /**
+   * Whether an app protocol request is still waiting for its reply. The coordinator asks
+   * before re-sending a request whose responder disconnected — one already answered or
+   * timed out must not be asked again.
+   */
+  isAppRequestPending(requestId: string): boolean {
+    return this.appRequests.isPending(requestId);
+  }
+
+  /**
    * A window closed: settle every app protocol request still addressed to it.
    *
    * Without this, a relayed command that destroys its own responder is indistinguishable

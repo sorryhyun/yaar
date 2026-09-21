@@ -138,6 +138,11 @@ export class DesktopRequest<TResult, TMeta = void> {
     return pending;
   }
 
+  /** Whether this ask is still waiting for its answer. */
+  isPending(id: string): boolean {
+    return this.store.has(id);
+  }
+
   /**
    * Resolve a pending entry with the desktop's answer. `resolved: false` means the id is
    * no longer held — ask {@link takeLate} whether it was one of ours.
