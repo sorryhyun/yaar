@@ -46,6 +46,7 @@ export const createNotificationsSlice: SliceCreator<NotificationsSlice> = (set, 
       (state as DesktopStore).pendingInteractions.push({
         type: 'notification.dismiss',
         timestamp: Date.now(),
+        notificationId: id,
         details: notification?.title,
       });
     }),

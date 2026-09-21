@@ -63,14 +63,16 @@ export class SurfaceRegistry {
   }
 
   /**
-   * Forget a dialog or prompt the user has answered.
+   * Forget a surface the user has settled: an answered dialog or prompt, or a dismissed
+   * notification.
    *
-   * An answer arrives as a client event (`DIALOG_FEEDBACK` / `USER_PROMPT_RESPONSE`), not
-   * as an action, so it never passes through `record()`. Without this, an answered dialog
-   * would be re-shown by the next snapshot — asking the user a question they had already
-   * settled.
+   * These arrive as client events (`DIALOG_FEEDBACK` / `USER_PROMPT_RESPONSE` /
+   * a `notification.dismiss` interaction), not as actions, so they never pass through
+   * `record()`. Without this, the next snapshot would re-show them — asking a question
+   * the user had already settled, or piling dismissed notifications back up on reload.
    */
   answered(id: string): void {
+    this.notifications.delete(id);
     this.dialogs.delete(id);
     this.prompts.delete(id);
   }

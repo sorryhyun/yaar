@@ -439,6 +439,12 @@ export class ClientEventController {
     for (const interaction of event.interactions) {
       logger?.logInteraction(interaction);
 
+      // The user closed it, so it is off the screen — and the next snapshot must not
+      // put it back. Only an agent's dismiss passes through `SurfaceRegistry.record()`.
+      if (interaction.type === 'notification.dismiss' && interaction.notificationId) {
+        this.deps.surfaces.answered(interaction.notificationId);
+      }
+
       const applied = await this.deps.windowState.applyUserInteraction(interaction, getAppMeta);
 
       this.notifyWindowWatchers(interaction);

@@ -37,6 +37,7 @@ export interface UserInteraction {
   monitorId?: string; // Monitor ID for window.create
   content?: { renderer: string; data: unknown }; // Window content for window.create
   appId?: string; // App ID for window.create
+  notificationId?: string; // Notification ID for notification.dismiss
 }
 
 export interface UserMessageEvent {
