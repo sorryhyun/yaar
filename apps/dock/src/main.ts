@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, Show, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { defineApp, notifications, safeParseOr } from '@bundled/yaar';
+import { createSharedSignal, defineApp, notifications, safeParseOr } from '@bundled/yaar';
 import { OpenMeteoResponse, NominatimResponse } from './schema';
 import { POLL_MS, fetchRoster, formatTokens, roster, rosterError, type AgentRow } from './agents';
 import './styles.css';
@@ -33,11 +33,15 @@ const [weatherCity, setWeatherCity] = createSignal('');
 
 const [notifCount, setNotifCount] = createSignal(0);
 
-const [agentsOpen, setAgentsOpen] = createSignal(false);
+// The dock is one desktop panel shared by every connected copy (phone + companion
+// tab). These are all set by agent commands (setAgentsExpanded, setAppearance), never
+// by user interaction in the view, so every copy must show what the agent set, not
+// what it individually started with.
+const [agentsOpen, setAgentsOpen] = createSharedSignal('agentsOpen', false);
 
-const [showPanel, setShowPanel] = createSignal(false);
-const [panelOpacity, setPanelOpacity] = createSignal(0.45);
-const [panelBlurPx, setPanelBlurPx] = createSignal(10);
+const [showPanel, setShowPanel] = createSharedSignal('showPanel', false);
+const [panelOpacity, setPanelOpacity] = createSharedSignal('panelOpacity', 0.45);
+const [panelBlurPx, setPanelBlurPx] = createSharedSignal('panelBlurPx', 10);
 
 // ── Panel style (reactive) ────────────────────────────────────────────────────
 function panelStyle(): string {
