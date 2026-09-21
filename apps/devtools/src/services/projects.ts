@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, list, del, errMsg, safeParseOr } from '@bundled/yaar';
+import { appStorage, invoke, list, del, errMsg, safeParseOr, subscribe } from '@bundled/yaar';
 import type * as z from '@bundled/zod';
 import { ProjectAppJsonSchema } from '../schema';
 import {
@@ -170,33 +170,89 @@ function saveWorkspace(): void {
 }
 
 /**
- * Reopen what was open, once the project list is in.
- *
- * Filtered against the live list rather than trusted: a project deleted from another
- * window — or from a session whose last write never landed — would otherwise put a tab
- * on screen for a directory that is gone, and `openProject` would quietly do nothing
- * while the tab stayed. Nothing is written back here; the next open or close does that.
+ * The stored open set, filtered against the live project list — a project deleted from
+ * another window, or from a session whose last write never landed, would otherwise put
+ * a tab on screen for a directory that is gone. Null when nothing usable is stored.
+ */
+async function readWorkspace(): Promise<{ tabs: string[]; activeId: string } | null> {
+  const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const stored = raw as Partial<Workspace>;
+  const live = new Set(projects().map((p) => p.id));
+  const tabs = (Array.isArray(stored.tabs) ? stored.tabs : []).filter(
+    (id): id is string => typeof id === 'string' && live.has(id),
+  );
+  if (tabs.length === 0) return null;
+  const activeId =
+    typeof stored.activeId === 'string' && tabs.includes(stored.activeId)
+      ? stored.activeId
+      : tabs[tabs.length - 1];
+  return { tabs, activeId };
+}
+
+/**
+ * Reopen what was open, once the project list is in. Nothing is written back here; the
+ * next open or close does that.
  */
 export async function restoreWorkspace(): Promise<void> {
   try {
-    const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
-    const stored = raw as Partial<Workspace>;
-    const live = new Set(projects().map((p) => p.id));
-    const tabs = (Array.isArray(stored.tabs) ? stored.tabs : []).filter(
-      (id): id is string => typeof id === 'string' && live.has(id),
-    );
-    if (tabs.length === 0) return;
-    setOpenTabs(tabs);
-    const activeId =
-      typeof stored.activeId === 'string' && tabs.includes(stored.activeId)
-        ? stored.activeId
-        : tabs[tabs.length - 1];
-    await openProject(activeId);
+    const workspace = await readWorkspace();
+    if (!workspace) return;
+    setOpenTabs(workspace.tabs);
+    await openProject(workspace.activeId);
   } catch (err) {
     // A workspace that cannot be read is not worth a status line: the user still has
     // every project in the picker, and the next open writes a good one.
     console.error('[devtools] restoring open projects failed', err);
+  }
+}
+
+/**
+ * Follow the open set when another copy of this window changes it.
+ *
+ * Every connected desktop mounts its own copy of Dev Tools, and the agent's commands reach
+ * exactly one of them — the server pins one responder per window. With a phone and the
+ * companion tab both attached, that one is the companion: `cloneApp` opened the clone
+ * there, while the copy on the phone's screen kept showing the project from before, and
+ * the user watched the agent build an app that was not the one on screen.
+ *
+ * A copy that follows does not write the set back, so two copies cannot ping-pong, and
+ * each reads the file rather than trusting the ping — every copy lands on the last write.
+ */
+export function followWorkspace(): void {
+  subscribe(`yaar://apps/self/storage/${WORKSPACE_PATH}`, () => {
+    void syncWorkspace().catch((err) => {
+      console.error('[devtools] following open projects failed', err);
+    });
+  }).catch((err) => {
+    console.error('[devtools] watching open projects failed', err);
+  });
+}
+
+async function syncWorkspace(): Promise<void> {
+  const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
+  const stored = (raw && typeof raw === 'object' ? raw : {}) as Partial<Workspace>;
+  const storedTabs = Array.isArray(stored.tabs) ? stored.tabs : [];
+  const current = openTabs();
+  // The ping for this copy's own write, the common case: nothing to do.
+  if (
+    (stored.activeId ?? null) === (activeProject()?.id ?? null) &&
+    storedTabs.length === current.length &&
+    storedTabs.every((id, i) => id === current[i])
+  ) {
+    return;
+  }
+  // A project cloned or created in another copy is one this copy has never listed.
+  if (storedTabs.some((id) => !projects().some((p) => p.id === id))) await loadProjects();
+  const workspace = await readWorkspace();
+  if (!workspace) {
+    if (activeProject()) clearActiveProjectState({ record: false });
+    setOpenTabs([]);
+    return;
+  }
+  setOpenTabs(workspace.tabs);
+  if (workspace.activeId !== activeProject()?.id) {
+    await openProject(workspace.activeId, { record: false });
   }
 }
 
@@ -361,7 +417,10 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
   return { id, appId: typeof meta.appId === 'string' ? meta.appId : appId, agentsMd };
 }
 
-export async function openProject(id: string): Promise<void> {
+export async function openProject(
+  id: string,
+  { record = true }: { record?: boolean } = {},
+): Promise<void> {
   const proj = projects().find((p) => p.id === id);
   if (!proj) return;
   if (!openTabs().includes(id)) setOpenTabs([...openTabs(), id]);
@@ -383,12 +442,12 @@ export async function openProject(id: string): Promise<void> {
   setPreviewWindowId(null);
   await refreshFiles(id);
   await openFile('src/main.ts');
-  saveWorkspace();
+  if (record) saveWorkspace();
   setStatusText(`Opened "${proj.name}"`);
 }
 
 /** Clear project-scoped UI state when no project remains open. */
-function clearActiveProjectState(): void {
+function clearActiveProjectState({ record = true }: { record?: boolean } = {}): void {
   batch(() => {
     setActiveProject(null);
     setFiles([]);
@@ -401,7 +460,7 @@ function clearActiveProjectState(): void {
     setPreviewUrl(null);
     setStaticProtocol(null);
   });
-  saveWorkspace();
+  if (record) saveWorkspace();
 }
 
 export async function deleteProject(id: string): Promise<void> {
