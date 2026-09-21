@@ -160,8 +160,7 @@ interface Workspace {
 
 /**
  * Record the open set. Best effort, and not awaited by its callers: failing to write
- * this must never fail the open or close that produced it — the cost of losing it is
- * one restore, which is where we were before it existed.
+ * this must never fail the open or close that produced it; losing it costs one restore.
  */
 function saveWorkspace(): void {
   const workspace: Workspace = { tabs: openTabs(), activeId: activeProject()?.id ?? null };
@@ -210,9 +209,7 @@ export async function loadProjects(): Promise<void> {
     for (const dir of dirs) {
       const id = dir.path.replace(/\/$/, '').split('/').pop()!;
       // Dated from app.json, the one file every project has and the one a scaffold
-      // writes last. `Date.now()` used to stand here, which stamped every project
-      // with the moment the list was read — so "most recently worked on" was
-      // whatever order storage happened to enumerate.
+      // writes last.
       let lastModified = 0;
       const appJson = (await appStorage.list(`projects/${id}/`)).find(
         (e) => !e.isDirectory && e.path.endsWith('app.json'),
@@ -376,13 +373,10 @@ export async function openProject(id: string): Promise<void> {
   // being switched away from. `diagnostics` is left standing until the next
   // typecheck writes it, but `compileStatus` no longer reads it as current.
   setTypecheckState('unknown');
-  // The preview binding is project-scoped in exactly the way staticProtocol above is,
-  // and was the one member of that set left standing. Both the window id and the build
-  // URL describe the project being switched *away from*: the window keeps rendering the
-  // other project's bundle under the other project's principal, and `previewUrl` still
-  // points at its dist. Left set, `previewOpen` reports `open: true, stale: false` while
-  // previewQuery/previewCommand/previewEval answer about a different app entirely --
-  // silently and with no error, which is worse than the "window not found" it looks like.
+  // The preview binding is project-scoped in the same way. Both the window id and the
+  // build URL describe the project being switched *away from*; left set, `previewOpen`
+  // reports `open: true, stale: false` while previewQuery/previewCommand/previewEval
+  // silently answer about a different app.
   // Unbind rather than close: the window belongs to the other project, and openPreview
   // already closes by id before it re-creates, so switching back cannot collide.
   setPreviewUrl(null);

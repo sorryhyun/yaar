@@ -149,11 +149,8 @@ export const devtoolsState = {
       'of guessing, and instead of calling `preview` defensively, which remounts the iframe ' +
       'and resets all in-app state. `stale: true` means a compile ran with ' +
       '`refreshPreview: false`, so the window is rendering the *previous* build.',
-    // Asked of the server, not of our own signal. The signal records that we opened a
-    // window; only the server knows whether it is still there — the user can close it, a
-    // project delete can take it, a deploy can retire it, and none of those tell us.
-    // Answering from the signal made this key report `{open: true, stale: false}` about a
-    // window that no longer existed, which is worse than an error because nothing failed.
+    // Asked of the server, not of our own signal: the user, a project delete or a deploy
+    // can close the window without telling us.
     get: async () => {
       const open = await previewWindowIsOpen();
       return { open, stale: open && previewIsStale() };
@@ -263,15 +260,13 @@ export const devtoolsState = {
       '`connected: false` means the preview buffer could not be read — an empty `logs` ' +
       'then says nothing about whether the app logged anything.',
     get: async () => {
-      // Pull the live console buffer straight from the preview window over
-      // the app protocol. The preview runs as its own registered window
-      // (where verb calls work), so its console-capture buffer is the
-      // source of truth for preview output. The local signal is updated by the
-      // poll in project.ts and also retains Dev Tools' evaluation audit entries.
+      // Pull the live console buffer straight from the preview window over the app
+      // protocol; its console-capture buffer is the source of truth for preview output.
+      // The local signal is updated by the poll in services/console.ts and also retains
+      // Dev Tools' evaluation audit entries.
       //
-      // Every failure here used to collapse into the same empty array, so "no preview open",
-      // "preview unreachable" and "app logged nothing" were indistinguishable — a reader had
-      // no choice but to guess. Report which one it is.
+      // Each failure ("no preview open", "preview unreachable") gets its own reason,
+      // distinct from an app that logged nothing.
       const wid = previewWindowId();
       if (!wid) {
         return {

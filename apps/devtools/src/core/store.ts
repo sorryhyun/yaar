@@ -28,11 +28,10 @@ export const [openFileContent, setOpenFileContent] = createSignal<string | null>
 export const [openFileImage, setOpenFileImage] = createSignal<string | null>(null);
 export const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>([]);
 /**
- * The **bundler's** verdict on the last build. Deliberately not the whole story:
- * Bun strips types and builds straight through type errors, so this says "it
- * bundled", never "it is correct". `bundleStatus`/`compileStatus` in the protocol
- * are what combine it with `typecheckState` — nothing should read this signal alone
- * and call the project clean.
+ * The **bundler's** verdict on the last build. Bun builds straight through type
+ * errors, so this says "it bundled", never "it is correct"; `compileStatus` combines
+ * it with `typecheckState`. Nothing should read this signal alone and call the
+ * project clean.
  */
 export const [bundleStatus, setBundleStatus] = createSignal<
   'idle' | 'compiling' | 'success' | 'error'
@@ -40,10 +39,8 @@ export const [bundleStatus, setBundleStatus] = createSignal<
 /**
  * Whether type checking has run against the code as it stands now.
  *
- * `unknown` is the load-bearing value, and it is the default after every write: a
- * `clean` from before the last edit describes code that no longer exists, and
- * reporting it as still clean is the exact failure `compileStatus` was making with
- * the bundler's verdict. It is a third answer, not a shade of one of the other two.
+ * `unknown` is the default after every write: a `clean` from before the last edit
+ * describes code that no longer exists. It is a third answer, not a shade of `clean`.
  */
 export const [typecheckState, setTypecheckState] = createSignal<'unknown' | 'clean' | 'errors'>(
   'unknown',
@@ -64,11 +61,10 @@ export const [previewWindowId, setPreviewWindowId] = createSignal<string | null>
  *
  * `buildSerial` counts successful compiles; `previewBuildSerial` records the one the
  * preview window was last mounted from. They are equal when the preview shows current
- * code. They diverge only when a compile deliberately skipped the refresh
- * (`compile({ refreshPreview: false })`, which is how in-app state survives a build) —
- * and that divergence has to be *reported*, because a preview silently showing the
- * previous build is the failure the unconditional remount existed to prevent: a
- * screenshot taken to confirm a fix showed the code from before the fix and agreed.
+ * code. They diverge only when a compile skipped the refresh
+ * (`compile({ refreshPreview: false })`, which is how in-app state survives a build),
+ * and that divergence must be *reported*: a preview silently showing the previous
+ * build makes a screenshot confirm a fix that is not in it.
  */
 export const [buildSerial, setBuildSerial] = createSignal(0);
 export const [previewBuildSerial, setPreviewBuildSerial] = createSignal(0);
@@ -81,10 +77,9 @@ export function previewIsStale(): boolean {
 /**
  * Recent file mutations, newest first and bounded by the recorder.
  *
- * Every write, edit, copy and delete lands here so the bottom panel can show the
- * actual diff. The status line reports that *a* write happened; this is what it
- * was. Holding the before/after text is the point — re-reading the file later
- * shows its current state, which is a different question.
+ * Every write, edit, copy and delete lands here so the Changes tab can show the
+ * diff. The before/after text is held because re-reading the file later shows only
+ * its current state.
  */
 export const [fileChanges, setFileChanges] = createSignal<FileChange[]>([]);
 /** Which change the panel is showing. Null means "the newest one". */

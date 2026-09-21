@@ -11,7 +11,7 @@ import { narrow, sidebarVisible, toggleSidebar, closeDrawer, watchViewport } fro
 import { selectTurns, compactTurn, indexSession } from './select';
 import type { SessionSummary } from './types';
 
-/** Default and ceiling for one `readTurns` page. A page is a budget, not a preference. */
+/** Default and ceiling for one `readTurns` page. */
 const TURNS_DEFAULT = 40;
 const TURNS_MAX = 200;
 /** Default and ceiling for `readBlob` / `readTranscript`, in characters. */
@@ -228,13 +228,8 @@ export default defineApp({
         };
       },
     },
-    // An index, deliberately — not the turns.
-    //
-    // This used to return every parsed entry, which made a session unreadable rather
-    // than large: one logged session here holds 6874 of them, and a state getter takes
-    // no arguments, so there was no smaller question to ask. Orientation (what is in
-    // here) and retrieval (give me these forty) are different questions; only the
-    // second one should cost an agent anything, and it is `readTurns` that answers it.
+    // An index, not the turns: a session can hold thousands of entries and a state
+    // getter takes no arguments. Retrieval is `readTurns`.
     messages: {
       description:
         'Index of the selected session: total, type/agent/tool histograms, error and blob ' +
@@ -428,11 +423,9 @@ export default defineApp({
         };
       },
     },
-    // The agent's intended route to storage. `command('storage:write', …)` would reach the
-    // same tree — the built-ins are held by every app agent, and `yaar://apps/self/storage/`
-    // needs no permission — which is exactly why a named command earns its place instead:
-    // the iframe holds the SDK, the agent asks for the write by name, and the app decides
-    // where a report may land and under what name. The prompt says to prefer it.
+    // The agent's intended route to storage: the app decides where a report may land
+    // and under what name. `command('storage:write', …)` would reach the same tree; the
+    // prompt says to prefer this.
     saveReport: {
       description:
         'Save an analysis report into this app\'s own storage under "reports/". ' +

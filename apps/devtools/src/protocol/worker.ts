@@ -495,9 +495,6 @@ export const workerCommands = {
       const proposal = findProposal(id);
       if (!proposal) throw new AppCommandError('No edit request #' + id + '.');
       if (proposal.status !== 'pending') {
-        // Spelled out because the obvious reading of a bare refusal is that the
-        // worker is now owed an explanation nobody can deliver. It is not: every
-        // terminal status queues its own feedback on the way there.
         throw new AppCommandError(
           'Edit request #' +
             id +

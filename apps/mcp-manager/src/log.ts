@@ -1,8 +1,7 @@
 // One place for how a failure is logged and shown.
 //
-// Three call sites used to hand-roll console.error + showToast with slightly
-// different prefixes; `reportError` is that pair written once, so the log line
-// and the toast can never drift apart. Failures that should *not* be shown to
+// `reportError` is console.error + showToast written once, so the log line and
+// the toast cannot drift apart. Failures that should *not* be shown to
 // the user (a single malformed row inside a list that still renders) use
 // `logError` alone, and one that is *routinely* expected (a port sweep's
 // misses) uses `logDebug`.

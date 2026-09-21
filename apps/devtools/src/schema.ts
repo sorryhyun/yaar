@@ -6,26 +6,17 @@
 // compiler run that may have failed halfway — and the runtime manifest is
 // whatever the previewed app handed back from its own `defineApp()` config.
 //
-// Treating them as trusted (`readJsonOr<{ name: string }>` and friends) meant a
-// truncated protocol.json produced a manifest of garbage keys, indistinguishable
-// from the legitimate "no such file" case. (The project *name* was never at
-// risk: the old reader started from `let name = id` and only overwrote it on a
-// truthy `meta.name`. What the app.json schema tightens is `permissions` — a
-// value handed straight to window creation as a grant list, which the old code
-// guarded with a bare `Array.isArray`, so an array of arbitrary junk went through.)
+// Unvalidated, a truncated protocol.json produces a manifest of garbage keys,
+// indistinguishable from the legitimate "no such file" case. The app.json schema
+// matters for `permissions`, which is handed straight to window creation as a grant
+// list. It must accept everything an app.json may say, including `{ uri, verbs }`
+// grant objects: a schema narrower than the format rejects valid apps.
 //
-// Tightening it is only safe if it matches what an app.json may actually say —
-// the first version accepted `string[]` alone and so declared every app that
-// narrows a grant to `{ uri, verbs }` invalid. A boundary schema narrower than
-// the format it guards is not strictness, it is a false negative.
-//
-// Loose on purpose: an app.json carries far more than the two fields devtools
-// reads (icon, version, bundles, controls...), and none of it should have to be
-// re-declared here to survive.
+// Loose: an app.json carries far more than the two fields devtools reads (icon,
+// version, bundles, controls...), and none of it is re-declared here.
 //
 // `@bundled/zod` is Zod Mini (functional API): `z.optional(z.string())`,
-// `z.safeParse(Schema, data)`. Mini tree-shakes to ~10KB; standard Zod would
-// add ~260KB.
+// `z.safeParse(Schema, data)`.
 import * as z from '@bundled/zod';
 
 /**

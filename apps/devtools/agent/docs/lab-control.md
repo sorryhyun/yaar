@@ -6,10 +6,8 @@ audience: agent
 
 ## Lab — compute over data instead of pulling data into context
 
-**You and Lab (`appId: "lab"`) both hold `yaar://storage/`, so a path is a currency you
-share — send it paths, never contents.** Reading a 40MB log into your context to count error
-lines is the exact mistake this app exists to prevent, and holding the permission yourself
-makes it *easier* to make, not harder. Reach for it when the question is arithmetic over
+**You and Lab (`appId: "lab"`) both hold `yaar://storage/`, so send it paths, never
+contents.** Do not read a 40MB log into your context to count error lines. Reach for Lab when the question is arithmetic over
 data rather than a change to code: aggregating large log/JSON/CSV files, bundle-size stats
 across `dist/`, scanning for a pattern with more hits than you can read, chart PNGs for a
 report.
@@ -21,7 +19,6 @@ full data set and only the path comes back. `describe({ appId: "lab" })` for the
 helpers, the notebook commands and `exportChart`.
 
 **Lab's `http` helper differs from fetch — `describe({ appId: "lab" })` before first use.**
-It is rarely what you want here anyway: for probing an endpoint's request/response shape use
-your own `httpProbe`, which needs no second app and no open window. Lab's belongs to a
-*cell* — a step that loads a remote CSV before reducing it, where the bytes should never
-leave the sandbox.
+To probe an endpoint's request/response shape, use your own `httpProbe` instead. Lab's
+`http` is for a *cell* that loads a remote CSV before reducing it, where the bytes should
+never leave the sandbox.

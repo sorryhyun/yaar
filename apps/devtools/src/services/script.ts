@@ -497,10 +497,8 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
   const baseline = parseBaseline(script.baselinePath, baselineText);
   const expectedRows = baseline.results.filter((r) => inGroups(r?.group, groups));
 
-  // Updating comes before the alignment check on purpose. Re-capture is precisely
-  // what a caller does after editing the script, so refusing it on the grounds that
-  // the script was edited leaves no way forward at all. The delta is reported by
-  // label instead, which is the part that carries the review: `added` and `removed`
+  // Updating comes before the alignment check: re-capture is what a caller does after
+  // editing the script. The delta is reported by label instead: `added` and `removed`
   // are the script edit, `changed` is the behavior that moved under it.
   if (opts.update) {
     const delta = diffRows(expectedRows, rows);

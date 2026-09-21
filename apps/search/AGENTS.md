@@ -13,7 +13,7 @@ Full-text search over YAAR storage, plus app-source cloning and dependency analy
 - `depsgraph.ts` — the rendered dependency diagram (mermaid mode only).
 - `styles/` — one file per region, imported in cascade order by `styles/index.ts`.
 
-## Invariants worth knowing
+## Invariants
 
 - **JSON Schema params, not Zod.** `main.ts` evaluates nothing at module scope that needs a
   DOM, but the manifest extractor imports the app in a stubbed-DOM worker; the templates here

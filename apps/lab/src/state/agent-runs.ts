@@ -4,9 +4,8 @@ import { trimOutput } from '../lib/trim';
 import type { AgentRun, CellOutput } from '../types';
 
 /**
- * The agent run log — the answer to "an agent ran something and the window showed
- * nothing". Every execution that arrives over the app protocol lands here and is
- * drawn by components/AgentPanel.ts with the ordinary cell output renderer.
+ * The agent run log. Every execution that arrives over the app protocol lands here
+ * and is drawn by components/AgentPanel.ts with the ordinary cell output renderer.
  *
  * The log is one of the two main views (`mainView`), not a panel stacked under the
  * notebook. A `runCode` has nowhere else to show itself, so it pulls the view over
@@ -14,7 +13,7 @@ import type { AgentRun, CellOutput } from '../types';
  * only bumps `unseen`, which badges the tab. Either way the user can switch back,
  * and a later run may pull it over again.
  *
- * Two caps, both deliberate: MAX_ENTRIES bounds the list, and each entry's payload
+ * Two caps: MAX_ENTRIES bounds the list, and each entry's payload
  * goes through `trimOutput` — the same pass that caps a notebook before it is
  * written to disk — so one enormous result cannot wedge the UI.
  */
@@ -61,8 +60,7 @@ export interface AgentRunInput {
 
 /**
  * Record one protocol-initiated run. `focus` brings the log to the front; without
- * it the Agent runs tab is badged instead. A silent run is the bug this module
- * exists to prevent.
+ * it the Agent runs tab is badged instead.
  */
 export function logAgentRun(input: AgentRunInput): AgentRun {
   const source =

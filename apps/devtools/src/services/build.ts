@@ -130,10 +130,8 @@ export async function typecheck(): Promise<void> {
  * anything verified in it afterwards is a false result: the files on disk are correct, the
  * repo agrees the fix shipped, and the code actually running is the code from before.
  *
- * A failed deploy used to be written to the status bar and then swallowed — the caller got
- * back the same `undefined` a successful one returns. An agent, which cannot read the status
- * bar, was told nothing and moved on believing it had shipped. The server refusing to deploy
- * type-broken code only helps if the refusal reaches whoever asked.
+ * A failed deploy throws rather than only writing the status bar: an agent cannot read the
+ * status bar, and a server refusal must reach whoever asked.
  */
 export async function deploy(opts: {
   appId: string;
@@ -178,8 +176,7 @@ export async function deploy(opts: {
   // Close the preview once the deploy has actually landed. A preview is a window onto a
   // *build*, not onto the app: it runs under the throwaway `preview--{projectId}` principal
   // against a sandbox that deploy has now superseded. Left open it keeps rendering the
-  // pre-deploy bundle under a title that reads like the shipped app, which is exactly the
-  // window someone screenshots to confirm a deploy worked.
+  // pre-deploy bundle under a title that reads like the shipped app.
   //
   // Best-effort, and only on success: a close that fails (or a preview that was never open)
   // must not turn a deploy that shipped into a reported failure. The signal is cleared

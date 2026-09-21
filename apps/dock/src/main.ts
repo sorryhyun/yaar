@@ -283,7 +283,7 @@ export default defineApp({
     },
     tokenUsage: {
       description:
-        'Real token counters from the server. `session` is the lifetime total including disposed agents; `perAgent` covers live agents only. `total` = input + cacheWrite + output (cache reads excluded, matching Process Explorer).',
+        'Token counters from yaar://session/agents. `session` is the lifetime total including disposed agents; `perAgent` covers live agents only. `total` = input + cacheWrite + output (cache reads excluded, matching Process Explorer).',
       get: () => {
         const r = roster();
         return {
@@ -357,7 +357,6 @@ export default defineApp({
           setPanelOpacity(Math.max(0, Math.min(1, p.panelOpacity)));
         if (typeof p?.panelBlurPx === 'number')
           setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx)));
-        // Signals are reactive — DOM updates automatically, no applyAppearance() needed
         return {
           appearance: {
             showPanel: showPanel(),

@@ -55,9 +55,7 @@ export async function loadMemos(): Promise<void> {
 async function migrateLegacyFile(): Promise<void> {
   try {
     const raw = await appStorage.readJsonOr<unknown>(LEGACY_FILE, null);
-    // No legacy file is the overwhelmingly common case (every install after the
-    // first) and is not worth a word. A file that is *there but unreadable* is
-    // a different thing entirely, and falls through to the throw below.
+    // No legacy file: nothing to migrate, silently. An unreadable file throws below.
     if (raw == null) return;
 
     const parsed = z.safeParse(LegacyMemoStoreSchema, raw);
@@ -67,10 +65,8 @@ async function migrateLegacyFile(): Promise<void> {
     }
     if (parsed.data.memos.length === 0) return;
 
-    // Per-row validation is separate from the envelope's: one unreadable row
-    // should not abandon the whole migration, but it must not vanish silently
-    // either — the file is deleted at the end of this function, so a skip is the
-    // last chance to say anything about that row.
+    // An unreadable row is skipped, not fatal, and logged here: the file is
+    // deleted at the end of this function.
     const docs: MemoDoc[] = [];
     for (const entry of parsed.data.memos) {
       const row = z.safeParse(LegacyMemoSchema, entry);
@@ -87,11 +83,8 @@ async function migrateLegacyFile(): Promise<void> {
 
     const skipped = parsed.data.memos.length - docs.length;
     if (docs.length === 0) {
-      // Every row was unreadable. Retiring the file here would turn "some memos
-      // did not survive the upgrade" into "all my memos are gone", with only the
-      // console to say otherwise — so the file stays exactly where it is and the
-      // migration is retried on the next launch, by which time a fixed build may
-      // read it.
+      // Every row was unreadable: keep the file so the migration retries on the
+      // next launch instead of losing every memo.
       console.error(
         `[memo] no legacy memo survived validation (${skipped} skipped) — ` +
           `keeping ${LEGACY_FILE} for a later attempt`,
@@ -102,17 +95,15 @@ async function migrateLegacyFile(): Promise<void> {
       );
       return;
     }
-    // An existing collection wins: the migration has already run (or the user
-    // has written memos since), so the legacy file is stale and is only retired,
-    // not replayed.
+    // A non-empty collection wins: the legacy file is only retired, not replayed.
     if ((await collection.count()) === 0) {
       await collection.insertMany(docs);
       if (skipped > 0) {
         showToast(`Imported ${docs.length} memo(s); ${skipped} could not be read`, 'error');
       }
     }
-    // Back up what was actually on disk, not the validated projection — the
-    // .bak is the only copy left of anything a skipped row contained.
+    // Back up the raw file, not the validated projection: the .bak is the only
+    // copy of anything a skipped row contained.
     await appStorage.save(`${LEGACY_FILE}.bak`, JSON.stringify(raw));
     await appStorage.remove(LEGACY_FILE);
   } catch (err) {

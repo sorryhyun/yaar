@@ -189,9 +189,8 @@ export function globToRegExp(glob: string): RegExp {
 // `.glb` -> `data:model/gltf-binary`, `.gltf` -> `data:model/gltf+json`, `.bin` ->
 // `data:application/octet-stream`, with `dist/` still holding index.html alone. So this
 // list is not the bundler's capability; it is the set devtools vouches for by offering an
-// import line. An extension missing from it still builds. It was once the other way round
-// — an unlisted extension emitted an unserved sibling file — and a stale copy of this list
-// is why `.glb` was reported as unsupported long after it worked.
+// import line. An extension missing from it still builds; do not describe this list as
+// the limit of what builds.
 const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|gltf|bin)$/i;
 
 /**

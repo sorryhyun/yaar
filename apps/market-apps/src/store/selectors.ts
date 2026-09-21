@@ -61,7 +61,7 @@ export function outdatedApps(): DisplayApp[] {
  * Apps visible after applying the Hide Installed filter, the search-mode dropdown,
  * and the search query.
  *
- * - 'title'    — query matches name or description (the original behavior).
+ * - 'title'    — query matches name or description.
  * - 'author'   — query matches the author field instead.
  * - 'official' — restrict to YAAR-official apps; the query still filters within
  *                them by name/description.

@@ -19,9 +19,8 @@ import { refreshFiles, writeFile } from './files';
  * JSON is deliberately absent. Storage reads a `.json` file back *parsed*, so the text
  * this app can hand a formatter is a re-serialization, not the bytes on disk: every run
  * would report a change, rewrite the file, and record a diff whose "before" was never
- * what the file held. A formatter that cannot see the file it is formatting has nothing
- * truthful to say about it. `app.json` is written by deploy, not by hand, so nothing is
- * lost. The endpoint itself still formats JSON for a caller holding real text.
+ * what the file held. The endpoint itself still formats JSON for a caller holding real
+ * text.
  */
 const FORMATTABLE = new Set(['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs', 'css']);
 

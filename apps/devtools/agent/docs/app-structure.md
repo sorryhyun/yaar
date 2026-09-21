@@ -25,6 +25,5 @@ suite sits under `src/`: a directory at any other top level is silently absent f
 deployed app.
 
 **Mounting and design tokens are specified in the App Authoring Contract appended to your
-prompt** — generated from the compiler itself and authoritative. Read it rather than guessing
-a token name or a mount id; the compiler rejects both a wrong render target and an undefined
-token, so a build error naming one is telling you the truth.
+prompt**, generated from the compiler. The compiler rejects both a wrong render target and an
+undefined token.

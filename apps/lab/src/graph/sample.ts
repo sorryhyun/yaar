@@ -1,8 +1,7 @@
 // Samplers: a compiled expression plus a viewport -> polylines in screen space.
 //
-// Sampling happens against the *current* viewport, which is the whole point of
-// shipping expressions as strings: zooming in re-runs these functions at the new
-// scale instead of stretching a frozen point series.
+// Sampling happens against the *current* viewport: zooming in re-runs these
+// functions at the new scale instead of stretching a frozen point series.
 
 import type { Compiled, Scope } from './compile';
 import type { GraphSpec } from '../types';

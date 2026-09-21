@@ -1,4 +1,4 @@
-// Commands call the same actions the UI does, so a command and a click cannot diverge.
+// Commands call the same actions the UI does.
 import { defineAppCommand } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { start, stop } from './actions';

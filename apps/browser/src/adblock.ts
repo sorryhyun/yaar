@@ -349,7 +349,7 @@ export function onPopup(popup: PopupTab): void {
 }
 
 /**
- * Keep the toolbar badge honest while the observer keeps working.
+ * Keep the toolbar badge current while the observer keeps working.
  *
  * Polled rather than pushed because the count lives in the remote page and there
  * is no channel out of it. Skipped when the window is hidden, so a backgrounded
@@ -378,9 +378,8 @@ export function stopStatsPolling(): void {
 /**
  * Turn blocking on or off, globally or for the current site.
  *
- * Takes effect on the page already on screen rather than at the next navigation:
- * a user turning this off is usually looking at something the blocker just broke,
- * and "reload to undo" is not an undo.
+ * Takes effect on the page already on screen rather than at the next navigation,
+ * since a user turning this off is usually looking at something the blocker broke.
  */
 export async function setAdBlock(
   enabled: boolean,

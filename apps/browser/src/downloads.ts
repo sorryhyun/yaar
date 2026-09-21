@@ -1,8 +1,7 @@
 /**
  * Saving a file out of the remote browser.
  *
- * All of this is one call now. `web.download()` asks the *tab* to perform the transfer,
- * which is what makes the feature work at all:
+ * `web.download()` asks the *tab* to perform the transfer:
  *
  * - it carries the tab's cookies, so a file behind a login saves here exactly as it
  *   would for a human in front of that browser;
@@ -12,13 +11,10 @@
  *   the one in its built-in PDF viewer — is captured too, and arrives here on the SSE
  *   stream as a `download` frame carrying an `id` (see `sse.ts`).
  *
- * An earlier version of this file re-fetched the URL through YAAR's HTTP proxy and had
- * to hand-roll `Range` assembly to get past that proxy's 10MB cap, while still failing
- * on anything behind a login. None of that was a fact about downloads; it was a fact
- * about fetching from the wrong client. Do not reintroduce it.
+ * Do not reintroduce a client-side fetch through the HTTP proxy for downloads.
  *
  * Imports `store.ts` and nothing else of this app's, which is what keeps it clear of the
- * `sse -> actions` and `session -> sse` edges. Keep it that way — `sse.ts`, `view.ts`
+ * `sse -> actions` and `session -> sse` edges. Keep it that way: `sse.ts`, `view.ts`
  * and `protocol.ts` all reach into it, so an import back would close a cycle. In
  * particular `browserOpts()` lives in `session.ts` and is therefore out of reach: the
  * active id comes from the store, and a caller that already holds one passes it.
@@ -78,8 +74,8 @@ function isPdfPath(path: string): boolean {
 }
 
 /**
- * Show a saved file in a window. The browser renders a PDF natively, which is the whole
- * point — `apps/storage` frames the same URL for its own PDF preview.
+ * Show a saved file in a window. The browser renders a PDF natively; `apps/storage`
+ * frames the same URL for its own PDF preview.
  *
  * `storage.url()` on the path the *server* returned, rather than `sharedStorage.url()`
  * on a name: this app never writes through the SDK, so `sharedStorage` has never learned
@@ -97,9 +93,8 @@ export function openDownload(entry: DownloadEntry): void {
 /**
  * The one path every download takes: call the verb, record it, show it.
  *
- * A PDF opens in its own window, which is the point of the exercise. Anything else is
- * announced rather than opened — the desktop has no renderer for a .zip, and a window
- * that fails to display one is a worse answer than a line saying where it went.
+ * A PDF opens in its own window. Anything else is announced rather than opened: the
+ * desktop has no renderer for a .zip, so a line says where it went.
  */
 async function run(
   params: { url?: string; id?: string; filename?: string },
@@ -141,9 +136,9 @@ export async function captureUrl(
 /**
  * Claim a download Chrome performed on its own.
  *
- * This is the payoff of doing the capture server-side: the user presses the download
- * arrow in the remote Chrome's PDF viewer — a control this app cannot reach and never
- * could — and the file still arrives, because Chrome wrote it and the SSE frame said so.
+ * The user presses a download control in the remote Chrome (e.g. its PDF viewer's
+ * arrow, which this app cannot reach) and the file still arrives, because Chrome
+ * wrote it and the SSE frame said so.
  */
 export function claimDownload(id: string, suggestedFilename: string, browserId: string): void {
   setStatus(`Saving ${suggestedFilename || id}…`, false);

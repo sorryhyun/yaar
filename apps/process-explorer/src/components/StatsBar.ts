@@ -16,9 +16,7 @@ interface StatCard {
 }
 
 /**
- * The cards, as data. They were near-identical markup blocks; the only real
- * differences are the two accessors, so a card is four fields and a new tab is
- * one entry rather than one more copy of the block.
+ * The cards, as data: a card is four fields and a new tab is one entry.
  */
 const CARDS: StatCard[] = [
   {

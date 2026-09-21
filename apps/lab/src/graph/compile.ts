@@ -1,7 +1,6 @@
 // AST -> closure, plus the form dispatch that decides what kind of curve a source
 // string describes. Everything here is pure and main-thread: the kernel ships
-// expression *strings*, and this is where they become functions, in the renderer,
-// which is what makes re-sampling on zoom possible at all.
+// expression *strings*, and this is where they become functions, in the renderer.
 
 import { parse, type Node } from './parser';
 

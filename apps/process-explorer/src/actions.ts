@@ -60,8 +60,7 @@ export async function closeAppWindows(appId: string) {
 
 /**
  * Kill a browser session: the tab closes, its record is forgotten, and the window
- * showing it is closed with it — a canvas left painting a page that no longer
- * exists is the failure this whole surface is here to make visible.
+ * showing it is closed with it.
  */
 export async function killBrowser(browserId: string) {
   await act(() => del(browserUri(browserId)), `Closed browser ${browserId}`, fetchBrowsers);

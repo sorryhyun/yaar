@@ -25,8 +25,8 @@ export type VersionOrder = 'newer' | 'older' | 'same' | 'unknown';
  * `unknown` is returned whenever either side is absent or is not numeric dot-parts
  * (`v1.2.0`, a codename). It is deliberately a *third* answer rather than a default
  * of `newer` or `older`: the two callers want opposite things from "can't tell", and
- * folding it into either one is what let an app whose version we cannot read be
- * labelled "Publish update".
+ * folding it into either one would label an app whose version we cannot read
+ * "Publish update".
  */
 export function compareVersions(local?: string, published?: string): VersionOrder {
   if (!local || !published) return 'unknown';

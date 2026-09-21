@@ -83,8 +83,8 @@ export type AgentTurnState = 'responding' | 'using-tool' | 'done' | 'error';
  *
  * The whole record is replaced on each `start` frame. Turn boundaries are what
  * make that possible: without them the first delta of a new turn is
- * indistinguishable from a continuation of the last one, so text accumulated
- * across turns forever and a stale tool line outlived the call that set it.
+ * indistinguishable from a continuation of the last one, so text would accumulate
+ * across turns and a stale tool line would outlive the call that set it.
  */
 export interface AgentActivity {
   /** Where the current turn is. */

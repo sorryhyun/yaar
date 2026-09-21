@@ -1,8 +1,8 @@
 /**
  * Entrypoint: wire the pieces together, register the app, honour `?url=`.
  *
- * Everything with substance lives next door — store.ts (display state), sse.ts and
- * actions.ts (the still-screenshot path), live.ts (the screencast path), session.ts
+ * Everything with substance lives next door: store.ts (display state), sse.ts and
+ * actions.ts (the still-screenshot path), live/ (the screencast path), session.ts
  * (which browser we are driving), protocol.ts (the agent contract), view.ts (markup).
  */
 import { onCleanup } from '@bundled/solid-js';
@@ -63,10 +63,8 @@ if (initialLive) {
 }
 
 /**
- * `?url=` is a launch parameter, and it used to fill the URL bar and stop there — the
- * address was displayed but never fetched, so the window opened on a blank page that
- * claimed to be somewhere. It is now what the app opens on, which is what the desktop
- * relies on when it hands this app a link that refuses to be framed (`open-url.ts`).
+ * `?url=` is a launch parameter: the app navigates to it on open. The desktop relies
+ * on this when it hands this app a link that refuses to be framed (`open-url.ts`).
  */
 if (parsedInitialUrl !== 'about:blank') {
   void (async () => {

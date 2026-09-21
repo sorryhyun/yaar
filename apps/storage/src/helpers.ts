@@ -15,11 +15,7 @@ export function sanitizeAlias(alias: string): string {
     .replace(/^-|-$/g, '');
 }
 
-/**
- * `formatBytes` has no "unknown" case — a directory or a listing that omits
- * `size` would render as a misleading `'0 B'`. Blank stays a local delta on
- * top of the shared ladder rather than something the helper should own.
- */
+/** `formatBytes`, but blank for a missing `size` (a directory) instead of `'0 B'`. */
 export function formatSize(bytes?: number): string {
   return bytes == null ? '' : formatBytes(bytes);
 }

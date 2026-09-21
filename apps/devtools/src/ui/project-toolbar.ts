@@ -26,15 +26,10 @@ import { Icon } from './icons';
 // Project selection and build actions in the app chrome.
 //
 // The active project's name is the dropdown trigger: clicking it lists every open
-// project, switches between them, and closes them. That list used to be a second
-// toolbar row (ProjectTabs), which cost a permanent ~26px of vertical space to show
-// information that is only consulted when switching. The row is gone; the trigger
-// still reports what is open at a glance, and the status bar still carries the rest.
+// project, switches between them, and closes them.
 //
-// Load and Clone remain their own buttons, hidden in a narrow window where the menu's
-// own entries cover them — they open the filtered picker modal,
-// which the dropdown deliberately does not try to replace (a filter box inside a
-// menu that also closes projects is two interactions fighting over one surface).
+// Load and Clone are their own buttons (hidden in a narrow window, where the menu's
+// entries cover them) and open the filtered picker modal; the dropdown has no filter box.
 
 type PickerMode = 'load' | 'clone';
 
@@ -63,8 +58,8 @@ function openLoadPicker(): void {
 async function openClonePicker(): Promise<void> {
   setFilter('');
   setPicker('clone');
-  // Re-listed on every open rather than cached: an app installed from the
-  // marketplace while this window was up is exactly the one being looked for.
+  // Re-listed on every open rather than cached, so an app installed while this
+  // window was up appears.
   setBusy(true);
   setAppsError(null);
   try {
@@ -171,8 +166,7 @@ function ProjectMenu() {
   // the document during the bubble phase and re-renders synchronously, so by the
   // time a bubble-phase listener saw the click on a project's close (×) button,
   // that button had already been detached and `contains` reported it as outside.
-  // The menu dismissed itself on every row action. Capture runs before any of
-  // that, while the target is still in the tree.
+  // Capture runs while the target is still in the tree.
   const onDocumentClick = (event: MouseEvent) => {
     if (!menuOpen()) return;
     const target = event.target as Node | null;

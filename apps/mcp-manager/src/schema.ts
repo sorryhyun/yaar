@@ -31,8 +31,7 @@ export const JsonRpcResponse = z.looseObject({
 
 // The schemas below sit behind `parseRpcResponse`, which only guarantees "some
 // JSON-RPC result came back". The result *payload* is still whatever a remote
-// server chose to send, so it gets validated rather than cast — the `as` casts
-// these replaced were unchecked assertions about an untrusted peer.
+// server chose to send, so it gets validated rather than cast.
 
 // `initialize` result. `protocolVersion` is what the server negotiated down to;
 // the app echoes it back in the MCP-Protocol-Version header on every subsequent

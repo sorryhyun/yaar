@@ -4,15 +4,15 @@ description: Read when the preview disagrees with the state, a probe 403s, a scr
 audience: agent
 ---
 
-## Preview & Debugging — beyond the core loop
+## Preview & Debugging
 
 **A `previewCommand` that passes a storage path can 403 where the same command from the
 session principal succeeds.** You relay as an app-role principal, and an app may not hand its
 own reach to another app (`mayDelegateGrants`) — so a file *you* can read is not delegated
-through the relay. The refusal now says so ("cannot delegate grants"); read the text before
+through the relay. The refusal says so ("cannot delegate grants"); read the text before
 concluding a permission is missing, because the same call made by the session agent will
-reach the file. This is a confinement rule, not a bug in the app under test — and it bites
-hardest when you are checking whether a permission is still needed.
+reach the file. It is a confinement rule, not a bug in the app under test; mind it when
+checking whether a permission is still needed.
 
 **Resource failures surface in `consoleLogs`** (`[resource] failed to load <img>: ...`) —
 that is how you catch a broken asset, which produces no `console.log` and does not fail the
@@ -23,20 +23,16 @@ is an ES module, so its top-level bindings — signals, `let`s, helper functions
 `globalThis`; eval there reaches browser builtins and the injected YAAR runtime only. Module
 state is observable through exactly two projections: `previewQuery` for whatever
 `defineApp({ state })` declares, and the DOM for whatever gets rendered. If you need to
-watch a value that is neither, add it to `state:` — that is what it is for — rather than
-hunting for an eval expression that will never resolve it.
+watch a value that is neither, add it to `state:`.
 
 **Pointer lock never engages under a click you synthesized.** The sandbox grants it
 (`allow-pointer-lock`, previews included), but `requestPointerLock()` needs transient user
 activation and a dispatched click is not one — the promise rejects and `pointerlockerror`
 fires. An app that mouselooks therefore needs a non-locked fallback (drag to look, and a fire
 button that is not the mouse, since the same button now steers), and a preview sitting in that
-fallback is the expected reading rather than a bug you introduced. Put which mode it is in
-`state:` — otherwise the only evidence is HUD text, and `previewQuery` cannot tell you how the
-app is being driven. In a deployed window, where a human's click *does* take the lock, the
-shell withholds Ctrl+W for as long as it is held, so a player walking forward with Ctrl down
-does not close the window out from under themselves — though that only holds up in a Chrome
-opened with `--app`, and why a normal tabbed window still takes the key is an open question.
+fallback is expected. Put which mode it is in `state:`, or the only evidence is HUD text. In a
+deployed window, where a human's click *does* take the lock, the shell withholds Ctrl+W while
+it is held; that only holds in a Chrome opened with `--app`.
 
 When a `previewEval` has to wait a long or open-ended time, don't raise the timeouts
 indefinitely — have the expression stash its result on `window` and return immediately, then
@@ -51,13 +47,12 @@ the project is deleted, and any left behind by a project that is already gone ar
 next time `preview` runs. The preview has **no app agent** — you are the agent inside it.
 
 **A file an app publishes under a preview is therefore in a different directory than the
-deployed app's**, which is what you want while iterating, but means a cross-app hand-off
-(another app reading `shared/{appId}/`) is the one thing a preview cannot rehearse end to
-end. Deploy, then check that.
+deployed app's**, so a cross-app hand-off (another app reading `shared/{appId}/`) cannot be
+rehearsed in a preview. Deploy, then check that.
 
 **Its `permissions` and `bundles` are read off the sandbox `app.json` too**, so a declared
 grant is in force in the preview — a write to a path under `yaar://storage/` really writes
-there, which is the point of testing it here. Two limits: the preview can never reach past
+there. Two limits: the preview can never reach past
 **Dev Tools' own** permissions (the `uri-reference` topic; a project declaring one it lacks
 gets it dropped, not honoured), and the list is read **when the preview window is created**, so edit `app.json`
 first, then re-open the preview.

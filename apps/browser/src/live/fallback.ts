@@ -5,8 +5,8 @@
  * against any other target attaches without complaint and then emits nothing at all,
  * so a tab the user switches back to streams zero frames while its page is very much
  * alive: input is forwarded, the remote page scrolls, and the canvas holds whatever
- * the seed last painted. Measured, not assumed — a tab reading 36 fps drops to 0 the
- * moment a newer tab takes the foreground, and reads 36 again when it is frontmost.
+ * the seed last painted (a tab reading 36 fps drops to 0 the moment a newer tab takes
+ * the foreground).
  * Neither reconnecting the socket nor navigating the tab revives it.
  *
  * The cure is server-side and is in place: the screencast handlers call
@@ -18,7 +18,7 @@
  * still endpoint for a `fresh` capture of that tab, which (unlike the screencast)
  * does answer for a background target.
  *
- * Two things can then put pixels on the canvas, and both are wins:
+ * Two things can then put pixels on the canvas:
  *
  *   - the capture itself, painted by seed.ts; or
  *   - a real screencast frame, because forcing a capture makes the target rasterize
@@ -26,9 +26,8 @@
  *     usually reports `false` — aborted because a real frame beat it, which is exactly
  *     the guard seed.ts is there to apply.
  *
- * Measured against the unfixed build on the same kind of stalled tab: 4 wheel scrolls
- * produced 0 canvas repaints before, and 2-3 after. It is a few frames per second, not
- * a stream, which is why activation on attach is the fix and this is the net under it.
+ * It yields a few frames per second, not a stream; activation on attach is the fix
+ * and this is the net under it.
  *
  * It costs nothing when the stream is healthy: a capture is only fetched when input is
  * outstanding AND no frame has been painted for STALL_MS, so a live stream never

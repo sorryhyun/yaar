@@ -49,8 +49,8 @@ export type UpdateOutcome = {
 
 /**
  * Progress of the sequential Update All run — what the header button and the status
- * line both read. `active` doubles as the concurrency guard: a second run started
- * while it is true is refused, not queued.
+ * line both read. `active` disables the header button; the concurrency guard is
+ * `runInFlight` in actions/update-all.ts.
  *
  * The final state of a finished run is kept rather than cleared, so its per-app
  * results stay readable (over the protocol, and for the summary line) afterwards.

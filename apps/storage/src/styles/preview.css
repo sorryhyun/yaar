@@ -62,7 +62,7 @@
 }
 /* .preview-meta is y-statusbar in markup. */
 
-/* ── Preview state classes (replaces inline styles) ─────────────────────── */
+/* ── Preview state classes ──────────────────────────────────────────────── */
 .preview-loading,
 .preview-unavailable {
   color: var(--yaar-text-muted);

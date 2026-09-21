@@ -4,7 +4,7 @@
   "description": "Turn on Claude Remote Control so claude.ai/code or the Claude app can drive this monitor",
   "run": "dist/index.html",
   "permissions": [],
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "YAAR",
   "kind": "system",
   "appId": "remote-control"

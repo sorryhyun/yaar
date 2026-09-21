@@ -92,10 +92,9 @@ export async function fetchTools(name: string): Promise<McpTool[]> {
 /**
  * Register a server, returning the name it was registered under.
  *
- * `action:'add'` writes the config *and* connects in one step; the older path
- * wrote `yaar://config/mcp` then fired a separate 'reload', which left a window
- * where the config and the live gateway disagreed. Only HTTP transport can be
- * registered from here — see agent/SKILL.md.
+ * `action:'add'` writes the config *and* connects in one step, so the config and
+ * the live gateway never disagree. Only HTTP transport can be registered from
+ * here — see agent/SKILL.md.
  */
 export async function addServer(url: string, name?: string): Promise<string> {
   const finalName = (name ?? '').trim() || deriveName(url);

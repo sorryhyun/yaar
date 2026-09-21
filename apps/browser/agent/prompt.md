@@ -62,7 +62,7 @@ live mode costs a video stream per frame.
 own. `query("downloads")` lists what has been saved this session.
 
 The transfer is made by the tab, with the tab's cookies, so a file behind a login works
-and there is no size cap to worry about.
+and there is no size cap.
 
 Reach for it when the user asks to download, save, or open a file — including the case
 where they pressed a download button on the page and nothing seemed to happen. You cannot

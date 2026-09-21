@@ -8,8 +8,8 @@
  *
  * The contract every script upholds is REVERSIBILITY. `APPLY` records the previous
  * inline style of everything it touches on a `window.__yaarAdBlock` ledger, and
- * `DISABLE` walks that ledger back. A heuristic that hides real content is worse
- * than the ads it removed, so the escape hatch has to be exact rather than a reload.
+ * `DISABLE` walks that ledger back, so a heuristic that hid real content is undone
+ * exactly, without a reload.
  */
 
 /** Tunables and rule lists, injected into APPLY as `__CFG__`. */
@@ -195,12 +195,11 @@ const APPLY = `(function () {
  * The pre-page half, installed server-side with `web.setInitScript` so it runs
  * before the page's own scripts on every navigation, in every frame, in every tab.
  *
- * Deliberately tiny: only the two hooks that lose a race if installed late. The
- * popunder pattern binds `window.open` (or captures a reference to it) during
- * load, so an override that arrives with APPLY after the fact never fires — that
- * was the `popups: 0` in issue #94's field test. Everything DOM-shaped stays in
- * APPLY, where it can be reversed through the ledger; this shares that ledger so
- * DISABLE restores `window.open` from `st.openOrig` exactly as before.
+ * Only the two hooks that lose a race if installed late. The popunder pattern
+ * binds `window.open` (or captures a reference to it) during load, so an override
+ * that arrives with APPLY after the fact never fires. Everything DOM-shaped stays
+ * in APPLY, where it can be reversed through the ledger; this shares that ledger
+ * so DISABLE restores `window.open` from `st.openOrig`.
  */
 const INIT = `(function () {
   var NS = '__yaarAdBlock';

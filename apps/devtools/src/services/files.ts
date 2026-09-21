@@ -50,8 +50,8 @@ export async function refreshFiles(projectId?: string): Promise<void> {
  * Fill in `lines` (and a text-accurate `bytes`) on each text entry, in place.
  *
  * Sizes and timestamps come from the listing itself. Line counts do not — those need
- * the text — so a listing can still answer "how big is this file" without a read per
- * file (agents used to read line 1 just to see the "(N lines)" header). Projects are a
+ * the text — so a listing can answer "how long is this file" without a read per
+ * file. Projects are a
  * handful of source files, so reading them in parallel is cheap; a file that cannot be
  * read stays uncounted.
  */
@@ -181,8 +181,8 @@ export async function listProjectFiles(opts: {
 /**
  * A caller's path resolved inside the active project, or a refusal.
  *
- * Refusal and absence are separate errors on purpose: both used to come back as the
- * same `// Could not read` body, so a read that was refused looked like a missing file.
+ * Refusal and absence are separate errors, so a refused read does not look like a
+ * missing file.
  */
 export function resolveProjectPath(raw: string): string {
   const path = normalizeProjectPath(raw);
@@ -359,11 +359,9 @@ export interface WriteReceipt {
 /**
  * Write a file and say what landed.
  *
- * The receipt exists because `editFile` returns `{ editsApplied, lines, removed }`
- * and this returned "Done." — so the one command whose whole job is to replace a
- * file's contents was the one that would not confirm what the file now holds. A
- * line count is also the cheapest way to catch the mistake this command invites:
- * passing a JSON object and getting the serialization you did not expect.
+ * The receipt confirms what the file now holds, like `editFile`'s. A line count is also
+ * the cheapest way to catch passing a JSON object and getting a serialization you did
+ * not expect.
  */
 export async function writeFile(
   path: string,
@@ -380,9 +378,8 @@ export async function writeFile(
     /**
      * Skip the file-list refresh, for a caller writing many files in one pass that
      * refreshes once at the end. A write normally updates only its own listing
-     * entry, so this now just skips that; the batch's final refresh covers every
-     * file it touched. Everything else about the write is unchanged —
-     * the change record, the editor buffer and the typecheck state all still land.
+     * entry, so this skips that; the change record, the editor buffer and the
+     * typecheck state all still land.
      */
     deferRefresh?: boolean;
   },
@@ -458,11 +455,7 @@ async function readCopyText(projectId: string, path: string): Promise<string> {
  * the bytes travel as bytes: `readBlob`, then `blobToDataUrl` for the base64 `save`
  * wants. Every binary round-trips exactly this way, images included.
  *
- * Images used not to: `appStorage.readBlob` read through the verb layer, which hands an
- * image back re-encoded to WebP for a model's eyes — a 408,746-byte PNG arrived as a
- * 40,472-byte `image/webp` blob — so a copy landed as WebP and the destination had to be
- * renamed to match what it actually held. The SDK reads the served file now, and both
- * the re-encode and the rename are gone.
+ * `appStorage.readBlob` reads the served file, so an image is not re-encoded to WebP here.
  *
  * A server-side `action: 'copy'` would avoid the read entirely — it is how a storage
  * *import* stays byte-exact — but it cannot express this case. `from` does not expand

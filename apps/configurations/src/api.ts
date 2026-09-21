@@ -7,9 +7,8 @@ import * as z from '@bundled/zod';
  * Fetches `uri`, reads `data[key]`, validates it against `schema`, and calls
  * `setter` with the result.
  *
- * Failures are logged with the underlying cause and toasted, matching what
- * `domains-view` already did for its own load — so an empty list after this
- * returns silently means the config really is empty, not that the read broke.
+ * Failures are logged with the underlying cause and toasted, so an empty list after
+ * this returns silently means the config really is empty, not that the read broke.
  *
  * Recovery is **per entry**: one unreadable row is skipped and reported, and the
  * rest still render. Validating the array atomically would let a single hook the

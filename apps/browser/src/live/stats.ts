@@ -1,16 +1,12 @@
 /**
- * The spike's instrument: painted fps, link throughput, server-side drops, and —
- * the number that actually matters — input-to-pixel lag, measured client-side from
+ * The spike's instrument: painted fps, link throughput, server-side drops, and
+ * input-to-pixel lag, measured client-side from
  * an input event to the paint of the next frame after it. Client and server clocks
  * are unrelated, so nothing here subtracts one from the other.
  *
- * Every reading is over a fixed wall-clock window. It used to advance only when a
- * frame was painted, which made the readout lie in exactly the situation worth
- * measuring: a stream that goes quiet leaves the window open, and the next frame —
- * a tab switch and thirty seconds later — is divided by the whole idle span. That
- * is where `Live 3 fps / 29333 ms` came from, on a link that was never slow. The
- * window is closed by a clock now (`startStatsClock`), so an idle stream reads 0 fps
- * rather than saving up its idleness for the next frame.
+ * Every reading is over a fixed wall-clock window closed by a clock
+ * (`startStatsClock`), so an idle stream reads 0 fps rather than saving up its
+ * idleness for the next frame.
  */
 import { liveStats, setLiveStats } from './state';
 import { noteRepaintOwed, clearRepaintOwed } from './context';

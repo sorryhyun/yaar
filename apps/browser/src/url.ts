@@ -3,9 +3,8 @@
  *
  * The bar takes two kinds of input, and they are handled by different halves of the
  * app: an address is navigated locally, and anything else is a request only the agent
- * can act on. Telling them apart is therefore not cosmetic — a phrase read as an
- * address navigates to a host that does not exist, and an address read as a phrase
- * spends a whole agent turn re-issuing a page load the app already did.
+ * can act on. A phrase read as an address navigates to a host that does not exist;
+ * an address read as a phrase spends an agent turn on a page load the app could do.
  */
 
 /** Schemes the remote browser will navigate to when one is written out in full. */
@@ -43,8 +42,8 @@ function isParseable(url: string): boolean {
 /**
  * The address `text` names, or null when it names none.
  *
- * Null is the load-bearing answer: it means the input was a phrase, and a phrase is
- * what the agent gets. A returned string is the input plus a scheme where one was
+ * Null means the input was a phrase, and a phrase is what the agent gets. A
+ * returned string is the input plus a scheme where one was
  * missing and nothing else — no trailing slash, no re-serialization — so the bar goes
  * on showing what the user typed.
  */

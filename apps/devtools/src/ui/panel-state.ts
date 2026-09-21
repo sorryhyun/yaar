@@ -2,15 +2,9 @@ export {};
 import { createSignal } from '@bundled/solid-js';
 import { createPersistedSignal } from '@bundled/yaar';
 
-// Shared view state for the workspace panes.
-//
-// The Changes view is no longer a bottom-panel tab: the change list lives beside
-// the file tree (same sidebar, second tab) and its diff takes the editor area, so
-// a changed file is read in the same place a file is read. Three components have
-// to agree on which pane is showing what — Sidebar, Workspace and ChangeView — and
-// none of them owns the others, so the signals live here rather than in any one of
-// them. This module imports nothing app-local, which is what keeps it free of the
-// import cycle a shared signal in either component would have closed.
+// Shared view state for the workspace panes. Sidebar, Workspace and ChangeView must
+// agree on which pane shows what, and none owns the others. This module imports
+// nothing app-local; a shared signal in any one component would close an import cycle.
 
 export type SidebarTab = 'files' | 'changes' | 'worker';
 export type MainView = 'editor' | 'changes';

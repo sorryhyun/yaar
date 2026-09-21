@@ -1,9 +1,8 @@
 # Lab — the sandbox scope
 
 Lab runs JavaScript in a Web Worker inside its own window and hands back **logs plus a
-size-capped result**. Its purpose is that the data stays in the sandbox: send it a
-question, get a conclusion, and keep the 40 000 rows out of every context between here
-and there.
+size-capped result**. Send it a question and get a conclusion back; the data stays in
+the sandbox.
 
 ## When to reach for it
 
@@ -14,15 +13,12 @@ inside the cell and let the path come back instead.
 
 Not for probing an HTTP API on another app's behalf, and not as a general scripting
 door: an app that needs a request of its own should declare `yaar://http` and make it.
-Lab's `http` is here because a cell that loads a remote CSV should not have to leave the
-sandbox to get it.
+Lab's `http` is for cells that load remote data.
 
 ## The helpers in every cell
 
-**This is the part no manifest can carry.** The commands below are protocol; these are
-plain JavaScript globals inside the kernel scope, so they never appear in a command
-schema — and an app driving Lab from outside has no other way to learn their signatures.
-Calling `http.get(...)` and reading the `is not a function` back is the cost of guessing.
+These are plain JavaScript globals inside the kernel scope, not protocol commands, so no
+command schema lists them; this section is their only reference.
 
 Scope persists across every execution — `const`, `let`, `function` and `class` declared at
 a cell's top level survive into the next run, so setup and query can be separate calls.
@@ -165,7 +161,7 @@ into `shared/lab/`. It renders the spec's own viewport — not wherever the user
 `show(x)` adds an extra output block to a cell, `md(text)` adds rendered markdown, and
 `sleep(ms)` waits.
 
-## Ordering, and what surprises callers
+## Execution order, timeouts, and the Agent runs view
 
 Executions are serialized — one at a time, the rest queue. The default timeout is 30
 seconds, and **a timeout kills the worker and wipes the scope**, as does resetting the

@@ -8,10 +8,8 @@ import type { ChartSpec, GraphSpec } from '../types';
  *
  * `storagePath` reads every spelling of a storage reference; what is left here is this
  * function's own rule, that anything not already naming the shared tree is *placed*
- * under `shared/lab/` rather than refused. A reference it cannot read at all — a remote
- * URL, a traversing path — falls back to a generated name for the same reason: the
- * caller asked for a chart to be saved, and refusing over the filename is not the
- * answer this is for.
+ * under `shared/lab/` rather than refused. A reference it cannot read at all (a remote
+ * URL, a traversing path) falls back to a generated name.
  */
 export function sharedPath(raw?: string, fallbackName?: string): string {
   let p = storagePath(raw) ?? '';

@@ -45,8 +45,8 @@ export async function loadServers(): Promise<void> {
   } catch (err) {
     // Both failure modes reach here: the read itself failed, or the persisted
     // config parsed as something we cannot interpret. Neither is "no servers
-    // configured" — collapsing them into an empty list made a broken config
-    // render exactly like a fresh install, so the toast is the only signal
+    // configured" — collapsing them into an empty list would render a broken
+    // config exactly like a fresh install, so the toast is the only signal
     // that anything is wrong.
     reportError('Could not load MCP servers', err);
     setServers([]);
@@ -142,9 +142,9 @@ export async function startScan(): Promise<DiscoveredServer[]> {
     setScanning(false);
   }
 
-  // A sweep that found nothing and failed everywhere is the signature this app
-  // shipped broken for two versions: every probe refused for the same reason,
-  // reported to the user as an empty network. One captured line names it.
+  // A sweep that found nothing but tallied failures may be a systemic fault (a
+  // missing permission, say) rather than an empty network. One captured line
+  // names the reasons.
   if (found.length === 0 && failures.size > 0) {
     const [reason, count] = [...failures].sort((a, b) => b[1] - a[1])[0];
     logInfo(

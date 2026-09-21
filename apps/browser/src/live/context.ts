@@ -3,9 +3,8 @@
  * the hidden IME anchor parked over that canvas, and the remote viewport every
  * coordinate is expressed in.
  *
- * They were module-level `let`s in one 647-line file; pulled out here they are what
- * lets that file become seven cohesive ones. This module imports nothing, so no
- * live/* module can end up in a cycle by reaching for them.
+ * This module imports nothing, so no live/* module can end up in a cycle by
+ * reaching for them.
  */
 
 let socket: WebSocket | null = null;
@@ -94,9 +93,8 @@ export function resetFrameClock(): void {
 /**
  * Input has been forwarded that no painted pixel has answered yet.
  *
- * Lives here rather than in fallback.ts so that `markInput` — called from nine
- * places across input.ts and ime.ts — can set it without stats.ts and fallback.ts
- * importing each other. This module imports nothing, which is the whole point of it.
+ * Lives here rather than in fallback.ts so that `markInput` (stats.ts) can set it
+ * without stats.ts and fallback.ts importing each other.
  */
 let repaintOwed = false;
 

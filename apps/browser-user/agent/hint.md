@@ -1,6 +1,6 @@
 # Real Browser
 
-Drive the user's ACTUAL Chrome tabs via the YAAR Bridge extension — not the "Browser" app, which is a separate headless browser for autonomous tasks.
+Drives the user's actual Chrome tabs via the YAAR Bridge extension. The "Browser" app is a separate headless browser for autonomous tasks.
 
 Read `tabs` / `connected`, then act by numeric `tabId`: `focus`, `extract`, `click`, `type`, `navigate`.
 

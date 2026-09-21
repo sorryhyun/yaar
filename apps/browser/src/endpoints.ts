@@ -1,9 +1,6 @@
 /**
- * Every browser-session server route this app talks to, in one place.
- *
- * The paths were built inline in three modules (screenshot in actions.ts and sse.ts,
- * events in sse.ts, screencast in live.ts), so the same cache-busted screenshot URL
- * existed twice and the token rule below had to be remembered at each site.
+ * Every browser-session server route this app talks to, in one place, so the token
+ * rule below is applied at one site.
  */
 
 /**

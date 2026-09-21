@@ -18,8 +18,8 @@
  *                                         same way they are stored
  *
  * Trailing slashes, doubled slashes and "." segments normalise away instead of throwing.
- * ".." is refused outright: traversal used to escape app storage into neighbouring apps,
- * and a URI is now the only way out.
+ * ".." is refused outright (it would escape app storage into neighbouring apps); a URI
+ * is the only way out.
  *
  * Reading the dialects apart is the SDK's `storagePath`, which folds every spelling of a
  * storage reference onto one root-relative path. What stays here is what is genuinely

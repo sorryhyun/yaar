@@ -9,15 +9,10 @@ import { refreshFiles } from './files';
 //
 // The bytes never enter a model context, and with no recompression they never enter
 // this iframe either: `action: 'copy'` moves them storage -> storage on the server.
-// Only a recompress round-trips them here to be re-encoded. That is the reason this
-// is a command rather than advice to read the file and write it back — a base64 blob
-// in a transcript is the failure mode being designed out.
+// Only a recompress round-trips them here to be re-encoded.
 //
-// The export direction (`exportToStorage`) is the same argument run backwards, and it
-// was missing: a project could take in an artifact another app had published and had
-// no way to hand one back, so a scene document another app needed to open had to be
-// read into an agent's context and written out again. The two directions now differ
-// only in which side of the copy names the project.
+// The export direction (`exportToStorage`) is the same copy run backwards; the two
+// differ only in which side of the copy names the project.
 
 /** Formats worth re-encoding. WebP and SVG are already what we would convert to. */
 const RECOMPRESSIBLE = new Set(['png', 'jpg', 'jpeg', 'bmp']);

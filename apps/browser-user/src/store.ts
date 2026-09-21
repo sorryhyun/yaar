@@ -1,11 +1,7 @@
 /**
- * Shared reactive state for the Real Browser app.
- *
- * Both the UI (main.ts) and the App Protocol (protocol.ts) read/write the same
- * `tabs` / `connected` signals, so the agent always sees exactly what the user
- * sees. `pollOnce()` is the single source of truth for refreshing that state
- * from the Bridge — the UI calls it on an interval; the protocol's `refresh`
- * command calls it on demand.
+ * Shared reactive state for the Real Browser app: the UI and the App Protocol read the same
+ * `tabs` / `connected` signals. `pollOnce()` is the only thing that refreshes them from the
+ * Bridge; the UI calls it on an interval and the `refresh` command on demand.
  */
 export {};
 import { createSignal } from '@bundled/solid-js';

@@ -34,15 +34,12 @@ export function clampPanelWidth(w: number): number {
 /**
  * Validate the loaded value at the storage trust boundary.
  *
- * Deliberately does not clamp: what is stored is the user's preference, and the
- * clamp belongs on the read (see panelWidth) so a temporarily narrow window
- * can't shrink it for good.
+ * Does not clamp: the stored value is the user's preference, and the clamp is applied on
+ * read (see panelWidth) so a temporarily narrow window can't shrink it for good.
  *
- * `safeParseOr` gives the absence/malformed split for free: nothing stored
- * (the fallback below flows straight back through, since `createPersistedSignal`
- * calls `revive` on its own fallback too) takes the default silently, while
- * anything present and wrong — including a hand-edited `layout.json` containing
- * literal `null` — is logged instead of quietly looking like a fresh install.
+ * Nothing stored takes the default silently (`createPersistedSignal` also passes its own
+ * fallback through `revive`); anything present and malformed, including a literal `null`,
+ * is logged by `safeParseOr`.
  */
 function reviveLayout(raw: unknown): LayoutPrefs {
   const parsed = safeParseOr(LayoutPrefsSchema, raw, DEFAULT_PREFS, {
@@ -79,10 +76,9 @@ export function resetPanelWidth() {
 /**
  * Re-clamp after the window resizes, so the panel can't exceed 70% of it.
  *
- * This only refreshes the viewport signal — the stored preference is left alone,
- * so widening the window again restores the width the user actually chose. It
- * also has to stay write-free for a second reason: a resize can land before the
- * async load does, and a write here would supersede the value still in flight.
+ * Only refreshes the viewport signal and never writes: widening the window again restores
+ * the stored width, and a resize can land before the async load, where a write would
+ * supersede the value still in flight.
  */
 export function reclampPanelWidth() {
   setViewportWidth(window.innerWidth);

@@ -11,8 +11,8 @@ import {
 import { diffStats } from '../lib';
 
 // Records what each file mutation did, so the Changes panel can render a diff.
-// Every writer in services/files.ts funnels through recordChange — a mutation that
-// skips it is invisible to the user, which is the state this feature exists to end.
+// Every writer in services/files.ts funnels through recordChange; a mutation that
+// skips it is invisible to the user.
 
 /**
  * How many changes to keep.

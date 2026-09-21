@@ -3,11 +3,10 @@
 // `yaar://session/agents`, `yaar://windows` and `yaar://apps` all cross a trust
 // boundary: they are served by the running YAAR server, whose version need not
 // match this app's, and the last two return *either* a direct record or a
-// `resource_link` (`{ uri, name, description }`) depending on the verb layer's
-// mood. That two-shaped response is exactly what used to be duck-typed with
-// `entry: any` heuristics — these schemas make the discrimination explicit and
-// make a shape we cannot read a *logged* skip rather than a silent `as` cast
-// that blows up later in the renderer.
+// `resource_link` (`{ uri, name, description }`) depending on the verb layer.
+// These schemas make the discrimination explicit and make a shape we cannot read
+// a *logged* skip rather than a silent `as` cast that blows up later in the
+// renderer.
 //
 // Every object is loose so an additive server field does not fail the read (the
 // adapters below rebuild explicit records, so it is not carried into the UI —

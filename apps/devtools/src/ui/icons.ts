@@ -2,8 +2,7 @@ export {};
 import html from '@bundled/solid-js/html';
 
 // Stroke icons drawn in currentColor, so they take the colour and hover state of
-// whatever button or row holds them. Emoji were used before and rendered at a
-// different size, weight and palette on every platform.
+// whatever button or row holds them (emoji render differently on every platform).
 
 const PATHS = {
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',

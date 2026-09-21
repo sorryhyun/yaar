@@ -66,9 +66,8 @@ export function attach(browserId: string): void {
   connectSSE(browserId);
   if (liveMode()) {
     // `connectSSE` starts the 200 ms still poll, and the two render paths are
-    // mutually exclusive (see setLive). This branch used to leave it running:
-    // live mode with a socket that is not up yet is reached by switchTab, and
-    // nothing downstream of here stops the poll it just started.
+    // mutually exclusive (see setLive). switchTab reaches this branch in live mode
+    // before the socket is up, and nothing downstream stops the poll, so stop it here.
     stopPolling();
     connectLive(browserId);
   }
@@ -79,7 +78,7 @@ export function attach(browserId: string): void {
  *
  * The two render paths are mutually exclusive on purpose: the still path polls a
  * fresh WebP every 200 ms, and leaving that running behind a screencast would
- * charge the same page for two encodes and make the frame-rate reading a lie.
+ * charge the same page for two encodes and skew the frame-rate reading.
  *
  * Stated as "put it in this state" rather than "flip it" because the agent asks
  * for a state (`set_live_mode`) while the toolbar asks for a flip, and a toggle

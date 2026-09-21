@@ -1,14 +1,9 @@
-// Boundary schema for the `/api/bridge` envelope (untrusted structured JSON).
-//
-// The Bridge relays actions to the user's REAL Chrome tabs via the extension,
-// then returns a `{ ok, data?, error? }` envelope that crosses a process boundary
-// before we read it. This schema confirms the ENVELOPE WRAPPER is well-formed —
-// it does NOT re-validate `data`, whose shape is generic over `T` per action and
-// is left as `unknown` by design. Callers cast `data` to their expected `T` only
-// after the envelope shape has been confirmed here.
+// Boundary schema for the `/api/bridge` `{ ok, data?, error? }` envelope. Validates the
+// wrapper only; `data` stays `unknown` and callers cast it to their per-action `T` after
+// this check passes. Loose object so additive envelope fields survive.
 //
 // `@bundled/zod` is Zod Mini (functional API): `z.optional(z.unknown())`,
-// `z.safeParse(Schema, data)`. Loose object so additive envelope fields survive.
+// `z.safeParse(Schema, data)`.
 import * as z from '@bundled/zod';
 
 export const BridgeEnvelopeSchema = z.looseObject({

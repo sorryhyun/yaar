@@ -28,7 +28,7 @@ Components import from `data.ts`, never from `store.ts`/`fetchers.ts` directly.
 The barrel deliberately omits the setters: nothing outside the data layer writes
 the store.
 
-## Things that will bite you
+## Gotchas
 
 **`html` unwraps function props into reactive getters.** Passing a render
 callback as a prop (`row=${(x) => ...}`) makes it fire during render with no
@@ -36,7 +36,7 @@ arguments. `ProcessList` therefore takes its row renderer as *children*, exactly
 as `For` does — and the children function must sit tight against the tags
 (`>${(x) => ...}</>`), because surrounding whitespace turns `children` into an
 array of text nodes plus the function, which `For` cannot use. This compiles
-clean and renders a blank panel, so it will not announce itself.
+clean and renders a blank panel.
 
 **HTML entities interpolated through `${}` do not decode** — they are set as
 `textContent`. The empty-state glyphs are passed to `ProcessList` as literal
@@ -61,5 +61,5 @@ app.
 ## Token accounting
 
 Displayed input is `inputTokens + cacheWriteTokens`, cache **reads excluded** —
-`inputRead()` in `format.ts` is the only place that sum is taken. The long
-comment there explains why; do not add these fields by hand elsewhere.
+`inputRead()` in `format.ts` is the only place that sum is taken (the comment there
+says why); do not add these fields by hand elsewhere.

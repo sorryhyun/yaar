@@ -2,10 +2,9 @@
 //   - Open-Meteo current-weather forecast (main.ts)
 //   - Nominatim reverse-geocoding (main.ts)
 //   - the yaar://session/agents roster (agents.ts)
-// Only the fields the dock actually reads are validated. Loose objects so
-// additive upstream fields survive; nested/leaf fields are optional because
-// either service may omit them, and the dock degrades gracefully rather than
-// throwing (it is core chrome).
+// Only the fields the dock reads are validated. Loose objects so additive
+// upstream fields survive; nested/leaf fields are optional because either
+// service may omit them, and the dock degrades instead of throwing.
 //
 // `@bundled/zod` is Zod Mini (functional API): `z.optional(z.string())`,
 // `z.looseObject({...})`, `z.safeParse(Schema, data)`.

@@ -56,10 +56,9 @@ export function followTab(browserId: string, url: string, title: string): void {
 export function switchLiveTab(browserId: string): void {
   if (!isLiveConnected()) return;
   setDesiredTab(browserId);
-  // Counters are per-tab, not per-connection. Carrying them across a switch is
-  // what reported `3 fps / 29333 ms` for a link that was never slow: the window
-  // and the unanswered-input mark both spanned the time the *other* tab was on
-  // screen, and the first frame after the switch was charged for all of it.
+  // Counters are per-tab, not per-connection: otherwise the window and the
+  // unanswered-input mark span the time the *other* tab was on screen, and the
+  // first frame after the switch is charged for all of it.
   resetStats();
   resetFrameClock();
   resetFallback();

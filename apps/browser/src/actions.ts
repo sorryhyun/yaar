@@ -65,11 +65,9 @@ async function navigateDirect(url: string): Promise<void> {
 /**
  * Enter in the address bar.
  *
- * An address is navigated here and nowhere else. The app can carry out a page load
- * by itself, so telling the agent about one buys nothing and costs a whole turn --
- * it would wake up only to be told that the navigation it might have performed has
- * already happened. Anything that is *not* an address is a request this app cannot
- * carry out at all, and that, alone, is what the agent is woken for.
+ * An address is navigated here and the agent is not told (it would spend a turn on
+ * a page load that already happened). Anything that is *not* an address is a
+ * request this app cannot carry out, and only that wakes the agent.
  */
 export function handleUrlKeydown(e: KeyboardEvent): void {
   if (e.key !== 'Enter') return;

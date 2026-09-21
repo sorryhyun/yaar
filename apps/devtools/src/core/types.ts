@@ -7,12 +7,8 @@ export interface ProjectMeta {
   id: string;
   name: string;
   /**
-   * Unix ms of the most recent write anywhere in the project, or 0 when nothing in
-   * it could be dated.
-   *
-   * Was `Date.now()` at discovery time, which made every project equally recent and
-   * the field useless for the one question it answers ("which of these was I last
-   * working in"). It now comes from the storage listing's own timestamps.
+   * Unix ms of the most recent write anywhere in the project (from the storage
+   * listing's timestamps), or 0 when nothing in it could be dated.
    */
   lastModified: number;
   /**

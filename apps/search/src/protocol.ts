@@ -33,9 +33,8 @@ export function validateSearchPattern(pattern: string): void {
  * Phrase the result of one search, given what survived filtering and what did not.
  *
  * Pure and shared by the statusbar and the protocol return so the UI and an agent are
- * never told different things about the same search. `notes` is the honest half: an
- * empty result after filtering is NOT the same answer as no match anywhere, and
- * reporting it as one sends the caller looking for a string they already found.
+ * never told different things about the same search. `notes` states when an empty
+ * result after filtering is NOT the same answer as no match anywhere.
  */
 export function describeSearch(
   matchCount: number,
@@ -165,9 +164,8 @@ function appIdFromPath(file: string): string | null {
  * Rebuild a store match as a plain, structured-cloneable object.
  *
  * `state.matches` is a Solid createStore array, i.e. a Proxy. Handing its
- * elements to postMessage throws DataCloneError, which is exactly what made
- * the `results` state unreadable. Every protocol payload must be rebuilt from
- * primitives like this rather than passing store values through.
+ * elements to postMessage throws DataCloneError. Every protocol payload must be
+ * rebuilt from primitives like this rather than passing store values through.
  */
 function toPlainMatch(m: SearchMatch) {
   const path = fullPath(m.file);
@@ -202,7 +200,7 @@ function globToRegExp(pattern: string): RegExp {
 type AppListEntry = { uri?: string; id?: string; appId?: string; name?: string };
 
 /**
- * List installed app ids. The verb layer has returned several shapes over time
+ * List installed app ids. The verb layer may answer in several shapes
  * (bare array, { items }, { apps }, plain string ids), so accept all of them
  * rather than silently expanding a glob to nothing.
  */

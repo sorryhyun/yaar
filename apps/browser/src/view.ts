@@ -1,9 +1,8 @@
 /**
- * The window's markup, in four pieces rather than one 133-line template.
+ * The window's markup, in four pieces.
  *
- * The pieces are plain functions called during `App()`, not Solid components: every
- * reactive read stays inside the same `${() => ...}` accessor it was in before, so
- * the split changes where the markup is written and nothing about when it updates.
+ * The pieces are plain functions called during `App()`, not Solid components; every
+ * reactive read sits inside its own `${() => ...}` accessor.
  */
 import html from '@bundled/solid-js/html';
 import {
@@ -169,9 +168,8 @@ function QualitySelect() {
 }
 
 /**
- * Only shown once there is more than one tab. A popup is what usually creates
- * the second one, and a strip that is always there would be chrome charging
- * rent for the case that hasn't happened yet.
+ * Only shown once there is more than one tab; a popup is what usually creates
+ * the second one.
  */
 function TabStrip() {
   return html`
@@ -202,7 +200,7 @@ function TabStrip() {
   `;
 }
 
-/** The spike's instrument panel — see the header of live.ts for what each number means. */
+/** The spike's instrument panel; see the header of live/stats.ts for what each number means. */
 function LiveStatsBar() {
   return html`
     <div class="live-stats y-text-xs">

@@ -3,9 +3,7 @@
 // These come from YAAR's own config files on disk — hand-editable, written by
 // older builds, and shared with the rest of the OS. That makes them persisted
 // external input, not values this app just produced: a truncated or renamed
-// record must be distinguishable from an empty one, which is exactly the
-// distinction `loadConfigList` could not make while it collapsed everything to
-// `[]`.
+// record must be distinguishable from an empty one.
 //
 // Every object is loose and only the fields the views actually read are
 // required, so an added config key never fails a load.
@@ -30,8 +28,7 @@ export const ShortcutSchema = z.looseObject({
 // yaar://config/domains → { allow_all_domains, allowed_domains }. Both fields are
 // read directly by the view — the toggle reads the boolean, the list maps the
 // array — and `read()` can also resolve to null when the config is absent, which
-// used to be assigned straight into the signal and crash the first render on
-// `data().allow_all_domains`.
+// must not reach the signal: the first render reads `data().allow_all_domains`.
 export const DomainsDataSchema = z.looseObject({
   allow_all_domains: z.boolean(),
   allowed_domains: z.array(z.string()),
@@ -50,8 +47,7 @@ export const DomainsDataSchema = z.looseObject({
 // So `payload` is `unknown`: the view only renders it (and already guards with
 // `action.type === 'os_action' && action.payload`), it does not interpret it.
 // Narrowing either of these to `z.string()` / `z.record(...)` rejects hooks the
-// server writes routinely — see the per-entry recovery in `api.ts` for why that
-// used to be able to blank the whole list.
+// server writes routinely.
 const HookFilterFieldSchema = z.optional(z.union([z.string(), z.array(z.string())]));
 
 const HookFilterSchema = z.looseObject({

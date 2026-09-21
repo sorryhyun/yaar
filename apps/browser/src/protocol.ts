@@ -2,8 +2,8 @@
  * The agent-facing protocol: what this app publishes as state and what it accepts
  * as commands.
  *
- * Kept out of main.ts because it is a contract, not logic — 236 lines of it, which
- * was two thirds of the entrypoint. The maps are plain top-level `const`s and each
+ * Kept out of main.ts because it is a contract, not logic. The maps are plain
+ * top-level `const`s and each
  * descriptor is wrapped in `defineAppCommand` so its `params` schema keeps typing
  * its own `run` after being spread into `defineApp`.
  */

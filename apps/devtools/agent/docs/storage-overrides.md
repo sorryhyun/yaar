@@ -17,7 +17,7 @@ Raw bytes are right for an app that *keeps files* and wrong for an app whose fil
 `report.json` are one document in three formats. If such an app ships its own
 `saveDocument` beside the built-in `storage:write`, its agent now holds two write calls with
 the same verb and different semantics, and the one that writes `content` verbatim under a
-`.docx` name produces a file nothing can open. That failure has been reported more than once.
+`.docx` name produces a file nothing can open.
 
 ### The pattern: take the built-in's name
 
@@ -47,7 +47,7 @@ agent typed, or the commons URI (`yaar://storage/shared/…`) when it named the 
 }),
 ```
 
-Rules that keep it honest:
+Rules:
 
 - **One name per verb.** Never add an alias (`saveToStorage`) or a sibling
   (`deleteFromStorage`) "for the URI case" — every path your handler can reach is already

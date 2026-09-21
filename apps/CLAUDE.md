@@ -45,9 +45,8 @@ Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 | `agent/docs/*.md` | Nobody, until pulled. One topic per file, frontmatter-indexed (`name`, a trigger-shaped `description`, `audience: agent\|dev\|both`); only the **index** is generated into the app agent's prompt and `describe` payloads. Served at `yaar://apps/{id}/docs/{name}`, via `describe({ topic })` on the app agent's tool, and as plain files in a clone. `features/apps/docs.ts` owns the tier; `scripts/check/apps.ts` validates frontmatter and warns when `prompt.md` restates a topic. |
 
 Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (`AGENT_DOCS` in
-`features/apps/discovery.ts`); `agent/docs/` is a fixed location. Root `AGENTS.md` is
-deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a
-coding agent editing that directory). The full rules — override handling, legacy `HINT.md`,
+`features/apps/discovery.ts`); `agent/docs/` is a fixed location. Root `AGENTS.md` is **not**
+read as a prompt: it is instructions to a coding agent editing that directory. The full rules — override handling, legacy `HINT.md`,
 what clone and deploy carry — live in `discovery.ts`'s and `docs.ts`'s doc comments.
 
 Key server files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle),
@@ -84,18 +83,15 @@ it needs app code:
   window is decided by asking the site first (`GET /api/embeddable`, read by
   `store/iframe-bridge/open-url.ts`). A framable site becomes an iframe window; one that refuses
   (`frame-ancestors` / `X-Frame-Options`) goes to the **Browser app** instead, which drives a real
-  page server-side and so frames nothing. Framing is the target's call and no attribute of ours
-  overrides it, which is why the answer is a different surface rather than a workaround.
+  page server-side and so frames nothing.
 
-**Do not write a link handler.** A capture-phase listener that cancels every anchor, a resolver,
-an `openExternal` wrapper around `window.open`, a clipboard fallback — three apps grew that file
-independently and every line of it is now the default. Two things the default cannot know, and
-they are the whole app-facing surface:
+**Do not write a link handler** (a capture-phase anchor listener, a resolver, an `openExternal`
+wrapper around `window.open`, a clipboard fallback); all of it is the default. The app-facing
+surface is two things the default cannot know:
 
 - **Which site a relative href belongs to.** An app rendering someone else's HTML has `/board/123`
   in it, and resolving that against the app's own document lands on a shell 404. Declare it in
-  `app.json` — `"links": { "base": "https://m.dcinside.com" }` — because it is a fact about the
-  app, not a decision. The compiler bakes it in as `window.__yaar_links__`.
+  `app.json`: `"links": { "base": "https://m.dcinside.com" }`. The compiler bakes it in as `window.__yaar_links__`.
 - **Whether a URL is really yours.** `links.onOpen((url, anchor) => …)` from `@bundled/yaar`, once
   at module scope: return a **string** to open something else (unwrap a redirect interstitial,
   canonicalize a mirror), **`false`** to claim the link and route it in-app with no window at all,
@@ -123,28 +119,24 @@ openUrl: {
 
 **The app does not declare which site is "its".** That is a `link_open` hook in the user's
 `config/hooks.json` naming a URL pattern and your app id (see
-[hooks](../docs/guides/hooks.md#link-handling)), because a claim in `app.json` would take the
-site over on every desktop the app was ever installed on. Write the command; whether it is ever
-called is the user's decision, and `describe`-ing an `openUrl` command is what lets an agent
-offer to write the rule.
+[hooks](../docs/guides/hooks.md#link-handling)); a claim in `app.json` would take the site over
+on every desktop the app is installed on. Write the command; the user decides whether it is
+called, and `describe`-ing an `openUrl` command is what lets an agent offer to write the rule.
 
 Three rules follow, all in `store/iframe-bridge/open-url.ts`:
 
 - `openUrl` must answer `{ handled: true }`, or `{ handled: false }` for a URL under the site
   the app has no view for (`github.com/settings` is not a repository). Anything else — an error,
-  no reply — reads as "not mine" and the link continues to the framing probe. A link that opens
-  nowhere is the outcome that whole module exists to rule out.
+  no reply — reads as "not mine" and the link continues to the framing probe.
 - **A closed app is opened to take the link**, and closed again if it answers `{ handled: false }`.
   So `openUrl` may be the first thing your app is ever asked — it runs against a freshly mounted
   app, after `defineApp` registration and not before it. The desktop reports the window to the
   agent only once the app has taken the link.
 - A link is **never handed back to the window it came from**. That app already saw it through
-  `links.onOpen` and let it go, so it is asking for the link to land somewhere else — which is
-  what an "open the real page ↗" anchor in that app means. Mark those anchors (`data-external`)
-  and let the hook pass them through.
+  `links.onOpen` and let it go (an "open the real page ↗" anchor). Mark those anchors
+  (`data-external`) and let the hook pass them through.
 
-Handling links inside your own content is still `links.onOpen` — same routing, no round trip,
-and no rule needed since your own content is your own business.
+Links inside your own content are handled by `links.onOpen`, with no hook rule needed.
 
 ## Design Tokens
 
@@ -186,8 +178,8 @@ import.
 
 The authoritative library list is `BUNDLED_LIBRARIES` in
 `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries`.
-Don't enumerate it here — `scripts/check/doc-freshness.ts` lints doc copies of that list for
-drift, so point at the registry instead of restating it.
+Point at it rather than enumerating it; `scripts/check/doc-freshness.ts` lints doc copies of the
+list for drift.
 
 Notable libraries: `mermaid` — `renderMermaid()` returns token-themed, already-sanitized SVG; at
 3.3 MB it is by far the largest, so import it only where diagrams are drawn. `dompurify` —

@@ -4,7 +4,7 @@ This app talks to the user's real, running Chrome through the YAAR Bridge extens
 Every tab listed is a tab the user can see. It is **not** the `browser` app, which is a
 separate server-side/headless browser meant for autonomous work with no human watching.
 
-## Consent model — read this before anything else
+## Consent
 
 Nothing is drivable by default. Each tab reports an `allowed` flag, which turns true only
 once the user clicks that tab's **"Allow use"** button in the app window. That single
@@ -21,19 +21,16 @@ YAAR's own tab can never be closed.
 
 - `extract` returns the page text. Reach for it first when you need selectors — discover
   the structure, then click or type against it.
-- `screenshot` returns a PNG of the **visible** tab, so `focus` it first or you capture
-  whatever else was on screen.
+- `screenshot` captures the **visible** tab, so `focus` it first or you capture whatever
+  else was on screen.
 
 ## Driving a tab
 
-- `click` — `selector`
-- `type` — `selector`, `text`, optional `submit`
-- `scroll` — `selector` | `deltaY` | `top`
-- `navigate` — `url`
+`click`, `type`, `scroll` and `navigate` act by CSS selector or URL. `click`, `type` and
+`scroll` take `screenshot: true` to return an image of the result in the same call.
 
-Interactions dispatch synthetic DOM events. That is reliable on the large majority of
-sites, but a widget gated on trusted events specifically may not respond, and the failure
-is silent rather than an error.
+Interactions dispatch synthetic DOM events. A widget that only accepts trusted events may
+not respond, and that failure is silent rather than an error.
 
 ## Managing tabs
 
@@ -51,4 +48,4 @@ browser pushes both on its own:
 
 **Subscribe before the click, not after.** A form submit that triggers validation answers
 with a dialog, and without the subscription that is indistinguishable from a click that
-did nothing at all — the single most common way work here goes wrong.
+did nothing.

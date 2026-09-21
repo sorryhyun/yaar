@@ -1,7 +1,6 @@
 // Questions asked about a *single* app, all answered from the live signals so that
 // every caller reads the same snapshot. The card's "Install update" branch and its
-// publish button used to compare versions independently and disagree about the same
-// app; both now come from `installedVersionOrder` below.
+// publish button both come from `installedVersionOrder` below.
 
 import { OFFICIAL_AUTHORS } from '../constants.js';
 import { compareVersions, normalizeId } from '../parsers/index.js';
@@ -36,11 +35,9 @@ export function installedVersionOf(appId: string): string | undefined {
  * How this machine's copy stands against the catalog — the one live read that both
  * the card's "Install update" branch and its publish button are decided from.
  *
- * They used to compare independently and disagree about the same app: the update
- * check demanded both versions parse, while the publish button treated "can't tell"
- * as publishable. Any app with a missing or non-numeric version therefore fell
- * through the first check and out of the second as an enabled "Publish update" —
- * offering to push a copy up that may be *older* than what is already published.
+ * Deciding both from one answer keeps an app with a missing or non-numeric version
+ * from showing an enabled "Publish update" for a copy that may be *older* than what
+ * is already published.
  */
 export function installedVersionOrder(app: Pick<ListedApp, 'id' | 'version'>): VersionOrder {
   return compareVersions(installedVersionOf(app.id), app.version);

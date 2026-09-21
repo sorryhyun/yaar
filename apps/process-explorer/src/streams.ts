@@ -58,8 +58,8 @@ function onAgentFrame(id: string, frame: StreamFrame) {
       break;
     case 'usage':
       // The frame's totals are cumulative for the agent, so this assigns rather
-      // than adds — and it deliberately does *not* touch `state`. Both providers
-      // now report usage several times mid-turn; letting that move the state
+      // than adds, and it does *not* touch `state`. Both providers report usage
+      // several times mid-turn; letting that move the state
       // would make a finished turn look like it resumed.
       setAgentActivity(id, (prev) => ({
         ...prev,

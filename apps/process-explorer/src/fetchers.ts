@@ -34,9 +34,8 @@ import type {
  * Names of the feeds currently in a failing state.
  *
  * These fetchers are driven by server-pushed change pings, not a poll, so on a
- * busy desktop they can run many times a second — a report per failure would be
- * a wall of toasts and a console filled at the same rate, which is how a console
- * stops being readable at exactly the moment someone needs to read it. So both
+ * busy desktop they can run many times a second, and a report per failure would be
+ * a wall of toasts and console lines. So both
  * the toast and the log fire on the *transition* into a failing state, which is
  * the moment a user needs to know the panel has stopped telling the truth, and
  * again on recovery so the log says when it came back. `startWatching`'s
@@ -126,8 +125,7 @@ function idFromUri(uri: string, root: string) {
 /**
  * Normalise a usage record off the wire. Every field is optional in the schema
  * (an older server may omit any of them), while {@link AgentUsage} requires the
- * two totals — defaulting them to 0 here is what keeps `inputRead()` out of NaN
- * territory and replaces the `as` cast this adapter used to carry.
+ * two totals; defaulting them to 0 here keeps `inputRead()` out of NaN territory.
  */
 function toUsage(
   raw:

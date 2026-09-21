@@ -3,16 +3,12 @@ export {};
 /**
  * What `createProject` writes into a new sandbox.
  *
- * Pure string building, kept out of `services/projects.ts` so it can be read (and
- * tested) as what it is: the first thing every author of a YAAR app sees, and
- * therefore the pattern most of them will copy.
+ * Pure string building, kept out of `services/projects.ts` so it can be read and
+ * tested on its own; it is the pattern most new apps copy.
  *
  * It follows the App Authoring Contract the compiler generates and the app-agent
- * prompt embeds — one `export default defineApp({...})`, no `render()` call, no
- * mount lookup. The previous scaffold contradicted all three, so the very first
- * compile taught the opposite of the rules the same session had just been given,
- * and any project that needed a protocol had to be rewritten from scratch before
- * it could declare one.
+ * prompt embeds: one `export default defineApp({...})`, no `render()` call, no
+ * mount lookup.
  */
 
 /**
@@ -29,8 +25,7 @@ export function appIdFromName(name: string, projectId: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   // A name that is entirely non-ASCII slugifies to nothing, and one starting with a
-  // digit ("2048") is a legal name but not a legal id. Both get a prefix rather than
-  // a rejection: naming the project is not the moment to argue about id syntax.
+  // digit ("2048") is a legal name but not a legal id. Both get a prefix, not a rejection.
   if (!slug) return `app-${projectId}`;
   return /^[a-z]/.test(slug) ? slug : `app-${slug}`;
 }
@@ -38,12 +33,9 @@ export function appIdFromName(name: string, projectId: string): string {
 /**
  * `src/main.ts` for a new project.
  *
- * Deliberately more than "hello world": it declares one state key and one command
- * with a Zod `params`, because those are the two things a scaffold can demonstrate
- * that documentation cannot. The Zod schema in particular is the fix for a trap the
- * JSON-Schema form leaves open — presence and unknown keys are validated, declared
- * *types* are not, so a `type: "string"` param accepts the number 12345 and stores
- * it. An app that starts from a validating schema never meets that.
+ * It declares one state key and one command with a Zod `params`. The JSON-Schema form
+ * validates presence and unknown keys but not declared *types*, so a `type: "string"`
+ * param accepts the number 12345; a Zod schema validates it.
  *
  * The two are only compatible because the `` html`` `` template lives inside `App()`.
  * A Zod `params` makes the compiler import the app to read the schema back, in a

@@ -41,8 +41,8 @@ export const [searchMode, setSearchMode] = createSignal<SearchMode>('title');
 // ── Update All ───────────────────────────────────────────────
 
 /**
- * Progress of the bulk update. Written only by `actions/update-all.ts`, whose
- * `active` flag is also what refuses a second concurrent run.
+ * Progress of the bulk update. Written only by `actions/update-all.ts`. For display
+ * and the protocol; the concurrency guard is `runInFlight` in that file.
  */
 export const [updateRun, setUpdateRun] = createSignal<UpdateRun>(IDLE_UPDATE_RUN);
 

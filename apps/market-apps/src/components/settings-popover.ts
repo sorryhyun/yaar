@@ -56,9 +56,8 @@ function accountControls() {
 }
 
 /**
- * Settings/config popover. Consolidates the account controls and the
- * "Hide installed apps" filter that used to sit inline in the header, so the
- * primary view stays focused on the search box and the app list.
+ * Settings/config popover: the account controls and the "Hide installed apps"
+ * filter, kept out of the header.
  *
  * Stable outer node + reactive inner content (the `githubBanner` idiom): the
  * panel shows/hides as `configOpen` flips without the parent re-rendering. A

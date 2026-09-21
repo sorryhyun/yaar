@@ -1,8 +1,7 @@
 # MCP Manager — notes for whoever edits this next
 
 Discovers, probes and manages external MCP (Model Context Protocol) servers.
-It is a client for *remote, untrusted* servers, which is the fact that shapes
-most of the design decisions below.
+It is a client for *remote, untrusted* servers.
 
 ## Layout
 
@@ -80,36 +79,31 @@ config renders in the list but cannot be added or reconfigured here.
 
 - `probePort` swallows *every* error as "nothing here" — that is right for a
   port sweep, but it means a systemic failure (a missing permission, say)
-  looks exactly like an empty network. It now logs each miss via `logDebug`,
+  looks exactly like an empty network. It logs each miss via `logDebug`,
   so open the console and look for repeated `[mcp-manager] probe ... failed`
   lines with an identical reason: that is the signature of a systemic fault
   rather than a quiet network. Probing a single URL by hand also reports the
   real reason, since that path does not swallow.
 - `parseRpcResponse` must not wrap the direct-JSON branch in a try that falls
-  through to the SSE scan. A previous version did, and it swallowed the
-  server's own `error.message` — the most useful thing in the exchange —
-  re-reporting everything as "Could not parse MCP response".
+  through to the SSE scan: that swallows the server's own `error.message` and
+  re-reports everything as "Could not parse MCP response".
 - Solid's `html` wraps *component* props in reactive getters, so a handler
   passed as a prop fires during render. `ScanField` and `ToolList` are called
   as plain functions (`${ScanField({...})}`) precisely to avoid this.
 - `SCAN_DEFAULTS` is `as const`, so signals initialised from it need an
   explicit type parameter or they pin to their initial literal.
 
-## Permissions: declare the exact URI, not just the prefix
+## Permissions
 
-From v1.0.0 to v2.0.2 app.json declared `"yaar://http/"` — with a trailing
-slash — while the code invokes the exact URI `yaar://http`. A trailing-slash
-prefix does **not** cover the slashless exact URI, so every outbound HTTP call
-was refused with `Not permitted: invoke yaar://http`. Because `probePort`
-swallows errors, this presented as "the network is empty" rather than as a
-failure: scans found nothing, forever. Fixed in 2.0.3.
+**Declare every form the code actually targets.** A trailing-slash prefix
+(`yaar://http/`) does **not** cover the slashless exact URI (`yaar://http`) the
+code invokes: every outbound HTTP call is refused with `Not permitted: invoke
+yaar://http`, and because `probePort` swallows errors a scan just finds nothing.
+One passing call does not prove the whole grant: `read`/`list` on
+`yaar://config/mcp` pass under the slash form while `invoke` on `yaar://http`
+does not.
 
-The rule to keep: **declare every form the code actually targets.** Verbs are
-not interchangeable here either — `read`/`list` on `yaar://config/mcp` worked
-under the slash form while `invoke` on `yaar://http` did not, so do not assume
-one passing call proves the whole grant.
-
-Current call sites, and why each entry exists:
+Current call sites:
 
 | Target | Verbs | Declared |
 |---|---|---|

@@ -41,9 +41,7 @@ export function startPolling(browserId: string): void {
   stopPolling();
   // The server has nothing captured for a tab it has just been pointed at, and it
   // answers a capture-less tab with a 404. Asking for a `fresh` one on the first
-  // tick makes the server capture instead of refusing — that 404 is the
-  // `failed to load <img>: /api/browser/8/screenshot` in the console, and it is
-  // cheaper not to make the doomed request than to swallow its error.
+  // tick makes the server capture instead of refusing.
   let primed = false;
   pollTimer = setInterval(() => {
     // The id is re-read every tick against the one this poll was started for.

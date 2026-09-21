@@ -1,6 +1,6 @@
 export {};
 
-// The data layer's public face, re-exported from the four modules it split into.
+// The data layer's public face, re-exported from the modules below.
 //
 // Components and the protocol import from here rather than reaching into
 // store.ts / fetchers.ts / streams.ts / actions.ts directly, so the boundary

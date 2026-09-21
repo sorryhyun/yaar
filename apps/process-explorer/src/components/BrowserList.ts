@@ -70,10 +70,9 @@ function BrowserRow(props: { session: BrowserSession }) {
 /**
  * The sandbox browser's sessions, as processes.
  *
- * Lists suspended sessions beside live ones on purpose: a `browserId` whose socket
- * is gone still names a page and a profile, and "this tab exists but nothing is
- * connected to it" is exactly the state a user needs to be able to see — and act
- * on — rather than discover through a window that will not paint.
+ * Lists suspended sessions beside live ones: a `browserId` whose socket is gone
+ * still names a page and a profile, and the user needs to see (and revive or kill)
+ * it rather than discover it through a window that will not paint.
  */
 export function BrowserList() {
   return html`

@@ -1,7 +1,6 @@
-// YAAR's own REST routes (http/routes/remote-control.ts), not a `yaar://` verb: there is none,
-// so an agent can only reach Remote Control through this app's commands. The fetch proxy
-// attaches this window's iframe token, which is how the server learns the monitor, and the
-// routes answer only the bundled Remote Control app.
+// YAAR's own REST routes (http/routes/remote-control.ts); there is no `yaar://` verb. The fetch
+// proxy attaches this window's iframe token, which is how the server learns the monitor, and
+// the routes answer only the bundled Remote Control app.
 const BASE = '/api/remote-control';
 
 /** `remoteControlStatus()` in the server's features/remote-control.ts. */

@@ -207,10 +207,9 @@ export const MessageCard = (m: ParsedMessage) => {
 /**
  * The ONE source of turns.
  *
- * The count badge and the list must read the same accessor. When they read
- * separate expressions they can disagree — and they did: a render throw in the
- * list left the badge showing "6874 turns" above a raw-markdown dump, because
- * the badge's memo had already committed and the list's had aborted.
+ * The count badge and the list must read the same accessor. Separate expressions
+ * can disagree: a render throw in the list leaves the badge's memo committed and
+ * the list's aborted.
  */
 const turns = (): ParsedMessage[] => (Array.isArray(state.messages) ? state.messages : []);
 
@@ -253,9 +252,8 @@ export const TranscriptSection = () => html`
           `;
         }
         if (state.transcript) {
-          // Falling back to the server-rendered markdown is legitimate, but it
-          // used to be silent — indistinguishable from a broken renderer. Say
-          // why there are no structured turns.
+          // Falling back to the server-rendered markdown: say why there are no
+          // structured turns, so it does not look like a broken renderer.
           return html`
             ${() =>
               state.messagesError

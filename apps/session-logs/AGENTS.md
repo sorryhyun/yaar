@@ -18,25 +18,23 @@ Browses `yaar://history/`. Read-only over session data; the one write is
 
 ## The agent reads a different session than the UI does
 
-The UI needs the whole array in memory — the transcript pane scrolls every row.
-An agent does not, and the two must not share a door: a state getter takes no
-arguments, so `query('messages')` returning the array meant a 6874-turn session
-could only be read by swallowing it whole.
+The UI needs the whole array in memory: the transcript pane scrolls every row.
+An agent does not, and a state getter takes no arguments, so a `query('messages')`
+that returned the array would make an agent read a 6874-turn session whole.
 
 So the split is by *question*, not by data. `query('messages')` answers "what is
 in here" with `indexSession()` — histograms and counts, zero turns.
 `command('readTurns', …)` answers "give me these" with `selectTurns` +
 `compactTurn`, because a **command takes parameters and a state getter cannot**.
-That is the whole reason the reads are commands; do not "simplify" them back into
-state keys.
+Keep the reads as commands.
 
-Two consequences worth keeping:
+Two consequences:
 
 - **Every turn carries its `index` in the unfiltered array.** A filtered hit is
   useless if you cannot go back and read what surrounded it, and the position in
   the *filtered* set does not address anything.
 - **`compactTurn` must return plain data.** `state.messages` is behind a Solid
-  store proxy, so a sub-object handed back by reference (`msg.action` was the one)
+  store proxy, so a sub-object handed back by reference (e.g. `msg.action`)
   fails the postMessage hop with `DataCloneError` — the same trap the state
   getters have. Strings and freshly-built objects are safe; a nested proxy is not.
 
@@ -45,43 +43,39 @@ Blob bytes stay on disk until `readBlob` asks (`api.readBlob` →
 session's blobs run to megabytes; that call is the one place where an unbounded
 read would undo everything above.
 
-## Invariants worth knowing
+## Invariants
 
-**The transcript render must not be able to throw.** This is the big one — it
-cost a whole release. `loadMessages` does `setState('messages', …)`, and Solid
-runs effects *synchronously* inside `setState`. So an exception thrown while
-rendering a single turn does not just lose that turn: it unwinds back out
-through `setState` into `loadMessages`'s own try/catch, which logs
-"Failed to load messages" and swallows it. The visible result is bizarre and
-misleading — `state.messages` is already assigned, so the count badge renders
-"6874 turns", while the list memo aborted mid-update and leaves the previous
-raw-markdown fallback on screen. Header and body disagree in the same frame,
-and the console blames the *load* for a *render* bug.
+**The transcript render must not be able to throw.** `loadMessages` does
+`setState('messages', …)`, and Solid runs effects *synchronously* inside
+`setState`. So an exception thrown while rendering a single turn does not just
+lose that turn: it unwinds back out through `setState` into `loadMessages`'s own
+try/catch, which logs "Failed to load messages" and swallows it. The visible
+result: `state.messages` is already assigned, so the count badge renders "6874
+turns", while the list memo aborted mid-update and leaves the previous
+raw-markdown fallback on screen. Header and body disagree in the same frame, and
+the console blames the *load* for a *render* bug.
 
-Three defences, all load-bearing, none redundant:
+Three defences, all needed:
 
 1. `api.normalizeMessages()` coerces every entry at the boundary — `content`
    and `interaction` come back as strings or undefined, always. Entries are
    heterogeneous and some runtimes send block form
    (`[{ type: 'text', text }]`) or a bare object where the type says string.
 2. `summarize.ts`'s `str()` guards every helper that calls a string method.
-   The types claim `string`; the data does not always agree. Do not "clean
-   this up" because the signature looks over-defensive.
+   The types claim `string`; the data does not always agree. Keep the guards
+   even though the signature makes them look redundant.
 3. `SafeMessageCard` in `transcript.ts` wraps each row, so one bad entry costs
    one row instead of the whole pane.
 
 **The turn count and the turn list must read the same accessor.** Both go
-through `turns()` in `transcript.ts`. When they read separate expressions they
-can disagree, and a disagreement is invisible until someone screenshots it.
+through `turns()` in `transcript.ts`; separate expressions can disagree.
 
 **Protocol state getters must return `toPlain(…)`, never store data directly.**
 Everything in `store.ts` is behind a Solid store proxy, and the structured
 clone algorithm does not run proxy traps — it reads internal slots — so a
 Proxy is not cloneable at all. Returning `state.sessions` from a state getter
 fails the postMessage hop out of the iframe with `DataCloneError`, however
-plain the underlying data is. `transcript` (a plain string) read fine
-throughout, which is what made this look like a data problem rather than a
-wrapper problem.
+plain the underlying data is.
 
 **A log row is one line, always.** Everything that is not prose (tool calls,
 results, reasoning, actions, UI interactions) is a `<details>` whose `<summary>`
@@ -96,12 +90,11 @@ So `splitTarget()` cuts a path-like target at a separator and the row renders
 two spans: `.log-target-head` shrinks and takes the ellipsis,
 `.log-target-tail` is pinned. This adapts to the real pane width, which a fixed
 character budget cannot. Prose targets (a thought preview, an error message)
-are informative at the *head*, so `splitTarget` deliberately declines them —
-that is what the `pathLike` test is for, not an optimisation.
+are informative at the *head*, so `splitTarget` declines them; that is what the
+`pathLike` test is for.
 
 **`maxTail` is a budget, not a minimum.** A pinned tail cannot shrink, so a
-tail wider than the pane overflows instead of eliding. Raising it much past 20
-chars reintroduces the bug it exists to fix.
+tail wider than the pane overflows instead of eliding. Keep it near 20 chars.
 
 **`toolSummary` parses the verb tools exactly** (`mcp__verbs__{verb}` +
 `input.uri`) and degrades everything else to short-name + most identifying
@@ -122,10 +115,9 @@ param, a very long URI, an error result, an action and an interaction — those
 are the branches in `summarize.ts`.
 
 **Always include a malformed entry in that fixture** — a `tool_result` whose
-`content` is `[{ type: 'text', text: '…' }]` or a bare object. That single
-entry is the entire regression above, and a fixture of well-formed data cannot
-see it. The assertion is that all turns still render and the count badge
-matches the number of rows.
+`content` is `[{ type: 'text', text: '…' }]` or a bare object; a fixture of
+well-formed data cannot catch the render-throw above. The assertion is that all
+turns still render and the count badge matches the number of rows.
 
 For `normalizeMessages`, a temporary `testNormalize` command that runs the
 function over an array of payload shapes and returns the counts is the fastest

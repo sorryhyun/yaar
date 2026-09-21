@@ -72,9 +72,8 @@ function App() {
   async function handleSave() {
     if (saving()) return;
     setSaving(true);
-    // Success message depends on which mode was saved, so it's toasted inline
-    // rather than via `tryToast`'s single `opts.success` string; `tryToast`
-    // still owns the one shared failure path.
+    // The success toast depends on the mode, so it is shown inline; `tryToast`
+    // handles failure.
     await tryToast(async () => {
       if (editMode() === 'new') {
         const memo = await addMemo(editTitle(), editContent());

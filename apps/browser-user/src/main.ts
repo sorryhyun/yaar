@@ -1,20 +1,11 @@
 /**
- * The Real Browser app: a live view of the user's real Chrome tabs, plus the App
- * Protocol surface that lets a monitor agent observe AND drive them via the YAAR
- * Bridge extension.
+ * The Real Browser app: a live view of the user's real Chrome tabs, plus the App Protocol
+ * (`defineApp` at the bottom) that lets an agent observe and drive them via the YAAR Bridge.
  *
- * Protocol shape (see the `defineApp` call at the bottom of this file):
- *   - `state`:   tabs / activeTab / connected
- *   - `commands`
- *       manage:  focus / close / group / move / track / refresh
- *       read:    extract (page text) / screenshot (WebP image of the visible tab)
- *       drive:   click / type / scroll / navigate (synthetic DOM events over the Bridge)
  * Every command delegates to the matching `./bridge.ts` helper and unwraps its envelope, so the
- * agent receives the bare payload (e.g. the extracted `{ url, title, text }`) instead of a
- * `{ ok, data }` wrapper. Consent refusals / failures throw, which the App Protocol surfaces to
- * the agent as a clean command error. The drive/read verbs are gated per-origin on the server
- * (tab-control consent for click/type/scroll/navigate, content-read for extract/screenshot) — the
- * user's "Allow use" button pre-grants both, so a granted tab drives without further prompts.
+ * agent receives the bare payload; consent refusals and failures throw as command errors. The
+ * server gates drive verbs on tab-control consent and read verbs on content-read consent per
+ * origin; the "Allow use" button pre-grants both.
  */
 import { For, Show, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
@@ -140,11 +131,7 @@ function App() {
   `;
 }
 
-/**
- * Unwrap a Bridge envelope for an app command: return its `data` on success,
- * or throw its `error` so the App Protocol reports a proper command failure
- * (rather than stringifying a `{ ok: false, error }` object as a "successful" result).
- */
+/** Unwrap a Bridge envelope: return its `data`, or throw its `error` as a command failure. */
 async function unwrap<T>(p: Promise<bridge.BridgeEnvelope<T>>): Promise<T> {
   const res = await p;
   if (!res.ok) throw new Error(res.error || 'Bridge command failed.');
@@ -168,10 +155,9 @@ function shotToBlocks(shot: bridge.ScreenshotData, caption: string): Block[] {
 const SETTLE_MS = 400;
 
 /**
- * Run a drive verb, then — when the caller passes `screenshot: true` — snapshot the tab so the agent
- * sees the result of its action in the SAME turn, instead of a separate focus+screenshot round trip.
- * The shot is best-effort: the drive already succeeded, so if the capture fails (tab not focused,
- * content consent declined) we return the drive summary with a short note rather than erroring out.
+ * After a drive verb, when the caller passes `screenshot: true`, snapshot the tab and return it
+ * with the drive summary. Best-effort: if the capture fails (tab not focused, content consent
+ * declined) the summary comes back with a short note instead of an error.
  */
 async function withOptionalShot(
   tabId: number,
@@ -298,8 +284,7 @@ export default defineApp({
         properties: { tabId: { type: 'number' } },
         required: ['tabId'],
       },
-      // Return an MCP image content block (not the raw data-URL object) so the agent actually
-      // *sees* the pixels via vision, instead of receiving a giant opaque base64 string as text.
+      // An MCP image block, so the agent sees the pixels rather than a base64 string.
       run: async (p) => {
         const shot = await unwrap(bridge.screenshot(p.tabId));
         return shotToBlocks(shot, `Screenshot of "${shot.title}" — ${shot.url}`);

@@ -12,10 +12,9 @@ audience: agent
   `new Function`. So `` html`${x}` ``, `` html`hi ${x}` `` and `` html`hi` `` throw, and
   `` html`lead <b>x</b>` `` silently loses `lead `. **Return the accessor instead of wrapping
   it** — `() => (cond() ? a() : b())`, not `` html`${() => (cond() ? a() : b())}` `` — or
-  give the template markup (`` html`<span>hi ${x}</span>` ``). This is the most common
-  broken-template shape by far: a conditional row or panel wrapped in `` html`` `` out of
-  habit. The guard (`solid-html-guard.ts`) rejects all four, and `typecheck` reports them
-  too, so you do not have to reach a compile to find out.
+  give the template markup (`` html`<span>hi ${x}</span>` ``). The usual case is a
+  conditional row or panel wrapped in `` html`` ``. The guard (`solid-html-guard.ts`)
+  rejects all four, and `typecheck` reports them too.
 - **`flex: 1` breaks inside reactive expressions** — Solid's `html` inserts comment markers
   that break flex chains. Use `position: absolute; inset: 0`.
 - **Zero-arg function props are invoked, not passed through** — `html` wraps any component

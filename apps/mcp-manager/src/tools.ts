@@ -1,10 +1,8 @@
 // Tool-list parsing, shared by the two boundaries that produce one.
 //
 // A remote server's `tools/list` RPC result and the gateway's
-// `list('yaar://mcp/{name}')` carry the same payload, and both used to walk it
-// with their own near-identical copy of this loop. One copy means one answer to
-// "what happens to a malformed row" — which is the whole point of the
-// per-row parse below.
+// `list('yaar://mcp/{name}')` carry the same payload. One parser means one answer
+// to "what happens to a malformed row".
 import { safeParseOr } from '@bundled/yaar';
 import { logError } from './log';
 import { McpToolInfo, McpToolListEnvelope } from './schema';

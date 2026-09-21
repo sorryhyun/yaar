@@ -2,13 +2,9 @@ export {};
 import { createCollapsiblePanel } from '@bundled/yaar';
 
 /**
- * Open/close state for the left nav overlay that holds the file list + toolbar.
- *
- * This lives in its own module rather than inside a component because both the
- * navigation layer (which closes it after a file is selected) and the protocol
- * layer (which exposes it to the app agent) need to reach it. The hover-expand +
- * pin machine is the shared `createCollapsiblePanel` primitive; only the app's
- * `nav*` naming and the post-select rule live here.
+ * Open/close state for the left nav overlay that holds the file list + toolbar, shared by the
+ * UI and the protocol. The hover-expand + pin machine is `createCollapsiblePanel`; this module
+ * only gives it `nav*` names.
  */
 
 /** Grace period before the panel slides out, so a brief cursor exit doesn't flicker. */

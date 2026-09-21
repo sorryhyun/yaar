@@ -4,15 +4,10 @@ description: Read before writing docs, protocol descriptions, comments, or CSS i
 audience: agent
 ---
 
-## Authoring Style — writing for the agent that reads you next
+## Authoring Style
 
-Everything you author becomes future context for other agents: cloned source is read by
-later sessions, `AGENTS.md` is the manual the next editor swallows whole, `protocol.json`
-descriptions become prompt material for every agent that drives the app, and your CSS and
-structure choices become the pattern the next generated app imitates. There is no taste in
-that loop to correct drift — the most-copied example wins. So the discipline below is not
-politeness; it is what keeps an agent-authored ecosystem from converging on its own worst
-habits. The bright-line versions of these rules are in your prompt; this is the how.
+Cloned source, `AGENTS.md`, `protocol.json` descriptions, CSS and structure are all read or
+copied by later agents. The bright-line rules are in your prompt; this is the detail.
 
 ### Doc conventions
 
@@ -21,8 +16,7 @@ into them.
 
 - **A topic's `description` is a trigger, not a summary.** "Read before touching the body
   renderer" fires at the right moment; "notes about the body renderer" never fires at all.
-  The description line is the topic's entire always-loaded footprint (≤150 chars) — it is
-  the only chance the doc gets to be pulled.
+  The description line is the topic's entire always-loaded footprint (≤150 chars).
 - **Default to updating, not adding.** A change rarely deserves a new doc — extend the
   topic that already covers the area, and touch its file so staleness tooling sees it.
   A new topic is for a new area with its own trigger, not for "misc notes, part 2".
@@ -42,24 +36,19 @@ One line: what the command does, then the precondition that makes it fail.
 - Bad: `submitComment — this command allows the agent to submit a comment to the currently
   viewed post using the comment submission system.`
 
-The bad one spends its whole length restating the name. The reader is an agent choosing
-whether to call it — tell it the effect it cannot guess and the failure it would otherwise
-discover by paying a turn. State-key descriptions are the same contract for reads: say what
-the value is *when things are unusual* (empty, absent, stale), because the usual case is
-already in the name. Descriptions are prompt material: every word is paid for on every turn
-of every agent that drives the app.
+The bad one restates the name. Give the effect the caller cannot guess and the failure it
+would otherwise discover by paying a turn. State-key descriptions are the same contract for
+reads: say what the value is *when things are unusual* (empty, absent, stale). Every word is
+paid for on every turn of every agent that drives the app.
 
 ### Comment discipline
 
-The rule — comments state what the code cannot — expands to a house idiom: a *file header*
-that argues a design decision (why this shape, what alternative was rejected, what breaks if
-it changes) is welcome and is how this repo documents itself. What is not welcome:
+Comments state what the code cannot. A *file header* that records a design decision (why
+this shape, what breaks if it changes) is welcome. Not welcome:
 
-- Narration: `// call the handler`, `// now update the state` — the next line already says so.
-- Task residue: `// fixed the bug where…`, `// as requested` — meaningless after the change
-  lands, misleading a year later.
-- Correctness advocacy: a comment explaining why your change is right is addressed to a
-  reviewer, not to the next reader; it dies with the review.
+- Narration: `// call the handler`, `// now update the state`.
+- Task residue: `// fixed the bug where…`, `// as requested`.
+- Correctness advocacy: a comment arguing that your change is right, addressed to a reviewer.
 
 If a comment states a constraint, an invariant, or a workaround with its reason, keep it.
 Otherwise delete it and let the code speak.
@@ -68,8 +57,7 @@ Otherwise delete it and let the code speak.
 
 Shared `y-*` chrome and `--yaar-*` design tokens first; local CSS only for what makes this
 app *this app*. Redefining a `y-*` class or assigning a `--yaar-*` token in app CSS shadows
-the platform's copy for every element in the app — the next clone copies the shadow, and the
-ecosystem forks its own chrome. Token values come from the design-token brief in your
+the platform's copy for every element in the app, and the next clone copies the shadow. Token values come from the design-token brief in your
 prompt's App Authoring Contract; use `var(--yaar-…)` over literals so themes keep working.
 A local style is justified for app-specific identity (a game's board, a reader's typography),
 not for re-derived plumbing (buttons, toolbars, toasts — the chrome already has those).
@@ -78,12 +66,9 @@ not for re-derived plumbing (buttons, toolbars, toasts — the chrome already ha
 
 The two protocol namespaces must be tellable apart from the name alone: **nouns read, verbs
 run**. `consoleLogs` is a state key; `clearConsole` is a command. An agent that calls
-`command("consoleLogs")` gets "Unknown command" and reads it as a broken app — naming that
-makes the split obvious is cheaper than any error message.
+`command("consoleLogs")` gets "Unknown command" and reads it as a broken app.
 
-### The exemplar effect — the pre-deploy question
+### Before deploying
 
-Before deploying, ask: *what will the next agent copy from this app?* Whatever the answer
-is — a CSS pattern, a protocol shape, a doc structure — that is your review checklist,
-because it will be copied whether it is good or not. Fixing an exemplar fixes every app
-generated after it; shipping a shortcut ships it to the whole ecosystem.
+Review whatever the next agent will copy from this app (a CSS pattern, a protocol shape, a
+doc structure).

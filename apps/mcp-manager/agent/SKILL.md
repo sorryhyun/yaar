@@ -20,9 +20,6 @@ tools it advertises without writing anything to the config.
 
 ## Protocol version negotiation
 
-Two facts about the protocol are not visible in `app.json` or `protocol.json`, and matter
-when a server misbehaves:
-
 - It speaks MCP revision **`2025-06-18`**.
 - It **negotiates**. Whatever `protocolVersion` a server returns from `initialize` is
   echoed back in the `MCP-Protocol-Version` header on every subsequent request, so older

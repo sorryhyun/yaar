@@ -159,7 +159,7 @@ async function runUpdates(targets: DisplayApp[], confirm: boolean): Promise<Upda
         }
       } finally {
         // In a finally so that an unexpected throw cannot leave `active` true, which
-        // would refuse every later run for the lifetime of the window.
+        // would leave the Update All button disabled for the lifetime of the window.
         setUpdateRun({
           active: false,
           total,

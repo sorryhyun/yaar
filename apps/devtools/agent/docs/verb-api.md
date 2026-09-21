@@ -27,14 +27,13 @@ app* to ask it, in a worker with a stubbed DOM. A module-scope `` html`` `` buil
 `<template>` element on import, which the stub cannot do, so the whole extraction fails —
 one Zod command is enough to take the app's entire manifest with it. Use JSON Schema
 literals in those apps, or keep every `` html`` `` call inside a function so it runs at
-mount. The compile names this now, but it is cheaper not to hit it.
+mount. The compile reports this failure by name.
 
 Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`,
 `invoke`, `describe`, `del`. For HTTP, use `httpFetch` from the same barrel — it is `fetch`,
 standard `Response` and all, and cross-origin calls route through the server's proxy
 automatically (so `yaar://http` must still be declared). Prefer it over
-`invoke('yaar://http', ...)`, which returns YAAR's internal envelope and has led every app
-that used it to hand-roll a response type.
+`invoke('yaar://http', ...)`, which returns YAAR's internal envelope.
 
 **Splitting a large `protocol.ts`.** Descriptor maps may live in `src/protocol/<domain>.ts`
 and be spread back in — `commands: { ...fileCommands, ...gitCommands }`. The compiler

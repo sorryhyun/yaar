@@ -50,11 +50,9 @@ const PREVIEW_UNAVAILABLE = '<span class="preview-unavailable">Unable to preview
 
 export async function navigate(path: string) {
   setState('currentPath', path);
-  // The open preview persists across directory navigation — moving between
-  // folders keeps the current content view in place. The preview is only
-  // replaced when the user actually selects a different file (selectFile) or
-  // explicitly closes it (closePreview). The selected-row highlight simply
-  // won't show while the selected file lives outside the current directory.
+  // The open preview persists across directory navigation; only selectFile or
+  // closePreview replace it. The selected-row highlight is absent while the
+  // selected file lives outside the current directory.
   setState('statusText', 'Loading...');
   try {
     await refreshMountAliases();
@@ -84,16 +82,14 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   setState('previewMetaText', formatSize(entry.size));
   setState('showPreview', true);
   // The preview renders behind the overlay; the nav panel stays until the cursor
-  // leaves it (onMouseLeave → scheduleNavClose), so selecting a file no longer
-  // dismisses the panel on its own.
+  // leaves it (onMouseLeave → scheduleNavClose), not on file selection.
 
   elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 
   if (isImage(name)) {
-    // Built via DOM construction rather than string interpolation: `name` is an
-    // attacker-controlled filename, and a `"` in it would break out of the alt
-    // attribute. Property assignment has no attribute-injection surface at all.
-    // inline styles intentionally omitted — .preview-body img already covers max-width + border-radius
+    // DOM construction, not string interpolation: `name` is an attacker-controlled
+    // filename, and a `"` in it would break out of the alt attribute.
+    // Sizing comes from `.preview-body img`.
     const img = document.createElement('img');
     img.src = storage.url(entry.path);
     img.alt = name;
@@ -102,11 +98,9 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   }
 
   if (isPdf(name)) {
-    // The browser renders PDFs natively; point an iframe at the file's storage
-    // URL. Built via DOM construction rather than string interpolation because
-    // `name`/path are attacker-controlled filenames — property assignment has no
-    // attribute-injection surface. The iframe is same-origin to /api/storage and
-    // carries no app scripting, so it's a plain document viewer.
+    // The browser renders PDFs natively in an iframe on the file's storage URL
+    // (same-origin to /api/storage, no app scripting). DOM construction, not string
+    // interpolation: `name`/path are attacker-controlled filenames.
     const frame = document.createElement('iframe');
     frame.className = 'pdf-frame';
     frame.src = storage.url(entry.path);

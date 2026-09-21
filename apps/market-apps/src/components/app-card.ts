@@ -34,9 +34,8 @@ import { badge } from './ui.js';
  * whose version is a codename; the host remains the backstop there. The tooltip says
  * so rather than implying a comparison we did not make.
  *
- * The order is read live from the store, not from `app.installedVersion` — the
- * "Install update" branch above reads the store too, and the two deciding from
- * different snapshots is what let them disagree about the same app.
+ * The order is read live from the store, not from `app.installedVersion`, so this and
+ * the "Install update" branch decide from the same snapshot.
  */
 function publishButton(app: DisplayApp) {
   if (isSystem(app.id) || !account().signedIn) return '';

@@ -6,7 +6,7 @@
   "permissions": [
     "yaar://storage/"
   ],
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "YAAR",
   "kind": "system",
   "appId": "storage"

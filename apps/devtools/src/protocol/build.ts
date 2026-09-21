@@ -52,9 +52,8 @@ export const buildCommands = {
       },
     },
     run: async (p) => {
-      // Typecheck and compile were always run back-to-back as two round trips, and compiling
-      // does not typecheck — so it was easy to ship code that built but never type checked.
-      // Fold them: check first, build regardless, report both.
+      // Compiling does not typecheck, so one call does both: check first, build regardless,
+      // report both.
       const skip = p.skipTypecheck === true;
       if (!skip) await typecheck();
       await compile();
@@ -63,31 +62,24 @@ export const buildCommands = {
       const diags = skip ? [] : diagnostics();
       const typeErrors = diags.filter((d) => d.severity === 'error').length;
 
-      // A bundle that built around two type errors used to come back `status: "success"`
-      // with a previewUrl — the one word the caller reads, saying the one thing that
-      // wasn't true. Bun strips types and builds happily through them, so "it built" and
-      // "it type checks" are separate facts and both get reported: `built` for the
-      // bundle, `status` for the code. Deploy enforces the same line.
+      // Bun strips types and builds through them, so "it built" and "it type checks" are
+      // separate facts: `built` for the bundle, `status` for the code. Deploy enforces the
+      // same line.
       //
-      // `skipTypecheck` gets its own word rather than borrowing `success`: nothing here
-      // checked the code, and the `compileStatus` state key says the same thing so a
-      // caller polling it cannot land on a cleaner answer than the command gave.
+      // `skipTypecheck` gets its own status rather than `success`, matching the
+      // `compileStatus` state key.
       const status = resolveCompileStatus(
         built ? 'success' : 'error',
         skip ? 'unknown' : typeErrors === 0 ? 'clean' : 'errors',
       );
 
-      // Refresh an open preview onto the build we just made. Left alone, it went on
-      // showing the previous one — so a screenshot taken to confirm a fix showed the
-      // code from before the fix, and agreed with you. Re-opening remounts the iframe,
-      // which resets app state: a new build is a new app.
+      // Refresh an open preview onto the build we just made; otherwise a screenshot taken
+      // to confirm a fix shows the code from before it. Re-opening remounts the iframe,
+      // which resets app state.
       //
-      // That remount is the whole cost of a build for an app whose state took several
-      // interactions to establish, so it is now declinable — but only because the
-      // silent half of the original failure is closed: with `refreshPreview: false`
-      // the window is *marked* stale (previewIsStale), and every preview read leads
-      // with that. A stale preview you know about is a tradeoff; the one you don't is
-      // the bug this comment was written for.
+      // With `refreshPreview: false` the remount is skipped and the window is *marked*
+      // stale (previewIsStale), and every preview read leads with that. Keep the marker
+      // if you touch this: an unmarked stale preview is the failure.
       const wantRefresh = p.refreshPreview !== false;
       let previewRefreshed = false;
       if (built && previewWindowId() && wantRefresh) {

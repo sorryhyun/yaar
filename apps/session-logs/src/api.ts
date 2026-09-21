@@ -66,12 +66,12 @@ export async function loadTranscript(sessionId: string): Promise<void> {
  * reading turns wants none of them.
  *
  * **A JSON blob does not come back as text.** The verb envelope runs `tryParseJson`
- * over the resource body (`http/routes/verb.ts`), so bytes that happen to parse —
- * which most offloaded tool results do, they are verb responses — arrive here as an
- * *object*. `String(that)` is `[object Object]`, which is what this returned before
- * and is worse than an error: the agent is told the blob is 15 characters long.
- * Re-serialise instead. The round trip costs the original whitespace, so the length
- * this reports is of the rendered text, not of `contentRef.bytes` on disk.
+ * over the resource body (`http/routes/verb.ts`), so bytes that happen to parse — which
+ * most offloaded tool results do, they are verb responses — arrive here as an *object*.
+ * `String(that)` is `[object Object]`, which would tell the agent the blob is 15
+ * characters long. Re-serialise instead. The round trip costs the original whitespace,
+ * so the length this reports is of the rendered text, not of `contentRef.bytes` on
+ * disk.
  */
 export async function readBlob(sessionId: string, sha256: string): Promise<string> {
   const data = await read<unknown>(`yaar://history/${sessionId}/blobs/${sha256}`);
@@ -87,7 +87,7 @@ export async function readBlob(sessionId: string, sha256: string): Promise<strin
 // `yaar://history/{id}/messages` is a trust boundary: the entries are
 // heterogeneous (tool_use / tool_result / thinking / action / interaction),
 // they are produced by several different agent runtimes, and a single odd one
-// used to take down the whole transcript. See AGENTS.md "The transcript render
+// can take down the whole transcript. See AGENTS.md "The transcript render
 // must not be able to throw".
 //
 // Two rules here:
@@ -111,7 +111,7 @@ function jsonish(v: unknown): string {
  * `content` is documented as a string but arrives as block form
  * (`[{ type: 'text', text: '…' }]`) or a bare object from some runtimes. The
  * renderer calls `.split`/`.slice` on it, so anything non-string that reaches
- * the row builders is a TypeError — which is exactly the regression this fixes.
+ * the row builders is a TypeError.
  */
 function asText(v: unknown): string | undefined {
   if (v == null) return undefined;
@@ -210,9 +210,8 @@ export async function loadMessages(sessionId: string): Promise<void> {
     const messages = normalizeMessages(data);
     if (state.selectedId !== sessionId) return;
     setState('messages', messages);
-    // An empty result after a successful read is worth saying out loud: the old
-    // code fell straight back to the raw markdown dump, which looked like a
-    // rendering bug rather than "there was nothing to render".
+    // An empty result after a successful read is said out loud, so the raw markdown
+    // fallback does not read as a rendering bug.
     setState('messagesError', messages.length ? null : 'No structured turns in this session.');
   } catch (e) {
     const msg = errMsg(e);

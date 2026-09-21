@@ -46,13 +46,10 @@ function tryJson(text: string): unknown {
  * Read the JSON-RPC payload out of a response body — direct JSON or SSE framing.
  *
  * Only the *decode* decides which framing this is; everything after it (schema
- * failure, and a well-formed `error` envelope) throws for the caller. That
- * separation is the point: an earlier version wrapped the whole direct-JSON
- * branch in a try whose catch fell through to the SSE scan, so a legitimate
- * `error.message` from the server — and the schema failure too — was swallowed
- * and re-reported as the generic "Could not parse MCP response". The server's
- * own explanation of what went wrong is the most useful thing in the exchange;
- * it must not be lost to control flow.
+ * failure, and a well-formed `error` envelope) throws for the caller. Do not
+ * wrap the direct-JSON branch in a try that falls through to the SSE scan: that
+ * swallows the server's own `error.message` (and a schema failure) and
+ * re-reports it as the generic "Could not parse MCP response".
  */
 export function parseRpcResponse(body: string): unknown {
   const direct = tryJson(body);

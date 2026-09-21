@@ -177,10 +177,8 @@ function topEntries(counts: Map<string, number>, limit: number): { name: string;
 /**
  * What is in this session, without any of it.
  *
- * This is what the `messages` state key answers now. It used to answer with the
- * entire array, which is the whole reason an agent could not read a session
- * without swallowing it — orientation and retrieval are different questions and
- * only the second one should cost turns.
+ * This is what the `messages` state key answers: orientation, with retrieval left
+ * to `readTurns`.
  */
 export function indexSession(messages: readonly ParsedMessage[] | null): Record<string, unknown> {
   if (!Array.isArray(messages))

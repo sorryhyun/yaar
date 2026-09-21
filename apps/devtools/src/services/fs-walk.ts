@@ -7,8 +7,7 @@ import type { FileEntry } from '../core/types';
 //
 // `dist/` is skipped entirely. It is compiler output — the largest entry in every
 // project (an inlined bundle runs past 100KB), never edited by hand, and excluded
-// from version history — so listing it only crowded out the source files the list
-// exists to show.
+// from version history — so listing it crowds out the source files.
 const GENERATED_DIRS = new Set(['dist']);
 
 export async function listAllFiles(

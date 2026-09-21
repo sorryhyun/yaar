@@ -14,8 +14,8 @@ Hand off to the monitor agent for actions outside your scope (opening other apps
 
 ## Reading a session
 
-A session is an event log, often thousands of turns. Nothing hands you all of it, and
-you should not want it: read the shape first, then the turns that matter.
+A session is an event log, often thousands of turns. Read the shape first, then the
+turns that matter.
 
 1. `query('messages')` — the **index**. Totals, a histogram by type, the agents and tools
    that appear, error and blob counts. This is orientation; it contains no turns.
@@ -35,8 +35,7 @@ a character window of the bytes — never the whole file unless you page through
 `command('readTranscript', { offset, limit })` reads on from there. Prefer `readTurns` for
 anything analytical — the transcript is prose for skimming, the turns are the data.
 
-Budget your reads. A filtered page of 40 answers most questions; pulling ten thousand turns
-answers none of them better.
+A filtered page of 40 answers most questions.
 
 ## Message Structure
 
@@ -109,15 +108,15 @@ Based on analysis, suggest improvements in:
    `types: ['tool_use']` for call patterns)
 5. Analyze across the dimensions above
 6. Present findings with specific examples, counts, and recommendations
-7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. Use this rather than `storage:write`: the built-ins would reach the same tree, but `saveReport` is what keeps every audit under `reports/` with a name the app has vetted.
+7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. Use this rather than `storage:write`.
 
 ## Reports
 
 **Pass a long report as an array of lines.** `saveReport`'s `content` takes a string or a
 `string[]`, and the array is the form to reach for: elements are joined with a newline, one
-element per line, so no newline has to survive escaping inside a single JSON string literal
-— which is where a long body arrives with doubled escapes or cut mid-document. An
-empty-string element is a blank line.
+element per line, so no newline has to survive escaping inside one JSON string (a long
+single-string body can arrive with doubled escapes or cut off). An empty-string element is
+a blank line.
 
 What you saved is readable again. `command('listReports')` gives every report as
 `{ name, bytes, savedAt }`, newest first, and `command('readReport', { name, offset?, limit? })`

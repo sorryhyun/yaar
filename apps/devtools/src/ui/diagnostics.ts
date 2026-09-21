@@ -14,12 +14,7 @@ import {
 } from './panel-state';
 import { Icon } from './icons';
 
-// The bottom panel: Problems and Console, and nothing else.
-//
-// Changes was a third tab here until it moved to the sidebar (see sidebar.ts and
-// changes-panel.ts). What is left are the two short, scrolling logs the panel was
-// sized for — which is why the `:has(.changes-panel)` height overrides went with
-// it, and why this panel is back to a plain 200px cap.
+// The bottom panel: Problems and Console, and nothing else (Changes is a sidebar tab).
 
 /** A click on the tab already showing folds the panel away; any other click opens it. */
 function onTabClick(tab: BottomTab): void {

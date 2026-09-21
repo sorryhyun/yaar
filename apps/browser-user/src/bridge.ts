@@ -1,19 +1,12 @@
 /**
- * Local HTTP helper for the YAAR Bridge REST route.
+ * HTTP helper for `POST /api/bridge` (the user's real Chrome tabs via the Bridge extension).
+ * Mirrors `browserPost` from the yaar-web shim; `@bundled/yaar-web` itself drives the headless
+ * browser, not the user's live tabs, so it is not used here. Every request carries the iframe
+ * token (`window.__YAAR_TOKEN__`) in the `X-Iframe-Token` header.
  *
- * Mirrors `browserPost` from the yaar-web shim, but talks to `POST /api/bridge`
- * (the user's REAL Chrome tabs via the Bridge extension) instead of the
- * server-side headless browser. Do NOT use `@bundled/yaar-web` here — that SDK
- * drives the headless browser, not the user's live tabs.
- *
- * Every request carries the iframe token (`window.__YAAR_TOKEN__`) in the
- * `X-Iframe-Token` header, exactly like the Browser app posts to `/api/browser`.
- *
- * app.json therefore declares `"bundles": ["yaar-web"]` even though nothing here imports that SDK.
- * `bundles` does double duty: it is the compiler's gate on *importing* a gated SDK, and it is the
- * capability the server checks (`requireBundle`) on the doors those SDKs open — and `/api/bridge` is
- * one of them. We need the second without the first. Deleting the declaration because no import
- * matches it 403s this app out of the endpoint it exists to call.
+ * app.json still declares `"bundles": ["yaar-web"]` though nothing imports that SDK: `bundles` is
+ * also the capability the server checks (`requireBundle`) on `/api/bridge`. Deleting the
+ * declaration 403s this app out of the endpoint.
  */
 
 import { errMsg } from '@bundled/yaar';
@@ -99,9 +92,7 @@ async function bridgePost<T>(body: BridgeRequest): Promise<BridgeEnvelope<T>> {
       headers: bridgeHeaders(),
       body: JSON.stringify(body),
     });
-    // Validate the untrusted envelope wrapper at the boundary. `data` stays
-    // `unknown` here (the schema's job is only to confirm a well-formed envelope);
-    // we restore the caller's generic `<T>` by casting once the shape is confirmed.
+    // Validate the envelope wrapper; `data` is cast to the caller's `<T>` afterwards.
     const parsed = z.safeParse(BridgeEnvelopeSchema, await res.json());
     if (!parsed.success) {
       console.error('bridge envelope failed validation', parsed.error.issues);
@@ -167,7 +158,7 @@ export function extract(tabId: number, maxChars?: number): Promise<BridgeEnvelop
   return bridgePost<ExtractData>({ action: 'extract', tabId, maxChars });
 }
 
-/** Capture a PNG of the visible tab. Content-consent-gated; the tab must be focused. */
+/** Capture the visible tab (WebP data URL). Content-consent-gated; the tab must be focused. */
 export function screenshot(tabId: number): Promise<BridgeEnvelope<ScreenshotData>> {
   return bridgePost<ScreenshotData>({ action: 'screenshot', tabId });
 }

@@ -1,16 +1,15 @@
 # AGENTS.md — Dev Tools
 
-The IDE that builds and deploys every other YAAR app, including itself. Read this before editing.
+The IDE that builds and deploys every other YAAR app, including itself.
 
 ## Run the tests
 
 Run `selfTest` before every deploy; its descriptor says what it covers and when else to run it.
 
-Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file — the
-suites are the regression record. Behaviour that needs a running app is `previewScript`
-(`agent/docs/regression-testing.md`), also not prose.
+Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file.
+Behaviour that needs a running app is `previewScript` (`agent/docs/regression-testing.md`).
 
-## The self-hosting hazard
+## Deploying devtools itself
 
 Devtools compiles, deploys and rolls back apps, and it is an app. **A broken deploy of devtools
 breaks the tool you would use to fix devtools.**
@@ -26,8 +25,8 @@ breaks the tool you would use to fix devtools.**
 `ui → services → lib → core`. Imports point one direction only, and each directory's `index.ts`
 re-exports **only what that directory owns**.
 
-- `core/` — signals and types, importing nothing app-local. That keeps the rule grep-able.
-- `lib/` — pure logic: no signals, no I/O. Testable without booting the app; keep it that way.
+- `core/` — signals and types, importing nothing app-local.
+- `lib/` — pure logic: no signals, no I/O, testable without booting the app.
 - `services/` — everything that performs I/O or mutates signals.
 - `ui/` — Solid components, composed by `app-shell.ts`. Imported by nothing.
 - `test/` — the suites. The only directory that may import across layers.
@@ -35,7 +34,7 @@ re-exports **only what that directory owns**.
 **Never add a cross-layer barrel.** A former `src/project.ts` was one, and it closed a real import
 cycle through `services/preview.ts`. If a module seems to need one, it is in the wrong layer.
 
-## The protocol is split on purpose
+## Protocol
 
 `src/main.ts` holds the single `defineApp`, spreading one descriptor map per domain from
 `src/protocol/`. Do not write down how many there are — read the manifest.
@@ -44,8 +43,7 @@ cycle through `services/preview.ts`. If a module seems to need one, it is in the
 `verb-api` topic (`agent/docs/verb-api.md`).
 
 **Command and state `description` strings are the agent-facing documentation**, appended verbatim
-to the prompt of every agent driving this app. Never restate one in `agent/prompt.md`: a fact in
-both places will disagree with itself, and the descriptor is the copy that cannot go stale.
+to the prompt of every agent driving this app. Never restate one in `agent/prompt.md`.
 
 ## Storage re-encodes images on read
 
@@ -58,7 +56,7 @@ file into the iframe. Both storage directions use it — import (`yaar://storage
 export (as `to`, via `exportToStorage`). A copy *within* the project has no storage URI on either
 side, so it cannot; that is why it reads, rewrites and renames.
 
-## compileStatus is three-valued, and that is load-bearing
+## compileStatus is three-valued
 
 `resolveCompileStatus` in `lib/compile-status.ts` is the single reducer, shared by the
 `compileStatus` state key and the `compile` command's `status` so the two cannot drift.
@@ -73,17 +71,16 @@ third value and keep it surfacing as `"unchecked"`; the `compile-status` suite p
 
 `consoleLogs` and `permissions` return a structured reason on failure, never an empty result: "no
 preview open", "preview unreachable" and "the app logged nothing" must not collapse into the same
-empty array. An empty list is an answer — make sure it is the true one. Keep this in any new state
-getter that can fail.
+empty array. Keep this in any new state getter that can fail.
 
 ## Every mutation is recorded
 
 **Every path that mutates a file goes through `services/files.ts` and calls `recordChange`**, so
-the Changes tab can show the diff. A path that saves via `appStorage` directly is invisible there,
-which is the bug the panel closes. `createProject` is the one deliberate exemption: skeleton files
+the Changes tab can show the diff. A path that saves via `appStorage` directly is invisible there.
+`createProject` is the one deliberate exemption: skeleton files
 are noise, not changes the user made.
 
-## The worker proposes; only one command applies
+## Worker proposals
 
 A worker reads the project and cannot write to it. **`acceptEditRequest` in `protocol/worker.ts`
 is the only thing in this app that turns a proposal into a write.** Anything added to the worker's
@@ -101,7 +98,7 @@ tool list that writes directly re-opens that hole.
   unchanged. The queue is **per worker**, keyed by `proposal.worker` — feedback delivered to the
   wrong slot teaches a worker about an edit it never made.
 
-## Workers run in parallel; that rests on them never writing
+## Parallel workers
 
 `services/worker.ts` holds a fixed pool of slots (`worker`, `worker-2`, `worker-3`), each its own
 persona, stream, watchdog and in-flight record; `workerCap()` of them may run at once.

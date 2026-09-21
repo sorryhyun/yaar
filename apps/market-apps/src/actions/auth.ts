@@ -48,14 +48,12 @@ export async function refreshAccount(): Promise<void> {
  * identity, they don't summon consent), so it lives on a button here and reports
  * back by polling rather than by holding the request open across the consent screen.
  *
- * The consent screen opens as a real browser tab, from here. The server used to
- * launch it with `xdg-open`, which on Android (Termux) opens nothing — and on any
- * machine it lands wherever the server runs, not where the user is clicking. The tab
- * is opened blank *before* the first await, while the click's user activation is
- * still live (a popup opened after a round trip is blocked on mobile), and pointed at
- * Google once the server has minted the URL. A blank `window.open` is one the windows
- * SDK passes through to the browser; a URL would be routed into a YAAR window, which
- * Google refuses to be framed in.
+ * The consent screen opens as a real browser tab, from here, so it lands where the user
+ * is clicking rather than where the server runs. The tab is opened blank *before* the
+ * first await, while the click's user activation is still live (a popup opened after a
+ * round trip is blocked on mobile), and pointed at Google once the server has minted
+ * the URL. A blank `window.open` is one the windows SDK passes through to the browser;
+ * a URL would be routed into a YAAR window, which Google refuses to be framed in.
  */
 export async function signIn(): Promise<void> {
   if (authBusy()) return;

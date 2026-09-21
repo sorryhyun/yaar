@@ -21,14 +21,13 @@ it and `constants`/`types`/`schema` read by everything.
 `main.ts` is the protocol surface only: `defineApp` with 11 state keys and 9 commands,
 all delegating into `store` and `actions`.
 
-## Invariants worth knowing
+## Invariants
 
 - **Ids are compared through `normalizeId`, never `===`.** They arrive from three
   sources (catalog, host list, owned-app list) that disagree about case and padding.
 - **`installedVersionOrder` is the single version comparison.** The card's "Install
-  update" branch and its publish button both read it. They used to compare
-  independently and disagreed about the same app — that is the bug the `'unknown'`
-  third answer exists to prevent. Do not fold `'unknown'` into `'newer'`/`'older'`.
+  update" branch and its publish button both read it, so they cannot disagree about
+  the same app. Do not fold its `'unknown'` answer into `'newer'`/`'older'`.
 - **Every user action goes through `runAction`** (loading flag + status line). The two
   exceptions are documented in place: `confirmPublish` drives the dialog's own busy
   flag, and `refreshGithubStatus` is ambient and must stay silent.
@@ -60,7 +59,7 @@ all delegating into `store` and `actions`.
   select's `value` as it builds the element, so mapped options would start blank).
   Adding a mode means editing all three.
 
-## Solid gotchas that bit here
+## Solid gotchas
 
 - Dialogs and the banner use **stable outer node + reactive inner content**
   (`<div>${() => …}</div>`), so they appear and disappear without the parent

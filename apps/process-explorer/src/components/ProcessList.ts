@@ -27,8 +27,7 @@ export interface ProcessListProps<T> {
 
 /**
  * The list shell every tab shares: rows when there are any, a centred empty state
- * when there are none. All three tabs differed only in signal, row renderer,
- * glyph and wording.
+ * when there are none. Tabs differ only in signal, row renderer, glyph and wording.
  *
  * Callers must keep the children function tight against the tags —
  * `>${(x) => ...}</>` with no surrounding whitespace — or the whitespace becomes
