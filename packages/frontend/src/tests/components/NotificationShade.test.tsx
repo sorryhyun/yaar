@@ -12,6 +12,7 @@ import { useDesktopStore } from '@/store';
 import { NotificationShade } from '@/components/overlays/NotificationShade';
 import { DesktopStatusBar } from '@/components/desktop/DesktopStatusBar';
 import { SHADE_SETTLE_MS } from '@/lib/gestures';
+import { clearGestureVars } from '@/lib/gesture-layer';
 
 const noop = mock(() => {});
 
@@ -40,7 +41,7 @@ describe('NotificationShade', () => {
   afterEach(() => {
     cleanup();
     document.documentElement.removeAttribute('data-shade-pull');
-    document.documentElement.style.removeProperty('--shade-pull');
+    clearGestureVars('shade-pull');
   });
 
   it('stays open on an empty list, because the status above it is the point', () => {
@@ -82,7 +83,8 @@ describe('NotificationShade', () => {
       return screen.getByLabelText('Close notifications');
     }
 
-    const pullPx = () => document.documentElement.style.getPropertyValue('--shade-pull').trim();
+    // Off the sheet itself, which is where the CSS reads it — never `<html>`.
+    const pullPx = () => screen.getByRole('dialog').style.getPropertyValue('--shade-pull').trim();
 
     it('pushes the sheet up with the finger, from wherever it already was', () => {
       open();

@@ -418,6 +418,7 @@ export function DesktopSurface() {
 
       <div
         className={styles.desktop}
+        data-gesture-layer="monitor-peek"
         data-cli-mode={cliMode}
         style={
           {

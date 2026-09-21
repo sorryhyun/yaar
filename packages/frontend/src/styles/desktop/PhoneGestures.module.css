@@ -1,3 +1,18 @@
+/* Registered non-inheriting: `lib/gesture-layer` writes these every touchmove onto each
+   element that reads them (the desktop, the CLI panel, the peek panel). Left inheriting,
+   one write restyles the element's whole subtree — the desktop's is every window. */
+@property --monitor-peek-x {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --monitor-peek-ms {
+  syntax: '<time>';
+  inherits: false;
+  initial-value: 220ms;
+}
+
 /* Mobile-only: `PhoneGestures` renders nothing on a desktop, so no form-factor guard. */
 
 .gutter {

@@ -50,9 +50,12 @@ import {
   swipeDirection,
 } from '@/lib/gestures';
 import { settleShadePull, trackShadePull } from '@/lib/shade-pull';
+import { clearGestureVars, gestureLayerRef, setGestureVar } from '@/lib/gesture-layer';
 import { resolveWallpaper } from '@/constants/appearance';
 import styles from '@/styles/desktop/PhoneGestures.module.css';
 
+/** The layer the desktop, the CLI panel and the peek panel all belong to. */
+const PAN_LAYER = 'monitor-peek';
 /** The CSS var the desktop and the peek panel both translate by. */
 const PEEK_X_VAR = '--monitor-peek-x';
 /** Published beside it so the settle transition and the settle timer cannot disagree. */
@@ -132,8 +135,7 @@ export function PhoneGestures() {
       if (settle.current) clearTimeout(settle.current);
       settle.current = null;
       root.removeAttribute('data-monitor-peek');
-      root.style.removeProperty(PEEK_X_VAR);
-      root.style.removeProperty(PEEK_MS_VAR);
+      clearGestureVars(PAN_LAYER);
       setPeekNow(null);
     };
 
@@ -191,9 +193,10 @@ export function PhoneGestures() {
         root.dataset.monitorPeek = 'dragging';
         // The settle transition reads its duration from here, so the animation that
         // draws the landing and the timer that commits it cannot disagree.
-        root.style.setProperty(PEEK_MS_VAR, `${PEEK_SETTLE_MS}ms`);
+        setGestureVar(PAN_LAYER, PEEK_MS_VAR, `${PEEK_SETTLE_MS}ms`);
       }
-      root.style.setProperty(
+      setGestureVar(
+        PAN_LAYER,
         PEEK_X_VAR,
         `${peekOffset(dx, peekRef.current !== null, globalThis.innerWidth)}px`,
       );
@@ -212,7 +215,8 @@ export function PhoneGestures() {
           : null;
       const width = globalThis.innerWidth;
       root.dataset.monitorPeek = 'settling';
-      root.style.setProperty(
+      setGestureVar(
+        PAN_LAYER,
         PEEK_X_VAR,
         landing ? `${landing.side === 'left' ? width : -width}px` : '0px',
       );
@@ -408,6 +412,8 @@ export function PhoneGestures() {
       {peek && peek.target.kind !== 'desktop' && (
         <div
           className={styles.peek}
+          data-gesture-layer={PAN_LAYER}
+          ref={gestureLayerRef(PAN_LAYER)}
           data-side={peek.side}
           data-cli={peek.target.kind === 'cli' || undefined}
           style={

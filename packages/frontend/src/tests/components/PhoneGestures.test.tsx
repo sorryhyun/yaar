@@ -11,6 +11,7 @@ import { render, cleanup, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { PhoneGestures } from '@/components/desktop/PhoneGestures';
 import { EDGE_GUTTER_PX, PEEK_SETTLE_MS } from '@/lib/gestures';
+import { clearGestureVars, getGestureVar } from '@/lib/gesture-layer';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
 /**
@@ -99,11 +100,10 @@ function sidewaysScroller(metrics: {
 }
 
 const gutters = () => document.querySelectorAll<HTMLElement>('[data-phone-gutter]');
-const peekOffsetPx = () =>
-  document.documentElement.style.getPropertyValue('--monitor-peek-x').trim();
+const peekOffsetPx = () => getGestureVar('monitor-peek', '--monitor-peek-x');
 const panState = () => document.documentElement.getAttribute('data-monitor-peek');
 const pullState = () => document.documentElement.getAttribute('data-shade-pull');
-const pullPx = () => document.documentElement.style.getPropertyValue('--shade-pull').trim();
+const pullPx = () => getGestureVar('shade-pull', '--shade-pull');
 
 describe('PhoneGestures', () => {
   beforeEach(() => {
@@ -128,9 +128,9 @@ describe('PhoneGestures', () => {
     jest.useRealTimers();
     cleanup();
     document.documentElement.removeAttribute('data-monitor-peek');
-    document.documentElement.style.removeProperty('--monitor-peek-x');
+    clearGestureVars('monitor-peek');
     document.documentElement.removeAttribute('data-shade-pull');
-    document.documentElement.style.removeProperty('--shade-pull');
+    clearGestureVars('shade-pull');
   });
 
   it('renders nothing at all on a desktop', () => {

@@ -10,9 +10,9 @@
   pointer-events: none;
 }
 
-/* Monitor pan. `PhoneGestures` publishes --monitor-peek-x on the root while a sideways
-   drag is in flight and the peek panel reads the same var, so the desktop being left and
-   the one being uncovered move as one strip.
+/* Monitor pan. `PhoneGestures` writes --monitor-peek-x onto this element and the peek
+   panel (see `lib/gesture-layer`) while a sideways drag is in flight, so the desktop
+   being left and the one being uncovered move as one strip.
 
    Gated on the attribute rather than defaulting the var to 0: a transform makes this the
    containing block for every fixed child inside it, and that is not a thing to have on

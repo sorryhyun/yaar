@@ -183,6 +183,26 @@
   background: var(--color-overlay);
 }
 
+/* Registered non-inheriting, like the monitor pan's: written per frame onto the sheet
+   and its backdrop by `lib/gesture-layer`, and nothing under them reads them. */
+@property --shade-pull {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --shade-dim {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --shade-pull-ms {
+  syntax: '<time>';
+  inherits: false;
+  initial-value: 200ms;
+}
+
 /* ============ Under the finger ============
    While the shade is being dragged — open by `PhoneGestures`, shut by the grip above —
    its position is the gesture's, not an animation's. `--shade-pull` is how much of the

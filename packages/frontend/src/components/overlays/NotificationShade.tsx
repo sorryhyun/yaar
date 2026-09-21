@@ -40,6 +40,7 @@ import { Taskbar } from '../taskbar/Taskbar';
 import { useDismissable } from '@/hooks/useDismissable';
 import { shouldCommitDrag } from '@/lib/gestures';
 import { clearShadePull, settleShadePull, trackShadePull } from '@/lib/shade-pull';
+import { gestureLayerRef } from '@/lib/gesture-layer';
 import styles from '@/styles/overlays/NotificationShade.module.css';
 
 interface NotificationShadeProps {
@@ -62,7 +63,12 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
 
   // Push the shade back up the way it came. The grip sits at the bottom edge of the
   // sheet, which is where the finger that pulled it down ended up.
-  const shadeRef = useRef<HTMLDivElement>(null);
+  const shadeRef = useRef<HTMLDivElement | null>(null);
+  // Mounted mid-pull: catch the sheet up on the pull already under way.
+  const attachShade = useCallback((el: HTMLDivElement | null) => {
+    shadeRef.current = el;
+    gestureLayerRef('shade-pull')(el);
+  }, []);
   const settling = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * The drag in progress: where it started, when, and how much of the sheet was on
@@ -71,7 +77,7 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
    */
   const dragStart = useRef<{ y: number; at: number; shown: number; moved: boolean } | null>(null);
 
-  // The properties are on `<html>` and the shade is not unmounted when it closes, so
+  // The pull's phase is on `<html>` and the shade is not unmounted when it closes, so
   // nothing else will take them away: left at wherever the pull stopped, they would park
   // the *next* shade there — off the top of the screen, if the pull was abandoned. The
   // cleanup cancels a settle the same way, for a shade dismissed out from under one.
@@ -131,8 +137,19 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
 
   return (
     <>
-      <div className={styles.backdrop} onClick={() => setOpen(false)} />
-      <div className={styles.shade} ref={shadeRef} role="dialog" aria-label={t('status.title')}>
+      <div
+        className={styles.backdrop}
+        data-gesture-layer="shade-pull"
+        ref={gestureLayerRef('shade-pull')}
+        onClick={() => setOpen(false)}
+      />
+      <div
+        className={styles.shade}
+        data-gesture-layer="shade-pull"
+        ref={attachShade}
+        role="dialog"
+        aria-label={t('status.title')}
+      >
         {/* What the desktop keeps in its status pill all session. */}
         <div className={styles.status}>
           <ConnectionStatus />

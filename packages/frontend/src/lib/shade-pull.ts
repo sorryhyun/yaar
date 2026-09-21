@@ -5,8 +5,9 @@
  * the same gesture from opposite ends, but owned by two different components:
  * `PhoneGestures` has the `document` listeners the desktop's touches reach, and
  * `NotificationShade` has the grip, which is its own DOM. Rather than have each of them
- * animate the sheet its own way, both write these custom properties on `<html>` and let
- * one rule in `NotificationShade.module.css` place it.
+ * animate the sheet its own way, both write these custom properties onto the sheet and its
+ * backdrop (through `lib/gesture-layer`, never onto `<html>` — see there for why) and let
+ * one rule in `NotificationShade.module.css` place it. The phase is on `<html>`.
  *
  * Writing to the DOM node instead of through React is the same choice the monitor pan
  * makes: a pull re-renders the shade once, when it mounts, and never again per frame.
@@ -17,6 +18,9 @@
  * on a shade with ten notifications in it and on one with none.
  */
 import { SHADE_SETTLE_MS, shadeDim } from './gestures';
+import { clearGestureVars, setGestureVar } from './gesture-layer';
+
+const LAYER = 'shade-pull';
 
 /** Which phase the pull is in: following a finger, or finishing without one. */
 const PULL_STATE_ATTR = 'data-shade-pull';
@@ -36,10 +40,10 @@ export function trackShadePull(y: number): void {
   const clamped = Math.max(0, y);
   if (root.dataset.shadePull !== 'dragging') {
     root.dataset.shadePull = 'dragging';
-    root.style.setProperty(PULL_MS_VAR, `${SHADE_SETTLE_MS}ms`);
+    setGestureVar(LAYER, PULL_MS_VAR, `${SHADE_SETTLE_MS}ms`);
   }
-  root.style.setProperty(PULL_VAR, `${clamped}px`);
-  root.style.setProperty(DIM_VAR, `${shadeDim(clamped)}`);
+  setGestureVar(LAYER, PULL_VAR, `${clamped}px`);
+  setGestureVar(LAYER, DIM_VAR, `${shadeDim(clamped)}`);
 }
 
 /**
@@ -52,9 +56,9 @@ export function trackShadePull(y: number): void {
 export function settleShadePull(open: boolean, done: () => void): ReturnType<typeof setTimeout> {
   const root = document.documentElement;
   root.dataset.shadePull = 'settling';
-  root.style.setProperty(PULL_MS_VAR, `${SHADE_SETTLE_MS}ms`);
-  root.style.setProperty(PULL_VAR, open ? FULLY_OPEN : '0px');
-  root.style.setProperty(DIM_VAR, open ? '1' : '0');
+  setGestureVar(LAYER, PULL_MS_VAR, `${SHADE_SETTLE_MS}ms`);
+  setGestureVar(LAYER, PULL_VAR, open ? FULLY_OPEN : '0px');
+  setGestureVar(LAYER, DIM_VAR, open ? '1' : '0');
   return setTimeout(() => {
     // A shade that stays open keeps the properties: dropping them here would hand the
     // sheet back to its entry keyframes, which would play the slide a second time.
@@ -65,9 +69,6 @@ export function settleShadePull(open: boolean, done: () => void): ReturnType<typ
 
 /** Give the sheet back to CSS. The shade calls this as it unmounts. */
 export function clearShadePull(): void {
-  const root = document.documentElement;
-  root.removeAttribute(PULL_STATE_ATTR);
-  root.style.removeProperty(PULL_VAR);
-  root.style.removeProperty(DIM_VAR);
-  root.style.removeProperty(PULL_MS_VAR);
+  document.documentElement.removeAttribute(PULL_STATE_ATTR);
+  clearGestureVars(LAYER);
 }

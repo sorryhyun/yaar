@@ -16,6 +16,7 @@
 import { useDesktopStore } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { TerminalPane } from './TerminalPane';
+import { gestureLayerRef } from '@/lib/gesture-layer';
 import styles from '@/styles/overlays/CliPanel.module.css';
 
 export function CliPanel() {
@@ -32,7 +33,11 @@ export function CliPanel() {
     panes.length === 1 ? styles.grid1 : panes.length === 2 ? styles.grid2 : styles.grid4;
 
   return (
-    <div className={`${styles.cliPanel} ${gridClass}`}>
+    <div
+      className={`${styles.cliPanel} ${gridClass}`}
+      data-gesture-layer="monitor-peek"
+      ref={gestureLayerRef('monitor-peek')}
+    >
       {/* `display: contents` on a desktop, where the toggle places itself over the grid;
           a real row on a phone, which has a second control to fit beside it. */}
       <div className={styles.topBar}>
