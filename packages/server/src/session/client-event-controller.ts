@@ -19,6 +19,7 @@ import {
   ClientEventType,
   NO_AGENT_ACK,
   ServerEventType,
+  type OSAction,
   type ServerEvent,
   type UserInteraction,
 } from '@yaar/shared';
@@ -40,6 +41,7 @@ import { getAppMeta } from '../features/apps/discovery.js';
 import type { SessionId } from './types.js';
 import { createLogger } from '../observability/log.js';
 import { deadlines } from '../config.js';
+import { refreshRestoredWindowActions } from '../logging/window-restore.js';
 
 const log = createLogger('ClientEventController');
 
@@ -60,6 +62,8 @@ export interface ClientEventDeps {
   sendTo(connectionId: ConnectionId, event: ServerEvent): void;
   /** How many desktops are attached — every one of them receives a window capture. */
   connectionCount(): number;
+  /** Deliver to every attached desktop except one — the tab an interaction came from. */
+  broadcastExcept(connectionId: ConnectionId, event: ServerEvent): void;
   /**
    * Take responsibility for a message id, or report that the session already had.
    * Acceptance is the session's to decide, not a handler's — see `LiveSession`.
@@ -485,6 +489,7 @@ export class ClientEventController {
     // monitor wins where there is one; otherwise it happened on the desktop the sending
     // tab is watching (a dismissed toast names no window).
     const watched = this.deps.monitors.watchedBy(connectionId);
+    const mirrored: OSAction[] = [];
     for (const interaction of event.interactions) {
       // A create names a window that does not exist yet — asking the registry who owns
       // that id would answer with another monitor's copy of the same app.
@@ -505,6 +510,7 @@ export class ClientEventController {
       }
 
       const applied = await this.deps.windowState.applyUserInteraction(interaction, getAppMeta);
+      mirrored.push(...applied);
 
       this.notifyWindowWatchers(interaction);
 
@@ -529,6 +535,16 @@ export class ClientEventController {
       this.deps.windowState.listWindows().length === 0
     ) {
       this.deps.closeUnboundBrowsers();
+    }
+
+    // The tab the user touched has already drawn this; every other desktop in the session
+    // has not. Without this a second tab — the phone's companion above all — kept windows
+    // the user had closed and never mounted the ones they opened, so a capture sent to it
+    // answered "not on this desktop" for the window on the user's screen. A create goes out
+    // with a freshly minted iframe token, the same way a snapshot sends one.
+    if (mirrored.length > 0 && this.deps.connectionCount() > 1) {
+      const actions = await refreshRestoredWindowActions(mirrored, this.deps.sessionId);
+      this.deps.broadcastExcept(connectionId, { type: ServerEventType.ACTIONS, actions });
     }
 
     this.deps.getPool()?.pushUserInteractions(event.interactions);

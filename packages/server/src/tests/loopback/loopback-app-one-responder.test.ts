@@ -366,3 +366,64 @@ describe('S7b — a capture is not decided by the tab that does not have the win
     expect(Date.now() - startedAt).toBeLessThan(1000);
   });
 });
+
+describe('S7c — a window the user opens or closes in one tab reaches the others', () => {
+  function windowActions(client: FakeClient, type: string) {
+    return client
+      .framesOf(ServerEventType.ACTIONS)
+      .flatMap((frame) => frame.actions)
+      .filter((action) => action.type === type) as Array<{ windowId: string }>;
+  }
+
+  it('the other tab is told, with an iframe token; the tab that did it is not', async () => {
+    const h = await boot();
+    harness = h;
+    const phone = h.client;
+    const companion = await h.connect('0');
+
+    await expectSettlesWithin(
+      phone.deliverAsync({
+        type: ClientEventType.USER_INTERACTION,
+        interactions: [
+          {
+            type: 'window.create',
+            windowId: 'configurations',
+            windowTitle: 'Configurations',
+            bounds: { x: 0, y: 52, w: 640, h: 480 },
+            content: { renderer: 'iframe', data: 'yaar://apps/configurations/dist/index.html' },
+            appId: 'configurations',
+            monitorId: '0',
+            timestamp: Date.now(),
+          },
+        ],
+      }),
+      1000,
+      'the create',
+    );
+
+    // Before: the companion never heard of it, and a capture sent there answered
+    // "not on this desktop" for the window on the phone's screen.
+    const created = windowActions(companion, 'window.create') as Array<{
+      windowId: string;
+      iframeToken?: string;
+    }>;
+    expect(created.map((a) => a.windowId)).toEqual(['0/configurations']);
+    expect(created[0]!.iframeToken).toBeTruthy();
+    expect(windowActions(phone, 'window.create')).toHaveLength(0);
+
+    await expectSettlesWithin(
+      phone.deliverAsync({
+        type: ClientEventType.USER_INTERACTION,
+        interactions: [
+          { type: 'window.close', windowId: '0/configurations', timestamp: Date.now() },
+        ],
+      }),
+      1000,
+      'the close',
+    );
+    expect(windowActions(companion, 'window.close').map((a) => a.windowId)).toEqual([
+      '0/configurations',
+    ]);
+    expect(windowActions(phone, 'window.close')).toHaveLength(0);
+  });
+});

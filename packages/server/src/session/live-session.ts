@@ -293,6 +293,9 @@ export class LiveSession {
         broadcast: (event) => this.broadcast(event),
         sendTo: (connectionId, event) => this.sendTo(connectionId, event),
         connectionCount: () => this.connections.size,
+        broadcastExcept: (except, event) => {
+          for (const id of this.connections.keys()) if (id !== except) this.sendTo(id, event);
+        },
         claimMessageId: (messageId) => this.claimMessageId(messageId),
         resetSession: (connectionId, monitorId) => this.handleReset(connectionId, monitorId),
         closeBrowserForWindow: (windowId) => this.closeBrowserForWindow(windowId),
