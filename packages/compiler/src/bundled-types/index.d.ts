@@ -671,10 +671,12 @@ interface YaarAppCommandDefinition<P = Record<string, unknown>, R = unknown> {
   params?: object;
   returns?: object;
   /**
-   * Replay policy for this command. `'always'` (the default) re-runs it when the
-   * iframe remounts, which is right for state restoration (`navigate`, `setDeck`).
-   * `'never'` skips it, for a command that appends, notifies, or is otherwise
-   * one-shot. The list of `'never'` commands rides the ready handshake.
+   * Replay policy for this command, overriding the app's own
+   * (`YaarAppDefinition.replay`, `'always'` unless the app says otherwise).
+   * `'always'` re-runs it when the iframe remounts, which is right for state
+   * restoration (`navigate`, `setDeck`). `'never'` skips it, for a command that
+   * appends, notifies, or is otherwise one-shot. The list of `'never'` commands —
+   * inherited and declared alike — rides the ready handshake.
    */
   replay?: 'always' | 'never';
   /** See `YaarAppStateDefinition.describe` — on-demand doc, never in the manifest. */
@@ -789,6 +791,20 @@ interface YaarAppDefinition<
   commands?: YaarAppCommands<S>;
   /** Channels this app may `app.emit()` on. */
   events?: Record<string, YaarAppEventDescriptor>;
+  /**
+   * The replay policy every command inherits unless it declares its own
+   * (`YaarAppCommandDefinition.replay`). `'always'` is the default and the historical
+   * behaviour: a remounted iframe is re-sent the commands it was given, in order, to
+   * rebuild the state it lost.
+   *
+   * `'never'` is for an app that restores itself — one that persists what it is showing
+   * (`appStorage`, `appDb`) and reads it back at startup. For that app replay rebuilds
+   * nothing and re-runs everything: every edit, deploy and clone in its history is
+   * applied a second time against a sandbox that has since moved on. Saying so once here
+   * is also the only spelling that cannot drift — a per-command flag is one new command
+   * away from being incomplete.
+   */
+  replay?: 'always' | 'never';
   /**
    * Declarative keyboard shortcuts: combo → declared command name, e.g.
    * `{ ArrowRight: 'nextPage', 'Ctrl+s': 'save' }`. Modifiers: Ctrl/Meta/Alt/

@@ -196,6 +196,40 @@ describe('defineApp: reach', () => {
     expect(protocol!.commands.nav.replay).toBe('always');
   });
 
+  test('the app-wide replay policy lands on every command that does not override it', () => {
+    // An app that restores itself from storage says so once, and the manifest has to
+    // show the policy the running app will hand the server for each command — an
+    // agent reading it to see what a remount re-runs gets the same answer either way.
+    const { protocol } = extract({
+      'src/main.ts': `${IMPORT}
+        export default defineApp({
+          id: 'd', name: 'D',
+          replay: 'never',
+          commands: {
+            edit: { description: 'Edit', run: () => 1 },
+            nav: { description: 'Nav', replay: 'always', run: () => 1 },
+          },
+        });`,
+    });
+
+    expect(protocol!.commands.edit.replay).toBe('never');
+    expect(protocol!.commands.nav.replay).toBe('always');
+  });
+
+  test('an unknown app-wide replay policy is refused', () => {
+    expectRejected(
+      {
+        'src/main.ts': `${IMPORT}
+          export default defineApp({
+            id: 'd', name: 'D',
+            replay: 'sometimes',
+            commands: { go: { description: 'Go', run: () => 1 } },
+          });`,
+      },
+      "expected 'always' or 'never'",
+    );
+  });
+
   test('a command that says nothing about replay carries no replay field', () => {
     // Absent means `always` at the server; emitting it would make every existing
     // manifest churn for no change in behavior.

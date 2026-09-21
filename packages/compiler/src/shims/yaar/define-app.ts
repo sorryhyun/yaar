@@ -235,6 +235,10 @@ function toRegistration(definition) {
   // descriptor, and every `$ref` the schemas carry resolves against them — so the
   // registration has to hand them on for the served manifest to mean anything.
   if (manifest && manifest.$defs !== undefined) registration.$defs = manifest.$defs;
+  // The app-wide replay default, read by the injected SDK when it builds the `noReplay`
+  // list for the ready handshake. An app that restores itself from its own storage sets
+  // it once rather than per command; see YaarAppDefinition.replay.
+  if (definition.replay !== undefined) registration.replay = definition.replay;
   if (definition.events !== undefined) registration.events = definition.events;
   if (definition.onCapture !== undefined) registration.onCapture = definition.onCapture;
   if (definition.keybindings !== undefined) registration.keybindings = definition.keybindings;
