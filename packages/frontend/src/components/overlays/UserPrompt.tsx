@@ -12,6 +12,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { sendUserPromptResponse } from '@/hooks/useAgentConnection';
 import type { UserPromptModel } from '@/types/state';
 import { isComposingKey } from '@/lib/ime';
+import { Modal } from './Modal';
 import styles from '@/styles/overlays/UserPrompt.module.css';
 
 function PromptBox({
@@ -193,8 +194,15 @@ export function UserPrompt() {
   const labelOf = (monitorId: string) =>
     monitors.find((m) => m.id === monitorId)?.label ?? monitorId;
 
+  // Escape is the Skip button of the prompt on top — and does nothing where there is none.
+  const top = prompts[prompts.length - 1];
+
   return (
-    <div className={styles.overlay}>
+    <Modal
+      className={styles.overlay}
+      label={top.title}
+      onDismiss={top.allowDismiss !== false ? () => handleDismiss(top) : undefined}
+    >
       {prompts.map((prompt) => (
         <PromptBox
           key={prompt.id}
@@ -208,6 +216,6 @@ export function UserPrompt() {
           onDismiss={handleDismiss}
         />
       ))}
-    </div>
+    </Modal>
   );
 }

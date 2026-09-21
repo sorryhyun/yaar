@@ -10,10 +10,34 @@
  * is a property of this tab. That is exactly the thing the server used to keep one copy
  * of for the whole session, last-writer-wins.
  */
-import type { SliceCreator, MonitorSlice, DesktopStore } from '../types';
+import type { SliceCreator, DesktopStore } from '../types';
+import type { Monitor } from '@/types/state';
 import { DEFAULT_MONITOR_ID, ClientEventType } from '@yaar/shared';
-import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import { stepMonitorIndex } from '@/lib/gestures';
+
+export interface MonitorSliceState {
+  monitors: Monitor[];
+  activeMonitorId: string;
+}
+
+export interface MonitorSliceActions {
+  /** Ask the server for a new monitor; it mints the id and answers with MONITORS. */
+  createMonitor: () => void;
+  /** Ask the server to delete a monitor; the list comes back on MONITORS. */
+  removeMonitor: (id: string) => void;
+  /** Apply the session's authoritative monitor list. `focus` switches this tab to it. */
+  setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
+  switchMonitor: (id: string) => void;
+  /**
+   * Switch `delta` monitors along the list, clamped at both ends. Returns the id it
+   * moved to, or `null` when the edge of the list stopped it — the phone's edge swipe
+   * uses that answer to decide whether it consumed the touch.
+   */
+  switchMonitorBy: (delta: number) => string | null;
+}
+
+export type MonitorSlice = MonitorSliceState & MonitorSliceActions;
 
 export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, get) => ({
   monitors: [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }],

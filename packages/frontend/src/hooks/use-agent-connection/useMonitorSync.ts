@@ -1,23 +1,7 @@
 import { useEffect } from 'react';
 import { useDesktopStore } from '@/store';
-import { ClientEventType } from '@/types';
-import type { SubscribeMonitorEvent } from '@yaar/shared';
-import { wsManager, sendEvent } from './transport-manager';
-
-/**
- * The one spelling of "this tab is looking at `monitorId`": which monitor, how big the
- * screen is, and which shell layout it renders. The server sizes new windows from the
- * viewport and tells the monitor agent it is on a phone from the form factor, so every
- * send carries both — including the one on (re)connect.
- */
-export function monitorSubscription(monitorId: string): SubscribeMonitorEvent {
-  return {
-    type: ClientEventType.SUBSCRIBE_MONITOR,
-    monitorId,
-    viewport: { w: window.innerWidth, h: window.innerHeight },
-    formFactor: useDesktopStore.getState().formFactor,
-  };
-}
+import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
+import { monitorSubscription } from '@/lib/transport/frames';
 
 /**
  * Tells the server which monitor this connection is looking at.

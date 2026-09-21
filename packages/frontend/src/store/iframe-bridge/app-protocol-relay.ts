@@ -4,7 +4,7 @@
  */
 import type { AppProtocolPostMessage, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { ClientEventType } from '@/types';
-import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import { getDesktopState } from './store-access';
 import { forgetWindowDropClaims } from './drop';
 import {

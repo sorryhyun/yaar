@@ -9,8 +9,8 @@ import {
   reconnectDelay,
   RECONNECT_BASE_DELAY,
   RECONNECT_MAX_DELAY,
-} from '@/hooks/use-agent-connection/transport-manager';
-import { dispatchServerEvent } from '@/hooks/use-agent-connection/server-event-dispatcher';
+} from '@/lib/transport/transport-manager';
+import { dispatchServerEvent } from '@/lib/transport/server-event-dispatcher';
 
 /** A socket whose readyState and callbacks the test drives by hand. */
 interface FakeSocket {

@@ -1,8 +1,18 @@
 /**
  * Debug slice - the activity log (recent OS actions).
  */
-import type { SliceCreator, DebugSlice, DebugSliceState } from '../types';
+import type { SliceCreator } from '../types';
 import type { OSAction } from '@yaar/shared';
+
+export interface DebugSliceState {
+  activityLog: OSAction[];
+}
+
+export interface DebugSliceActions {
+  addToActivityLog: (action: OSAction) => void;
+}
+
+export type DebugSlice = DebugSliceState & DebugSliceActions;
 
 /** How many recent OS actions the activity log keeps, whichever path appended them. */
 export const ACTIVITY_LOG_LIMIT = 200;

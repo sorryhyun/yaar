@@ -10,6 +10,7 @@ import {
   setRemoteConnection,
   type RemoteConnection,
 } from '@/lib/api';
+import { Modal } from './Modal';
 import styles from '@/styles/overlays/ConnectionDialog.module.css';
 
 interface ConnectionDialogProps {
@@ -86,7 +87,8 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
   );
 
   return (
-    <div className={styles.backdrop}>
+    // No `onDismiss`: there is no server behind this dialog, so nothing to go back to.
+    <Modal className={styles.backdrop} label={t('connection.title')}>
       <div className={styles.card}>
         <h2 className={styles.title}>{t('connection.title')}</h2>
         <p className={styles.subtitle}>{t('connection.subtitle')}</p>
@@ -119,6 +121,6 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
           </button>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

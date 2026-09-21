@@ -504,10 +504,19 @@
 /* Rubber-band selection rectangle */
 .selectionRect {
   position: fixed;
+  /* Written by DesktopSurface straight to the node, once per mousemove. */
+  left: var(--sel-x);
+  top: var(--sel-y);
+  width: var(--sel-w);
+  height: var(--sel-h);
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
   pointer-events: none;
   z-index: 1;
+}
+
+.selectionRect[hidden] {
+  display: none;
 }
 
 /* ============ Folder Styles ============ */

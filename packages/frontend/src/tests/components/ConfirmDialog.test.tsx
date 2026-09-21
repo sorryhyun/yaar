@@ -8,7 +8,7 @@
  * alongside it, and a dialog that sends no rows still renders its message as before.
  */
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import type { CapabilityLine } from '@yaar/shared';
 
@@ -76,5 +76,30 @@ describe('the app-install permission dialog', () => {
 
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getByText('Private to this app')).toBeTruthy();
+  });
+
+  // Escape used to do nothing here at all. It is the cancel button — never a remembered
+  // one, so a ticked box plus a reflexive Escape cannot become a standing deny.
+  it('Escape cancels once, even with "remember" ticked', () => {
+    seedDialog();
+    useDesktopStore.setState((s) => {
+      s.dialogs.d1.permissionOptions = { showRememberChoice: true } as never;
+    });
+    render(<ConfirmDialog />);
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(sendDialogFeedback).toHaveBeenCalledWith('d1', false, 'once');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('is announced as a modal dialog', () => {
+    seedDialog();
+    render(<ConfirmDialog />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('aria-label')).toBe('App Permissions');
   });
 });

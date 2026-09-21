@@ -5,7 +5,27 @@
  * working on the same window each get their own entry.
  */
 import { agentKindFromRole } from '@yaar/shared';
-import type { SliceCreator, AgentsSlice } from '../types';
+import type { SliceCreator } from '../types';
+import type { ActiveAgent, WindowAgent } from '@/types/state';
+
+export interface AgentsSliceState {
+  activeAgents: Record<string, ActiveAgent>;
+  agentPanelOpen: boolean;
+  windowAgents: Record<string, WindowAgent>;
+}
+
+export interface AgentsSliceActions {
+  setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
+  clearAgent: (agentId: string) => void;
+  clearAllAgents: () => void;
+  toggleAgentPanel: () => void;
+  registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void;
+  updateWindowAgentStatus: (agentId: string, status: WindowAgent['status']) => void;
+  incrementSubagentCount: (agentId: string) => void;
+  decrementSubagentCount: (agentId: string) => void;
+}
+
+export type AgentsSlice = AgentsSliceState & AgentsSliceActions;
 
 export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
   activeAgents: {},

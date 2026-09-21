@@ -1,7 +1,19 @@
 /**
  * Queued Actions slice - manages queued component actions for locked windows.
  */
-import type { SliceCreator, QueuedActionsSlice } from '../types';
+import type { SliceCreator } from '../types';
+import type { QueuedComponentAction } from '@/types/state';
+
+export interface QueuedActionsSliceState {
+  queuedActions: Record<string, QueuedComponentAction[]>;
+}
+
+export interface QueuedActionsSliceActions {
+  queueComponentAction: (action: QueuedComponentAction) => void;
+  consumeQueuedActions: (windowId: string) => QueuedComponentAction[];
+}
+
+export type QueuedActionsSlice = QueuedActionsSliceState & QueuedActionsSliceActions;
 
 export const createQueuedActionsSlice: SliceCreator<QueuedActionsSlice> = (set, get) => ({
   queuedActions: {},

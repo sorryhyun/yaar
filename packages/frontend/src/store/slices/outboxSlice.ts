@@ -10,7 +10,27 @@
  * Resending is safe because the server dedups by message id (`LiveSession.acceptedMessageIds`):
  * a message that did land before the socket died is acked again rather than run twice.
  */
-import type { SliceCreator, OutboxSlice } from '../types';
+import type { SliceCreator } from '../types';
+import type { ClientEvent } from '@yaar/shared';
+
+/** A command held until the server acknowledges it. See `slices/outboxSlice.ts`. */
+export interface OutboxEntry {
+  messageId: string;
+  event: ClientEvent;
+  queuedAt: number;
+}
+
+export interface OutboxSliceState {
+  outbox: OutboxEntry[];
+}
+
+export interface OutboxSliceActions {
+  enqueueOutbox: (messageId: string, event: ClientEvent) => void;
+  settleOutbox: (messageId: string) => void;
+  pendingOutbox: () => OutboxEntry[];
+}
+
+export type OutboxSlice = OutboxSliceState & OutboxSliceActions;
 
 export const createOutboxSlice: SliceCreator<OutboxSlice> = (set, get) => ({
   outbox: [],

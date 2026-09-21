@@ -57,7 +57,7 @@ import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
 import { applyUserPromptAction } from './slices/userPromptsSlice';
 import { logActivity, trimActivityLog } from './slices/debugSlice';
-import { handleClipboardAction } from '@/lib/clipboard';
+import { handleClipboardAction } from './clipboard';
 
 // Import iframe bridge (circular import — safe, only accessed at runtime)
 import {

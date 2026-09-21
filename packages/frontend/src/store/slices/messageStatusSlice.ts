@@ -9,7 +9,36 @@
  * or the turn began), and one that never leaves is a bug worth seeing rather than one a
  * timer would have swept under the rug.
  */
-import type { SliceCreator, MessageStatusSlice } from '../types';
+import type { SliceCreator } from '../types';
+
+export interface MessageStatus {
+  /**
+   * - `unsent` — the socket was not open; it sits in the outbox awaiting a retry.
+   * - `sent` — it went out; the server has not answered yet.
+   * - `queued` / `accepted` — the server has it.
+   * - `failed` — the server named this message and said it will not run.
+   */
+  status: 'unsent' | 'sent' | 'accepted' | 'queued' | 'failed';
+  agentId?: string;
+  position?: number;
+  error?: string;
+  timestamp: number;
+}
+
+export interface MessageStatusSliceState {
+  messageStatuses: Record<string, MessageStatus>;
+}
+
+export interface MessageStatusSliceActions {
+  trackMessage: (messageId: string, status?: MessageStatus['status']) => void;
+  acceptMessage: (messageId: string, agentId: string) => void;
+  queueMessage: (messageId: string, position: number) => void;
+  failMessage: (messageId: string, error: string) => void;
+  clearMessageStatus: (messageId: string) => void;
+  clearAllMessageStatuses: () => void;
+}
+
+export type MessageStatusSlice = MessageStatusSliceState & MessageStatusSliceActions;
 
 export const createMessageStatusSlice: SliceCreator<MessageStatusSlice> = (set) => ({
   messageStatuses: {},

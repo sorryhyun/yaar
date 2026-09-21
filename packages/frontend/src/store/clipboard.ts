@@ -25,7 +25,7 @@ import {
   type UserClipboardWriteAction,
 } from '@/types';
 import type { ClipboardImagePayload, ClipboardResponseEvent } from '@yaar/shared';
-import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 
 type ClipboardFailure = Pick<ClipboardResponseEvent, 'reason' | 'error'>;
 

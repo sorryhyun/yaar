@@ -5,8 +5,9 @@
  * Window store keys are scoped by monitorId: "0/win-storage".
  * This prevents collisions when multiple monitors create windows with the same ID.
  */
-import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types';
-import type { WindowAction, WindowCreateAction } from '@yaar/shared';
+import type { SliceCreator, DesktopStore } from '../types';
+import type { WindowModel } from '@/types/state';
+import type { WindowAction, WindowCreateAction, WindowBounds } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, toWindowKey } from '../helpers';
 import { notifyIframeClose } from '../iframe-bridge';
@@ -18,6 +19,28 @@ import {
   DEFAULT_VIEWPORT_HEIGHT,
   MIN_VISIBLE_WINDOW_EDGE,
 } from '@/constants/layout';
+
+export interface WindowsSliceState {
+  windows: Record<string, WindowModel>;
+  zOrder: string[];
+  focusedWindowId: string | null;
+}
+
+export interface WindowsSliceActions {
+  userFocusWindow: (windowId: string) => void;
+  userMinimizeWindow: (windowId: string) => void;
+  userCloseWindow: (windowId: string) => void;
+  userMoveWindow: (windowId: string, x: number, y: number) => void;
+  userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void;
+  userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
+  queueBoundsUpdate: (windowId: string, action?: 'window.move' | 'window.resize') => void;
+  /** Flag an agent-driven change the store can't see itself (an App Protocol command). */
+  markWindowChanged: (windowId: string) => void;
+  /** Swap a window's iframe token, but only if it still carries the one we expected. */
+  replaceIframeToken: (windowId: string, expected: string, token: string) => void;
+}
+
+export type WindowsSlice = WindowsSliceState & WindowsSliceActions;
 
 /**
  * Inserts a window key into zOrder respecting variant layering.

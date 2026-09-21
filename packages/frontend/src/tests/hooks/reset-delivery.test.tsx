@@ -16,7 +16,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { ClientEventType, type ClientEvent } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import { reset } from '@/hooks/useAgentConnection';
-import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager } from '@/lib/transport/transport-manager';
 
 function fakeOpenSocket(): WebSocket & { sent: string[] } {
   const sent: string[] = [];

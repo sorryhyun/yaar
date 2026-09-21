@@ -21,8 +21,9 @@ import {
   interrupt,
   reset,
 } from '@/hooks/useAgentConnection';
-import { useDesktopStore } from '@/store';
-import type { MessageStatus } from '@/store/types';
+import { useShallow } from 'zustand/react/shallow';
+import { useDesktopStore, type DesktopStore } from '@/store';
+import type { MessageStatus } from '@/store/slices/messageStatusSlice';
 import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
@@ -64,6 +65,19 @@ function readFilesAsDataUrls(files: File[]): Promise<string[]> {
   );
 }
 
+/** One `[appId, windowId, title]` triple per open app, first window wins. */
+function selectAppWindowFields(state: DesktopStore): string[] {
+  const seen = new Set<string>();
+  const fields: string[] = [];
+  for (const w of Object.values(state.windows)) {
+    if (w.appId && !seen.has(w.appId)) {
+      seen.add(w.appId);
+      fields.push(w.appId, w.id, w.title);
+    }
+  }
+  return fields;
+}
+
 export function CommandPalette() {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -88,7 +102,10 @@ export function CommandPalette() {
   const removeAttachedImage = useDesktopStore((state) => state.removeAttachedImage);
   const clearAttachedImages = useDesktopStore((state) => state.clearAttachedImages);
   const messageStatuses = useDesktopStore((state) => state.messageStatuses);
-  const windows = useDesktopStore((state) => state.windows);
+  // Flattened to strings so `useShallow` can compare it: the `windows` map itself gets a
+  // new identity on every mousemove of a window drag, and this component is too big to
+  // re-render at pointer rate for a list that only changes when an app opens or closes.
+  const appWindowFields = useDesktopStore(useShallow(selectAppWindowFields));
   const activeMonitorId = useDesktopStore((state) => state.activeMonitorId);
   const monitors = useDesktopStore((state) => state.monitors);
   const isMobile = useDesktopStore((state) => state.formFactor === 'mobile');
@@ -162,16 +179,13 @@ export function CommandPalette() {
 
   // Open app windows for @mention dropdown
   const appWindows = useMemo(() => {
-    const seen = new Set<string>();
     const result: { appId: string; windowId: string; title: string }[] = [];
-    for (const w of Object.values(windows)) {
-      if (w.appId && !seen.has(w.appId)) {
-        seen.add(w.appId);
-        result.push({ appId: w.appId, windowId: w.id, title: w.title });
-      }
+    for (let i = 0; i < appWindowFields.length; i += 3) {
+      const [appId, windowId, title] = appWindowFields.slice(i, i + 3);
+      result.push({ appId, windowId, title });
     }
     return result;
-  }, [windows]);
+  }, [appWindowFields]);
 
   // Show @mention dropdown when input starts with "@" and no space yet (typing appId)
   const mentionQuery = useMemo(() => {

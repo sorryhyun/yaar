@@ -23,12 +23,12 @@ import {
   replaceDeadSocket,
 } from './transport-manager';
 import { dispatchServerEvent } from './server-event-dispatcher';
-import { monitorSubscription } from './useMonitorSync';
-import { clientPresence } from './useClientPresence';
+import { monitorSubscription } from './frames';
+import { clientPresence } from './frames';
 import { createLivenessProbe } from './liveness-probe';
 import { flushPending, resync } from './commands';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
-import { refreshStaleIframeTokens } from '@/lib/iframeTokenRefresh';
+import { refreshStaleIframeTokens } from './iframe-token-refresh';
 
 let sessionCheckDone = false;
 

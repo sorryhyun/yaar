@@ -13,7 +13,7 @@ import type { ClientEvent } from '@/types';
 import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from './transport-manager';
 import { generateActionId, generateMessageId } from './outbound-command-helpers';
-import { drainPendingQueues } from './usePendingEventDrainer';
+import { drainPendingQueues } from './pending-queues';
 import { captureMonitorScreenshot } from '@/lib/captureMonitorScreenshot';
 
 /**

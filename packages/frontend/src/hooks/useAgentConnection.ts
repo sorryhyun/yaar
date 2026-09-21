@@ -11,9 +11,9 @@
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { useDesktopStore } from '@/store';
-import { wsManager } from './use-agent-connection/transport-manager';
-import { connect, recoverAfterResume } from './use-agent-connection/connection';
-import { send, sendComponentAction } from './use-agent-connection/commands';
+import { wsManager } from '@/lib/transport/transport-manager';
+import { connect, recoverAfterResume } from '@/lib/transport/connection';
+import { send, sendComponentAction } from '@/lib/transport/commands';
 import { usePendingEventDrainer } from './use-agent-connection/usePendingEventDrainer';
 import { useMonitorSync } from './use-agent-connection/useMonitorSync';
 import { useClientPresence } from './use-agent-connection/useClientPresence';
@@ -31,8 +31,8 @@ export {
   reset,
   flushPending,
   resync,
-} from './use-agent-connection/commands';
-export { connect, disconnect, retryConnection } from './use-agent-connection/connection';
+} from '@/lib/transport/commands';
+export { connect, disconnect, retryConnection } from '@/lib/transport/connection';
 
 // Hoisted so `useSyncExternalStore` is handed the same two functions on every render.
 // As inline arrows they made React tear down and reinstall the subscription per render,

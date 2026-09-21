@@ -37,6 +37,7 @@ import { useDesktopStore, selectNotifications, selectTaskbarWindows } from '@/st
 import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { Taskbar } from '../taskbar/Taskbar';
+import { useDismissable } from '@/hooks/useDismissable';
 import { shouldCommitDrag } from '@/lib/gestures';
 import { clearShadePull, settleShadePull, trackShadePull } from '@/lib/shade-pull';
 import styles from '@/styles/overlays/NotificationShade.module.css';
@@ -57,14 +58,7 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
 
   // An open shade covers the screen, so Escape has to reach it even when the focus is
   // somewhere else — a hardware keyboard on a tablet, or a phone's own.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, setOpen]);
+  useDismissable({ onDismiss: () => setOpen(false), enabled: open });
 
   // Push the shade back up the way it came. The grip sits at the bottom edge of the
   // sheet, which is where the finger that pulled it down ended up.

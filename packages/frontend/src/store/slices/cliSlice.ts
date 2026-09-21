@@ -1,8 +1,65 @@
 /**
  * CLI slice - manages terminal-like CLI mode state.
  */
-import type { SliceCreator, CliSlice } from '../types';
+import type { SliceCreator } from '../types';
+import type { CliEntry } from '@/types/state';
 import { generateId, capArray } from '../helpers';
+
+export interface CliSliceState {
+  cliMode: boolean;
+  cliHistory: Record<string, CliEntry[]>;
+  cliStreaming: Record<string, CliEntry>;
+  /**
+   * Routing target for typed messages, chosen from the CLI-panel toggle:
+   *  - `'monitor'` (default) — the monitor agent, sandbox browsing only.
+   *  - `'session'` — the session agent ("act as me"), which can drive the
+   *    user's real browser.
+   */
+  cliTarget: 'monitor' | 'session';
+}
+
+export interface CliSliceActions {
+  toggleCliMode: () => void;
+  /**
+   * The same switch, said rather than flipped. The phone's sideways pan lands on the
+   * CLI or on the desktop from a drag whose direction already decided which, and a
+   * toggle there would undo itself on the second swipe in the same direction.
+   */
+  setCliMode: (on: boolean) => void;
+  setCliTarget: (target: 'monitor' | 'session') => void;
+  addCliEntry: (entry: {
+    type: CliEntry['type'];
+    content: string;
+    agentId?: string;
+    monitorId?: string;
+  }) => void;
+  updateCliStreaming: (
+    agentId: string,
+    content: string,
+    type: 'thinking' | 'response' | 'tool',
+    monitorId?: string,
+  ) => void;
+  /** Append to the live entry, for feeds that arrive as deltas rather than snapshots. */
+  appendCliStreaming: (
+    agentId: string,
+    delta: string,
+    type: 'thinking' | 'response' | 'tool',
+    monitorId?: string,
+  ) => void;
+  finalizeCliStreaming: (agentId: string) => void;
+  clearCliHistory: (monitorId?: string) => void;
+  restoreCliHistory: (
+    entries: {
+      type: CliEntry['type'];
+      content: string;
+      agentId?: string;
+      monitorId: string;
+      timestamp: number;
+    }[],
+  ) => void;
+}
+
+export type CliSlice = CliSliceState & CliSliceActions;
 
 const MAX_CLI_ENTRIES = 5000;
 

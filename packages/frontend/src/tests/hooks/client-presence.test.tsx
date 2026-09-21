@@ -17,7 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '@testing-library/react';
 import type { ClientEvent } from '@yaar/shared';
 import { useClientPresence } from '@/hooks/use-agent-connection/useClientPresence';
-import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager } from '@/lib/transport/transport-manager';
 
 function fakeOpenSocket(): WebSocket & { sent: string[] } {
   const sent: string[] = [];

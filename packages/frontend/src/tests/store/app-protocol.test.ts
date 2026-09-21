@@ -15,8 +15,8 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { handleAppProtocolRequest, resendAppProtocolReady, useDesktopStore } from '@/store';
 import { toWindowKey } from '@/store/helpers';
-import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
-import { drainPendingQueues } from '@/hooks/use-agent-connection/usePendingEventDrainer';
+import { wsManager } from '@/lib/transport/transport-manager';
+import { drainPendingQueues } from '@/lib/transport/pending-queues';
 import type { AppProtocolRequest } from '@yaar/shared';
 
 const MONITOR_ID = '0';

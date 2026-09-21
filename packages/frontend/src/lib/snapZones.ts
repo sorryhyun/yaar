@@ -3,7 +3,11 @@
  * Pure utility — no React or store dependencies.
  */
 import type { WindowBounds } from '@yaar/shared';
-import { DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT } from '@/constants/layout';
+import {
+  DEFAULT_VIEWPORT_WIDTH,
+  DEFAULT_VIEWPORT_HEIGHT,
+  TASKBAR_HEIGHT,
+} from '@/constants/layout';
 
 function viewportWidth(): number {
   return typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : DEFAULT_VIEWPORT_WIDTH;
@@ -24,7 +28,6 @@ export type SnapZone =
   | 'bottom-right';
 
 const EDGE_THRESHOLD = 8;
-const TASKBAR_H = 36;
 
 /**
  * Detect which snap zone the cursor is in, if any.
@@ -37,7 +40,7 @@ export function detectSnapZone(cursorX: number, cursorY: number): SnapZone | nul
   const nearLeft = cursorX <= EDGE_THRESHOLD;
   const nearRight = cursorX >= vw - EDGE_THRESHOLD;
   const nearTop = cursorY <= EDGE_THRESHOLD;
-  const nearBottom = cursorY >= vh - TASKBAR_H - EDGE_THRESHOLD;
+  const nearBottom = cursorY >= vh - TASKBAR_HEIGHT - EDGE_THRESHOLD;
 
   // Corners first (higher priority)
   if (nearTop && nearLeft) return 'top-left';
@@ -59,7 +62,7 @@ export function detectSnapZone(cursorX: number, cursorY: number): SnapZone | nul
 export function getSnapBounds(zone: SnapZone): WindowBounds {
   const vw = viewportWidth();
   const vh = viewportHeight();
-  const usableH = vh - TASKBAR_H;
+  const usableH = vh - TASKBAR_HEIGHT;
   const halfW = Math.round(vw / 2);
   const halfH = Math.round(usableH / 2);
 

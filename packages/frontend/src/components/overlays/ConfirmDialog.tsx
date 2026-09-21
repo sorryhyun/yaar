@@ -8,6 +8,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { sendDialogFeedback } from '@/hooks/useAgentConnection';
 import type { DialogModel } from '@/types/state';
 import type { CapabilityLine } from '@yaar/shared';
+import { Modal } from './Modal';
 import styles from '@/styles/overlays/ConfirmDialog.module.css';
 
 /**
@@ -117,11 +118,17 @@ export function ConfirmDialog() {
 
   if (dialogs.length === 0) return null;
 
+  // Escape is the cancel button of the dialog on top, and never a remembered one: a
+  // ticked "remember" box plus a reflexive Escape must not become a standing deny.
+  const top = dialogs[dialogs.length - 1];
+  const cancelTop = () =>
+    handleResponse(top.id, false, top.permissionOptions?.showRememberChoice ? 'once' : undefined);
+
   return (
-    <div className={styles.overlay}>
+    <Modal className={styles.overlay} label={top.title} onDismiss={cancelTop}>
       {dialogs.map((dialog) => (
         <DialogBox key={dialog.id} dialog={dialog} onRespond={handleResponse} />
       ))}
-    </div>
+    </Modal>
   );
 }

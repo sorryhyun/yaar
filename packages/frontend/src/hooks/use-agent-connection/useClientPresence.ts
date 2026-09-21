@@ -1,22 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { ClientEventType, type ClientEvent } from '@/types';
+import { ClientEventType } from '@/types';
 import type { ClientPresenceState } from '@yaar/shared';
-import { wsManager, sendEvent } from './transport-manager';
-
-/**
- * This tab's presence as one frame, for the (re)connect path.
- *
- * Presence is per connection and the server forgets it when the socket closes, so a
- * reconnecting tab has to say it again — a tab that reconnects while hidden, which is
- * exactly the tab this whole mechanism is about, would otherwise come back looking
- * present.
- */
-export function clientPresence(): ClientEvent {
-  return {
-    type: ClientEventType.CLIENT_PRESENCE,
-    state: document.visibilityState === 'hidden' ? 'hidden' : 'visible',
-  };
-}
+import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 
 /**
  * How long a tab must have been away before coming back is worth a resync.

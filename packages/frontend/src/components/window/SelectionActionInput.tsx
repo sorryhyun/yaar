@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useDesktopStore } from '@/store';
 import { isComposingKey } from '@/lib/ime';
+import { useDismissable } from '@/hooks/useDismissable';
 import styles from '@/styles/window/WindowFrame.module.css';
 
 interface SelectionActionInputProps {
@@ -30,18 +31,9 @@ export function SelectionActionInput({
 
   useEffect(() => {
     inputRef.current?.focus();
-    const handleClickOutside = (e: MouseEvent) => {
-      if (inputRef.current && !inputRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    // Delay to avoid immediate close from the right-click event
-    const timer = setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 50);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [onClose]);
+  }, []);
+  // Escape is handled on the input itself, which stops its keys from reaching the shell.
+  useDismissable({ onDismiss: onClose, escape: false, outside: inputRef });
 
   const handleSubmit = useCallback(
     (instruction: string) => {

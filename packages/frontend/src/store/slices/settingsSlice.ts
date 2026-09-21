@@ -2,10 +2,32 @@
  * Settings slice - manages user preferences (persisted to localStorage).
  * Language syncs to server via PATCH /api/settings so the AI knows the user's language.
  */
-import type { SliceCreator, SettingsSlice } from '../types';
+import type { SliceCreator } from '../types';
 import { apiFetch } from '@/lib/api';
 import type { IconSizeKey } from '@/constants/appearance';
 import i18next from 'i18next';
+
+export interface SettingsSliceState {
+  userName: string;
+  language: string;
+  wallpaper: string;
+  accentColor: string;
+  iconSize: 'small' | 'medium' | 'large';
+  theme: 'dark' | 'light';
+}
+
+export interface SettingsSliceActions {
+  setUserName: (name: string) => void;
+  setLanguage: (lang: string) => void;
+  applyServerLanguage: (lang: string) => void;
+  applyServerSettings: (settings: Partial<SettingsSliceState>) => void;
+  setWallpaper: (value: string) => void;
+  setAccentColor: (key: string) => void;
+  setIconSize: (size: 'small' | 'medium' | 'large') => void;
+  setTheme: (theme: 'dark' | 'light') => void;
+}
+
+export type SettingsSlice = SettingsSliceState & SettingsSliceActions;
 
 const STORAGE_KEY = 'yaar-settings';
 

@@ -1,9 +1,20 @@
 /**
  * Toasts slice - manages toast notifications.
  */
-import type { SliceCreator, ToastsSlice, ToastsSliceState, DesktopStore } from '../types';
+import type { SliceCreator, DesktopStore } from '../types';
+import type { ToastModel } from '@/types/state';
 import type { ToastShowAction } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
+
+export interface ToastsSliceState {
+  toasts: Record<string, ToastModel>;
+}
+
+export interface ToastsSliceActions {
+  dismissToast: (id: string) => void;
+}
+
+export type ToastsSlice = ToastsSliceState & ToastsSliceActions;
 
 /**
  * Pure mutation function that applies a toast action to an Immer draft.

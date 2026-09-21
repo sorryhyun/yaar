@@ -1,14 +1,20 @@
 /**
  * Notifications slice - manages notification center.
  */
-import type {
-  SliceCreator,
-  NotificationsSlice,
-  NotificationsSliceState,
-  DesktopStore,
-} from '../types';
+import type { SliceCreator, DesktopStore } from '../types';
+import type { NotificationModel } from '@/types/state';
 import type { NotificationShowAction } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
+
+export interface NotificationsSliceState {
+  notifications: Record<string, NotificationModel>;
+}
+
+export interface NotificationsSliceActions {
+  dismissNotification: (id: string) => void;
+}
+
+export type NotificationsSlice = NotificationsSliceState & NotificationsSliceActions;
 
 /**
  * Pure mutation function that applies a notification action to an Immer draft.

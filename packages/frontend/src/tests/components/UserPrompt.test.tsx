@@ -120,3 +120,35 @@ describe('UserPrompt option selection', () => {
     });
   });
 });
+
+describe('UserPrompt and Escape', () => {
+  beforeEach(() => {
+    sendUserPromptResponse.mockClear();
+    useDesktopStore.setState({ userPrompts: {} } as never);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('Escape is the Skip button', () => {
+    seedPrompt();
+    render(<UserPrompt />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(sendUserPromptResponse).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), {
+      dismissed: true,
+    });
+  });
+
+  it('does nothing on a prompt that offers no Skip', () => {
+    seedPrompt({ allowDismiss: false });
+    render(<UserPrompt />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(sendUserPromptResponse).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+});

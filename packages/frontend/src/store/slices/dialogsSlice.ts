@@ -1,9 +1,20 @@
 /**
  * Dialogs slice - manages confirmation dialogs.
  */
-import type { SliceCreator, DialogsSlice, DialogsSliceState } from '../types';
+import type { SliceCreator } from '../types';
+import type { DialogModel } from '@/types/state';
 import type { PermissionOptions, DialogConfirmAction, CapabilityLine } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
+
+export interface DialogsSliceState {
+  dialogs: Record<string, DialogModel>;
+}
+
+export interface DialogsSliceActions {
+  respondToDialog: (id: string, confirmed: boolean) => void;
+}
+
+export type DialogsSlice = DialogsSliceState & DialogsSliceActions;
 
 /**
  * Pure mutation function that applies a dialog action to an Immer draft.

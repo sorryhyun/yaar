@@ -13,7 +13,7 @@
  * boundary a reader looks at first.
  */
 import { describe, it, expect } from 'bun:test';
-import { classifyClipboardError, truncateClipboardText } from '@/lib/clipboard';
+import { classifyClipboardError, truncateClipboardText } from '@/store/clipboard';
 
 function domError(name: string, message: string): Error {
   const err = new Error(message);

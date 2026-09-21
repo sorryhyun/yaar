@@ -1,9 +1,20 @@
 /**
  * User prompts slice — manages ask/request prompts from the agent.
  */
-import type { SliceCreator, UserPromptsSlice, UserPromptsSliceState } from '../types';
+import type { SliceCreator } from '../types';
+import type { UserPromptModel } from '@/types/state';
 import type { UserPromptShowAction } from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
+
+export interface UserPromptsSliceState {
+  userPrompts: Record<string, UserPromptModel>;
+}
+
+export interface UserPromptsSliceActions {
+  dismissUserPrompt: (id: string) => void;
+}
+
+export type UserPromptsSlice = UserPromptsSliceState & UserPromptsSliceActions;
 
 /**
  * Pure mutation function that applies a user prompt action to an Immer draft.

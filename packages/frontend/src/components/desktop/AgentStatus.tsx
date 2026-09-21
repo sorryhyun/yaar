@@ -11,7 +11,8 @@
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useDesktopStore } from '@/store';
+import { useShallow } from 'zustand/react/shallow';
+import { useDesktopStore, type DesktopStore } from '@/store';
 import type { ActiveAgent } from '@/types/state';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
@@ -99,6 +100,15 @@ export function ConnectionStatus() {
   );
 }
 
+/** The title of the window each window agent belongs to, keyed by agent id. */
+function selectAgentWindowTitles(state: DesktopStore): Record<string, string | undefined> {
+  const titles: Record<string, string | undefined> = {};
+  for (const [agentId, { windowId }] of Object.entries(state.windowAgents)) {
+    titles[agentId] = state.windows[windowId]?.title;
+  }
+  return titles;
+}
+
 interface AgentRosterProps {
   interrupt: () => void;
   interruptAgent: (agentId: string) => void;
@@ -115,8 +125,9 @@ interface AgentRosterProps {
 export function AgentRoster({ interrupt, interruptAgent }: AgentRosterProps) {
   const { t } = useTranslation();
   const activeAgents = useDesktopStore((s) => s.activeAgents);
-  const windows = useDesktopStore((s) => s.windows);
-  const windowAgents = useDesktopStore((s) => s.windowAgents);
+  // Titles only, compared shallowly: subscribing to `windows` itself re-rendered the
+  // roster on every mousemove of a window drag.
+  const windowTitles = useDesktopStore(useShallow(selectAgentWindowTitles));
 
   const agentList = Object.values(activeAgents).sort(chipOrder);
   const now = useElapsedNow(agentList.length > 0);
@@ -133,10 +144,7 @@ export function AgentRoster({ interrupt, interruptAgent }: AgentRosterProps) {
       </div>
       <div className={styles.agentPanelList}>
         {agentList.map((agent) => {
-          // Find window associated with this agent (keyed by agentId)
-          const windowAgent = windowAgents[agent.id];
-          const windowId = windowAgent?.windowId;
-          const windowTitle = windowId ? windows[windowId]?.title : null;
+          const windowTitle = windowTitles[agent.id];
 
           return (
             <div key={agent.id} className={styles.agentPanelItem}>

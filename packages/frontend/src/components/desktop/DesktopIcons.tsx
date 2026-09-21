@@ -223,9 +223,10 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
               }));
             };
             // A window opened without a token can never call /api/verb — every
-            // request 403s for the life of the tab, and iframeTokenRefresh only
-            // revisits windows that already have one. So a failed mint must not
-            // produce a half-working window; it fails visibly and offers a retry.
+            // request 403s for the life of the tab, and the attach-time token refresh
+            // (lib/transport/iframe-token-refresh) only revisits windows that already
+            // have one. So a failed mint must not produce a half-working window; it
+            // fails visibly and offers a retry.
             const launch = () => {
               apiFetch('/api/iframe-token', {
                 method: 'POST',

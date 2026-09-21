@@ -1,8 +1,42 @@
 /**
  * UI slice - manages the restore prompt, window selection, and the shell form factor.
  */
-import { detectFormFactor } from '@/lib/formFactor';
-import type { SliceCreator, UiSlice } from '../types';
+import { detectFormFactor, type FormFactor } from '@/lib/formFactor';
+import type { SliceCreator } from '../types';
+import type { RestorePrompt } from '@/types/state';
+
+export interface UiSliceState {
+  restorePrompt: RestorePrompt | null;
+  selectedWindowIds: string[];
+  /** Shell layout: floating windows, or full-screen cards on a phone. See `lib/formFactor.ts`. */
+  formFactor: FormFactor;
+  /**
+   * The phone card the user blew up to fill the whole screen, command palette and all.
+   * Only in effect while that card is the one on top — see `selectFullscreenCardId`.
+   */
+  fullscreenWindowId: string | null;
+  /**
+   * Whether the phone's command palette is pulled up. It is a bottom sheet there:
+   * collapsed to a handle by default so the screen belongs to the content, raised by
+   * a pull-up from the bottom edge or a tap on the handle. Meaningless on a desktop,
+   * where the palette is always on screen.
+   */
+  paletteSheetOpen: boolean;
+  /** Whether the phone's notification shade is pulled down. See `NotificationShade`. */
+  notificationShadeOpen: boolean;
+}
+
+export interface UiSliceActions {
+  setRestorePrompt: (prompt: RestorePrompt | null) => void;
+  dismissRestorePrompt: () => void;
+  setSelectedWindows: (ids: string[]) => void;
+  setFormFactor: (formFactor: FormFactor) => void;
+  toggleFullscreenWindow: (windowId: string) => void;
+  setPaletteSheetOpen: (open: boolean) => void;
+  setNotificationShadeOpen: (open: boolean) => void;
+}
+
+export type UiSlice = UiSliceState & UiSliceActions;
 
 export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   restorePrompt: null,

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { PALETTE_DARK } from '@yaar/shared';
 import { apiFetch } from '@/lib/api';
+import { Modal } from './Modal';
 import styles from '@/styles/overlays/QrCodeModal.module.css';
 
 interface RemoteInfo {
@@ -40,10 +41,6 @@ export function QrCodeModal({ onClose }: { onClose: () => void }) {
       .catch(() => {});
   }, []);
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   const handleCopy = () => {
     if (info?.connectUrl) {
       navigator.clipboard.writeText(info.connectUrl);
@@ -53,7 +50,7 @@ export function QrCodeModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className={styles.backdrop} onClick={handleBackdropClick}>
+    <Modal className={styles.backdrop} label="QR Code" onDismiss={onClose} dismissOnBackdrop>
       <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>QR Code</h2>
@@ -96,6 +93,6 @@ export function QrCodeModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

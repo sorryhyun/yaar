@@ -9,11 +9,8 @@
  * replacement that does not wait for a close handshake nobody will complete.
  */
 import { describe, it, expect } from 'bun:test';
-import {
-  createLivenessProbe,
-  LIVENESS_PROBE_TIMEOUT_MS,
-} from '@/hooks/use-agent-connection/liveness-probe';
-import { createWsManager, replaceDeadSocket } from '@/hooks/use-agent-connection/transport-manager';
+import { createLivenessProbe, LIVENESS_PROBE_TIMEOUT_MS } from '@/lib/transport/liveness-probe';
+import { createWsManager, replaceDeadSocket } from '@/lib/transport/transport-manager';
 
 const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

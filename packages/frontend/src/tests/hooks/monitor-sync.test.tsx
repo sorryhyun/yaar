@@ -11,7 +11,7 @@ import { renderHook } from '@testing-library/react';
 import type { ClientEvent } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import { useMonitorSync } from '@/hooks/use-agent-connection/useMonitorSync';
-import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager } from '@/lib/transport/transport-manager';
 
 function fakeOpenSocket(): WebSocket & { sent: string[] } {
   const sent: string[] = [];

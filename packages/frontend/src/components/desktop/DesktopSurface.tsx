@@ -58,6 +58,11 @@ import { DesktopIcons } from './DesktopIcons';
 import { PhoneGestures } from './PhoneGestures';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
+/** Whether `list` holds exactly the members of `set` — the rubber band's no-op check. */
+function sameMembers(list: readonly string[], set: ReadonlySet<string>): boolean {
+  return list.length === set.size && list.every((id) => set.has(id));
+}
+
 export function DesktopSurface() {
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
@@ -75,13 +80,12 @@ export function DesktopSurface() {
   useAgentConnectionOwner();
   useFormFactorSync();
 
-  // Rubber-band selection state
-  const [selectionRect, setSelectionRect] = useState<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  } | null>(null);
+  // Rubber-band selection. The rectangle is presentational, so it is written straight to
+  // the DOM node as CSS vars and never through React: a state write per mousemove re-ran
+  // this whole subtree — CommandPalette and DesktopIcons included — at pointer rate. The
+  // selection it produces still goes through state, but only once per frame and only
+  // when it actually changed.
+  const selectionRectEl = useRef<HTMLDivElement>(null);
   const selectionStart = useRef<{ x: number; y: number } | null>(null);
   const selectionActive = useRef(false);
   const selectionListeners = useRef<{
@@ -303,7 +307,14 @@ export function DesktopSurface() {
           w: Math.abs(dx),
           h: Math.abs(dy),
         };
-        setSelectionRect(rect);
+        const el = selectionRectEl.current;
+        if (el) {
+          el.style.setProperty('--sel-x', `${rect.x}px`);
+          el.style.setProperty('--sel-y', `${rect.y}px`);
+          el.style.setProperty('--sel-w', `${rect.w}px`);
+          el.style.setProperty('--sel-h', `${rect.h}px`);
+          el.hidden = false;
+        }
 
         // Coalesce expensive DOM queries to one-per-frame
         cancelAnimationFrame(rafId);
@@ -338,7 +349,9 @@ export function DesktopSurface() {
               windowIds.add(winEl.dataset.windowId!);
             }
           }
-          setSelectedWindows([...windowIds]);
+          if (!sameMembers(useDesktopStore.getState().selectedWindowIds, windowIds)) {
+            setSelectedWindows([...windowIds]);
+          }
 
           // Compute which app icons intersect
           const appIds = new Set<string>();
@@ -368,14 +381,14 @@ export function DesktopSurface() {
               appIds.add(el.dataset.shortcutId!);
             }
           });
-          setSelectedAppIds(appIds);
+          setSelectedAppIds((prev) => (sameMembers([...prev], appIds) ? prev : appIds));
         });
       };
 
       const handleMouseUp = () => {
         cancelAnimationFrame(rafId);
         selectionStart.current = null;
-        setSelectionRect(null);
+        if (selectionRectEl.current) selectionRectEl.current.hidden = true;
         selectionActive.current = false;
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -431,17 +444,7 @@ export function DesktopSurface() {
         <DesktopIcons selectedAppIds={selectedAppIds} sendMessage={sendMessage} />
 
         {/* Rubber-band selection rectangle */}
-        {selectionRect && (
-          <div
-            className={styles.selectionRect}
-            style={{
-              left: selectionRect.x,
-              top: selectionRect.y,
-              width: selectionRect.w,
-              height: selectionRect.h,
-            }}
-          />
-        )}
+        <div ref={selectionRectEl} className={styles.selectionRect} hidden />
 
         {/* Window container */}
         <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>

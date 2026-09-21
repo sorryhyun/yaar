@@ -2,7 +2,7 @@
  * Window capture — asks an iframe to draw itself, sends the result straight down the socket.
  */
 import { ClientEventType } from '@/types';
-import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
+import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import {
   explainMissingWindow,
   findIframeIn,
