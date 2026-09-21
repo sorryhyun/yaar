@@ -1,7 +1,8 @@
 /**
  * Minimal Chrome DevTools Protocol client over WebSocket — just enough to drive
- * a headless Chrome for the resource benchmark: attach to the page target,
- * evaluate JS in it (open apps, read performance.memory), and wait for readiness.
+ * a headless Chrome for the benchmarks (scripts/bench/claude.ts, mobile.ts): attach to
+ * the page target, evaluate JS in it, wait for readiness, and send raw commands
+ * (Input.dispatchTouchEvent, Emulation.*, Performance.getMetrics).
  *
  * No dependency on puppeteer or the server's internal browser lib — a benchmark
  * harness should stay self-contained.
@@ -58,7 +59,8 @@ export class Cdp {
     return c;
   }
 
-  private send(method: string, params: Record<string, unknown> = {}): Promise<any> {
+  /** A raw CDP command on the page session. */
+  send(method: string, params: Record<string, unknown> = {}): Promise<any> {
     const id = ++this.id;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });

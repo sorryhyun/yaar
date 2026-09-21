@@ -30,6 +30,7 @@ before changing a default or adding a knob.
 |---|---|---|
 | `PROVIDER` | auto-detect | Force `claude` or `codex` |
 | `FABLE` | off | `=1`: monitor agent on Fable, every other agent on Opus |
+| `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock that opens real windows — load/perf runs only |
 | `PORT` / `MAX_AGENTS` | `8000` / `10` | Server port; global agent limit |
 | `MCP_SKIP_AUTH` / `REMOTE` | off | Skip MCP auth (local dev); enable remote mode |
 | `YAAR_REMOTE_TOKEN` | — | Adopt this remote token instead of minting one (ignored under 32 chars) |
@@ -104,6 +105,7 @@ src/
 │   ├── factory.ts        # Auto-detect provider, warm pool init
 │   ├── warm-pool.ts      # WarmPool singleton
 │   ├── notice.ts         # ProviderNotice + toNoticeMessage — the recoverable-failure channel
+│   ├── mock/             # MockTransport (YAAR_MOCK_AGENT=1) — scripted turns for make mobile-bench
 │   ├── claude/           # ClaudeSessionProvider, message-mapper, errors.ts
 │   └── codex/            # CodexProvider, AppServer, JsonRpcWsClient, auth, errors.ts, version.ts, types
 ├── handlers/             # PRIMARY: URI registry + 5 generic verb tool handlers

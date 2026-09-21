@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev claude-dev-mobile codex-dev termux claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench codex-types design design-preview
+.PHONY: dev claude codex claude-dev claude-dev-mobile codex-dev termux claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench mobile-bench codex-types design design-preview
 
 # GNU make on Windows runs recipes with cmd.exe by default, which can't parse
 # the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
@@ -111,6 +111,20 @@ bench:
 # write bench/report.md. Override apps: make claude-bench APPS=market-apps,memo
 claude-bench:
 	@bun scripts/bench/claude.ts $(if $(APPS),--apps $(APPS),) $(if $(SETTLE),--settle $(SETTLE),) $(BENCH_ARGS)
+
+# Phone-shell performance on Termux, with a mock agent (no model, no tokens): a
+# phone-emulated, CPU-throttled headless Chrome creates monitors, has the mock agent open
+# windows on each, and swipes between them, all by real touch. The companion desktop is on
+# (as it is on Android) and throttled alike; YAAR_COMPANION_TAB=0 turns it off. Frame timing,
+# renderer work for both desktops, whole-device CPU/RSS and turn/swipe latency per phase
+# land in bench/mobile/report.md.
+# Knobs: make mobile-bench MONITORS=4 WINDOWS=8 APPS=memo,storage CPU=6 VIEWPORT=390x844
+# (APPS=none for no iframe windows); anything else via MOBILE_BENCH_ARGS="--headful --keep-open".
+mobile-bench:
+	@bun scripts/bench/mobile.ts $(if $(MONITORS),--monitors $(MONITORS),) \
+		$(if $(WINDOWS),--windows $(WINDOWS),) $(if $(APPS),--apps $(APPS),) \
+		$(if $(CPU),--cpu $(CPU),) $(if $(VIEWPORT),--viewport $(VIEWPORT),) \
+		$(if $(SETTLE),--settle $(SETTLE),) $(MOBILE_BENCH_ARGS)
 
 # Regenerate Codex app-server TypeScript types
 # Post-processes imports to add .js extensions required by ESM resolution

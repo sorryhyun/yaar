@@ -31,6 +31,12 @@ export async function instantiateProvider(
   providerType: ProviderType,
   appServer?: AppServer | null,
 ): Promise<AITransport> {
+  // Load and performance runs (`make mobile-bench`): the whole stack stays real except
+  // the model. See providers/mock.
+  if (process.env.YAAR_MOCK_AGENT === '1') {
+    const { MockTransport } = await import('./mock/index.js');
+    return new MockTransport(providerType);
+  }
   switch (providerType) {
     case 'claude': {
       const { ClaudeSessionProvider } = await import('./claude/index.js');

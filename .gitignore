@@ -60,4 +60,4 @@ apps/*/credentials.json
 # matches any path component, which silently hides src/providers/claude/.
 /claude
 # Resource benchmark output (make claude-bench)
-bench/
+/bench/

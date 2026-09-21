@@ -21,7 +21,7 @@
  *   bun scripts/bench/claude.ts --settle 5 --headful --keep-open
  */
 
-import { Cdp } from './lib/cdp.ts';
+import { Cdp } from '../lib/cdp.ts';
 
 const HERE = new URL('.', import.meta.url).pathname;
 const REPO = new URL('../../', import.meta.url).pathname;

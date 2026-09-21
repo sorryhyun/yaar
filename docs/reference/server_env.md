@@ -24,6 +24,23 @@ passes in review.
 | `MAX_AGENTS` | `10` | Global agent limit (process-wide) |
 | `CODEX_WS_PORT` | `4510` | Codex app-server WebSocket listener |
 | `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
+| `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock — no model, no tokens (`make mobile-bench`) |
+
+### `YAAR_MOCK_AGENT`
+
+`YAAR_MOCK_AGENT=1` makes `instantiateProvider` return a `MockTransport` for every agent,
+reporting the provider type it stands in for so provider-keyed branches stay on their real
+path. Only the model is replaced: the turn still runs inside its agent context, its stream
+still goes through `StreamToEventMapper`, and the windows it opens go through the same
+`yaar://windows` invoke the MCP tool reaches. That is what makes it a load generator rather
+than a UI fixture — `make mobile-bench` uses it to measure the phone shell with the model's
+latency and choices held still. It models Termux, so it runs with the companion desktop on.
+
+A turn is steered from its prompt: `perf windows=6 text=600 apps=memo` streams 600 characters,
+then opens six windows rotating markdown → table → component → iframe app. A prompt with no
+`perf` directive gets a one-line reply and no windows.
+
+**Source:** `packages/server/src/providers/mock/index.ts`, `scripts/bench/mobile.ts`
 
 ### `FABLE`
 

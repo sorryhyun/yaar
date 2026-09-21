@@ -29,6 +29,7 @@ make build                       # Build all packages
 bun run typecheck                # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
+make mobile-bench                # Phone-shell perf: mock agent, N monitors × M windows (bench/mobile/report.md)
 make codex-types                 # Regenerate Codex protocol types (requires codex CLI >= CODEX_MIN_VERSION)
 bun run format                   # Format all files with Prettier
 bun run format:check             # Check formatting without writing
