@@ -9,31 +9,13 @@ import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { installFakeCdpClient } from './helpers/mock-cdp-client.js';
 
 // ── Mock CDP client ──────────────────────────────────────────────────────────
 
-const mockCdpSend = mock(() => Promise.resolve({}));
-const mockCdpWaitForEvent = mock(() => Promise.resolve(undefined));
-const mockCdpClose = mock(() => {});
-const mockCdpOn = mock(() => {});
-const mockCdpOff = mock(() => {});
-/** Crash watch: `BrowserSession` arms one per socket. Never fired by these tests. */
-const mockCdpOnClose = mock(() => {});
-
-mock.module('../lib/browser/cdp.js', () => ({
-  CDPClient: {
-    connect: mock(() =>
-      Promise.resolve({
-        send: mockCdpSend,
-        waitForEvent: mockCdpWaitForEvent,
-        close: mockCdpClose,
-        on: mockCdpOn,
-        off: mockCdpOff,
-        onClose: mockCdpOnClose,
-      }),
-    ),
-  },
-}));
+// `waitForEvent` and `onClose` (crash-watch arm) aren't asserted on by this file —
+// the helper still wires them into the mock's shape, just not into a binding here.
+const { send: mockCdpSend, close: mockCdpClose, on: mockCdpOn } = installFakeCdpClient();
 
 // ── Mock chrome process management ───────────────────────────────────────────
 
@@ -169,6 +151,49 @@ describe('BrowserPool', () => {
     expect((err as Error).message).toMatch(/limit reached/i);
     expect(pool.getStats().activeSessions).toBe(5);
   });
+
+  it('enforces max sessions limit (5) under concurrent creation', async () => {
+    // 8 fired at once (not one at a time, unlike the sequential test above) to
+    // actually exercise concurrent access to the size+pendingSessions guard in
+    // `CdpBrowserProvider.createSession` (cdp-provider.ts).
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => pool.createSession()));
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled.length).toBeLessThanOrEqual(5);
+    for (const r of rejected as PromiseRejectedResult[]) {
+      expect(r.reason).toBeInstanceOf(Error);
+      expect((r.reason as Error).message).toMatch(/limit reached/i);
+    }
+    expect(pool.getStats().activeSessions).toBeLessThanOrEqual(5);
+    expect(pool.getStats().activeSessions).toBe(fulfilled.length);
+  });
+
+  // The size+pendingSessions guard above holds under concurrency (no `await` sits
+  // between its own check and its `pendingSessions++` reservation, so 8 calls fired
+  // at once still cap at exactly 5 successes). But firing those 8 at once on a *cold*
+  // pool (nothing launched yet) surfaces a real, separate TOCTOU bug one layer down,
+  // in `HeadlessServerBrowser.getChrome()` (lib/browser/pool.ts): it checks
+  // `this.chromePath === undefined` and, if so, `await findChrome()` — genuinely
+  // suspending — *before* it sets `this.initPromise`. Every concurrent call that
+  // starts while `chromePath` is still undefined passes both of getChrome's early
+  // returns (`this.chrome` and `this.initPromise` are both still unset) and reaches
+  // that same await; when each resumes, it does not re-check `initPromise` (it
+  // already read that field as null before suspending), so it proceeds to call
+  // `launchChrome()` and overwrite `this.initPromise`/`this.chrome` itself. The last
+  // one to resolve wins the `this.chrome` slot; every earlier instance is orphaned —
+  // in production, a real, un-tracked Chrome process leaked per extra launch, none of
+  // which `releaseProcess()`/`cleanupChrome()` will ever reach. Confirmed by instrumenting
+  // this test: `mockLaunchChrome` was called 5 times (once per successful
+  // `createSession`) instead of once. Not fixed here — out of scope for a test-only
+  // change — just documented so it isn't silently "fixed" as flaky or reintroduced.
+  it.failing(
+    'launches Chrome only once for concurrent createSession calls on a cold pool',
+    async () => {
+      await Promise.allSettled(Array.from({ length: 8 }, () => pool.createSession()));
+      expect(mockLaunchChrome).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('findByWindowId returns the correct session', async () => {
     const { session: s1 } = await pool.createSession();

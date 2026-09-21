@@ -5,6 +5,7 @@
  * initialization, navigation, clicking, typing, and screenshot capture.
  */
 import { mock, describe, it, expect, beforeEach } from 'bun:test';
+import { installFakeCdpClient } from './helpers/mock-cdp-client.js';
 
 // ── Mock CDP ────────────────────────────────────────────────────────────────
 
@@ -17,28 +18,14 @@ const FAKE_IMAGE_BASE64 = Buffer.from('fake-image').toString('base64');
  */
 const isSettle = (expression: string) => expression.includes('MutationObserver');
 
-const mockSend = mock((_method: string, _params?: Record<string, unknown>) =>
-  Promise.resolve({} as Record<string, unknown>),
-);
-const mockWaitForEvent = mock(() => Promise.resolve(undefined));
-const mockClose = mock(() => undefined);
-const mockOn = mock(() => {});
-const mockOnClose = mock(() => {});
-
-mock.module('../lib/browser/cdp.js', () => ({
-  CDPClient: {
-    connect: mock(() =>
-      Promise.resolve({
-        send: mockSend,
-        waitForEvent: mockWaitForEvent,
-        close: mockClose,
-        on: mockOn,
-        off: mock(() => {}),
-        onClose: mockOnClose,
-      }),
-    ),
-  },
-}));
+// `onClose` (crash-watch arm) isn't asserted on by this file — the helper still
+// wires it into the mock's shape, just not into a binding here.
+const {
+  send: mockSend,
+  waitForEvent: mockWaitForEvent,
+  close: mockClose,
+  on: mockOn,
+} = installFakeCdpClient();
 
 // Import after mocks are established
 const { BrowserSession } = await import('../lib/browser/session.js');
@@ -224,21 +211,16 @@ describe('BrowserSession', () => {
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
     expect((evalCalls[0] as any)[1].expression).toContain('#my-button');
 
-    // Mouse press and release dispatched at element center coordinates
-    expect(mockSend).toHaveBeenCalledWith('Input.dispatchMouseEvent', {
-      type: 'mousePressed',
-      x: 150,
-      y: 200,
-      button: 'left',
-      clickCount: 1,
-    });
-    expect(mockSend).toHaveBeenCalledWith('Input.dispatchMouseEvent', {
-      type: 'mouseReleased',
-      x: 150,
-      y: 200,
-      button: 'left',
-      clickCount: 1,
-    });
+    // Mouse press and release both dispatched at element center coordinates, press
+    // before release. (Collapsed from two near-identical toHaveBeenCalledWith checks
+    // that repeated the same x/y/button/clickCount shape — this still confirms both
+    // fired, in order, with the right coordinates, just without stating the shared
+    // shape twice.)
+    const mouseCalls = mockSend.mock.calls.filter(([m]: any) => m === 'Input.dispatchMouseEvent');
+    expect(mouseCalls.map(([, p]: any) => p.type)).toEqual(['mousePressed', 'mouseReleased']);
+    for (const [, params] of mouseCalls as any[]) {
+      expect(params).toMatchObject({ x: 150, y: 200, button: 'left', clickCount: 1 });
+    }
 
     // Returns updated page state
     expect(state.url).toBe('https://example.com');
