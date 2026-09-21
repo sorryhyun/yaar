@@ -124,8 +124,10 @@ export interface RenderingFeedbackEvent {
    * Why a `renderer: 'capture'` feedback carries no image.
    *
    * One of the iframe capture script's reasons ('taint', 'zero-size',
-   * 'serialize-error', 'img-load-error', 'no-provider') or 'no-response' when the
-   * iframe never answered at all. Absent on success and on non-capture feedback.
+   * 'serialize-error', 'img-load-error', 'no-provider'), 'no-response' when the
+   * iframe never answered at all, 'not-mounted' when this tab does not have the
+   * window in its DOM (another tab may), 'no-iframe' when the window element holds no
+   * live iframe, or 'exception' when the capture itself threw. Absent on success and on non-capture feedback.
    * A failed capture used to be reported as a bare "returned empty", which reads
    * the same whether the canvas was tainted (retrying is futile) or the page was
    * merely slow (retrying is the fix).

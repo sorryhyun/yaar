@@ -292,6 +292,7 @@ export class LiveSession {
         getSessionLogger: () => this.getSessionLogger(),
         broadcast: (event) => this.broadcast(event),
         sendTo: (connectionId, event) => this.sendTo(connectionId, event),
+        connectionCount: () => this.connections.size,
         claimMessageId: (messageId) => this.claimMessageId(messageId),
         resetSession: (connectionId, monitorId) => this.handleReset(connectionId, monitorId),
         closeBrowserForWindow: (windowId) => this.closeBrowserForWindow(windowId),

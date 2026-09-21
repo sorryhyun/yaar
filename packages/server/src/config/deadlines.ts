@@ -87,6 +87,13 @@ export interface Deadlines {
   /** Default wait for the frontend to report on a rendered action. */
   renderFeedbackMs: number;
   /**
+   * Upper bound on holding a capture failure from a tab that does not have the window
+   * (`ClientEventController.handleRenderingFeedback`). It stands as soon as every attached
+   * tab has failed, or another tab's image replaces it; this only covers a tab that never
+   * answers. A capture rasterizes in a few hundred ms at most.
+   */
+  captureNotMountedGraceMs: number;
+  /**
    * Default wait for the desktop to answer a clipboard read/write.
    *
    * Longer than `renderFeedbackMs` even though the work is trivial: the *first* read from
@@ -105,6 +112,7 @@ const PRODUCTION_DEADLINES: Readonly<Deadlines> = Object.freeze({
   dialogMs: 60_000,
   userPromptMs: MAX_REQUEST_DEADLINE_MS,
   renderFeedbackMs: 3_000,
+  captureNotMountedGraceMs: 300,
   clipboardMs: 30_000,
 });
 

@@ -335,9 +335,12 @@ export function registerWindowHandlers(
    * unfixable by retrying, while one that timed out may well succeed on the next call.
    * Reported as the same empty result, both looked like "it may not have painted yet".
    */
-  async function captureWindow(
-    win: WindowState,
-  ): Promise<{ imageData?: string; captureFailure?: string; captureDegraded?: string[] }> {
+  async function captureWindow(win: WindowState): Promise<{
+    imageData?: string;
+    captureFailure?: string;
+    captureError?: string;
+    captureDegraded?: string[];
+  }> {
     const outcome = await actionEmitter.emitActionWithFeedback(
       { type: 'window.capture', windowId: win.id },
       5000,
@@ -355,7 +358,8 @@ export function registerWindowHandlers(
         ...(degraded && degraded.length > 0 ? { captureDegraded: degraded } : {}),
       };
     }
-    return { captureFailure: feedback?.captureFailure };
+    if (!feedback) return { captureFailure: 'no-response' };
+    return { captureFailure: feedback.captureFailure, captureError: feedback.error };
   }
 
   /**
@@ -396,13 +400,16 @@ export function registerWindowHandlers(
 
     if (key === '__screenshot') {
       const askedAt = Date.now();
-      const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
+      const { imageData, captureFailure, captureError, captureDegraded } = await captureWindow(win);
       if (!imageData) {
         // A capture is a round trip into the page, so "no image" can equally mean the
-        // page was not running. Say which, where the desktop told us.
+        // page was not running. Say which, where the desktop told us — and pass the
+        // desktop's own sentence through: it is the only record of why, since the
+        // feedback frame itself is not logged.
         const away = clientAwayNote(getActiveSessionId(), askedAt);
         return error(
           `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.` +
+            (captureError ? ` ${captureError}` : '') +
             (away ? ` ${away}` : ''),
         );
       }
@@ -1028,7 +1035,8 @@ export function registerWindowHandlers(
       // depended on whether the frontend answered in time — and the half that was dropped was
       // addressable by nothing. `__content` is that half, and this says where it went.
       if (win.content.renderer === 'iframe') {
-        const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
+        const { imageData, captureFailure, captureError, captureDegraded } =
+          await captureWindow(win);
         if (imageData) {
           const { content: _content, ...infoWithoutContent } = windowInfo;
           return {
@@ -1057,6 +1065,9 @@ export function registerWindowHandlers(
         }
         if (captureFailure) {
           windowInfo.captureFailure = captureFailure;
+        }
+        if (captureError) {
+          windowInfo.captureError = captureError;
         }
       }
 

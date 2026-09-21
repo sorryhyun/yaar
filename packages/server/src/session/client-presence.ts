@@ -79,6 +79,15 @@ export function connectionPresence(
 }
 
 /** Drop a connection's presence when its socket closes. */
+/**
+ * Whether a connection has ever reported being away. A tab that backgrounds once (a phone)
+ * will do it again; one that never has (the always-visible companion) is the steadier pick
+ * when a window needs one responder to stay with.
+ */
+export function hasBeenAway(sessionId: SessionId, connectionId: ConnectionId): boolean {
+  return (sessions.get(sessionId)?.get(connectionId)?.lastAwayState ?? null) !== null;
+}
+
 export function forgetConnectionPresence(sessionId: SessionId, connectionId: ConnectionId): void {
   const byConnection = sessions.get(sessionId);
   if (!byConnection) return;

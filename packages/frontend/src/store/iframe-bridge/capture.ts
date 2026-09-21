@@ -114,15 +114,19 @@ export async function captureWindow(windowId: string, requestId: string) {
     // Addressed by the raw id, not a store-resolved key — see `resolveTargetKey`.
     const el = findWindowElement(windowId);
     if (!el) {
+      // Named, because this tab not having the window says nothing about whether another
+      // tab does: the capture goes to every desktop in the session, and the server waits
+      // for a better answer before it lets this one stand (see handleRenderingFeedback).
       sendFeedback(false, {
         error: `Window element not found in DOM. ${explainMissingWindow(windowId)}`,
+        captureFailure: 'not-mounted',
       });
       return;
     }
 
     const iframe = findIframeIn(el);
     if (!iframe?.contentWindow) {
-      sendFeedback(false, { error: 'No iframe found in window' });
+      sendFeedback(false, { error: 'No iframe found in window', captureFailure: 'no-iframe' });
       return;
     }
 
@@ -140,6 +144,9 @@ export async function captureWindow(windowId: string, requestId: string) {
       });
     }
   } catch (error) {
-    sendFeedback(false, { error: error instanceof Error ? error.message : 'Capture failed' });
+    sendFeedback(false, {
+      error: error instanceof Error ? error.message : 'Capture failed',
+      captureFailure: 'exception',
+    });
   }
 }

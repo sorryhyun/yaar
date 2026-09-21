@@ -20,12 +20,38 @@ import type { ClientEventOf } from './client-event-router.js';
 import type { AppProtocolRequestData } from './emitter-channels.js';
 import type { SessionId } from './types.js';
 import type { ConnectionId } from './broadcast-center.js';
-import { connectionPresence } from './client-presence.js';
+import { connectionPresence, hasBeenAway } from './client-presence.js';
 import type { WindowStateRegistry } from './window-state.js';
 import { actionEmitter } from './action-emitter.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AppWindowCoordinator');
+
+/**
+ * Windows whose responder changed since the agent last heard from them, per session.
+ *
+ * Module-level for the same reason `client-presence.ts` is: the note is read where a tool
+ * result is built (`features/window/app-protocol.ts`), which holds a session id and a
+ * window key but no coordinator.
+ */
+const responderSwitches = new Map<SessionId, Map<string, string>>();
+
+/**
+ * The note owed to an agent whose request was answered by a different copy of the window
+ * than the one its earlier requests reached — taken, so it is told once per switch.
+ */
+export function takeResponderSwitchNote(
+  sessionId: SessionId | string | undefined,
+  windowKey: string,
+): string | undefined {
+  if (!sessionId) return undefined;
+  const bySession = responderSwitches.get(sessionId as SessionId);
+  const note = bySession?.get(windowKey);
+  if (note === undefined) return undefined;
+  bySession!.delete(windowKey);
+  if (bySession!.size === 0) responderSwitches.delete(sessionId as SessionId);
+  return note;
+}
 
 /** The pool operations this coordinator needs, narrowed so `ContextPool` stays out. */
 export interface AppChannelTarget {
@@ -62,6 +88,20 @@ export class AppWindowCoordinator {
    * could take it.
    */
   private readonly readyConnections = new Map<string, ConnectionId[]>();
+
+  /**
+   * Per window key, the one connection this window's requests go to.
+   *
+   * Each tab's copy of an iframe has its own in-memory state — which project devtools has
+   * open, whether its preview is up. Picking a responder afresh for every request let a
+   * turn's requests land on different copies as soon as a tab's visibility changed: devtools
+   * cloned `memo` in the phone's copy, and three commands later was answering from the
+   * companion tab's copy, which had never heard of the clone, had no preview open, and
+   * refused the deploy as a protocol mismatch. So a window keeps its responder until that
+   * responder can no longer answer, and a change is announced (`takeResponderSwitchNote`)
+   * instead of being silent.
+   */
+  private readonly pinned = new Map<string, ConnectionId>();
 
   /**
    * Requests sent to one connection and not yet known to be settled, so a responder that
@@ -160,24 +200,84 @@ export class AppWindowCoordinator {
   }
 
   /**
-   * The connection to ask: a registered one whose tab is in front, else any registered
-   * one — newest first in both tiers, since the newest registration is the document most
-   * likely to still be alive (a reconnect re-announces under its new connection id).
+   * The connection to ask for this window: its pinned responder while that one can still
+   * answer, else a fresh pick, which becomes the new pin.
    *
-   * A backgrounded phone and a visible desktop both registered is the case this exists
-   * for: the phone cannot run script, so asking it is a guaranteed timeout, while asking
-   * both is a duplicated side effect the moment the phone wakes.
+   * The pin gives way in exactly two cases: its socket is gone (or the tab no longer holds a
+   * registration for the window), or its tab went to the background while another
+   * registered tab is in front. The second is the phone-plus-companion case the companion
+   * exists for — a backgrounded phone cannot run script, so staying pinned to it is a
+   * timeout on every request. Either way the new copy has not seen what the old one did,
+   * and the agent is told so rather than left to discover it.
    */
   private pickResponder(windowKey: string): ConnectionId | null {
     const registered = (this.readyConnections.get(windowKey) ?? []).filter((id) =>
       this.deps.hasConnection(id),
     );
-    if (registered.length === 0) return null;
-    for (let i = registered.length - 1; i >= 0; i--) {
-      const state = connectionPresence(this.deps.sessionId, registered[i]!);
-      if (state === undefined || state === 'visible') return registered[i]!;
+    if (registered.length === 0) {
+      this.pinned.delete(windowKey);
+      return null;
     }
-    return registered[registered.length - 1]!;
+
+    const pin = this.pinned.get(windowKey);
+    const pinAlive = !!pin && registered.includes(pin);
+    if (pinAlive) {
+      if (this.canAnswer(pin) || !registered.some((id) => this.canAnswer(id))) return pin;
+    }
+
+    const next = this.rankResponders(registered)[0]!;
+    this.pinned.set(windowKey, next);
+    if (pin && pin !== next) this.announceSwitch(windowKey, pinAlive ? 'away' : 'gone');
+    return next;
+  }
+
+  /** Whether a connection's tab can run script — silence counts as yes, see client-presence. */
+  private canAnswer(connectionId: ConnectionId): boolean {
+    const state = connectionPresence(this.deps.sessionId, connectionId);
+    return state === undefined || state === 'visible';
+  }
+
+  /**
+   * Best first: a tab in front before one in the background; among those in front, one
+   * that has never been away before one that has — a tab that backgrounds once (a phone)
+   * will do it again, while an always-visible desktop (the companion) will not, and every
+   * pin that lands on the steady one is a switch that never has to happen. Newest
+   * registration breaks ties: it is the document most likely to still be alive.
+   */
+  private rankResponders(registered: ConnectionId[]): ConnectionId[] {
+    const tier = (id: ConnectionId): number => {
+      if (!this.canAnswer(id)) return 2;
+      return hasBeenAway(this.deps.sessionId, id) ? 1 : 0;
+    };
+    return registered
+      .map((id, order) => ({ id, order, tier: tier(id) }))
+      .sort((a, b) => a.tier - b.tier || b.order - a.order)
+      .map((entry) => entry.id);
+  }
+
+  private announceSwitch(windowKey: string, reason: 'away' | 'gone'): void {
+    const why =
+      reason === 'gone'
+        ? 'the tab that was answering disconnected'
+        : 'the tab that was answering went to the background';
+    log.warn('app window responder changed', {
+      sessionId: this.deps.sessionId,
+      windowId: windowKey,
+      reason,
+    });
+    this.deps.windowState.recordWindowEvent(windowKey, 'responder-changed', why);
+    let bySession = responderSwitches.get(this.deps.sessionId);
+    if (!bySession) {
+      bySession = new Map();
+      responderSwitches.set(this.deps.sessionId, bySession);
+    }
+    bySession.set(
+      windowKey,
+      `Note: this answer came from a different open copy of this app window than your ` +
+        `earlier requests (${why}). That copy has its own in-memory state and did not run ` +
+        `your earlier commands — re-check the state you depend on (e.g. which project or ` +
+        `document is open) before continuing.`,
+    );
   }
 
   /**
@@ -243,6 +343,8 @@ export class AppWindowCoordinator {
   forgetReady(windowId: string): void {
     actionEmitter.forgetAppReady(this.deps.sessionId, windowId);
     this.readyConnections.delete(windowId);
+    this.pinned.delete(windowId);
+    takeResponderSwitchNote(this.deps.sessionId, windowId);
   }
 
   /** A socket closed: whatever its iframes registered can no longer answer. */

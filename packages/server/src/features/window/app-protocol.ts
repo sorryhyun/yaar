@@ -20,6 +20,7 @@ import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type PendingOutcome } from '../../session/pending-store.js';
 import { clientAwayNote } from '../../session/client-presence.js';
+import { takeResponderSwitchNote } from '../../session/app-window-coordinator.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import {
@@ -220,6 +221,18 @@ function withPresenceNote(message: string, waitStartedAt: number, sessionId?: st
   return note ? `${message} ${note}` : message;
 }
 
+/**
+ * Append the one-time notice that this answer came from a different tab's copy of the
+ * window than the caller's earlier requests (see `AppWindowCoordinator.pickResponder`).
+ * An answer from a copy with different in-memory state reads as the app having silently
+ * forgotten what it was told; saying so is what lets the agent re-establish it.
+ */
+function withResponderNote(result: VerbResult, windowKey: string): VerbResult {
+  const note = takeResponderSwitchNote(getActiveSessionId(), windowKey);
+  if (!note) return result;
+  return { ...result, content: [...(result.content ?? []), { type: 'text', text: note }] };
+}
+
 /** The message an agent sees when an app never answered. */
 function noAnswer(
   outcome: { ok: false; reason: 'timeout' | 'cancelled' | 'closed' },
@@ -290,9 +303,12 @@ export async function handleAppQuery(
   // state-path.ts. `requested` stays the label, so a filtered read names what it filtered.
   const { key: stateKey, path } = splitStatePath(requested);
   const answer = (value: unknown): VerbResult => {
-    if (path.length === 0) return wrapAppValue(value, read);
+    if (path.length === 0) return withResponderNote(wrapAppValue(value, read), key);
     const selected = selectStatePath(value, stateKey, path);
-    return selected.ok ? wrapAppValue(selected.value, read) : error(selected.message);
+    return withResponderNote(
+      selected.ok ? wrapAppValue(selected.value, read) : error(selected.message),
+      key,
+    );
   };
 
   // '__console' is a built-in state key answered by the injected app-protocol
@@ -593,8 +609,8 @@ export async function handleAppCommand(
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) {
     windowState.recordAppCommand(key, req, { ok: false, error: response.error }, agentId);
-    return error(response.error);
+    return withResponderNote(error(response.error), key);
   }
   windowState.recordAppCommand(key, req, { ok: true }, agentId);
-  return wrapAppValue(response.result);
+  return withResponderNote(wrapAppValue(response.result), key);
 }

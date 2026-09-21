@@ -39,6 +39,7 @@ import { subscriptionRegistry } from '../http/subscriptions.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import type { SessionId } from './types.js';
 import { createLogger } from '../observability/log.js';
+import { deadlines } from '../config.js';
 
 const log = createLogger('ClientEventController');
 
@@ -57,6 +58,8 @@ export interface ClientEventDeps {
   broadcast(event: ServerEvent): void;
   /** Delivery to one connection. */
   sendTo(connectionId: ConnectionId, event: ServerEvent): void;
+  /** How many desktops are attached — every one of them receives a window capture. */
+  connectionCount(): number;
   /**
    * Take responsibility for a message id, or report that the session already had.
    * Acceptance is the session's to decide, not a handler's — see `LiveSession`.
@@ -76,6 +79,12 @@ export interface ClientEventDeps {
 }
 
 export class ClientEventController {
+  /** Not-mounted capture failures held back while another tab may still answer. */
+  private readonly heldCaptureFailures = new Map<
+    string,
+    { timer: ReturnType<typeof setTimeout>; from: Set<ConnectionId> }
+  >();
+
   constructor(private readonly deps: ClientEventDeps) {}
 
   /**
@@ -98,7 +107,8 @@ export class ClientEventController {
       [ClientEventType.RESET]: (event, connectionId) => this.handleReset(event, connectionId),
       [ClientEventType.INTERRUPT_AGENT]: (event) =>
         this.deps.getPool()?.agentPool.interruptByIdOrRole(event.agentId),
-      [ClientEventType.RENDERING_FEEDBACK]: (event) => this.handleRenderingFeedback(event),
+      [ClientEventType.RENDERING_FEEDBACK]: (event, connectionId) =>
+        this.handleRenderingFeedback(event, connectionId),
       [ClientEventType.DIALOG_FEEDBACK]: (event) => this.handleDialogFeedback(event),
       [ClientEventType.APP_PROTOCOL_RESPONSE]: (event) =>
         actionEmitter.resolveAppProtocolResponse(event.requestId, event.response),
@@ -317,6 +327,55 @@ export class ClientEventController {
   }
 
   private handleRenderingFeedback(
+    event: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>,
+    connectionId: ConnectionId,
+  ): void {
+    if (event.renderer === 'capture' && !event.success) {
+      // The feedback frame is not in the session log, so this line is the only place a
+      // failed capture's reason survives outside the agent's tool result.
+      log.info('capture failed in a tab', {
+        requestId: event.requestId,
+        windowId: event.windowId,
+        connectionId,
+        captureFailure: event.captureFailure,
+        error: event.error,
+      });
+      // A capture goes to every desktop in the session, and a tab without the window
+      // answers in milliseconds while the one that has it is still rasterizing — so the
+      // fast wrong answer used to win every time. It now waits for a better one.
+      if (event.captureFailure === 'not-mounted') {
+        let held = this.heldCaptureFailures.get(event.requestId);
+        if (!held) {
+          held = {
+            // Only for a tab that never answers at all (backgrounded, frozen): every tab
+            // that does answer is counted below, so this rarely runs to the end.
+            timer: setTimeout(() => {
+              this.heldCaptureFailures.delete(event.requestId);
+              this.resolveRenderingFeedback(event);
+            }, deadlines.captureNotMountedGraceMs),
+            from: new Set(),
+          };
+          this.heldCaptureFailures.set(event.requestId, held);
+        }
+        held.from.add(connectionId);
+        // Every desktop has said it does not have the window: nobody else will answer.
+        if (held.from.size >= this.deps.connectionCount()) {
+          clearTimeout(held.timer);
+          this.heldCaptureFailures.delete(event.requestId);
+          this.resolveRenderingFeedback(event);
+        }
+        return;
+      }
+    }
+    const held = this.heldCaptureFailures.get(event.requestId);
+    if (held) {
+      clearTimeout(held.timer);
+      this.heldCaptureFailures.delete(event.requestId);
+    }
+    this.resolveRenderingFeedback(event);
+  }
+
+  private resolveRenderingFeedback(
     event: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>,
   ): void {
     // Resolve directly via actionEmitter — the pending request is global (keyed by requestId),
