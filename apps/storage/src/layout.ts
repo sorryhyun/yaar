@@ -1,6 +1,6 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
-import { createPersistedSignal, safeParseOr } from '@bundled/yaar';
+import { createPersistedSignal, createSharedSignal, safeParseOr } from '@bundled/yaar';
 import { LayoutPrefsSchema } from './schema';
 
 const KEY = 'layout.json';
@@ -65,8 +65,20 @@ export function setPanelWidth(w: number) {
 
 export const viewMode = () => layout().viewMode;
 
+/**
+ * List vs. grid is a content choice ("setViewMode" is a command) rather than a
+ * viewport one like panelWidth, so it is also mirrored live via a shared signal —
+ * `layout`'s own persistence covers reload, not another copy's screen mid-session.
+ * `onRemote` writes straight into the persisted store, never back through
+ * `setViewMode`, so adopting a remote value can't re-announce it and ping-pong.
+ */
+const [, setSharedViewMode] = createSharedSignal<ViewMode>('view-mode', DEFAULT_PREFS.viewMode, {
+  onRemote: (mode) => setLayout((prev) => ({ ...prev, viewMode: mode })),
+});
+
 export function setViewMode(mode: ViewMode) {
   setLayout({ ...layout(), viewMode: mode });
+  setSharedViewMode(mode);
 }
 
 export function resetPanelWidth() {

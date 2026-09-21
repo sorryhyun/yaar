@@ -13,7 +13,7 @@ import {
 import { basename, sanitizeAlias } from './helpers';
 import { FileRow, FileTile } from './entries';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
-import { navigate, selectFile, closePreview } from './navigation';
+import { navigate, selectFile, closePreview, initFromShared } from './navigation';
 import {
   panelWidth,
   setPanelWidth,
@@ -94,7 +94,9 @@ window.addEventListener('resize', () => reclampPanelWidth());
 
 const App = () => {
   onMount(() => {
-    navigate('');
+    // Not navigate(''): a copy that mounts after the agent has already moved
+    // around should show where it is, not reset the window to the root.
+    void initFromShared();
   });
 
   return html`
@@ -373,6 +375,14 @@ export default defineApp({
         },
       },
       run: (params) => {
+        // Deliberately not shared across copies of this window (unlike navigate/
+        // select-file/setViewMode below): open/pinned/panelWidth are the hover-nav
+        // panel's chrome, sized and toggled for *this* viewport. A phone and the
+        // server-side companion tab are different widths, so the panel a command
+        // opens or resizes on one is not a size or state that fits the other —
+        // sharing it would make the agent's phone-sized panel show up pinned open
+        // and clipped on a desktop copy, or vice versa.
+        //
         // Pin first: setNavPin(true) implies open, so an explicit open:false
         // in the same call can still override it.
         if (typeof params.pinned === 'boolean') setNavPin(params.pinned);
