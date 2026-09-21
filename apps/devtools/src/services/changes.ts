@@ -1,6 +1,13 @@
 export {};
 import { batch } from '@bundled/solid-js';
 import {
+  activeProject,
+  openFilePath,
+  setOpenFileContent,
+  setOpenFileImage,
+  setOpenFilePath,
+  setTypecheckState,
+  onRemoteFileChanges,
   fileChanges,
   setFileChanges,
   selectedChangeId,
@@ -9,6 +16,7 @@ import {
   type FileChangeKind,
 } from '../core';
 import { diffStats } from '../lib';
+import { refreshFiles } from './files';
 
 // Records what each file mutation did, so the Changes panel can render a diff.
 // Every writer in services/files.ts funnels through recordChange; a mutation that
@@ -46,6 +54,7 @@ export function recordChange(input: RecordChangeInput): FileChange | null {
   sequence += 1;
   const change: FileChange = {
     id: `chg-${Date.now()}-${sequence}`,
+    projectId: activeProject()?.id,
     ...input,
     added,
     removed,
@@ -83,3 +92,40 @@ export function currentChange(): FileChange | null {
   const id = selectedChangeId();
   return list.find((c) => c.id === id) ?? list[0] ?? null;
 }
+
+/**
+ * Catch up on changes another copy of this window made.
+ *
+ * The history itself arrives through the shared signal. What does not is everything
+ * else the writing copy did alongside it — its editor buffer, its file list, its
+ * typecheck reset — so this copy redoes those for the project it has open, and keeps
+ * following the newest entry the same way `recordChange` does.
+ */
+onRemoteFileChanges((next, prev) => {
+  const known = new Set(prev.map((c) => c.id));
+  const arrived = next.filter((c) => !known.has(c.id));
+  const selected = selectedChangeId();
+  if (selected === null || selected === prev[0]?.id || !next.some((c) => c.id === selected)) {
+    setSelectedChangeId(next[0]?.id ?? null);
+  }
+
+  const projectId = activeProject()?.id;
+  const touched = arrived.filter((c) => c.projectId === projectId);
+  if (!projectId || touched.length === 0) return;
+  const openPath = openFilePath();
+  // Oldest first, so the newest change to the open file is the one that sticks.
+  for (const change of [...touched].reverse()) {
+    if (change.path !== openPath) continue;
+    if (change.kind === 'delete') {
+      batch(() => {
+        setOpenFilePath(null);
+        setOpenFileContent(null);
+        setOpenFileImage(null);
+      });
+    } else {
+      setOpenFileContent(change.after);
+    }
+  }
+  setTypecheckState('unknown');
+  void refreshFiles(projectId);
+});

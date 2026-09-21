@@ -35,6 +35,18 @@ permission gate stays between the agent and the bytes.
 Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 (`.claude/skills/server-verbs/SKILL.md`); [`packages/server/CLAUDE.md`](../packages/server/CLAUDE.md) for the map.
 
+### One window, several copies
+
+A window runs once **per connected desktop**: a phone plus the companion tab is two iframes, each
+with its own memory. A `command` reaches exactly **one** of them (the server pins a responder,
+because running it in both would do its side effects twice), so state a command sets in a plain
+signal changes that copy's screen and no other, and the user watches the agent work while
+nothing happens on theirs. State the view renders *because of a command* goes in
+`createSharedSignal(key, initial, { onRemote })` from `@bundled/yaar`: the server holds it per
+window, every copy follows, and `onRemote` redoes whatever side effects the writing copy performed
+(reload a buffer, refresh a listing). Data that already lives server-side and is re-read on a
+`subscribe` ping (`appDb.createReactiveCollection`, a storage file you watch) is fine as is.
+
 ### Agent docs — four surfaces, four readers
 
 | File | Read by |

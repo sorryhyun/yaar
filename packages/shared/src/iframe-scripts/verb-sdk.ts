@@ -138,6 +138,26 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     return openSubscription(uri, onFrame, body);
   };
 
+  // Values shared by every copy of this window (one per connected desktop). The raw
+  // transport under @bundled/yaar's createSharedSignal, which owns ordering and echo
+  // suppression; watch a key with subscribe('yaar://windows/self/shared/' + key).
+  function callShared(body) {
+    return fetch(API_BASE + '/api/verb/shared', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(body)
+    }).then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok || data.error) throw new Error(data.error || 'Shared value call failed');
+        return data;
+      });
+    });
+  }
+  window.yaar.shared = {
+    get: function(key) { return callShared({ action: 'get', key: key }); },
+    set: function(key, value) { return callShared({ action: 'set', key: key, value: value }); }
+  };
+
   window.yaar.fetch = function(url, options) {
     var payload = { url: url };
     if (options) {

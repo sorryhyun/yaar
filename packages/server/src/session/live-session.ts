@@ -61,6 +61,7 @@ import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent, type Hook } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
+import { windowSharedStore } from '../http/window-shared.js';
 import { revokeTokensForWindow } from '../http/iframe-tokens.js';
 import { storageDocumentUri } from '../features/window/helpers.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -276,6 +277,8 @@ export class LiveSession {
       this.reloadCache.invalidateForWindow(wid);
       this.pool?.handleWindowClose(wid, appId, monitorId);
       subscriptionRegistry.clearForWindow(wid);
+      windowSharedStore.clearWindow(this.sessionId, wid);
+      if (raw !== wid) windowSharedStore.clearWindow(this.sessionId, raw);
       this.appWindows.forgetReady(wid);
     });
 
@@ -800,6 +803,7 @@ export class LiveSession {
     }
 
     subscriptionRegistry.clearForSession(this.sessionId);
+    windowSharedStore.clearSession(this.sessionId);
     this.windowState.clear();
     this.initialized = false;
   }

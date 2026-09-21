@@ -251,6 +251,18 @@ function namesFonts(canonical: string): boolean {
   return canonical === 'yaar://system/fonts' || canonical.startsWith('yaar://system/fonts/');
 }
 
+/**
+ * Is this the calling window's own shared values — the third thing granted for being an app?
+ *
+ * `self` here is the window the token names, and there is no spelling that reaches another
+ * window's: the door resolves the key from the token, never from the URI. Declaring it would
+ * guard nothing, and forgetting to would leave a window unable to agree with its own copies
+ * (see `window-shared.ts`).
+ */
+function namesOwnWindowShared(canonical: string): boolean {
+  return canonical.startsWith('yaar://windows/self/shared/');
+}
+
 /** Is this the session principal's private namespace? */
 function isSessionUri(uri: string): boolean {
   return uri === 'yaar://session' || uri.startsWith('yaar://session/');
@@ -324,6 +336,7 @@ export function permissionsAllow(
   // non-app iframe has no app identity to grant to.
   if (appId && namesSharedTree(target)) return true;
   if (appId && namesFonts(target)) return true;
+  if (appId && namesOwnWindowShared(target)) return true;
 
   // A capped entry (`sharedOnly`) is the shared tree only: it never answers for another
   // app's private storage, however broad the prefix it was written as. That is the whole

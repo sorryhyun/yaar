@@ -442,6 +442,16 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/verb/shared:
+    post:
+      summary: 'Read or write a value shared by every copy of the calling app window (one per connected desktop). Body: `{ action: "get" | "set", key, value? }`. Answers `{ value, rev }` (`rev: 0` when unset) or `{ rev }` for a set. Copies watch a key by subscribing to `yaar://windows/self/shared/{key}`.'
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
   /api/verb/subscribe:
     post:
       summary: 'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId?, mode?: "change" | "stream", kinds?: string[] }`. `mode: "stream"` pushes typed frames with payloads instead of bare change pings.'

@@ -108,6 +108,7 @@ export type { DialogOptions } from './dialogs.js';
 // ── Reactive primitives ─────────────────────────────────────────
 export {
   createPersistedSignal,
+  createSharedSignal,
   createCollapsiblePanel,
   createAutosave,
   createMediaQuery,

@@ -8,6 +8,7 @@
 import { createSignal } from 'solid-js';
 
 import { appStorage } from './app-storage.js';
+import { y, subscribe } from './verbs.js';
 import { showToast } from './ui.js';
 
 /**
@@ -135,6 +136,126 @@ export function createPersistedSignal<T>(
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
   };
+  return [value, set, ready];
+}
+
+/**
+ * A signal whose value is the same in every copy of this window.
+ *
+ * A window runs once per connected desktop — a phone plus the companion tab is two
+ * copies — and the agent's commands reach only one of them. State a command sets in a
+ * plain signal changes that copy's screen and no other, so the user can watch the agent
+ * work and see nothing happen. Hold what the view renders *because of a command* here:
+ * the copy that ran it writes, the others follow.
+ *
+ * The value lives on the server for as long as the window is open (not across a server
+ * restart — persist to `appStorage` for that). A copy that mounts later starts from it,
+ * so `initial` is only the value before any copy has set one, and it is never written
+ * by itself. The whole value travels on every set, JSON-serialized, up to 8 MB.
+ *
+ * Last write wins, per key. Nothing is merged: two copies setting the same key at once
+ * end on whichever write the server took second, which is why it suits state one actor
+ * drives (the agent, through the responding copy) and not a field two people type into.
+ *
+ * `onRemote(value, prev)` runs after a value written by another copy lands — the hook
+ * for catching up side effects the writing copy performed and this one did not (reload
+ * a buffer, refresh a listing). It does not run for this copy's own sets.
+ *
+ * `ready` resolves once the stored value has been read (or found absent), like
+ * `createPersistedSignal`'s.
+ */
+export function createSharedSignal<T>(
+  key: string,
+  initial: T,
+  options?: { onRemote?: (value: T, prev: T) => void },
+): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>] {
+  const [value, setValue] = createSignal<T>(initial);
+  // The newest server rev this copy holds. Reads and pings can arrive out of order;
+  // anything at or below this is already reflected, or superseded.
+  let rev = 0;
+  let written = false;
+  let inFlight = 0;
+  let queued = false;
+  // A ping that arrived while this copy's own write was outstanding. Re-read once it
+  // settles: the ping may have been another copy's write that the server took after ours.
+  let missed = false;
+
+  const adopt = (remote: { value: T; rev: number }, notify: boolean) => {
+    // Shape-checked, not trusted: the compiler's import-time stub answers every call
+    // with an inert proxy, which throws when compared.
+    if (typeof remote?.rev !== 'number' || remote.rev <= rev) return;
+    rev = remote.rev;
+    const prev = value();
+    setValue(() => remote.value);
+    if (notify && options?.onRemote) {
+      try {
+        options.onRemote(remote.value, prev);
+      } catch (e) {
+        console.error(`[yaar] onRemote failed for shared "${key}":`, e);
+      }
+    }
+  };
+
+  const refresh = (): Promise<void> => {
+    if (inFlight > 0 || queued) {
+      missed = true;
+      return Promise.resolve();
+    }
+    return Promise.resolve()
+      .then(() => y.shared.get(key))
+      .then((remote: { value: T; rev: number }) => {
+        if (inFlight > 0 || queued) missed = true;
+        else adopt(remote, true);
+      })
+      .catch((e: unknown) => console.error(`[yaar] reading shared "${key}" failed:`, e));
+  };
+
+  // Every call below goes through `Promise.resolve().then`, so a transport that throws
+  // or answers synchronously — the compiler's import-time stub, when it runs the app to
+  // read its protocol — lands in the catch instead of throwing out of module scope.
+  const ready = Promise.resolve()
+    .then(() => y.shared.get(key))
+    .then((remote: { value: T; rev: number }) => {
+      if (!written) adopt(remote, false);
+      return value();
+    })
+    .catch((e: unknown) => {
+      console.error(`[yaar] loading shared "${key}" failed, using the initial value:`, e);
+      return value();
+    });
+
+  Promise.resolve()
+    .then(() => subscribe(`yaar://windows/self/shared/${key}`, () => void refresh()))
+    .catch((e: unknown) => console.error(`[yaar] watching shared "${key}" failed:`, e));
+
+  // Sets in one tick coalesce into one write of the final value.
+  const flush = () => {
+    queued = false;
+    inFlight += 1;
+    const snapshot = value();
+    Promise.resolve()
+      .then(() => y.shared.set(key, snapshot))
+      .then((res: { rev: number }) => {
+        if (typeof res?.rev === 'number' && res.rev > rev) rev = res.rev;
+      })
+      .catch((e: unknown) => console.error(`[yaar] sharing "${key}" failed:`, e))
+      .finally(() => {
+        inFlight -= 1;
+        if (missed && inFlight === 0 && !queued) {
+          missed = false;
+          void refresh();
+        }
+      });
+  };
+
+  const set = (v: T | ((prev: T) => T)) => {
+    written = true;
+    setValue(v as any);
+    if (queued) return;
+    queued = true;
+    queueMicrotask(flush);
+  };
+
   return [value, set, ready];
 }
 

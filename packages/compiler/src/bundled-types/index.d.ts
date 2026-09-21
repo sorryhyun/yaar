@@ -2318,6 +2318,33 @@ declare module '@bundled/yaar' {
     },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>];
 
+  /**
+   * A signal whose value is the same in every copy of this window.
+   *
+   * A window runs once per connected desktop (a phone plus the companion tab is two
+   * copies), and the agent's commands reach only one of them. State a command sets in
+   * a plain signal changes that copy's screen and no other. Hold what the view renders
+   * because of a command here: the copy that ran it writes, the others follow.
+   *
+   * The value is held by the server while the window is open (not across a restart —
+   * persist to `appStorage` for that); a copy that mounts later starts from it, and
+   * `initial` is never written by itself. Keys are 1-64 chars of `A-Za-z0-9._-`; the
+   * whole value is sent, as JSON, on every set (max 8 MB). Last write wins, no merge.
+   *
+   * `onRemote(value, prev)` runs when another copy's write lands — catch up the side
+   * effects that copy performed (reload a buffer, refresh a listing). Not called for
+   * this copy's own sets. `ready` resolves once the stored value has been read.
+   *
+   * ```js
+   * const [openFile, setOpenFile] = createSharedSignal('open-file', null);
+   * ```
+   */
+  export function createSharedSignal<T>(
+    key: string,
+    initial: T,
+    options?: { onRemote?: (value: T, prev: T) => void },
+  ): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>];
+
   /** A signal tracking a CSS media query in this app's frame (false without matchMedia). */
   export function createMediaQuery(query: string): () => boolean;
 

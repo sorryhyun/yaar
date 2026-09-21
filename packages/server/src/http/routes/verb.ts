@@ -28,6 +28,12 @@ import {
   type Principal,
 } from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
+import {
+  isValidSharedKey,
+  MAX_SHARED_VALUE_BYTES,
+  sharedValueUri,
+  windowSharedStore,
+} from '../window-shared.js';
 import { parseAgentStreamUri } from '../../streams/agent-stream.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
@@ -56,6 +62,13 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description:
       'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId?, mode?: "change" | "stream", kinds?: string[] }`. `mode: "stream"` pushes typed frames with payloads instead of bare change pings.',
   },
+  {
+    method: 'POST',
+    path: '/api/verb/shared',
+    response: 'JSON',
+    description:
+      'Read or write a value shared by every copy of the calling app window (one per connected desktop). Body: `{ action: "get" | "set", key, value? }`. Answers `{ value, rev }` (`rev: 0` when unset) or `{ rev }` for a set. Copies watch a key by subscribing to `yaar://windows/self/shared/{key}`.',
+  },
 ];
 
 const VALID_VERBS: Verb[] = ['describe', 'read', 'list', 'invoke', 'delete'];
@@ -65,6 +78,31 @@ interface VerbRequest {
   uri?: string;
   /** One payload, or a list to invoke against the same URI in order (`InvokePayload`). */
   payload?: InvokePayload;
+}
+
+interface SharedRequest {
+  action?: 'get' | 'set';
+  key?: unknown;
+  value?: unknown;
+}
+
+/** The SDK's spelling for watching a shared key; rewritten to the window's own URI. */
+const SHARED_SUBSCRIBE_PATTERN = /^yaar:\/\/windows\/self\/shared\/([^/]+)$/;
+
+/**
+ * The key both copies of a window agree on.
+ *
+ * A token minted by `window.create` carries the raw window id and one minted by a restore
+ * or reconnect carries the scoped handle, and the two copies of one window can hold one
+ * of each. Resolved through the session's handle map so they meet on the same entry.
+ */
+function sharedWindowKey(principal: {
+  sessionId: string;
+  windowId: string;
+  monitorId?: string;
+}): string {
+  const handleMap = getSessionHub().get(principal.sessionId)?.windowState.handleMap;
+  return handleMap?.resolve(principal.windowId, principal.monitorId) ?? principal.windowId;
 }
 
 interface SubscribeRequest {
@@ -204,6 +242,47 @@ async function openVerbDoor<T>(
 }
 
 export async function handleVerbRoutes(req: Request, url: URL): Promise<Response | null> {
+  if (url.pathname === '/api/verb/shared' && req.method === 'POST') {
+    // A few bytes over the value cap for the envelope; the store re-checks the value.
+    const body = await parseJsonBody<SharedRequest>(req, {
+      maxBytes: MAX_SHARED_VALUE_BYTES + 1024,
+    });
+    if (body instanceof Response) return body;
+    const resolved = resolvePrincipal(req, url);
+    if (resolved instanceof Response) return resolved;
+    const principal = requireApp(resolved);
+    if (principal instanceof Response) return principal;
+    if (!isValidSharedKey(body.key)) {
+      return errorResponse('Invalid "key": 1-64 characters of A-Z a-z 0-9 . _ -', 400);
+    }
+    // Granted to every app (`permissionsAllow`); the window is the token's, never the URI's.
+    const denied = requirePermission(
+      principal,
+      `yaar://windows/self/shared/${body.key}`,
+      body.action === 'set' ? 'invoke' : 'read',
+    );
+    if (denied) return denied;
+    const windowKey = sharedWindowKey(principal);
+
+    if (body.action === 'get') {
+      const stored = windowSharedStore.get(principal.sessionId, windowKey, body.key);
+      return jsonResponse(stored ?? { value: null, rev: 0 });
+    }
+    if (body.action === 'set') {
+      if (body.value === undefined) return errorResponse('Missing "value"', 400);
+      const bytes = Buffer.byteLength(JSON.stringify(body.value), 'utf-8');
+      let rev: number;
+      try {
+        rev = windowSharedStore.set(principal.sessionId, windowKey, body.key, body.value, bytes);
+      } catch (err) {
+        return errorResponse(err instanceof Error ? err.message : String(err), 413);
+      }
+      subscriptionRegistry.notifyChange(sharedValueUri(windowKey, body.key), principal.sessionId);
+      return jsonResponse({ rev });
+    }
+    return errorResponse('Invalid "action". Must be "get" or "set".', 400);
+  }
+
   if (url.pathname === '/api/verb/subscribe' && req.method === 'POST') {
     const opened = await openVerbDoor<SubscribeRequest>(req, url);
     if (opened instanceof Response) return opened;
@@ -234,6 +313,24 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       // one anyway would key the subscription under a string no producer ever notifies
       // with, so it would simply never fire.
       const uri = resolveShorthandUri(body.uri);
+
+      // A window's own shared value, keyed under the window's real URI so the shared
+      // door's `set` pings reach it. The gate is the ordinary read, which every app holds.
+      const sharedKey = uri.match(SHARED_SUBSCRIBE_PATTERN)?.[1];
+      if (sharedKey !== undefined) {
+        if (body.mode === 'stream' || !isValidSharedKey(sharedKey)) {
+          return errorResponse('Invalid shared-value subscription', 400);
+        }
+        const denied = requirePermission(principal, uri, 'read');
+        if (denied) return denied;
+        const subscriptionId = subscriptionRegistry.subscribe(
+          principal.token,
+          principal.windowId,
+          principal.sessionId,
+          sharedValueUri(sharedWindowKey(principal), sharedKey),
+        );
+        return jsonResponse({ subscriptionId });
+      }
 
       const mode = body.mode === 'stream' ? 'stream' : 'change';
       const kinds = Array.isArray(body.kinds)

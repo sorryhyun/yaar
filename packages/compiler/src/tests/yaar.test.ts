@@ -130,8 +130,34 @@ let principalId: string | null = null;
 const expandSelf = (p: string) =>
   principalId ? p.replace(/^shared\/self(?=\/|$)/, 'shared/' + principalId) : p;
 
+/**
+ * The server side of `createSharedSignal`: one value per key, a server-wide rev, and a
+ * change ping to every subscriber after each set — delivered a tick later, as the real
+ * ping arrives after the set's own answer. Two signals on one key stand in for the two
+ * copies of a window.
+ */
+const sharedValues = new Map<string, { value: unknown; rev: number }>();
+const sharedSubscribers = new Map<string, (() => void)[]>();
+const sharedSets: { key: string; value: unknown }[] = [];
+let sharedRev = 0;
+
 (globalThis as any).window = {
   yaar: {
+    shared: {
+      get: async (key: string) => sharedValues.get(key) ?? { value: null, rev: 0 },
+      set: async (key: string, value: unknown) => {
+        sharedSets.push({ key, value });
+        const rev = ++sharedRev;
+        sharedValues.set(key, { value: JSON.parse(JSON.stringify(value)), rev });
+        const uri = 'yaar://windows/self/shared/' + key;
+        setTimeout(() => (sharedSubscribers.get(uri) ?? []).forEach((cb) => cb()), 0);
+        return { rev };
+      },
+    },
+    subscribe: async (uri: string, cb: () => void) => {
+      (sharedSubscribers.get(uri) ?? sharedSubscribers.set(uri, []).get(uri)!).push(cb);
+      return () => {};
+    },
     invoke: (uri: string, payload: unknown) => invokeImpl(uri, payload),
     read: (uri: string, options?: unknown) => {
       readCalls.push({ uri, options });
@@ -191,7 +217,8 @@ process.on('exit', () => {
  */
 const { appStorage } = await import('../shims/yaar/app-storage.js');
 const { sharedStorage } = await import('../shims/yaar/shared-storage.js');
-const { createCollapsiblePanel, createPersistedSignal } = await import('../shims/yaar/reactive.js');
+const { createCollapsiblePanel, createPersistedSignal, createSharedSignal } =
+  await import('../shims/yaar/reactive.js');
 const { createProtocolContext } = await import('../shims/yaar/protocol-context.js');
 const { showConfirm, showPrompt } = await import('../shims/yaar/dialogs.js');
 const { setAppId } = await import('../shims/yaar/app-identity.js');
@@ -377,6 +404,62 @@ describe('appStorage binary reads', () => {
       encoding: 'base64',
     });
     expect(readCalls).toEqual([]);
+  });
+});
+
+describe('createSharedSignal', () => {
+  /** Long enough for a set, its ping, and the follower's re-read to all land. */
+  const settle = () => new Promise((r) => setTimeout(r, 5));
+
+  /**
+   * The bug this exists for: the agent's command runs in one copy of the window, and the
+   * copy on the user's screen has to end up showing what it did.
+   */
+  test("a copy follows another copy's set, and only it hears onRemote", async () => {
+    const heardA: unknown[] = [];
+    const heardB: unknown[] = [];
+    const [, setA, readyA] = createSharedSignal('follow', 0, {
+      onRemote: (v) => void heardA.push(v),
+    });
+    const [getB, , readyB] = createSharedSignal('follow', 0, {
+      onRemote: (v) => void heardB.push(v),
+    });
+    await Promise.all([readyA, readyB]);
+    setA(7);
+    await settle();
+    expect(getB()).toBe(7);
+    expect(heardB).toEqual([7]);
+    expect(heardA).toEqual([]);
+  });
+
+  test('a copy that mounts later starts from the value, and initial is never written', async () => {
+    const [, setA] = createSharedSignal('late', 'initial');
+    await settle();
+    expect(sharedSets.filter((s) => s.key === 'late')).toEqual([]);
+    setA('set');
+    await settle();
+    const [getB, , readyB] = createSharedSignal('late', 'initial');
+    expect(await readyB).toBe('set');
+    expect(getB()).toBe('set');
+  });
+
+  test('sets in one tick go out as one write of the final value', async () => {
+    const [, set] = createSharedSignal('burst', 0);
+    set(1);
+    set(2);
+    set((n) => n + 1);
+    await settle();
+    expect(sharedSets.filter((s) => s.key === 'burst')).toEqual([{ key: 'burst', value: 3 }]);
+  });
+
+  test("a copy's own write is not undone by the ping for an earlier one", async () => {
+    const [get, set] = createSharedSignal('order', 0);
+    set(1);
+    await Promise.resolve();
+    set(2);
+    await settle();
+    expect(get()).toBe(2);
+    expect(sharedValues.get('order')?.value).toBe(2);
   });
 });
 

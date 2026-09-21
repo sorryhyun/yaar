@@ -1,5 +1,6 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
+import { createSharedSignal } from '@bundled/yaar';
 import type {
   ProjectMeta,
   FileEntry,
@@ -74,14 +75,27 @@ export function previewIsStale(): boolean {
   return previewWindowId() !== null && previewBuildSerial() < buildSerial();
 }
 
+const remoteChangeListeners: ((next: FileChange[], prev: FileChange[]) => void)[] = [];
+
 /**
  * Recent file mutations, newest first and bounded by the recorder.
  *
  * Every write, edit, copy and delete lands here so the Changes tab can show the
  * diff. The before/after text is held because re-reading the file later shows only
  * its current state.
+ *
+ * Shared across copies of the window: the agent's edits run in whichever copy the
+ * server picked to answer, which on a phone is the companion tab's, not the one on
+ * screen.
  */
-export const [fileChanges, setFileChanges] = createSignal<FileChange[]>([]);
+export const [fileChanges, setFileChanges] = createSharedSignal<FileChange[]>('changes', [], {
+  onRemote: (next, prev) => remoteChangeListeners.forEach((fn) => fn(next, prev)),
+});
+
+/** Run `fn` when another copy of this window records changes. */
+export function onRemoteFileChanges(fn: (next: FileChange[], prev: FileChange[]) => void): void {
+  remoteChangeListeners.push(fn);
+}
 /** Which change the panel is showing. Null means "the newest one". */
 export const [selectedChangeId, setSelectedChangeId] = createSignal<string | null>(null);
 

@@ -71,6 +71,8 @@ export type FileChangeKind = 'create' | 'update' | 'delete';
  */
 export interface FileChange {
   id: string;
+  /** The project the path is relative to. */
+  projectId?: string;
   path: string;
   kind: FileChangeKind;
   /** Content before the operation — '' for a create. */
