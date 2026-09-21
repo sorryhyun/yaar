@@ -63,10 +63,17 @@ describe('appHtmlCsp', () => {
   });
 
   it.if(!APP_ORIGIN_ISOLATION)('names no host beyond self when isolation is off', () => {
+    // The exact source lists `HOST_DIRECTIVES` in csp.ts declares, unwidened — not just
+    // "present and URL-free", which would also pass for a directive silently missing
+    // `'self'` or one of the non-host schemes it's supposed to carry.
+    const expected: Record<string, string> = {
+      'connect-src': "'self' blob: data:",
+      'script-src': "'self' 'unsafe-inline' 'unsafe-eval' blob:",
+      'worker-src': "'self' blob:",
+    };
     for (const d of ['connect-src', 'script-src', 'worker-src']) {
       const directive = directiveOf(csp('localhost:8000'), d);
-      expect(directive).toBeTruthy();
-      expect(directive).not.toMatch(/https?:\/\//);
+      expect(directive).toBe(expected[d]);
     }
   });
 

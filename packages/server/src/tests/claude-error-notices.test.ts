@@ -270,7 +270,11 @@ describe('a notice does not end the turn', () => {
         errorCode: 'rate_limit',
       });
       await mapper.map({ type: 'complete' });
-      await new Promise((r) => setTimeout(r, 90));
+      // `notice` and `done` are both discrete kinds (outside subscriptionRegistry's
+      // COALESCABLE_KINDS = {text, thinking}), so `enqueueFrame` delivers each
+      // synchronously — there is no coalescing timer in play here to wait out. This
+      // just lets one macrotask turn run, as a guard against a future async hop.
+      await new Promise((r) => setTimeout(r, 0));
 
       expect(captured.map((f) => f.kind)).toEqual(['notice', 'done']);
       expect(captured[0].data).toMatchObject({ level: 'warning', code: 'rate_limit' });

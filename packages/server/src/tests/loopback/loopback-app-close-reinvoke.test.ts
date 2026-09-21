@@ -34,6 +34,7 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import { ClientEventType, ServerEventType, type OSAction } from '@yaar/shared';
 import { boot, type Harness } from './harness/boot.js';
 import { deferred } from './harness/deferred.js';
+import { expectSettlesWithin, expectStillPending } from './harness/liveness.js';
 
 let harness: Harness | undefined;
 
@@ -47,6 +48,25 @@ const APP = 'memo';
 /** Let the fire-and-forget close teardown run. Not a guess: nothing else announces it. */
 async function settleClose(): Promise<void> {
   for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
+}
+
+/**
+ * Prove `promise` stays unsettled for the whole budget, rather than merely waiting the
+ * budget out and hoping. Under the fix, turn two is genuinely queued behind turn one and
+ * cannot park until it's released — this fails the instant that stops being true, instead
+ * of silently discarding a race the original `Promise.race([…, setTimeout(250)])` only
+ * ever used for its timing, never asserted on.
+ */
+async function expectPendingFor(
+  promise: Promise<unknown>,
+  budgetMs: number,
+  what: string,
+): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    await expectStillPending(promise, what);
+    await new Promise((r) => setTimeout(r, 5));
+  }
 }
 
 /** Every non-empty assistant response the session broadcast. */
@@ -112,6 +132,11 @@ describe('S7 — an app window closed mid-turn, then re-invoked', () => {
     await parkedFirst.promise;
 
     // The monitor agent closes the window. Fire-and-forget, exactly as `window.close` is.
+    // This wait is deliberately not a poll-until: the whole point is to land the re-invoke
+    // *mid-teardown*, not after it settles, and nothing in production announces "teardown
+    // has started" — only "teardown is done" would be a signal, and waiting for that would
+    // defeat the race this test exists to exercise. A completion signal for the close
+    // itself would not help either, for the same reason.
     h.session.windowState.handleAction({ type: 'window.close', windowId: APP } as OSAction, '0');
     await settleClose();
 
@@ -128,17 +153,29 @@ describe('S7 — an app window closed mid-turn, then re-invoked', () => {
       monitorId: '0',
     });
 
-    // Under the fix turn two is queued and has not started, so this resolves nothing and
-    // the wait below falls through on its timer; under the race it is already parked, and
-    // releasing turn one now is what used to cut it off.
-    await Promise.race([parkedSecond.promise, new Promise((r) => setTimeout(r, 250))]);
+    // Under the fix turn two is genuinely queued behind turn one and cannot have parked
+    // yet — proven for a generous budget, rather than raced against one and discarded.
+    // Under the bug it would already be parked, and releasing turn one next is what used
+    // to cut it off.
+    await expectPendingFor(
+      parkedSecond.promise,
+      250,
+      "turn two's tool park, before turn one unwinds",
+    );
     releaseFirst.resolve();
-    await settleClose();
+
+    // Once turn one unwinds, its `finally` dequeues turn two and lets it actually run —
+    // this is a real event to await, not a fixed wait: turn two parking in its own tool
+    // is exactly the signal that it got dequeued and dispatched.
+    await expectSettlesWithin(
+      parkedSecond.promise,
+      2000,
+      "turn two's tool park, once turn one unwound",
+    );
     releaseSecond.resolve();
 
     await first;
     await second;
-    await settleClose();
 
     // The stall. Under the race this turn ran and produced nothing at all.
     expect(h.registry.turns.some((t) => t.prompt.includes('SECOND'))).toBe(true);
@@ -175,17 +212,21 @@ describe('S7 — an app window closed mid-turn, then re-invoked', () => {
       content: 'hello from the first window',
     });
 
-    // Close one of the two. The app is still on this desktop.
+    // Close one of the two. The app is still on this desktop, so this close retires
+    // nothing and interrupts nothing (the agent isn't running) — its fire-and-forget
+    // bookkeeping has no race to settle here, unlike the last-window closes elsewhere
+    // in this file.
     h.session.windowState.handleAction({ type: 'window.close', windowId: APP } as OSAction, '0');
-    await settleClose();
 
+    // `deliver` (unlike `deliverAsync`) awaits the handler's own call to
+    // `ContextPool.handleTask` fully, so by the time it resolves the turn — and its
+    // `finally` — has already run; no extra wait is needed to observe it.
     await h.client.deliver({
       type: ClientEventType.WINDOW_MESSAGE,
       messageId: 'm2',
       windowId: second,
       content: 'hello from the second window',
     });
-    await settleClose();
 
     expect(h.registry.turns).toHaveLength(2);
     expect(h.registry.turns[1]!.agentId).toBe(h.registry.turns[0]!.agentId);
@@ -232,17 +273,23 @@ describe('S7 — an app window closed mid-turn, then re-invoked', () => {
     h.session.windowState.handleAction({ type: 'window.close', windowId: APP } as OSAction, '0');
     release.resolve();
     await first;
+    // `first` settling only proves *that* task's own promise chain — including its
+    // `finally` — has run. The close above is this app's last window, so it also
+    // retires the app agent via `appProcessor.handleWindowClose`, fire-and-forget and
+    // concurrent with `first` unwinding; nothing announces when that separate chain is
+    // done, so there is no promise to await here instead — this is the one genuine
+    // "give the untracked chain room to finish" wait left in this file.
     await settleClose();
 
     const reopened = h.seedIframeWindow(APP);
     await h.client.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: reopened });
+    // `deliver` awaits the turn (and its `finally`) fully — see the note in the test above.
     await h.client.deliver({
       type: ClientEventType.WINDOW_MESSAGE,
       messageId: 'm3',
       windowId: reopened,
       content: 'THIRD are you there',
     });
-    await settleClose();
 
     expect(responses(h).join('|')).toContain('THIRD-ANSWER');
     expect(h.client.framesOf(ServerEventType.ERROR).map((e) => e.error)).toEqual([]);

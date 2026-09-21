@@ -61,12 +61,13 @@ describe('refusalForAddress', () => {
   });
 
   it('refuses the empty address rather than treating it as permitted', () => {
-    expect(refusalForAddress('')).toBeTruthy();
+    expect(refusalForAddress('')).toBe('empty address');
   });
 
   it('notably refuses the cloud metadata address', () => {
-    // 169.254.169.254 is the classic SSRF prize; it falls under link-local.
-    expect(refusalForAddress('169.254.169.254')).toBeTruthy();
+    // 169.254.169.254 is the classic SSRF prize; it falls under link-local, which
+    // `refusalForAddress` reports as an internal target.
+    expect(refusalForAddress('169.254.169.254')).toBe('refusing internal target 169.254.169.254');
   });
 });
 

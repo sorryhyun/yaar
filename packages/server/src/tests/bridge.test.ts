@@ -362,7 +362,8 @@ describe('runBridgeAction — manage (focus/close/track/extract)', () => {
     const exec = runBridgeAction('focus', { tabId: 5 }, undefined);
     const frame = await waitFor(() => sent.find((f) => f.type === 'command'));
     expect(frame.action).toBe('focus');
-    expect(sent.find((f) => f.type === 'activity' && f.kind === 'act')).toBeTruthy();
+    const cue = sent.find((f) => f.type === 'activity' && f.kind === 'act');
+    expect(cue).toMatchObject({ kind: 'act', tabId: 5, action: 'focus' });
     hub.resolveCommand({ type: 'command-result', requestId: frame.requestId, ok: true });
     const res = await exec;
     expect(res.ok).toBe(true);
@@ -391,7 +392,8 @@ describe('runBridgeAction — manage (focus/close/track/extract)', () => {
     const exec = runBridgeAction('extract', { tabId: 7 }, undefined);
     const frame = await waitFor(() => sent.find((f) => f.type === 'command'));
     expect(frame.action).toBe('extract');
-    expect(sent.find((f) => f.type === 'activity' && f.kind === 'observe')).toBeTruthy();
+    const cue = sent.find((f) => f.type === 'activity' && f.kind === 'observe');
+    expect(cue).toMatchObject({ kind: 'observe', tabId: 7, action: 'extract' });
     hub.resolveCommand({
       type: 'command-result',
       requestId: frame.requestId,

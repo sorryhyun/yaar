@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { CodexProvider } from '../providers/codex/provider.js';
 import { getCodexAppServerArgs, detectUserMcpServers } from '../config/providers/codex.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
+import { resolveAgentToken } from '../mcp/agent-tokens.js';
 import type { AppServer } from '../providers/codex/app-server.js';
 import type { JsonRpcWsClient } from '../providers/codex/jsonrpc-ws-client.js';
 
@@ -124,7 +125,11 @@ describe('codex per-thread MCP scope', () => {
     const servers = await scopeFor(undefined);
 
     for (const config of Object.values(servers)) {
-      expect(config.http_headers['x-agent-token']).toBeTruthy();
+      const token = config.http_headers['x-agent-token'];
+      // Not just "present": it has to actually resolve back to the caller
+      // (`agentId: 'agent-1'` in `runTurn`) — a truthy placeholder or another
+      // agent's stale token would pass a bare truthiness check just as well.
+      expect(resolveAgentToken(token)).toBe('agent-1');
       expect(config.bearer_token_env_var).toBe('YAAR_MCP_TOKEN');
     }
   });

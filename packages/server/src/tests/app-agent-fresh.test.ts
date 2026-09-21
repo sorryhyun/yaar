@@ -325,15 +325,29 @@ describe('a window message answered on a fresh app agent', () => {
     // turn — the exact memory it asked to be free of — and the mock steers happily.
     blockTurns = false; // the replacement's turn runs to completion
     const second = message('m2', { fresh: true });
-    await new Promise((resolve) => setTimeout(resolve, 1));
+
+    // No wait needed to prove this: `handleAppTask`'s `!task.fresh && (await …steer(...))`
+    // short-circuits on `task.fresh`, so the steer call is never *evaluated* for this
+    // task — not a race the code could lose under load, a branch it cannot reach. That
+    // holds whenever `second`'s dispatch runs, however long queuing takes it to get
+    // there, which is exactly what letting it run all the way out below (via
+    // `Promise.all`) exercises.
     expect(incumbent.session.steer).not.toHaveBeenCalled();
 
     // It waits its turn rather than interrupting: `fresh` says the *next* request
-    // needs no history, not that the running one should be abandoned.
+    // needs no history, not that the running one should be abandoned. (Same
+    // guarantee — `releaseAgent` for a fresh task never calls `session.interrupt()`;
+    // that only happens on window close, which this test never triggers.)
     expect(incumbent.session.interrupt).not.toHaveBeenCalled();
 
     releaseHeldTurns();
     await Promise.all([first, second]);
+
+    // Re-assert now that both turns have fully run: still true after the fresh task
+    // actually queued, waited, and got its replacement agent — not just true before
+    // any of that had a chance to happen.
+    expect(incumbent.session.steer).not.toHaveBeenCalled();
+    expect(incumbent.session.interrupt).not.toHaveBeenCalled();
 
     expect(pool.agentPool.appAgents.get(MONITOR, APP)!.instanceId).not.toBe(incumbent.instanceId);
   });
@@ -355,6 +369,16 @@ describe('a window message answered on a fresh app agent', () => {
     // reservation the loser is set into `appAgents` and then overwritten — an agent
     // in no collection, invisible to every dispose path and to cleanup(), holding a
     // provider process and a limiter slot for the life of the session.
+    //
+    // The overlap here is forced, not hoped for: `getOrCreate` runs synchronously up
+    // to its first real `await` (inside `createAgentCore`, past `acquireWarmProvider`),
+    // and `SpawnReservations.reserve` writes the reservation into `inFlight`
+    // synchronously too — before `create()`'s own first await, per its rule 1
+    // ("Reserved before the first await"). So the *first* array element below runs to
+    // that reservation write, synchronously, before the JS engine ever constructs the
+    // *second* call — there is no tick in which both calls could see an empty
+    // reservation map. The second call is therefore guaranteed to find the first's
+    // reservation already in place and join it, deterministically, every run.
     const [a, b] = await Promise.all([
       pool.agentPool.appAgents.getOrCreate(MONITOR, APP),
       pool.agentPool.appAgents.getOrCreate(MONITOR, APP),

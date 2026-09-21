@@ -10,6 +10,16 @@ import {
 } from '../agents/context-pool-policies/window-subscription-policy.js';
 import type { Task } from '../agents/pool-types.js';
 
+/** Poll a predicate until it's true, or fail after a generous budget — for the debounced delivery below. */
+async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, 2));
+  }
+  throw new Error('Timed out waiting for condition');
+}
+
 describe('MonitorQueuePolicy', () => {
   it('preserves FIFO ordering', () => {
     const policy = new MonitorQueuePolicy(3);
@@ -239,6 +249,7 @@ describe('ReloadCachePolicy', () => {
 });
 
 describe('WindowSubscriptionPolicy — app event channels', () => {
+  const DEBOUNCE_MS = 10;
   function subOpts(
     over: Partial<Parameters<WindowSubscriptionPolicy['subscribeChannels']>[0]> = {},
   ) {
@@ -248,7 +259,7 @@ describe('WindowSubscriptionPolicy — app event channels', () => {
       subscriberMonitorId: '0',
       targetWindowId: 'browser-user',
       channels: ['dialog'],
-      debounceMs: 10,
+      debounceMs: DEBOUNCE_MS,
       ...over,
     };
   }
@@ -270,7 +281,7 @@ describe('WindowSubscriptionPolicy — app event channels', () => {
     expect(matched).toBe(1);
     // Debounced — nothing delivered synchronously.
     expect(delivered.length).toBe(0);
-    await new Promise((r) => setTimeout(r, 30));
+    await waitFor(() => delivered.length === 1);
     expect(delivered.length).toBe(1);
     expect(delivered[0].content).toContain('<app:event window="browser-user" channel="dialog">');
     expect(delivered[0].content).toContain('"message":"hi"');
@@ -310,7 +321,7 @@ describe('WindowSubscriptionPolicy — app event channels', () => {
     expect(
       policy.notifyChannel('other-window', 'navigated', {}, undefined, deliver, () => {}),
     ).toBe(0);
-    await new Promise((r) => setTimeout(r, 30));
+    await waitFor(() => delivered.length === 1);
     expect(delivered.length).toBe(1);
   });
 
@@ -342,9 +353,11 @@ describe('WindowSubscriptionPolicy — app event channels', () => {
       (t) => delivered.push(t),
       () => {},
     );
-    // Unsubscribe cancels the pending debounced delivery.
+    // Unsubscribe cancels the pending debounced delivery. This proves an absence, so there's
+    // no event to await — wait comfortably past the debounce window (the timer, if it fired,
+    // would have fired by DEBOUNCE_MS) to confirm it was actually cancelled, not just delayed.
     expect(policy.unsubscribe(id)).toBe(true);
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, DEBOUNCE_MS * 5));
     expect(delivered.length).toBe(0);
 
     // A fresh sub cleared by clearForWindow also stops matching.

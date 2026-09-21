@@ -44,9 +44,6 @@ function collectSessionActions(sink: OSAction[]): () => void {
   return () => actionEmitter.off('session-action', handler);
 }
 
-/** Wait for a pending expiry to fire and its listeners to run. */
-const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 /** A socket that records what the session broadcast to it. */
 function fakeSocket(sink: ServerEvent[]): YaarWebSocket {
   return {
@@ -190,13 +187,15 @@ describe('a deadline nobody can answer is not a deadline', () => {
       // A budget far longer than the test could tolerate waiting out: if the cancellation
       // does not happen, this assertion does not fail, it hangs — which is exactly the
       // symptom being fixed.
+      // `emitAppProtocolRequest` registers the pending entry synchronously (before it
+      // returns — see `PendingStore.create`'s Promise executor), so `window.close` below
+      // is guaranteed to observe it without any wait.
       const pending = actionEmitter.emitAppProtocolRequest(
         '0/probe',
         { kind: 'command', command: 'closeWindow' },
         MAX_COMMAND_TIMEOUT_MS,
         sessionId,
       );
-      await settle(5);
 
       const startedAt = Date.now();
       session.windowState.handleAction({ type: 'window.close', windowId: 'probe' }, '0');
@@ -243,7 +242,8 @@ describe('a deadline nobody can answer is not a deadline', () => {
         MAX_COMMAND_TIMEOUT_MS,
         sessionId,
       );
-      await settle(5);
+      // Both pending entries are registered synchronously above — see the note in the
+      // previous test — so `window.close` is guaranteed to observe them without a wait.
 
       session.windowState.handleAction({ type: 'window.close', windowId: 'doomed' }, '0');
 
@@ -336,9 +336,10 @@ describe('F-17 — an expired dialog leaves the screen', () => {
     });
 
     // Unanswered means denied, and the user is not left looking at a live dialog for a
-    // request that has already been refused.
+    // request that has already been refused. `onExpire` fires — and with it the
+    // 'session-action' emit that populates `actions` — synchronously inside the same
+    // timer callback that resolves this promise, so no extra wait is needed here.
     expect(await answered).toBe(false);
-    await settle(5);
 
     const close = actions.find((a) => a.type === 'dialog.close');
     expect(close).toBeDefined();
@@ -366,7 +367,8 @@ describe('F-17 — an expired dialog leaves the screen', () => {
         toolName: 'wire_tool',
         timeoutMs: 10,
       });
-      await settle(5);
+      // Delivery to the connected tab runs synchronously off the same expiry callback —
+      // see the note in the previous test.
 
       const delivered = received
         .filter((e) => e.type === ServerEventType.ACTIONS)
@@ -396,7 +398,6 @@ describe('F-17 — an expired dialog leaves the screen', () => {
           timeoutMs: 10,
         }),
     );
-    await settle(5);
 
     expect(result.timedOut).toBe(true);
     // The dismissal goes out on the session channel, which is why the prompt has to be
@@ -465,7 +466,6 @@ describe('F-17 — an expired dialog leaves the screen', () => {
         toolName,
         timeoutMs: 10,
       });
-      await settle(5);
       expect(shown.some((a) => a.type === 'dialog.close')).toBe(true);
       return seen[0]!;
     } finally {

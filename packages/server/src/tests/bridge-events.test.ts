@@ -175,7 +175,26 @@ function dialogFrame(message: string) {
 /** The bridge socket the handler wants; nothing on the `event` path touches it. */
 const noopWs = { data: { connectionId: 'bridge-conn' } } as never;
 
-const settle = () => new Promise((r) => setTimeout(r, 30));
+/** Matches the `debounceMs` passed to `subscribeChannels` below. */
+const DEBOUNCE_MS = 10;
+
+/** Poll a predicate until it's true, or fail after a generous budget. */
+async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, 2));
+  }
+  throw new Error('Timed out waiting for condition');
+}
+
+/**
+ * Wait long enough to prove an absence: `handleBridgeMessage` is synchronous and, when
+ * no subscriber matches, `WindowSubscriptionPolicy.notifyChannel` arms no debounce timer
+ * at all — so a delivery that was going to happen already would have by `DEBOUNCE_MS`.
+ * There's no promise to await here, only a window to wait out.
+ */
+const settleAbsence = () => new Promise((r) => setTimeout(r, DEBOUNCE_MS * 5));
 
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -231,7 +250,7 @@ describe('a real-browser event reaches a subscribed agent', () => {
       targetWindowId,
       channels: [channel],
       mode: 'wake',
-      debounceMs: 10,
+      debounceMs: DEBOUNCE_MS,
     });
   }
 
@@ -240,7 +259,7 @@ describe('a real-browser event reaches a subscribed agent', () => {
     subscribe('0/browser-user', 'dialog');
 
     handleBridgeMessage(noopWs, dialogFrame('글 내용을 입력하세요'));
-    await settle();
+    await waitFor(() => delivered.length === 1);
 
     expect(delivered.length).toBe(1);
     // The whole point: the agent learns the message text, instead of watching its next click
@@ -252,7 +271,7 @@ describe('a real-browser event reaches a subscribed agent', () => {
   it('drops the event when no Real Browser window is open', async () => {
     // The channels are declared on the window. No window, nobody who could have subscribed.
     handleBridgeMessage(noopWs, dialogFrame('nobody is listening'));
-    await settle();
+    await settleAbsence();
 
     expect(delivered).toEqual([]);
   });
@@ -262,7 +281,7 @@ describe('a real-browser event reaches a subscribed agent', () => {
     subscribe('0/notes', 'dialog');
 
     handleBridgeMessage(noopWs, dialogFrame('not for notes'));
-    await settle();
+    await settleAbsence();
 
     expect(delivered).toEqual([]);
   });
@@ -276,7 +295,7 @@ describe('a real-browser event reaches a subscribed agent', () => {
     // The listener lives on a process-global emitter, so a session that failed to unhook would
     // keep answering bridge frames — and hold its pool alive — for the life of the process.
     handleBridgeMessage(noopWs, dialogFrame('after cleanup'));
-    await settle();
+    await settleAbsence();
 
     expect(delivered).toEqual([]);
   });

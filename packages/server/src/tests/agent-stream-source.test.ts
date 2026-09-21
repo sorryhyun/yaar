@@ -68,7 +68,14 @@ describe('agent stream source (StreamToEventMapper)', () => {
     captured
       .map((c) => (c.event.type === ServerEventType.STREAM_FRAME ? c.event.frame : undefined))
       .filter((f): f is StreamFrame => f !== undefined);
-  const tick = (ms = 90) => new Promise((r) => setTimeout(r, ms));
+  // Every sequence below ends with a discrete frame (tool/done/error), and
+  // `subscriptionRegistry.enqueueFrame` flushes any pending coalesced text
+  // *synchronously* before delivering a discrete frame (see its "preserve ordering"
+  // comment) — the 60ms COALESCE_MS timer is only armed when a run of deltas ends
+  // without one, which none of these do. So there is nothing async left pending by
+  // the time the last `map()`/`finish()` call returns; this just lets one macrotask
+  // turn run, to be robust against the delivery path ever gaining a real hop.
+  const flush = () => new Promise((r) => setTimeout(r, 0));
 
   it('publishes tool, coalesced text and done frames onto the agent stream URI', async () => {
     const subId = subscriptionRegistry.subscribe('tok', 'win-1', sessionId, uri, 'stream');
@@ -83,7 +90,7 @@ describe('agent stream source (StreamToEventMapper)', () => {
     await mapper.map({ type: 'text', content: 'Hel' } as StreamMessage);
     await mapper.map({ type: 'text', content: 'lo' } as StreamMessage);
     await mapper.map({ type: 'complete' } as StreamMessage);
-    await tick();
+    await flush();
 
     const kinds = frames().map((f) => f.kind);
     // tool delivers immediately; `complete` is discrete too, so it flushes the
@@ -116,7 +123,7 @@ describe('agent stream source (StreamToEventMapper)', () => {
       toolName: 'Write',
       toolInput: { path: '/tmp/a' },
     } as StreamMessage);
-    await tick();
+    await flush();
 
     const tools = frames().filter((f) => f.kind === 'tool');
     expect(tools.map((f) => (f.data as { status: string }).status)).toEqual(['pending', 'running']);
@@ -136,7 +143,7 @@ describe('agent stream source (StreamToEventMapper)', () => {
       toolName: 'Write',
       content: '{"body":"half-writ',
     } as StreamMessage);
-    await tick();
+    await flush();
 
     // Partial JSON stays on the frontend-only path: handing it to apps invites
     // parsing a prefix, and only one provider can produce it at all. Apps see
@@ -160,7 +167,7 @@ describe('agent stream source (StreamToEventMapper)', () => {
       source: 'yaar://monitors/0' as ContextSource,
     });
     await mapper.map({ type: 'text', content: 'hi' } as StreamMessage);
-    await tick();
+    await flush();
     expect(captured).toHaveLength(0);
   });
 });
@@ -195,7 +202,10 @@ describe('agent stream turn boundaries', () => {
     captured
       .map((c) => (c.event.type === ServerEventType.STREAM_FRAME ? c.event.frame : undefined))
       .filter((f): f is StreamFrame => f !== undefined);
-  const tick = (ms = 90) => new Promise((r) => setTimeout(r, ms));
+  // See the note on `flush` in the describe block above — every turn here closes on a
+  // discrete `start`/`done`/`error` frame, so delivery is synchronous by the time the
+  // last `map()`/`finish()` call returns; this only guards against a future async hop.
+  const flush = () => new Promise((r) => setTimeout(r, 0));
 
   function makeMapper(providerName: string, messageId: string | null = 'msg-7') {
     const state = { responseText: '', thinkingText: '', currentMessageId: messageId };
@@ -244,7 +254,7 @@ describe('agent stream turn boundaries', () => {
       mapper.start();
       for (const msg of messages) await mapper.map(msg);
       mapper.finish('completed'); // AgentSession's finally — already latched
-      await tick();
+      await flush();
 
       const kinds = frames().map((f) => f.kind);
       // One open, then the turn's content, then exactly one close. Text lands
@@ -270,7 +280,7 @@ describe('agent stream turn boundaries', () => {
     await mapper.map({ type: 'complete' } as StreamMessage);
     mapper.finish('completed');
     mapper.finish('interrupted');
-    await tick();
+    await flush();
 
     expect(frames().filter((f) => f.kind === 'start')).toHaveLength(1);
     expect(frames().filter((f) => f.kind === 'done')).toHaveLength(1);
@@ -285,7 +295,7 @@ describe('agent stream turn boundaries', () => {
     mapper.start();
     await mapper.map({ type: 'text', content: 'partial' } as StreamMessage);
     mapper.finish('interrupted');
-    await tick();
+    await flush();
 
     const kinds = frames().map((f) => f.kind);
     expect(kinds).toEqual(['start', 'text', 'done']);
@@ -299,7 +309,7 @@ describe('agent stream turn boundaries', () => {
     mapper.start();
     await mapper.map({ type: 'error', error: 'boom' } as StreamMessage);
     mapper.finish('completed'); // the finally, after the error already closed the turn
-    await tick();
+    await flush();
 
     expect(frames().map((f) => f.kind)).toEqual(['start', 'error']);
     expect(frames().at(-1)?.data).toMatchObject({ error: 'boom' });
