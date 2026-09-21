@@ -626,6 +626,16 @@
   gap: var(--space-3) 0;
   overflow-x: hidden;
   overflow-y: auto;
+  /* The grid scrolls by touch, so a scrollbar is pure cost — and a classic one appears only
+     when the soft keyboard shrinks the grid enough to overflow, taking its width out of the
+     `1fr` columns: the icons shift and "Market Apps" re-wraps every time the keyboard opens
+     (GitHub issue 111). Hidden, the columns depend on width alone. `scrollbar-gutter:
+     stable` would keep them still too, but by reserving that width permanently. */
+  scrollbar-width: none;
+}
+
+:global(html[data-form-factor='mobile']) .desktopIcons::-webkit-scrollbar {
+  display: none;
 }
 
 :global(html[data-form-factor='mobile']) .desktopIcon {
