@@ -4,7 +4,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { detectSnapZone, getSnapBounds } from '@/lib/snapZones';
-import { registerMouseTracking } from '@/lib/mouseTracking';
+import { useMouseTracking } from '@/hooks/useMouseTracking';
 import { beginShellDrag } from '@/lib/selection';
 import type { WindowBounds } from '@yaar/shared';
 import type { WindowModel } from '@/types/state';
@@ -23,18 +23,10 @@ interface UseDragWindowOptions {
   bounds: WindowBounds;
   variant?: WindowModel['variant'];
   frameless?: boolean;
-  listenersRef: React.RefObject<
-    Array<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void }>
-  >;
 }
 
-export function useDragWindow({
-  windowId,
-  bounds,
-  variant,
-  frameless,
-  listenersRef,
-}: UseDragWindowOptions) {
+export function useDragWindow({ windowId, bounds, variant, frameless }: UseDragWindowOptions) {
+  const track = useMouseTracking();
   const [isDragging, setIsDragging] = useState(false);
   const [snapPreviewBounds, setSnapPreviewBounds] = useState<WindowBounds | null>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -164,9 +156,9 @@ export function useDragWindow({
         }
         cleanup();
       };
-      const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);
+      const cleanup = track(handleMouseMove, handleMouseUp);
     },
-    [windowId, bounds, variant, frameless, listenersRef],
+    [windowId, bounds, variant, frameless, track],
   );
 
   return { isDragging, snapPreviewBounds, handleDragStart };

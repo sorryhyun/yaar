@@ -28,9 +28,4 @@ export const createOutboxSlice: SliceCreator<OutboxSlice> = (set, get) => ({
 
   /** Everything still unacknowledged, oldest first — the resend list. */
   pendingOutbox: () => get().outbox,
-
-  clearOutbox: () =>
-    set((state) => {
-      state.outbox = [];
-    }),
 });

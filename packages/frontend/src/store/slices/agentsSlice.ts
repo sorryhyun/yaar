@@ -69,15 +69,6 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
       }
     }),
 
-  removeWindowAgent: (windowId) =>
-    set((state) => {
-      for (const [key, wa] of Object.entries(state.windowAgents)) {
-        if (wa.windowId === windowId) {
-          delete state.windowAgents[key];
-        }
-      }
-    }),
-
   incrementSubagentCount: (agentId) =>
     set((state) => {
       if (state.activeAgents[agentId]) {

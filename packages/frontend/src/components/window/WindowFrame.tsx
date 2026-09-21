@@ -5,7 +5,7 @@
  * the screen above the command palette, cannot be dragged or resized, and z-order alone
  * decides which one shows — the taskbar tabs are the app switcher.
  */
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   useDesktopStore,
@@ -125,34 +125,17 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   const frameRef = useRef<HTMLDivElement>(null);
   const titleBarMouseDownRef = useRef<{ x: number; y: number } | null>(null);
   const lastTitleBarClickRef = useRef<number | null>(null);
-  const listenersRef = useRef<
-    Array<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void }>
-  >([]);
-
-  // Cleanup document listeners on unmount to prevent leaks
-  useEffect(() => {
-    return () => {
-      for (const { move, up } of listenersRef.current) {
-        document.removeEventListener('mousemove', move);
-        document.removeEventListener('mouseup', up);
-      }
-      listenersRef.current = [];
-    };
-  }, []);
-
   // --- Extracted hooks ---
   const { isDragging, snapPreviewBounds, handleDragStart } = useDragWindow({
     windowId: window.id,
     bounds: window.bounds,
     variant: window.variant,
     frameless: window.frameless,
-    listenersRef,
   });
 
   const { isResizing, handleResizeStart } = useResizeWindow({
     windowId: window.id,
     bounds: window.bounds,
-    listenersRef,
   });
 
   const { isDragOver, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =

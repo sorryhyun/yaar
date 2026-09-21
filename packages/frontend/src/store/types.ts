@@ -5,8 +5,6 @@
 import type { StateCreator } from 'zustand';
 import type { FormFactor } from '@/lib/formFactor';
 import type {
-  DesktopState,
-  DesktopActions,
   WindowModel,
   NotificationModel,
   ToastModel,
@@ -153,16 +151,10 @@ export type ConnectionSlice = ConnectionSliceState & ConnectionSliceActions;
 export interface DebugSliceState {
   activityLog: OSAction[];
   debugLog: DebugEntry[];
-  debugPanelOpen: boolean;
-  recentActionsPanelOpen: boolean;
 }
 
 export interface DebugSliceActions {
   addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void;
-  toggleDebugPanel: () => void;
-  clearDebugLog: () => void;
-  toggleRecentActionsPanel: () => void;
-  clearActivityLog: () => void;
   addToActivityLog: (action: OSAction) => void;
 }
 
@@ -181,7 +173,6 @@ export interface AgentsSliceActions {
   toggleAgentPanel: () => void;
   registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void;
   updateWindowAgentStatus: (agentId: string, status: WindowAgent['status']) => void;
-  removeWindowAgent: (windowId: string) => void;
   incrementSubagentCount: (agentId: string) => void;
   decrementSubagentCount: (agentId: string) => void;
 }
@@ -274,7 +265,6 @@ export interface FeedbackSliceState {
 export interface FeedbackSliceActions {
   addRenderingFeedback: (feedback: RenderingFeedback) => void;
   consumePendingFeedback: () => RenderingFeedback[];
-  addPendingFeedback: (feedback: RenderingFeedback) => void;
   addPendingAppProtocolResponse: (item: AppProtocolResponseItem) => void;
   consumePendingAppProtocolResponses: () => AppProtocolResponseItem[];
   addPendingAppInteraction: (item: AppInteractionItem) => void;
@@ -305,7 +295,6 @@ export interface QueuedActionsSliceState {
 export interface QueuedActionsSliceActions {
   queueComponentAction: (action: QueuedComponentAction) => void;
   consumeQueuedActions: (windowId: string) => QueuedComponentAction[];
-  clearQueuedActions: (windowId: string) => void;
 }
 
 export type QueuedActionsSlice = QueuedActionsSliceState & QueuedActionsSliceActions;
@@ -464,7 +453,6 @@ export interface OutboxSliceActions {
   enqueueOutbox: (messageId: string, event: ClientEvent) => void;
   settleOutbox: (messageId: string) => void;
   pendingOutbox: () => OutboxEntry[];
-  clearOutbox: () => void;
 }
 
 export type OutboxSlice = OutboxSliceState & OutboxSliceActions;
@@ -522,6 +510,3 @@ export type DesktopStore = WindowsSlice &
 
 // Type for creating slices with immer middleware
 export type SliceCreator<T> = StateCreator<DesktopStore, [['zustand/immer', never]], [], T>;
-
-// Legacy type compatibility
-export type DesktopStoreType = DesktopState & DesktopActions;

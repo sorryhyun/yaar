@@ -4,18 +4,17 @@
 import { useCallback, useState } from 'react';
 import type { WindowBounds } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
-import { registerMouseTracking } from '@/lib/mouseTracking';
+import { useMouseTracking } from '@/hooks/useMouseTracking';
 import { beginShellDrag } from '@/lib/selection';
+import { TASKBAR_HEIGHT, DRAGGING_CSS_CLASS } from '@/constants/layout';
 
 interface UseResizeWindowOptions {
   windowId: string;
   bounds: WindowBounds;
-  listenersRef: React.RefObject<
-    Array<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void }>
-  >;
 }
 
-export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWindowOptions) {
+export function useResizeWindow({ windowId, bounds }: UseResizeWindowOptions) {
+  const track = useMouseTracking();
   const [isResizing, setIsResizing] = useState(false);
 
   const handleResizeStart = useCallback(
@@ -24,7 +23,7 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
       beginShellDrag(e);
       e.stopPropagation();
       setIsResizing(true);
-      document.documentElement.classList.add('yaar-dragging');
+      document.documentElement.classList.add(DRAGGING_CSS_CLASS);
 
       const startBounds = { ...bounds };
       const startMouseX = e.clientX;
@@ -34,8 +33,6 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
       const resizeBottom = direction.includes('s');
       const resizeLeft = direction.includes('w');
       const resizeRight = direction.includes('e');
-
-      const TASKBAR_H = 36;
 
       let didResize = false;
       const handleMouseMove = (e: MouseEvent) => {
@@ -77,7 +74,7 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
           newY = 0;
         }
         // Clamp: bottom edge can't go below viewport minus taskbar
-        const maxH = vh - TASKBAR_H - newY;
+        const maxH = vh - TASKBAR_HEIGHT - newY;
         if (newH > maxH) newH = maxH;
         // Clamp: right edge within viewport
         if (newX + newW > vw) newW = vw - newX;
@@ -105,15 +102,15 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
 
       const handleMouseUp = () => {
         setIsResizing(false);
-        document.documentElement.classList.remove('yaar-dragging');
+        document.documentElement.classList.remove(DRAGGING_CSS_CLASS);
         if (didResize) {
           useDesktopStore.getState().queueBoundsUpdate(windowId, 'window.resize');
         }
         cleanup();
       };
-      const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);
+      const cleanup = track(handleMouseMove, handleMouseUp);
     },
-    [windowId, bounds, listenersRef],
+    [windowId, bounds, track],
   );
 
   return { isResizing, handleResizeStart };

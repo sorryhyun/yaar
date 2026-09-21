@@ -1,7 +1,7 @@
 /**
  * Desktop state - everything that can appear on screen.
  */
-import type { AgentKind, WindowBounds, WindowContent, WindowVariant, OSAction } from '@yaar/shared';
+import type { AgentKind, WindowBounds, WindowContent, WindowVariant } from '@yaar/shared';
 
 export interface WindowModel {
   id: string;
@@ -167,8 +167,6 @@ export interface RenderingFeedback {
   captureFailure?: string;
 }
 
-import type { UserInteraction } from '@yaar/shared';
-
 export interface QueuedComponentAction {
   windowId: string;
   windowTitle: string;
@@ -178,118 +176,4 @@ export interface QueuedComponentAction {
   formId?: string;
   componentPath?: string[];
   queuedAt: number;
-}
-
-export interface DesktopState {
-  // Windows managed by the AI
-  windows: Record<string, WindowModel>;
-  zOrder: string[]; // Window IDs in stacking order (last = top)
-  focusedWindowId: string | null;
-
-  // Notifications & Toasts
-  notifications: Record<string, NotificationModel>;
-  toasts: Record<string, ToastModel>;
-
-  // Confirmation dialogs
-  dialogs: Record<string, DialogModel>;
-
-  // Connection to AI backend
-  connectionStatus: ConnectionStatus;
-  connectionError: string | null;
-
-  // Session tracking
-  providerType: string | null;
-  sessionId: string | null;
-
-  // Activity log (debugging)
-  activityLog: OSAction[];
-
-  // Debug log (raw WebSocket events)
-  debugLog: DebugEntry[];
-  debugPanelOpen: boolean;
-
-  // Recent actions panel
-  recentActionsPanelOpen: boolean;
-
-  // Restore prompt
-  restorePrompt: RestorePrompt | null;
-
-  // Active agents (for spinner display)
-  activeAgents: Record<string, ActiveAgent>;
-
-  // Agent panel expanded state
-  agentPanelOpen: boolean;
-
-  // Window agents (for fork session feature)
-  windowAgents: Record<string, WindowAgent>;
-
-  // Pending feedback to send to the server
-  pendingFeedback: RenderingFeedback[];
-
-  // Pending user interactions to send to the server
-  pendingInteractions: UserInteraction[];
-
-  // Queued component actions for locked windows
-  queuedActions: Record<string, QueuedComponentAction[]>;
-}
-
-export interface DesktopActions {
-  // Apply an OS action from the AI
-  applyAction: (action: OSAction) => void;
-  applyActions: (actions: OSAction[]) => void;
-
-  // Connection management
-  setConnectionStatus: (status: ConnectionStatus, error?: string) => void;
-  /** Set the last error text without asserting anything about the transport. */
-  setConnectionError: (error: string | null) => void;
-  setSession: (providerType: string, sessionId: string) => void;
-
-  // User-initiated actions
-  userFocusWindow: (windowId: string) => void;
-  userCloseWindow: (windowId: string) => void;
-  userMoveWindow: (windowId: string, x: number, y: number) => void;
-  userResizeWindow: (windowId: string, w: number, h: number) => void;
-
-  // Dismissals
-  dismissToast: (id: string) => void;
-  dismissNotification: (id: string) => void;
-
-  // Dialogs
-  respondToDialog: (id: string, confirmed: boolean) => void;
-
-  // Debug panel
-  addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void;
-  toggleDebugPanel: () => void;
-  clearDebugLog: () => void;
-
-  // Recent actions panel
-  toggleRecentActionsPanel: () => void;
-  clearActivityLog: () => void;
-
-  // Restore prompt
-  setRestorePrompt: (prompt: RestorePrompt | null) => void;
-  dismissRestorePrompt: () => void;
-
-  // Active agents
-  setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
-  clearAgent: (agentId: string) => void;
-  clearAllAgents: () => void;
-  toggleAgentPanel: () => void;
-
-  // Window agents
-  registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void;
-  updateWindowAgentStatus: (windowId: string, status: WindowAgent['status']) => void;
-  removeWindowAgent: (windowId: string) => void;
-
-  // Rendering feedback
-  addRenderingFeedback: (feedback: RenderingFeedback) => void;
-  consumePendingFeedback: () => RenderingFeedback[];
-
-  // Pending user interactions
-  consumePendingInteractions: () => UserInteraction[];
-
-  // Queued component actions
-  queueComponentAction: (action: QueuedComponentAction) => void;
-  consumeQueuedActions: (windowId: string) => QueuedComponentAction[];
-  clearQueuedActions: (windowId: string) => void;
 }

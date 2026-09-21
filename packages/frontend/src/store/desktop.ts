@@ -90,8 +90,9 @@ function mapAgentsToMonitors(state: DesktopStore): Map<string, string | undefine
   for (const [monitorId, entries] of Object.entries(state.cliHistory)) {
     for (const entry of entries) note(entry.agentId, entry.monitorId || monitorId);
   }
-  for (const [windowId, agent] of Object.entries(state.windowAgents)) {
-    note(agent.agentId, monitorOfWindowId(state.windows, windowId));
+  // Keyed by agentId — the window is in the value, not the key (see `registerWindowAgent`).
+  for (const agent of Object.values(state.windowAgents)) {
+    note(agent.agentId, monitorOfWindowId(state.windows, agent.windowId));
   }
   return placed;
 }
@@ -444,9 +445,10 @@ export const useDesktopStore = create<DesktopStore>()(
             if (entry.monitorId === monitorId) delete state.cliStreaming[agentId];
           }
 
-          // Keyed by window, and a window belongs to exactly one monitor.
-          for (const windowId of Object.keys(state.windowAgents)) {
-            if (onThisMonitor(windowId)) delete state.windowAgents[windowId];
+          // Bound to a window, and a window belongs to exactly one monitor. `windowAgents`
+          // is keyed by agentId, so the window to attribute by is in the value.
+          for (const [agentId, agent] of Object.entries(state.windowAgents)) {
+            if (onThisMonitor(agent.windowId)) delete state.windowAgents[agentId];
           }
           for (const windowId of Object.keys(state.queuedActions)) {
             if (onThisMonitor(windowId)) delete state.queuedActions[windowId];

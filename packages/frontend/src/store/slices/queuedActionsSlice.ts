@@ -24,9 +24,4 @@ export const createQueuedActionsSlice: SliceCreator<QueuedActionsSlice> = (set, 
     }
     return actions;
   },
-
-  clearQueuedActions: (windowId) =>
-    set((state) => {
-      delete state.queuedActions[windowId];
-    }),
 });

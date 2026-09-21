@@ -1,5 +1,5 @@
 /**
- * Debug slice - manages debug panel, activity log, and debug log.
+ * Debug slice - the activity log (recent OS actions) and the debug log (every WS frame).
  */
 import type { SliceCreator, DebugSlice } from '../types';
 import type { OSAction } from '@yaar/shared';
@@ -10,8 +10,6 @@ export const ACTIVITY_LOG_LIMIT = 200;
 export const createDebugSlice: SliceCreator<DebugSlice> = (set, _get) => ({
   activityLog: [],
   debugLog: [],
-  debugPanelOpen: false,
-  recentActionsPanelOpen: false,
 
   addToActivityLog: (action: OSAction) =>
     set((state) => {
@@ -32,25 +30,5 @@ export const createDebugSlice: SliceCreator<DebugSlice> = (set, _get) => ({
       if (state.debugLog.length > 100) {
         state.debugLog = state.debugLog.slice(-100);
       }
-    }),
-
-  toggleDebugPanel: () =>
-    set((state) => {
-      state.debugPanelOpen = !state.debugPanelOpen;
-    }),
-
-  clearDebugLog: () =>
-    set((state) => {
-      state.debugLog = [];
-    }),
-
-  toggleRecentActionsPanel: () =>
-    set((state) => {
-      state.recentActionsPanelOpen = !state.recentActionsPanelOpen;
-    }),
-
-  clearActivityLog: () =>
-    set((state) => {
-      state.activityLog = [];
     }),
 });

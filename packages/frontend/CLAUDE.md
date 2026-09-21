@@ -30,12 +30,14 @@ src/
 ├── hooks/
 │   ├── use-agent-connection/  # Decomposed WebSocket logic (see WebSocket section)
 │   ├── useDragWindow.ts, useResizeWindow.ts, useWindowDrop.ts
+│   ├── useMouseTracking.ts    # owns a shell drag's document listeners AND the
+│   │                          # `yaar-dragging` class, incl. release on unmount
 ├── i18n/                  # i18next setup, locale JSON files
 ├── lib/                   # Utility modules (api, exportContent, iframeMessageRouter, snapZones, uploadImage)
 ├── store/                 # Zustand store with Immer, split into slices/
 │   └── iframe-bridge/     # Decomposed App Protocol relay (see App Protocol section)
 ├── styles/                # CSS Modules (organized by component subdirectory)
-└── types/                 # WindowModel, DesktopState, RenderingFeedback
+└── types/                 # WindowModel, RenderingFeedback (the store's own shape lives in store/types.ts)
 ```
 
 ## State Management

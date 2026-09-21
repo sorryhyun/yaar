@@ -9,6 +9,7 @@ import { join } from 'path';
 import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
 import { errMessage } from '@yaar/lib/errors';
+import { SHELL_RESET_CSS } from '@yaar/shared';
 import { registerDevReloadHandler } from './server.js';
 import { createLogger } from '../observability/log.js';
 
@@ -202,12 +203,7 @@ function generateDevHtml(jsFiles: string[], cssFiles: string[]): string {
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>YAAR</title>
 ${cssLinks}
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body, #root { width: 100%; height: 100%; overflow: hidden; font-family: var(--font-sans); }
-      html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-      html.yaar-dragging iframe { pointer-events: none; }
-      html.yaar-dragging, html.yaar-dragging * { user-select: none; }
+    <style>${SHELL_RESET_CSS}
     </style>
   </head>
   <body>

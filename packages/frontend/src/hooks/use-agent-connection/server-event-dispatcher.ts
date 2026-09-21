@@ -483,5 +483,14 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       handlers.queueMessage(message.messageId, message.position);
       handlers.settleOutbox(message.messageId);
       break;
+    // Every member of ServerEventType is handled above, and this is what keeps that true.
+    // The switch covered all of them by coincidence rather than by construction: a new
+    // server event compiled clean and was dropped in silence, and this is the one place
+    // in the frontend where a missed case means the desktop stops reacting to the server
+    // at all. The `never` makes adding one a type error here.
+    default: {
+      const unhandled: never = message;
+      console.warn('[dispatchServerEvent] unhandled event', (unhandled as ServerEvent).type);
+    }
   }
 }

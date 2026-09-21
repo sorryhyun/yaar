@@ -7,6 +7,7 @@
 
 import { join, relative } from 'path';
 import { cpSync, mkdirSync, rmSync } from 'fs';
+import { SHELL_RESET_CSS } from '@yaar/shared';
 
 const ROOT = import.meta.dirname;
 const SRC = join(ROOT, 'src');
@@ -117,12 +118,7 @@ export function generateHtml(
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>YAAR</title>
 ${cssLinks}
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body, #root { width: 100%; height: 100%; overflow: hidden; font-family: var(--font-sans); }
-      html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-      html.yaar-dragging iframe { pointer-events: none; }
-      html.yaar-dragging, html.yaar-dragging * { user-select: none; }
+    <style>${SHELL_RESET_CSS}
     </style>
   </head>
   <body>

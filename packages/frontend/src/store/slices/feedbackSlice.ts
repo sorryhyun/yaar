@@ -15,11 +15,6 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
       state.pendingFeedback.push(feedback);
     }),
 
-  addPendingFeedback: (feedback) =>
-    set((state) => {
-      state.pendingFeedback.push(feedback);
-    }),
-
   consumePendingFeedback: createConsumeQueue(get, set, 'pendingFeedback'),
 
   addPendingAppProtocolResponse: (item) =>

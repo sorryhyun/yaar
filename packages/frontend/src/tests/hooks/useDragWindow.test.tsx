@@ -50,10 +50,7 @@ describe('useDragWindow', () => {
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    const listenersRef = { current: [] };
-    const hook = renderHook(() =>
-      useDragWindow({ windowId, bounds: originalBounds, listenersRef }),
-    );
+    const hook = renderHook(() => useDragWindow({ windowId, bounds: originalBounds }));
 
     act(() => {
       hook.result.current.handleDragStart(startEvent(200, 110));
@@ -68,14 +65,7 @@ describe('useDragWindow', () => {
   });
 
   it('uses true maximize when a window is dragged to the top edge', () => {
-    const listenersRef = { current: [] };
-    const hook = renderHook(() =>
-      useDragWindow({
-        windowId,
-        bounds: originalBounds,
-        listenersRef,
-      }),
-    );
+    const hook = renderHook(() => useDragWindow({ windowId, bounds: originalBounds }));
 
     act(() => {
       hook.result.current.handleDragStart(startEvent(200, 110));
@@ -98,14 +88,7 @@ describe('useDragWindow', () => {
         }),
       },
     });
-    const listenersRef = { current: [] };
-    const hook = renderHook(() =>
-      useDragWindow({
-        windowId,
-        bounds: originalBounds,
-        listenersRef,
-      }),
-    );
+    const hook = renderHook(() => useDragWindow({ windowId, bounds: originalBounds }));
 
     act(() => {
       hook.result.current.handleDragStart(startEvent(300, 18));
@@ -114,5 +97,32 @@ describe('useDragWindow', () => {
 
     expect(useDesktopStore.getState().windows[windowId].maximized).toBe(true);
     hook.unmount();
+  });
+
+  it('releases the dragging class when the window is destroyed mid-drag', () => {
+    const hook = renderHook(() => useDragWindow({ windowId, bounds: originalBounds }));
+
+    act(() => {
+      hook.result.current.handleDragStart(startEvent(200, 110));
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240, clientY: 160 }));
+    });
+    expect(document.documentElement.classList.contains('yaar-dragging')).toBe(true);
+
+    // No mouseup: this is the window closing under the drag — an agent's `window.close`,
+    // Ctrl+W, a monitor switch, a RESYNC snapshot. The class is what makes every app
+    // iframe `pointer-events: none`, so leaving it on bricks every app until reload.
+    act(() => hook.unmount());
+    expect(document.documentElement.classList.contains('yaar-dragging')).toBe(false);
+  });
+
+  it('leaves the dragging class alone when an idle window unmounts', () => {
+    const hook = renderHook(() => useDragWindow({ windowId, bounds: originalBounds }));
+    document.documentElement.classList.add('yaar-dragging');
+
+    // Another window is mid-drag; this one never started a gesture and must not
+    // pull the class out from under it.
+    act(() => hook.unmount());
+    expect(document.documentElement.classList.contains('yaar-dragging')).toBe(true);
+    document.documentElement.classList.remove('yaar-dragging');
   });
 });

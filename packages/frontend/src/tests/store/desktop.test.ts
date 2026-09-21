@@ -433,10 +433,6 @@ describe('Desktop Store', () => {
             kind: 'monitor',
           },
         },
-        windowAgents: {
-          '1/w1': { agentId: 'a1', windowId: '1/w1', status: 'active' },
-          '2/w2': { agentId: 'a2', windowId: '2/w2', status: 'active' },
-        },
         queuedActions: {
           '1/w1': [{ windowId: '1/w1', windowTitle: 'One', action: 'go', queuedAt: 1 }],
           '2/w2': [{ windowId: '2/w2', windowTitle: 'Two', action: 'go', queuedAt: 1 }],
@@ -459,6 +455,12 @@ describe('Desktop Store', () => {
           t1: { id: 't1', message: 'still here', variant: 'info', timestamp: 1 },
         },
       });
+
+      // Seeded through the action rather than as a map literal: `windowAgents` is keyed by
+      // agentId, and a hand-written literal can key it by window — a shape production never
+      // produces, which is exactly how a window/agent key mix-up once stayed green here.
+      useDesktopStore.getState().registerWindowAgent('1/w1', 'a1', 'active');
+      useDesktopStore.getState().registerWindowAgent('2/w2', 'a2', 'active');
     }
 
     it('scoped reset clears only the named monitor, and keeps what it cannot attribute', () => {
@@ -478,7 +480,8 @@ describe('Desktop Store', () => {
       expect(state.activeAgents.a2).toBeUndefined();
       expect(state.activeAgents.ghost).toBeDefined();
 
-      expect(Object.keys(state.windowAgents)).toEqual(['1/w1']);
+      // Keyed by agentId: a2's entry goes because its window lives on monitor 2.
+      expect(Object.keys(state.windowAgents)).toEqual(['a1']);
       expect(Object.keys(state.queuedActions)).toEqual(['1/w1']);
 
       // Outbound queues are filtered, never emptied.
