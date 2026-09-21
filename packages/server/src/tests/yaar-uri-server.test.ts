@@ -43,18 +43,6 @@ describe('parseWindowResourceUri', () => {
     });
   });
 
-  it('returns null for bare window URI (no sub-path)', () => {
-    expect(parseWindowResourceUri('yaar://windows/win-excel')).toBeNull();
-  });
-
-  it('returns null for unknown resource type', () => {
-    expect(parseWindowResourceUri('yaar://windows/win-excel/unknown/key')).toBeNull();
-  });
-
-  it('returns null for sub-path without key', () => {
-    expect(parseWindowResourceUri('yaar://windows/win-excel/state')).toBeNull();
-  });
-
   it('roundtrips with buildWindowResourceUri', () => {
     const uri = buildWindowResourceUri('win-app', 'commands', 'refresh');
     const parsed = parseWindowResourceUri(uri);
@@ -116,18 +104,6 @@ describe('parseConfigUri', () => {
       section: 'app',
       id: 'github-manager',
     });
-  });
-
-  it('returns null for unknown section', () => {
-    expect(parseConfigUri('yaar://config/unknown')).toBeNull();
-  });
-
-  it('returns null for non-config URI', () => {
-    expect(parseConfigUri('yaar://apps/excel-lite')).toBeNull();
-  });
-
-  it('returns null for non-yaar URI', () => {
-    expect(parseConfigUri('https://example.com')).toBeNull();
   });
 });
 
@@ -198,18 +174,6 @@ describe('parseSessionUri', () => {
       id: '0',
     });
   });
-
-  it('returns null for unknown subKind', () => {
-    expect(parseSessionUri('yaar://session/unknown')).toBeNull();
-  });
-
-  it('returns null for non-session URI', () => {
-    expect(parseSessionUri('yaar://apps/sessions')).toBeNull();
-  });
-
-  it('returns null for non-yaar URI', () => {
-    expect(parseSessionUri('https://example.com')).toBeNull();
-  });
 });
 
 describe('buildSessionUri', () => {
@@ -267,18 +231,6 @@ describe('parseUserUri', () => {
   it('parses clipboard', () => {
     expect(parseUserUri('yaar://user/clipboard')).toEqual({ subKind: 'clipboard' });
   });
-
-  it('returns null for unknown subKind', () => {
-    expect(parseUserUri('yaar://user/unknown')).toBeNull();
-  });
-
-  it('returns null for non-user URI', () => {
-    expect(parseUserUri('yaar://session/notifications')).toBeNull();
-  });
-
-  it('returns null for non-yaar URI', () => {
-    expect(parseUserUri('https://example.com')).toBeNull();
-  });
 });
 
 describe('buildUserUri', () => {
@@ -297,5 +249,44 @@ describe('buildUserUri', () => {
   it('roundtrips notifications with parseUserUri', () => {
     const uri = buildUserUri('notifications', 'notif-42');
     expect(parseUserUri(uri)).toEqual({ subKind: 'notifications', id: 'notif-42' });
+  });
+});
+
+// ============ Invalid URIs (shared table) ============
+
+// The four parse* functions above each had three near-identical "returns null for X" cases
+// (unknown section/subKind/resource type, a URI from the wrong door, and a non-yaar URI) — same
+// assertion every time, only the function and the input string differing. Collapsed into one
+// table, one row per invalid-input case, so the shape of the check lives in one place.
+const INVALID_URI_CASES: Array<[string, (uri: string) => unknown, string]> = [
+  [
+    'parseWindowResourceUri: unknown resource type',
+    parseWindowResourceUri,
+    'yaar://windows/win-excel/unknown/key',
+  ],
+  [
+    'parseWindowResourceUri: sub-path without key',
+    parseWindowResourceUri,
+    'yaar://windows/win-excel/state',
+  ],
+  [
+    'parseWindowResourceUri: bare window URI (no sub-path)',
+    parseWindowResourceUri,
+    'yaar://windows/win-excel',
+  ],
+  ['parseConfigUri: unknown section', parseConfigUri, 'yaar://config/unknown'],
+  ['parseConfigUri: non-config URI', parseConfigUri, 'yaar://apps/excel-lite'],
+  ['parseConfigUri: non-yaar URI', parseConfigUri, 'https://example.com'],
+  ['parseSessionUri: unknown subKind', parseSessionUri, 'yaar://session/unknown'],
+  ['parseSessionUri: non-session URI', parseSessionUri, 'yaar://apps/sessions'],
+  ['parseSessionUri: non-yaar URI', parseSessionUri, 'https://example.com'],
+  ['parseUserUri: unknown subKind', parseUserUri, 'yaar://user/unknown'],
+  ['parseUserUri: non-user URI', parseUserUri, 'yaar://session/notifications'],
+  ['parseUserUri: non-yaar URI', parseUserUri, 'https://example.com'],
+];
+
+describe('invalid URIs return null', () => {
+  it.each(INVALID_URI_CASES)('%s', (_label, parse, uri) => {
+    expect(parse(uri)).toBeNull();
   });
 });
