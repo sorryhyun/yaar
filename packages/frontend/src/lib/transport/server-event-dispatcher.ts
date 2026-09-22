@@ -30,8 +30,6 @@ export interface ServerEventDispatchHandlers {
   checkForPreviousSession: (sessionId: string) => void;
   /** Apply the session's authoritative monitor list; `focus` answers this tab's ADD_MONITOR. */
   setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
-  /** Re-mint iframe tokens after reattaching to a session incarnation we did not leave. */
-  refreshStaleIframeTokens: (sessionId: string) => void;
   setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
   clearAgent: (agentId: string) => void;
   registerWindowAgent: (
@@ -150,14 +148,6 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         recoveryMode: message.recoveryMode,
         provider: message.provider,
       });
-      if (message.recoveryMode !== 'attached' && message.recoveryMode !== 'created') {
-        // Not the session we left. The iframe tokens our windows hold were minted by a
-        // process that is gone, so every verb call they make now 403s. Mint them again
-        // against the live session. (Everything *else* that is stale — closed windows still
-        // on screen, spinners for finished agents — is fixed by the resync below, which
-        // replaces local state with the server's rather than merging into it.)
-        handlers.refreshStaleIframeTokens(message.sessionId);
-      }
       // Say what we did while we were away, then ask what is actually there. The order is
       // the contract: the snapshot that comes back is authoritative and will delete
       // anything it does not mention, so the window the user opened during the outage has

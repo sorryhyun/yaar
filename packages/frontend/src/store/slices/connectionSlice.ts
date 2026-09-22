@@ -17,6 +17,8 @@ export interface ConnectionSliceState {
   connectionId: string | null;
   /** What the server did with the session id we asked for. Null until attached. */
   recoveryMode: RecoveryMode | null;
+  /** Adopt the next snapshot's tokens after losing the session that minted ours. */
+  iframeTokensStale: boolean;
 }
 
 export interface ConnectionSliceActions {
@@ -46,6 +48,7 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, _get) 
   sessionEpoch: null,
   connectionId: null,
   recoveryMode: null,
+  iframeTokensStale: false,
 
   setConnectionStatus: (status, error) =>
     set((state) => {
@@ -79,6 +82,13 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, _get) 
   // this sessionId describes a session that no longer exists.
   setAttachment: (attachment) =>
     set((state) => {
+      // Keep this set across another reconnect if the first recovery snapshot never
+      // arrived. An 'attached' reply alone does not make the old iframe tokens valid.
+      state.iframeTokensStale ||=
+        (attachment.recoveryMode !== 'attached' && attachment.recoveryMode !== 'created') ||
+        (state.sessionEpoch !== null &&
+          (state.sessionEpoch !== attachment.sessionEpoch ||
+            state.sessionId !== attachment.sessionId));
       state.sessionId = attachment.sessionId;
       state.sessionEpoch = attachment.sessionEpoch;
       state.connectionId = attachment.connectionId;

@@ -294,7 +294,7 @@ export const useDesktopStore = create<DesktopStore>()(
         return toWindowKey(monitorId, rawId);
       };
 
-      const held = useDesktopStore.getState().windows;
+      const { windows: held, iframeTokensStale } = useDesktopStore.getState();
 
       /**
        * The snapshot's actions, with the iframe token of every window we are *already
@@ -311,11 +311,11 @@ export const useDesktopStore = create<DesktopStore>()(
        *
        * Keeping ours is safe because a re-mint does not revoke its predecessor
        * (`http/iframe-tokens.ts`) — our token is still live for as long as the process
-       * that minted it is. The one case where it is *not* is an attach that is not a
-       * rejoin of the same incarnation, and that case is already owned, in full and
-       * independently of this path, by `refreshStaleIframeTokens`.
+       * that minted it is. After a changed incarnation, take the snapshot's fresh
+       * tokens instead. This needs neither a grace timer nor per-window HTTP requests.
        */
       const reconciled = actions.map((action) => {
+        if (iframeTokensStale) return action;
         if (action.type !== 'window.create') return action;
         const create = action as WindowCreateAction;
         const token = held[snapshotKey(create)]?.iframeToken;
@@ -374,6 +374,9 @@ export const useDesktopStore = create<DesktopStore>()(
       });
 
       useDesktopStore.getState().applyActions(reconciled);
+      set((state) => {
+        state.iframeTokensStale = false;
+      });
     },
 
     /**

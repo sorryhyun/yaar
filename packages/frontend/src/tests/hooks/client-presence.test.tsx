@@ -90,7 +90,7 @@ describe('useClientPresence', () => {
   it('reports a freeze the browser announces', () => {
     const hook = mount();
 
-    window.dispatchEvent(domEvent('freeze'));
+    document.dispatchEvent(domEvent('freeze'));
 
     expect(presenceStates(ws)).toEqual(['frozen']);
     hook.unmount();
@@ -131,12 +131,27 @@ describe('useClientPresence', () => {
     Date.now = () => clock;
     const hook = mount();
 
-    window.dispatchEvent(domEvent('freeze'));
+    document.dispatchEvent(domEvent('freeze'));
     clock += 100;
-    window.dispatchEvent(domEvent('resume'));
+    document.dispatchEvent(domEvent('resume'));
 
     expect(recovered).toBe(1);
     expect(presenceStates(ws)).toEqual(['frozen', 'visible']);
+    hook.unmount();
+  });
+
+  it('keeps a thawed background tab hidden and recovers once it becomes visible', () => {
+    const hook = mount();
+    setVisibility('hidden');
+    document.dispatchEvent(domEvent('freeze'));
+    document.dispatchEvent(domEvent('resume'));
+
+    expect(presenceStates(ws)).toEqual(['hidden', 'frozen', 'hidden']);
+    expect(recovered).toBe(0);
+    setVisibility('visible');
+    expect(recovered).toBe(1);
+    setVisibility('visible');
+    expect(recovered).toBe(1);
     hook.unmount();
   });
 
@@ -170,7 +185,9 @@ describe('useClientPresence', () => {
     hook.unmount();
 
     setVisibility('hidden');
-
+    document.dispatchEvent(domEvent('freeze'));
+    document.dispatchEvent(domEvent('resume'));
+    expect(recovered).toBe(0);
     expect(ws.sent).toHaveLength(0);
   });
 });

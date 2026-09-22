@@ -41,6 +41,9 @@ function windowAction(id: string): OSAction {
 beforeEach(() => {
   useDesktopStore.setState({
     windows: {},
+    sessionId: null,
+    sessionEpoch: null,
+    iframeTokensStale: false,
     zOrder: [],
     focusedWindowId: null,
     notifications: {},
@@ -122,6 +125,57 @@ describe('applySnapshot — the server is authoritative', () => {
 
     const win = useDesktopStore.getState().windows[toWindowKey(MONITOR, 'devtools')];
     expect(win.iframeToken).toBe('token-held');
+  });
+
+  it.each(['replaced', 'restored'] as const)(
+    'adopts fresh tokens after a %s attach, then preserves them on ordinary resumes',
+    (recoveryMode) => {
+      const store = useDesktopStore.getState();
+      store.applyActions([iframeWindowAction('devtools', 'dead-token')]);
+      store.setAttachment({ sessionId: 's1', sessionEpoch: 2, connectionId: 'c1', recoveryMode });
+      store.applySnapshot([iframeWindowAction('devtools', 'live-token')], []);
+      expect(useDesktopStore.getState().windows['0/devtools'].iframeToken).toBe('live-token');
+      store.applySnapshot([iframeWindowAction('devtools', 'another-token')], []);
+      expect(useDesktopStore.getState().windows['0/devtools'].iframeToken).toBe('live-token');
+    },
+  );
+
+  it('keeps invalidation across a reconnect before the recovery snapshot arrives', () => {
+    const store = useDesktopStore.getState();
+    store.applyActions([iframeWindowAction('devtools', 'dead-token')]);
+    store.setAttachment({
+      sessionId: 's1',
+      sessionEpoch: 2,
+      connectionId: 'c1',
+      recoveryMode: 'replaced',
+    });
+    store.setAttachment({
+      sessionId: 's1',
+      sessionEpoch: 2,
+      connectionId: 'c2',
+      recoveryMode: 'attached',
+    });
+    store.applySnapshot([iframeWindowAction('devtools', 'live-token')], []);
+    expect(useDesktopStore.getState().windows['0/devtools'].iframeToken).toBe('live-token');
+  });
+
+  it('refreshes even on attached when another tab already recreated the session', () => {
+    const store = useDesktopStore.getState();
+    store.setAttachment({
+      sessionId: 's1',
+      sessionEpoch: 1,
+      connectionId: 'c1',
+      recoveryMode: 'created',
+    });
+    store.applyActions([iframeWindowAction('devtools', 'dead-token')]);
+    store.setAttachment({
+      sessionId: 's1',
+      sessionEpoch: 2,
+      connectionId: 'c2',
+      recoveryMode: 'attached',
+    });
+    store.applySnapshot([iframeWindowAction('devtools', 'live-token')], []);
+    expect(useDesktopStore.getState().windows['0/devtools'].iframeToken).toBe('live-token');
   });
 
   it('takes the snapshot token for a window it was not already showing', () => {

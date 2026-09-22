@@ -49,12 +49,12 @@ export function useClientPresence(recover: () => void) {
 
   useEffect(() => {
     let hiddenSince: number | null = null;
+    let needsRecovery = false;
 
     const report = (state: ClientPresenceState) => {
       // Straight to the socket: this describes the transport's own peer, and a frame
       // that cannot be delivered has nothing to say. A closed socket means the server
       // already knows more than this would have told it.
-      if (wsManager.ws?.readyState !== WebSocket.OPEN) return;
       sendEvent(wsManager, { type: ClientEventType.CLIENT_PRESENCE, state });
     };
 
@@ -63,25 +63,35 @@ export function useClientPresence(recover: () => void) {
       report(state);
     };
 
-    /** @param forced true when the browser told us it had actually stopped us. */
-    const cameBack = (forced: boolean) => {
+    const cameBack = () => {
       const away = hiddenSince === null ? 0 : Date.now() - hiddenSince;
       hiddenSince = null;
       report('visible');
-      if (forced || away >= RESYNC_AFTER_HIDDEN_MS) recoverRef.current();
+      const recover = needsRecovery || away >= RESYNC_AFTER_HIDDEN_MS;
+      needsRecovery = false;
+      if (recover) recoverRef.current();
     };
 
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') goneAway('hidden');
-      else cameBack(false);
+      else cameBack();
     };
-    const onFreeze = () => goneAway('frozen');
-    const onResume = () => cameBack(true);
+    const onFreeze = () => {
+      needsRecovery = true;
+      goneAway('frozen');
+    };
+    const onResume = () => {
+      needsRecovery = true;
+      // Thawed does not mean foregrounded. Keep the companion answering until the
+      // user returns, and start the recovery deadline only when this tab is visible.
+      if (document.visibilityState === 'hidden') report('hidden');
+      else cameBack();
+    };
 
     document.addEventListener('visibilitychange', onVisibility);
     // Not on every browser; `addEventListener` for an unknown name is a no-op, so no guard.
-    window.addEventListener('freeze', onFreeze);
-    window.addEventListener('resume', onResume);
+    document.addEventListener('freeze', onFreeze);
+    document.addEventListener('resume', onResume);
 
     // Say where we stand now, rather than waiting for the first change. A tab that
     // connects while already hidden — restored on startup, opened in the background —
@@ -90,8 +100,8 @@ export function useClientPresence(recover: () => void) {
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('freeze', onFreeze);
-      window.removeEventListener('resume', onResume);
+      document.removeEventListener('freeze', onFreeze);
+      document.removeEventListener('resume', onResume);
     };
   }, []);
 }

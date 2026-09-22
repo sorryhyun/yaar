@@ -36,8 +36,6 @@ export interface WindowsSliceActions {
   queueBoundsUpdate: (windowId: string, action?: 'window.move' | 'window.resize') => void;
   /** Flag an agent-driven change the store can't see itself (an App Protocol command). */
   markWindowChanged: (windowId: string) => void;
-  /** Swap a window's iframe token, but only if it still carries the one we expected. */
-  replaceIframeToken: (windowId: string, expected: string, token: string) => void;
 }
 
 export type WindowsSlice = WindowsSliceState & WindowsSliceActions;
@@ -437,17 +435,9 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   zOrder: [],
   focusedWindowId: null,
 
-  // Guarded on `expected` so a token that the reconnect snapshot already refreshed is not
-  // clobbered by a re-mint that was in flight for the dead one.
   markWindowChanged: (windowId) =>
     set((state) => {
       markWindowChanged(state as DesktopStore, windowId);
-    }),
-
-  replaceIframeToken: (windowId, expected, token) =>
-    set((state) => {
-      const win = state.windows[windowId];
-      if (win && win.iframeToken === expected) win.iframeToken = token;
     }),
 
   userFocusWindow: (windowId) =>

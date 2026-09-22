@@ -28,7 +28,6 @@ import { clientPresence } from './frames';
 import { createLivenessProbe } from './liveness-probe';
 import { flushPending, resync } from './commands';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
-import { refreshStaleIframeTokens } from './iframe-token-refresh';
 
 let sessionCheckDone = false;
 
@@ -97,7 +96,6 @@ function handleMessage(event: MessageEvent): void {
       setAttachment: store.setAttachment,
       checkForPreviousSession,
       setMonitors: store.setMonitors,
-      refreshStaleIframeTokens,
       setAgentActive: store.setAgentActive,
       clearAgent: store.clearAgent,
       registerWindowAgent: store.registerWindowAgent,
@@ -141,9 +139,7 @@ export function connect(): void {
   wsManager.stopped = false;
   const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
     onOpen: () => {
-      // A completed handshake is a live peer; a probe armed against a socket that was
-      // still connecting has its answer.
-      livenessProbe.disarm();
+      // An armed resume probe waits for a server frame, not just the TCP handshake.
       sendEvent(wsManager, monitorSubscription(useDesktopStore.getState().activeMonitorId));
       // Presence is per connection and the server forgets it on close, so say it again.
       sendEvent(wsManager, clientPresence());
@@ -171,19 +167,24 @@ export function connect(): void {
 }
 
 export function disconnect(): void {
-  if (wsManager.reconnectTimeout) {
+  livenessProbe.disarm();
+  if (wsManager.reconnectTimeout !== null) {
     clearTimeout(wsManager.reconnectTimeout);
     wsManager.reconnectTimeout = null;
   }
   wsManager.nextRetryAt = null;
   wsManager.stopped = true;
 
-  if (wsManager.ws?.readyState === WebSocket.OPEN) {
-    wsManager.ws.close(1000, 'User disconnect');
-    // Deregistering here makes the socket's own onclose a no-op (it is no longer the
-    // current socket), so this path owns the teardown state it used to inherit.
-    wsManager.ws = null;
-    wsManager.notify();
+  // Detach before closing, including a handshake still in progress. Late callbacks
+  // must not bring an explicitly disconnected desktop back online.
+  const socket = wsManager.ws;
+  wsManager.ws = null;
+  wsManager.attached = false;
+  wsManager.notify();
+  try {
+    socket?.close(1000, 'User disconnect');
+  } catch {
+    // The socket is already detached; teardown must still clear the desktop state.
   }
 
   const store = useDesktopStore.getState();
@@ -193,7 +194,9 @@ export function disconnect(): void {
 
 /** Cancel the pending backoff and reconnect immediately. */
 export function retryConnection(): void {
-  retryNow(wsManager, connect);
+  livenessProbe.disarm();
+  wsManager.stopped = false;
+  replaceDeadSocket(wsManager, connect);
 }
 
 /**
@@ -212,13 +215,18 @@ export function retryConnection(): void {
  * `liveness-probe.ts` has the rest.
  */
 export function recoverAfterResume(): void {
+  if (wsManager.stopped) return;
   const socket = wsManager.ws;
-  if (!socket) return;
-  if (socket.readyState === WebSocket.OPEN) {
+  if (!socket) {
+    retryNow(wsManager, connect);
+    return;
+  }
+  if (socket.readyState === WebSocket.OPEN && wsManager.attached) {
     flushPending();
     resync();
-  } else if (socket.readyState !== WebSocket.CONNECTING) {
-    // CLOSING or CLOSED: the close path already owns the retry.
+  } else if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
+    // A close handshake can stall just like an open one. Do not wait for onclose.
+    replaceDeadSocket(wsManager, connect);
     return;
   }
   // CONNECTING gets the same deadline with nothing sent: a handshake interrupted by the

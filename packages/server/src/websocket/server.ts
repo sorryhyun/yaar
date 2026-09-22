@@ -87,6 +87,8 @@ export interface WsData {
    * frames in different lanes no longer wait on each other.
    */
   lanes?: Map<string, Promise<void>>;
+  /** Latest snapshot barrier, also inherited by lanes first used after it arrived. */
+  resyncBarrier?: Promise<void>;
 }
 
 /** Everything that is not addressed to one monitor's agent. Ordered as it always was. */
@@ -268,13 +270,16 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // running in another lane.
       if (event?.type === ClientEventType.RESYNC) {
         const barrier = Promise.all([...lanes.values()]).then(() => routeOne(ws, event));
+        ws.data.resyncBarrier = barrier;
         for (const lane of lanes.keys()) lanes.set(lane, barrier);
         lanes.set(MAIN_LANE, barrier);
         return barrier;
       }
 
       const lane = laneOf(event);
-      const next = (lanes.get(lane) ?? Promise.resolve()).then(() => routeOne(ws, event));
+      const next = (lanes.get(lane) ?? ws.data.resyncBarrier ?? Promise.resolve()).then(() =>
+        routeOne(ws, event),
+      );
       lanes.set(lane, next);
       return next;
     },

@@ -264,4 +264,23 @@ describe('WebSocket head-of-line blocking', () => {
     await settle();
     expect(routed).toEqual(['USER_MESSAGE', 'RESYNC']);
   });
+
+  it('keeps a newly used monitor behind a pending RESYNC barrier', async () => {
+    const ws = createWs();
+    appTurnBusy = false;
+    const turn = send(ws, { type: 'USER_MESSAGE', messageId: 'm1', content: 'hi', monitorId: '0' });
+    const snapshot = send(ws, { type: 'RESYNC' });
+    const interaction = send(ws, {
+      type: 'APP_INTERACTION',
+      windowId: '1/notes',
+      content: 'edit after returning',
+    });
+    await settle();
+    const beforeRelease = [...routed];
+    releaseTurn();
+    await Promise.all([turn, snapshot, interaction]);
+
+    expect(beforeRelease).toEqual(['USER_MESSAGE']);
+    expect(routed).toEqual(['USER_MESSAGE', 'RESYNC', 'APP_INTERACTION']);
+  });
 });
