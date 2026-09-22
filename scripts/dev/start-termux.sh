@@ -44,6 +44,20 @@ if [ ! -e node_modules/.bin/tsc ] || [ bun.lock -nt "$stamp" ]; then
   touch "$stamp"
 fi
 
+# A CLAUDE_CODE_PATH from the shell profile (a hand-installed CLI) is honored only while it
+# is at least the version the SDK was built against. Older, it fails every turn once the
+# code asks for a model it does not know — as a bare 400 — so fall back to the unpacked one.
+if [ -n "${CLAUDE_CODE_PATH:-}" ]; then
+  want="$(bun -e "console.log(require('./packages/server/node_modules/@anthropic-ai/claude-agent-sdk/package.json').claudeCodeVersion ?? '')")"
+  have="$("$CLAUDE_CODE_PATH" --version 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
+  if [ -n "$want" ] && { [ -z "$have" ] ||
+    [ "$(printf '%s\n%s\n' "$have" "$want" | sort -V | head -1)" != "$want" ]; }; then
+    echo "Ignoring CLAUDE_CODE_PATH=$CLAUDE_CODE_PATH (${have:-unknown version}, SDK needs >= $want);"
+    echo "  using the SDK's own build instead. Unset it in your shell profile to drop this note."
+    unset CLAUDE_CODE_PATH
+  fi
+fi
+
 if [ -z "${CLAUDE_CODE_PATH:-}" ]; then
   CLAUDE_CODE_PATH="$(./scripts/dev/ensure-claude-android.sh)"
   export CLAUDE_CODE_PATH
