@@ -57,8 +57,26 @@ if command -v termux-open-url >/dev/null 2>&1; then
   ) &
 fi
 
+# The wake lock is what keeps the server alive with the screen off. Without it Android dozes
+# Termux within minutes, and a phone that is both client and server loses both at once. It
+# comes from termux-tools, which ships with Termux itself, so there is no extra app behind
+# it. It is released on exit so a stopped YAAR does not hold the CPU awake.
+if command -v termux-wake-lock >/dev/null 2>&1; then
+  termux-wake-lock
+  trap 'termux-wake-unlock' EXIT
+fi
+
+# Termux:API is optional: with it, the server mirrors notifications into the Android shade
+# and uses the phone's clipboard and share sheet (features/android/). Without it, nothing
+# changes. It is a separate app as well as a package, so only the package can be checked here.
+if ! command -v termux-notification >/dev/null 2>&1; then
+  echo "Tip: \`pkg install termux-api\` plus the Termux:API app (same store as Termux) gives"
+  echo "  you native notifications, clipboard and share. Optional."
+fi
+
 # REMOTE=0 explicitly, not merely unset: on a phone the client and the server are the same
 # device, so there is no network leg to secure and nothing to hand a token to — the desktop
-# is opened locally, just above. Pinning it here also keeps a `REMOTE=1` exported in the
+# is opened locally, above. Pinning it here also keeps a `REMOTE=1` exported in the
 # user's shell profile from quietly turning this launch into a tunnelled one.
-MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" LAUNCH_CHROME=0 REMOTE=0 exec ./scripts/dev/start.sh claude
+# Not `exec`, so the EXIT trap above can release the wake lock.
+MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" LAUNCH_CHROME=0 REMOTE=0 ./scripts/dev/start.sh claude

@@ -42,6 +42,13 @@ import {
 import { invokeArchiveAction } from './storage-archive.js';
 import { describeStoragePath } from './storage-describe.js';
 
+/**
+ * `share` — Android's share sheet for one file. Offered only where there can be a sheet:
+ * a server running on the phone itself (Termux). Advertising it anywhere else would hand
+ * every agent an action that can only fail.
+ */
+const SHARE_ACTIONS = process.platform === 'android' ? ['share'] : [];
+
 // ── Helpers ──
 
 async function readStorageRaw(path: string): Promise<{ content: string } | { error: string }> {
@@ -71,7 +78,11 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       'An archive (.zip, .tar, .tar.gz, .tgz) reads as a read-only folder: list it, and read ' +
       'an entry as yaar://storage/{archive}/{entry}. To unpack one, invoke the new folder with ' +
       'action "extract" and "from" the archive; to build one, invoke the archive to create with ' +
-      'action "compress" and "from" the files or folders to pack.',
+      'action "compress" and "from" the files or folders to pack.' +
+      (SHARE_ACTIONS.length
+        ? ' This server runs on the user\'s phone: invoke a file with action "share" to open ' +
+          "Android's share sheet for it (the user picks the app to send it to)."
+        : ''),
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -79,7 +90,15 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       properties: {
         action: {
           type: 'string',
-          enum: ['write', COPY_ACTION, 'edit', 'grep', EXTRACT_ACTION, COMPRESS_ACTION],
+          enum: [
+            'write',
+            COPY_ACTION,
+            'edit',
+            'grep',
+            EXTRACT_ACTION,
+            COMPRESS_ACTION,
+            ...SHARE_ACTIONS,
+          ],
         },
         pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
         glob: {
@@ -267,6 +286,24 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return ok(`Edited yaar://storage/${path}`);
       }
 
+      if (action === 'share' && SHARE_ACTIONS.length) {
+        if (!path) return error('Provide a file path to share.');
+        const { resolvePathAsync } = await import('../storage/storage-manager.js');
+        const resolved = await resolvePathAsync(path);
+        if (!resolved) return error('Invalid storage path.');
+        const stat = await Bun.file(resolved.absolutePath)
+          .stat()
+          .catch(() => null);
+        if (!stat) return notFoundError(`File not found: yaar://storage/${path}`);
+        if (stat.isDirectory()) return error('Only a file can be shared, not a folder.');
+        const { shareFile } = await import('../features/android/index.js');
+        const shared = await shareFile(resolved.absolutePath, path.split('/').pop());
+        if (!shared.ok) return error(shared.error);
+        return ok(
+          `Opened the share sheet for yaar://storage/${path}. The user picks where it goes.`,
+        );
+      }
+
       if (action === 'grep') {
         if (typeof payload.pattern !== 'string')
           return error('"pattern" (string) is required for grep.');
@@ -280,7 +317,9 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       }
 
       return error(
-        `Unknown action "${action}". Use "write", "copy", "edit", "grep", "extract", or "compress".`,
+        `Unknown action "${action}". Use "write", "copy", "edit", "grep", "extract", "compress"${
+          SHARE_ACTIONS.length ? ', or "share"' : ''
+        }.`,
       );
     },
 

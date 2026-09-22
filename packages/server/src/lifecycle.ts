@@ -500,6 +500,13 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
       // Never started — nothing to stop.
     }
 
+    try {
+      const { stopAndroidIntegration } = await import('./features/android/index.js');
+      stopAndroidIntegration();
+    } catch {
+      // Never started — nothing to stop.
+    }
+
     // Close browser sessions — both doors (headless sandbox + the user's real
     // Chrome). The local provider never owns Chrome, so its shutdown only drops
     // our CDP connection.

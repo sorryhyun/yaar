@@ -68,8 +68,37 @@ interface ConnectionEntry {
   overflowed?: boolean;
 }
 
+/** Hears each event addressed to a session. See {@link BroadcastCenter.observe}. */
+export type SessionEventObserver = (sessionId: SessionId, event: ServerEvent) => void;
+
 export class BroadcastCenter {
   private connections: Map<ConnectionId, ConnectionEntry> = new Map();
+  private observers = new Set<SessionEventObserver>();
+
+  /**
+   * Hear every event published to a session or one of its monitors — what the desktop is
+   * told, whether or not any desktop is there to hear it.
+   *
+   * For a consumer that has to mirror the desktop somewhere else (the Android notification
+   * bridge). It sits here rather than on `actionEmitter` because this is the one place
+   * every route converges: tool actions, the session-scoped channels, and agent responses,
+   * which never touch the emitter at all. Observers run synchronously and must not throw;
+   * one that does is logged and the send goes on. Returns the unsubscribe.
+   */
+  observe(fn: SessionEventObserver): () => void {
+    this.observers.add(fn);
+    return () => this.observers.delete(fn);
+  }
+
+  private notifyObservers(sessionId: SessionId, event: ServerEvent): void {
+    for (const fn of this.observers) {
+      try {
+        fn(sessionId, event);
+      } catch (err) {
+        log.error('session event observer threw', { sessionId, err });
+      }
+    }
+  }
 
   /**
    * Register a WebSocket connection with its session.
@@ -194,6 +223,7 @@ export class BroadcastCenter {
    * Returns the number of connections that received the event.
    */
   publishToSession(sessionId: SessionId, event: ServerEvent): number {
+    this.notifyObservers(sessionId, event);
     let count = 0;
     const data = JSON.stringify(event);
     for (const [connectionId, entry] of this.connections) {
@@ -208,6 +238,7 @@ export class BroadcastCenter {
    * Returns the number of connections that received the event.
    */
   publishToMonitor(sessionId: SessionId, monitorId: string, event: ServerEvent): number {
+    this.notifyObservers(sessionId, event);
     let count = 0;
     const data = JSON.stringify(event);
     for (const [connectionId, entry] of this.connections) {

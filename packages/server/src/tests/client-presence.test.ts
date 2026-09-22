@@ -17,6 +17,9 @@ import {
   forgetConnectionPresence,
   forgetSessionPresence,
   resetClientPresenceForTest,
+  isUserWatching,
+  noteCompanionConnection,
+  onPresenceChange,
 } from '../session/client-presence.js';
 
 const SESSION = 'ses-test';
@@ -136,5 +139,33 @@ describe('forgetting', () => {
     // A reconnecting tab announces itself; that announcement is the whole record.
     noteClientPresence(SESSION, TAB, 'visible', t(20));
     expect(clientAwayNote(SESSION, t(20), t(30))).toBeNull();
+  });
+});
+
+describe('isUserWatching', () => {
+  it('is false with no connection at all — a killed tab has nobody left to report', () => {
+    expect(isUserWatching(SESSION)).toBe(false);
+  });
+
+  it('follows the user’s tab, and never counts the companion', () => {
+    noteCompanionConnection(SESSION, OTHER_TAB);
+    noteClientPresence(SESSION, OTHER_TAB, 'visible', t(0));
+    expect(isUserWatching(SESSION)).toBe(false);
+
+    noteClientPresence(SESSION, TAB, 'visible', t(0));
+    expect(isUserWatching(SESSION)).toBe(true);
+
+    noteClientPresence(SESSION, TAB, 'hidden', t(1));
+    expect(isUserWatching(SESSION)).toBe(false);
+  });
+
+  it('tells presence listeners about reports and disconnects', () => {
+    const heard: string[] = [];
+    const off = onPresenceChange((sid) => heard.push(sid));
+    noteClientPresence(SESSION, TAB, 'visible', t(0));
+    forgetConnectionPresence(SESSION, TAB);
+    off();
+    noteClientPresence(SESSION, TAB, 'visible', t(1));
+    expect(heard).toEqual([SESSION, SESSION]);
   });
 });

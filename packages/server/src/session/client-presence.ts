@@ -40,6 +40,45 @@ interface ConnectionPresence {
 
 const sessions = new Map<SessionId, Map<ConnectionId, ConnectionPresence>>();
 
+/** Told the session whose presence just changed. See {@link onPresenceChange}. */
+type PresenceListener = (sessionId: SessionId) => void;
+const listeners = new Set<PresenceListener>();
+
+/**
+ * Hear every presence change — a report, or a connection going away. For a consumer that
+ * acts on *the user coming back* (the Android notification bridge takes its notifications
+ * down), which is a transition, not a value anyone can poll for. Returns the unsubscribe.
+ */
+export function onPresenceChange(fn: PresenceListener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function notifyPresence(sessionId: SessionId): void {
+  for (const fn of listeners) fn(sessionId);
+}
+
+/**
+ * Whether a person can see this session right now: some connection that is not the
+ * companion reports itself visible.
+ *
+ * The opposite default from {@link connectionPresence}'s callers, on purpose. Those ask
+ * "could this tab answer?", where silence has to count as yes; this asks "is anyone
+ * looking?", where the costly mistake is the other way — a phone whose tab was killed
+ * outright has no connection left to report anything, and that is exactly the user who
+ * needs telling. So only a reported `visible` counts.
+ */
+export function isUserWatching(sessionId: SessionId): boolean {
+  const byConnection = sessions.get(sessionId);
+  if (!byConnection) return false;
+  const companionSet = companions.get(sessionId);
+  for (const [connectionId, presence] of byConnection) {
+    if (companionSet?.has(connectionId)) continue;
+    if (presence.state === 'visible') return true;
+  }
+  return false;
+}
+
 /** Connections that are the server's companion desktop, per session. */
 const companions = new Map<SessionId, Set<ConnectionId>>();
 
@@ -101,6 +140,7 @@ export function noteClientPresence(
     returnedAt: !isAway && wasAway ? now : (previous?.returnedAt ?? null),
     lastAwayState: isAway ? state : (previous?.lastAwayState ?? null),
   });
+  notifyPresence(sessionId);
 }
 
 /**
@@ -133,6 +173,7 @@ export function forgetConnectionPresence(sessionId: SessionId, connectionId: Con
   if (!byConnection) return;
   byConnection.delete(connectionId);
   if (byConnection.size === 0) sessions.delete(sessionId);
+  notifyPresence(sessionId);
 }
 
 /** Drop a whole session's presence when the session goes away. */

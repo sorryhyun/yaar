@@ -21,6 +21,7 @@ export * from './download/index.js';
 export * from './fonts/index.js';
 export * from './freedpi/index.js';
 export * from './pdf/index.js';
+export * from './termux/index.js';
 export * from './tls/index.js';
 export * from './tunnel/index.js';
 export * from './ytdlp/index.js';

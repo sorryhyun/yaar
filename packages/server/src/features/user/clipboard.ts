@@ -10,6 +10,13 @@
  * fixed by the user granting clipboard access; an unfocused one by clicking the desktop;
  * an empty one by copying something first. Each gets its own sentence.
  *
+ * The one exception is a server running *on the phone* (Termux, with Termux:API): there the
+ * server's clipboard and the user's are the same one, and reading it natively skips the
+ * browser's focus rule, which a phone fails every time the user has switched apps. Text
+ * only — Termux:API has no image clipboard — so an empty text read still asks the browser,
+ * in case what is there is a picture. Gated by `YAAR_CLIPBOARD_GRANT` like the CDP grant,
+ * because it is the same decision: clipboard access with no browser prompt in front of it.
+ *
  * **What is on a clipboard is unbounded, and the reader has a context window.** A pasted
  * log can be megabytes; a screenshot from a 4K display is ~30 MB decoded. Neither belongs
  * in a conversation, and neither should be discovered *after* it has crossed the socket —
@@ -41,6 +48,8 @@ import { actionEmitter, type ClipboardFeedback } from '../../session/action-emit
 import type { PendingOutcome } from '../../session/pending-store.js';
 import { storageWrite } from '../../storage/storage-manager.js';
 import { redactSecrets, type SecretFinding } from './secret-scan.js';
+import { isClipboardGrantEnabled } from '../../config/browser.js';
+import { getTermux } from '../android/termux.js';
 
 /**
  * How much clipboard text a `read` returns.
@@ -169,6 +178,33 @@ function unwrap(outcome: PendingOutcome<ClipboardFeedback>): ClipboardFeedback |
   };
 }
 
+/**
+ * The phone's own clipboard, as the answer the desktop would have given — or null to ask
+ * the desktop after all: no Termux:API, a failed call, or an empty text clipboard that
+ * may be holding an image only the browser can read.
+ */
+async function readFromPhone(
+  maxChars: number,
+  wantImage: boolean,
+): Promise<ClipboardFeedback | null> {
+  const termux = isClipboardGrantEnabled() ? await getTermux() : null;
+  if (!termux) return null;
+  const text = await termux.getClipboard();
+  if (text === null || (!text && wantImage)) return null;
+  const truncated = text.length > maxChars;
+  return {
+    requestId: 'phone',
+    ok: true,
+    text: truncated ? text.slice(0, maxChars) : text,
+    ...(truncated ? { truncated: true, totalChars: text.length } : {}),
+  };
+}
+
+async function writeToPhone(text: string): Promise<boolean> {
+  const termux = isClipboardGrantEnabled() ? await getTermux() : null;
+  return termux ? termux.setClipboard(text) : false;
+}
+
 function isFailure(v: ClipboardFeedback | { error: string }): v is { error: string } {
   return !('requestId' in v);
 }
@@ -177,14 +213,17 @@ function isFailure(v: ClipboardFeedback | { error: string }): v is { error: stri
  * Read the system clipboard for an agent — text truncated, image downscaled.
  */
 export async function readClipboard(opts?: { image?: boolean }): Promise<ClipboardReadResult> {
-  const answer = unwrap(
-    await actionEmitter.readUserClipboard({
-      maxChars: CLIPBOARD_TEXT_LIMIT,
-      image: opts?.image ?? true,
-      maxImagePx: CLIPBOARD_IMAGE_MAX_PX,
-      maxImageBytes: CLIPBOARD_IMAGE_MAX_BYTES,
-    }),
-  );
+  const image = opts?.image ?? true;
+  const answer =
+    (await readFromPhone(CLIPBOARD_TEXT_LIMIT, image)) ??
+    unwrap(
+      await actionEmitter.readUserClipboard({
+        maxChars: CLIPBOARD_TEXT_LIMIT,
+        image,
+        maxImagePx: CLIPBOARD_IMAGE_MAX_PX,
+        maxImageBytes: CLIPBOARD_IMAGE_MAX_BYTES,
+      }),
+    );
   if (isFailure(answer)) return { success: false, error: answer.error };
 
   if (!answer.text && !answer.image) {
@@ -208,6 +247,7 @@ export async function readClipboard(opts?: { image?: boolean }): Promise<Clipboa
 
 /** Put text on the system clipboard. */
 export async function writeClipboard(text: string): Promise<{ success: boolean; error?: string }> {
+  if (await writeToPhone(text)) return { success: true };
   const answer = unwrap(await actionEmitter.writeUserClipboard(text));
   if (isFailure(answer)) return { success: false, error: answer.error };
   return { success: true };
@@ -249,14 +289,16 @@ function extensionFor(mimeType: string): string {
  * saving a PNG or a WebP.
  */
 export async function saveClipboard(path: string): Promise<ClipboardSaveResult> {
-  const answer = unwrap(
-    await actionEmitter.readUserClipboard({
-      maxChars: CLIPBOARD_SAVE_TEXT_LIMIT,
-      image: true,
-      maxImagePx: 0, // full resolution: this is going to a file, not into a prompt
-      maxImageBytes: CLIPBOARD_SAVE_IMAGE_MAX_BYTES,
-    }),
-  );
+  const answer =
+    (await readFromPhone(CLIPBOARD_SAVE_TEXT_LIMIT, true)) ??
+    unwrap(
+      await actionEmitter.readUserClipboard({
+        maxChars: CLIPBOARD_SAVE_TEXT_LIMIT,
+        image: true,
+        maxImagePx: 0, // full resolution: this is going to a file, not into a prompt
+        maxImageBytes: CLIPBOARD_SAVE_IMAGE_MAX_BYTES,
+      }),
+    );
   if (isFailure(answer)) return { success: false, error: answer.error };
 
   // An image wins over text when both are present: a screenshot pasted from a design tool

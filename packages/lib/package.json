@@ -35,6 +35,10 @@
       "types": "./dist/tls/index.d.ts",
       "import": "./dist/tls/index.js"
     },
+    "./termux": {
+      "types": "./dist/termux/index.d.ts",
+      "import": "./dist/termux/index.js"
+    },
     "./tunnel": {
       "types": "./dist/tunnel/index.d.ts",
       "import": "./dist/tunnel/index.js"

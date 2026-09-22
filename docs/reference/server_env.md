@@ -439,6 +439,44 @@ A box with no Chromium simply goes without, and says so once.
 
 ---
 
+## Termux:API (Android)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `YAAR_TERMUX_API` | on for Android when Termux:API answers | Use the phone's own notifications, clipboard and share sheet (`0` off) |
+
+### Why it exists
+
+On a phone the server and the user's device are the same machine, and the desktop is a tab
+that Android freezes whenever the user switches apps. The companion desktop keeps the
+*server's* reads answering through that; this keeps the *user* informed. While no person is
+looking at the session (`isUserWatching` — the companion does not count), agent
+notifications, permission dialogs, questions and finished monitor turns are mirrored into
+the Android notification shade. Tapping one opens the desktop, and coming back takes them
+all down. A permission dialog is the case that matters most: it has a deadline, and one
+nobody sees is a denial.
+
+The same client serves the clipboard (the phone's real one, with no browser focus rule —
+text only, so an empty text read still asks the browser in case it holds an image; gated
+by `YAAR_CLIPBOARD_GRANT`) and `invoke { action: "share" }` on a storage file, which opens
+Android's share sheet and exists only on Android.
+
+### Why "on" means "if it answers"
+
+Termux:API is a separate app **and** a separate package. With the package installed and the
+app missing, every `termux-*` command waits forever instead of failing, so a `which` says
+nothing. The server makes one harmless call at startup (`termux-battery-status`) and uses
+Termux:API only if it answers in time; every later call has its own deadline too. Without
+it, nothing changes.
+
+The launcher (`scripts/dev/start-termux.sh`) separately takes a `termux-wake-lock` for as
+long as the server runs, so Android does not doze Termux with the screen off. That command
+ships with Termux itself and needs no extra app.
+
+**Source:** `packages/server/src/features/android/`, `packages/lib/src/termux/`
+
+---
+
 ## Agent budgets
 
 | Variable | Default | Meaning |

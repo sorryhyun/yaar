@@ -142,6 +142,14 @@ async function startup() {
   const { startCompanionTab } = await import('./features/companion/companion-tab.js');
   void startCompanionTab(getPort()).catch((err) => console.error('Companion tab error:', err));
 
+  // On a phone with Termux:API: mirror notifications, approvals and finished turns into
+  // the Android shade while the desktop is out of sight. Probes in the background and does
+  // nothing anywhere else — see features/android/index.ts.
+  const { startAndroidIntegration } = await import('./features/android/index.js');
+  void startAndroidIntegration(getPort()).catch((err) =>
+    console.error('Android integration error:', err),
+  );
+
   // Compile stale apps and warm the provider pool concurrently, AFTER the server
   // is listening — codex app-server needs to reach MCP endpoints at
   // http://127.0.0.1:{PORT}/mcp/*, and compile no longer blocks either the
