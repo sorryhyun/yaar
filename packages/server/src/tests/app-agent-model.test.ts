@@ -31,7 +31,7 @@ describe('app agent model selection', () => {
   it('preserves an explicit Opus app tier and maps it to Sol', async () => {
     const profile = await buildAppAgentProfile('devtools');
 
-    expect(profile.model).toBe('claude-opus-5');
+    expect(profile.model).toBe('claude-opus-5-5');
     expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-sol');
   });
 });

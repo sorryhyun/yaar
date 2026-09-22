@@ -35,7 +35,14 @@ fi
 echo $$ > "$pidfile"
 trap 'rm -f "$pidfile"' EXIT
 
-[ -e node_modules/.bin/tsc ] || bun install
+# Install again whenever bun.lock has moved since the last install here, not only on a bare
+# checkout: `git pull` alone leaves the old SDK in node_modules, and ensure-claude-android.sh
+# reads the version from there, so a bumped SDK would keep running the old unpacked CLI.
+stamp=node_modules/.yaar-termux-install
+if [ ! -e node_modules/.bin/tsc ] || [ bun.lock -nt "$stamp" ]; then
+  bun install
+  touch "$stamp"
+fi
 
 if [ -z "${CLAUDE_CODE_PATH:-}" ]; then
   CLAUDE_CODE_PATH="$(./scripts/dev/ensure-claude-android.sh)"

@@ -14,7 +14,7 @@ import { isFableMode } from '../../config/env.js';
 export const AGENT_TYPE_MODELS: Record<string, string> = {
   haiku: 'claude-haiku-4-5-20251001',
   sonnet: 'claude-sonnet-5',
-  opus: 'claude-opus-5',
+  opus: 'claude-opus-5-5',
 };
 
 /** The monitor agent's model in fable mode (`FABLE=1`). */

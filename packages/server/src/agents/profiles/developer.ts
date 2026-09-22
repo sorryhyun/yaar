@@ -17,7 +17,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
   allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES, ...MESSAGING_TOOL_NAMES],
   // Opus for the monitor agent — it is the one the user talks to. Claude-only; a
   // Codex turn gets the mapped equivalent from `turnOptionsFor`.
-  model: 'claude-opus-5',
+  model: 'claude-opus-5-5',
 };
 
 /**
