@@ -28,7 +28,7 @@ import {
 } from './client-presence.js';
 import { deadlines } from '../config.js';
 import type { WindowStateRegistry } from './window-state.js';
-import { actionEmitter } from './action-emitter.js';
+import { actionEmitter, REPLAY_REQUEST_PREFIX } from './action-emitter.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AppWindowCoordinator');
@@ -505,7 +505,7 @@ export class AppWindowCoordinator {
       const request = replayable[i]!;
       this.deps.sendTo(connectionId, {
         type: ServerEventType.APP_PROTOCOL_REQUEST,
-        requestId: `replay-${windowId}-${Date.now()}-${i}`,
+        requestId: `${REPLAY_REQUEST_PREFIX}${windowId}-${Date.now()}-${i}`,
         windowId,
         // A copy: the stored request is the one the agent originally sent, and it is
         // replayed again on the next remount. Stamping it in place would rewrite history.

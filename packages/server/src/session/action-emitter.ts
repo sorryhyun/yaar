@@ -62,6 +62,12 @@ const log = createLogger('ActionEmitter');
 const appProtocolLog = createLogger('AppProtocol');
 
 /**
+ * Request ids the coordinator mints when it re-sends stored commands to a remounted iframe.
+ * Nothing awaits those — no agent asked — so their replies have no pending entry by design.
+ */
+export const REPLAY_REQUEST_PREFIX = 'replay-';
+
+/**
  * Rendering feedback from frontend.
  */
 export interface RenderingFeedback {
@@ -811,6 +817,13 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   resolveAppProtocolResponse(requestId: string, response: AppProtocolResponse): boolean {
     const { resolved } = this.appRequests.resolve(requestId, response);
     if (resolved) return true;
+
+    // A replay's reply is expected to find nobody waiting. Warning on each one buried the
+    // log under ~20 lines per phone unlock, every one of them a command that worked.
+    if (requestId.startsWith(REPLAY_REQUEST_PREFIX)) {
+      appProtocolLog.debug('replayed command answered', { requestId, kind: response.kind });
+      return false;
+    }
 
     const expired = this.appRequests.takeLate(requestId);
     if (expired) {

@@ -16,6 +16,7 @@ export const projectCommands = {
       },
       required: ['name'],
     },
+    replay: 'never',
     run: async (p) => {
       const { id, appId } = await createProject(String(p.name));
       const proj = activeProject();
@@ -51,6 +52,7 @@ export const projectCommands = {
       properties: { id: { type: 'string' } },
       required: ['id'],
     },
+    replay: 'never',
     run: async (p) => {
       await deleteProject(String(p.id));
     },
@@ -68,6 +70,7 @@ export const projectCommands = {
       },
       required: ['appId'],
     },
+    replay: 'never',
     run: async (p) => {
       const { id: projectId, appId, agentsMd } = await cloneApp(String(p.appId));
       const proj = activeProject();

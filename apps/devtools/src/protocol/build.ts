@@ -155,6 +155,7 @@ export const buildCommands = {
         },
       },
     },
+    replay: 'never',
     run: async (p) => {
       const paths = Array.isArray(p.paths) ? p.paths.map(String) : undefined;
       const outcome = await formatFiles(paths);
@@ -247,6 +248,7 @@ export const buildCommands = {
       },
       required: ['appId'],
     },
+    replay: 'never',
     run: async (p) =>
       await deploy({
         appId: String(p.appId),

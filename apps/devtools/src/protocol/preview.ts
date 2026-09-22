@@ -111,6 +111,7 @@ export const previewCommands = {
       },
       required: ['expression'],
     },
+    replay: 'never',
     run: async (p) => {
       const expression =
         typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
@@ -178,6 +179,7 @@ export const previewCommands = {
       },
       required: ['command'],
     },
+    replay: 'never',
     run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
@@ -229,6 +231,7 @@ export const previewCommands = {
         },
       },
     },
+    replay: 'never',
     run: async (p) =>
       await runPreviewScript({
         ...(typeof p.path === 'string' ? { path: p.path } : {}),

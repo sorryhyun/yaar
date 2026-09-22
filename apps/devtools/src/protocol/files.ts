@@ -186,6 +186,7 @@ export const fileCommands = {
       },
       required: ['path', 'content'],
     },
+    replay: 'never',
     run: async (p) => {
       // `String(content)` turned an object into the literal "[object Object]" and wrote that
       // to disk — silent corruption, and passing an object is the natural thing to do for
@@ -253,6 +254,7 @@ export const fileCommands = {
       },
       required: ['path'],
     },
+    replay: 'never',
     run: async (p) => {
       const normalize = (e: {
         search?: string;
@@ -294,6 +296,7 @@ export const fileCommands = {
       properties: { path: { type: 'string' } },
       required: ['path'],
     },
+    replay: 'never',
     run: async (p) => {
       await deleteFile(String(p.path));
     },
@@ -344,6 +347,7 @@ export const fileCommands = {
       },
       required: ['from'],
     },
+    replay: 'never',
     run: async (p) => {
       if (!activeProject())
         throw new AppCommandError('No active project. Open or create one first.');

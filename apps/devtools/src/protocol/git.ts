@@ -93,6 +93,7 @@ export const gitCommands = {
       },
       required: ['appId', 'ref'],
     },
+    replay: 'never',
     run: async (p) => gitRestore(String(p.appId), String(p.ref)),
   }),
   gitCheckpoint: defineAppCommand({
@@ -105,6 +106,7 @@ export const gitCommands = {
       },
       required: ['appId'],
     },
+    replay: 'never',
     run: async (p) => gitCheckpoint(String(p.appId), p.message ? String(p.message) : undefined),
   }),
 };
