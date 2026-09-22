@@ -99,3 +99,9 @@ export interface SharedOpenFile {
   projectId: string;
   path: string;
 }
+
+/** Which projects are open as tabs, and which one is in front. */
+export interface Workspace {
+  tabs: string[];
+  activeId: string | null;
+}

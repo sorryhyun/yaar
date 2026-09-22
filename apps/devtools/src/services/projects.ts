@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, list, del, errMsg, safeParseOr, subscribe } from '@bundled/yaar';
+import { appStorage, invoke, list, del, errMsg, safeParseOr } from '@bundled/yaar';
 import type * as z from '@bundled/zod';
 import { ProjectAppJsonSchema } from '../schema';
 import {
@@ -24,7 +24,12 @@ import {
   sharedOpenFile,
   sharedOpenFileReady,
   setSharedOpenFile,
+  sharedWorkspace,
+  sharedWorkspaceReady,
+  setSharedWorkspace,
+  onRemoteWorkspace,
   type ProjectMeta,
+  type Workspace,
 } from '../core';
 import { previewWindowIdFor, projectPath } from '../lib/paths';
 import { appIdFromName, scaffoldMain } from '../lib/scaffold';
@@ -147,6 +152,11 @@ export async function reclaimOrphanedPreviewStorage(): Promise<void> {
  * which is indistinguishable from a devtools that never had one — so it cloned the repo
  * again, under a new id, on top of the work that was already there.
  *
+ * Kept twice. `sharedWorkspace` is this window's, held by the server while the window is
+ * open: it is what a remounting copy restores from and what the other copies follow.
+ * This file is one per app, so it is only the fallback for a window opened fresh — it
+ * must never be followed, or every Dev Tools window switches whenever any of them does.
+ *
  * A sidecar at the appStorage root, alongside {@link ORIGINS_PATH} and for the same
  * reason: the projects' own `app.json` files are manifests that `deploy` ships.
  *
@@ -156,29 +166,25 @@ export async function reclaimOrphanedPreviewStorage(): Promise<void> {
  */
 const WORKSPACE_PATH = 'workspace.json';
 
-interface Workspace {
-  tabs: string[];
-  activeId: string | null;
-}
-
 /**
- * Record the open set. Best effort, and not awaited by its callers: failing to write
- * this must never fail the open or close that produced it; losing it costs one restore.
+ * Record the open set, for this window's other copies and for the next fresh window.
+ * The file write is best effort and not awaited: failing it must never fail the open or
+ * close that produced it; losing it costs one restore.
  */
 function saveWorkspace(): void {
   const workspace: Workspace = { tabs: openTabs(), activeId: activeProject()?.id ?? null };
+  setSharedWorkspace(workspace);
   appStorage.save(WORKSPACE_PATH, JSON.stringify(workspace, null, 2)).catch((err) => {
     console.error('[devtools] recording open projects failed', err);
   });
 }
 
 /**
- * The stored open set, filtered against the live project list — a project deleted from
+ * A stored open set, filtered against the live project list — a project deleted from
  * another window, or from a session whose last write never landed, would otherwise put
  * a tab on screen for a directory that is gone. Null when nothing usable is stored.
  */
-async function readWorkspace(): Promise<{ tabs: string[]; activeId: string } | null> {
-  const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
+function usableWorkspace(raw: unknown): { tabs: string[]; activeId: string } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const stored = raw as Partial<Workspace>;
   const live = new Set(projects().map((p) => p.id));
@@ -197,13 +203,21 @@ async function readWorkspace(): Promise<{ tabs: string[]; activeId: string } | n
  * Reopen what was open, once the project list is in. Nothing is written back here; the
  * next open or close does that.
  *
+ * This window's own set first: a copy remounting while the window stays open must come
+ * back to the project *this* window was on, not whichever one another Dev Tools window
+ * last opened. The file only answers for a window with no set of its own yet.
+ *
  * Opened as a follower: a copy mounting while another copy of this window is already
  * up must adopt that copy's build, preview and open file, not reset them. A window
  * that has just opened has nothing shared yet, so for it the two are the same.
  */
 export async function restoreWorkspace(): Promise<void> {
   try {
-    const workspace = await readWorkspace();
+    await sharedWorkspaceReady;
+    const own = sharedWorkspace();
+    const workspace = usableWorkspace(
+      own ?? (await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined)),
+    );
     if (!workspace) return;
     setOpenTabs(workspace.tabs);
     await openProject(workspace.activeId, { record: false });
@@ -223,35 +237,26 @@ export async function restoreWorkspace(): Promise<void> {
  * there, while the copy on the phone's screen kept showing the project from before, and
  * the user watched the agent build an app that was not the one on screen.
  *
- * A copy that follows does not write the set back, so two copies cannot ping-pong, and
- * each reads the file rather than trusting the ping — every copy lands on the last write.
+ * Copies of *this* window only. Following the app-wide file instead put two Dev Tools
+ * windows on two monitors in lockstep: one agent's `cloneApp` moved the other's active
+ * project, and that agent's next `writeFile` landed in the wrong app.
+ *
+ * A copy that follows does not write the set back, so two copies cannot ping-pong.
  */
 export function followWorkspace(): void {
-  subscribe(`yaar://apps/self/storage/${WORKSPACE_PATH}`, () => {
+  onRemoteWorkspace(() => {
     void syncWorkspace().catch((err) => {
       console.error('[devtools] following open projects failed', err);
     });
-  }).catch((err) => {
-    console.error('[devtools] watching open projects failed', err);
   });
 }
 
 async function syncWorkspace(): Promise<void> {
-  const raw = await appStorage.readJsonOr<unknown>(WORKSPACE_PATH, undefined);
-  const stored = (raw && typeof raw === 'object' ? raw : {}) as Partial<Workspace>;
-  const storedTabs = Array.isArray(stored.tabs) ? stored.tabs : [];
-  const current = openTabs();
-  // The ping for this copy's own write, the common case: nothing to do.
-  if (
-    (stored.activeId ?? null) === (activeProject()?.id ?? null) &&
-    storedTabs.length === current.length &&
-    storedTabs.every((id, i) => id === current[i])
-  ) {
-    return;
-  }
+  const stored = sharedWorkspace();
+  const storedTabs = stored?.tabs ?? [];
   // A project cloned or created in another copy is one this copy has never listed.
   if (storedTabs.some((id) => !projects().some((p) => p.id === id))) await loadProjects();
-  const workspace = await readWorkspace();
+  const workspace = usableWorkspace(stored);
   if (!workspace) {
     if (activeProject()) clearActiveProjectState({ record: false });
     setOpenTabs([]);

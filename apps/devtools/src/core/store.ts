@@ -9,6 +9,7 @@ import type {
   StaticProtocolInfo,
   FileChange,
   SharedOpenFile,
+  Workspace,
 } from './types';
 
 // Shared reactive state for the IDE.
@@ -77,6 +78,26 @@ export const [previewUrl, setPreviewUrl] = createSharedSignal<string | null>('pr
 export const [statusText, setStatusText] = createSharedSignal('status', 'Ready');
 
 export const [openTabs, setOpenTabs] = createSignal<string[]>([]);
+
+const remoteWorkspaceListeners: (() => void)[] = [];
+
+/**
+ * The open set as this window's copies agree on it. Null until some copy of this window
+ * has opened or closed a project — the restore reads that as "nothing to follow here".
+ *
+ * Shared per window and not through `workspace.json`: that file is one per app, so a
+ * second Dev Tools window on another monitor followed it too, and each window's
+ * `cloneApp` switched the other's project under its agent's next write.
+ */
+export const [sharedWorkspace, setSharedWorkspace, sharedWorkspaceReady] =
+  createSharedSignal<Workspace | null>('workspace', null, {
+    onRemote: () => remoteWorkspaceListeners.forEach((fn) => fn()),
+  });
+
+/** Run `fn` when another copy of this window opens, closes or switches a project. */
+export function onRemoteWorkspace(fn: () => void): void {
+  remoteWorkspaceListeners.push(fn);
+}
 
 export const [bundledLibs, setBundledLibs] = createSignal<string[]>([]);
 
