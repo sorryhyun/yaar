@@ -223,7 +223,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
   // ── yaar://config/settings ──
   registry.register('yaar://config/settings', {
     description:
-      'User preferences — name, language, provider, appearance (wallpaper, accentColor, iconSize).',
+      'User preferences — name, language, provider, appearance (wallpaper, accentColor, iconSize, theme), handedness.',
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
       type: 'object',
@@ -249,6 +249,13 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
           type: 'string',
           enum: ['small', 'medium', 'large'],
           description: 'Desktop icon size',
+        },
+        theme: { type: 'string', enum: ['dark', 'light'], description: 'Color theme' },
+        handedness: {
+          type: 'string',
+          enum: ['right', 'left'],
+          description:
+            'Which hand holds the phone; the status badge sits in the opposite top corner',
         },
       },
     },

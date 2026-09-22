@@ -15,6 +15,7 @@
  * and how many agents are working — the two things a phone user otherwise has to pull
  * the shade down to learn after every swipe.
  */
+import { useEffect, useRef } from 'react';
 import { useDesktopStore } from '@/store';
 import type { ActiveAgent } from '@/types/state';
 import {
@@ -75,15 +76,23 @@ function chipTitle(agent: ActiveAgent, now: number): string {
 
 /**
  * The phone's stand-in for the pill: the active monitor's number and a count of working
- * agents, top-right, in the type size of a system status bar.
+ * agents, in a top corner, in the type size of a system status bar.
+ *
+ * Which corner is the user's `handedness` setting: the one *away* from the thumb, so a
+ * right-handed user's thumb, reaching up the right edge, does not sit over it — top-left
+ * by default. It is over everything, cards and the shade included (`DesktopSurface`
+ * renders it outside the desktop layer, which a card would cover and a pan would slide):
+ * a reading of where you are is worth most exactly when a card fills the screen.
  *
  * It is a reading, not a control — `pointer-events: none` in the CSS — because the top
- * edge belongs to the shade's pull-down and the right edge to the monitor-swipe gutter,
+ * edge belongs to the shade's pull-down and the side edges to the monitor-swipe gutters,
  * and a badge that ate either touch would break the gesture it sits on. The dot takes
  * the connection color, so a dropped connection is visible without a pull; the word
  * "Connected" is not worth its width here.
  */
-function PhoneStatusBadge({ agentCount }: { agentCount: number }) {
+export function PhoneStatusBadge() {
+  const agentCount = useDesktopStore((s) => Object.keys(s.activeAgents).length);
+  const handedness = useDesktopStore((s) => s.handedness);
   const connectionStatus = useDesktopStore((s) => s.connectionStatus);
   // The number the monitor tabs show ("Monitor 2" → "2"), not the id: ids start at '0'.
   const monitorNumber = useDesktopStore(
@@ -91,8 +100,29 @@ function PhoneStatusBadge({ agentCount }: { agentCount: number }) {
   );
   const monitorCount = useDesktopStore((s) => s.monitors.length);
 
+  // A card's title bar runs under this corner, so it leaves room for the badge — exactly
+  // as much as the badge is wide, which changes with its text ("M1" → "M2/3 ·4"). Written
+  // on `<html>` because the title bars that read it are all over the tree; a resize fires
+  // on a change of text, not per frame, so the inherited restyle is rare.
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    if (!el) return;
+    const publish = () =>
+      root.style.setProperty('--phone-badge-w', `${el.getBoundingClientRect().width}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--phone-badge-w');
+    };
+  }, []);
+
   return (
-    <div className={styles.phoneStatusBadge} aria-hidden="true">
+    <div ref={ref} className={styles.phoneStatusBadge} data-hand={handedness} aria-hidden="true">
       <span className={styles.statusDot} data-status={connectionStatus} />
       <span className={styles.phoneStatusMonitor}>
         M{monitorNumber || 1}
@@ -121,8 +151,9 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
   const now = useElapsedNow(agentList.length > 0);
 
   // The phone's rule, in one place: the bar is a desktop thing. A corner badge stands in
-  // for it; everything else it would have said is a pull-down away.
-  if (isMobile) return <PhoneStatusBadge agentCount={agentList.length} />;
+  // for it (rendered by `DesktopSurface`, above every layer); everything else it would
+  // have said is a pull-down away.
+  if (isMobile) return null;
   const census = agentList.length > 0;
 
   return (

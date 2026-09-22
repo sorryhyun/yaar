@@ -183,6 +183,11 @@
   "shade": {
     "monitors": "모니터",
     "windows": "창",
-    "noWindows": "열린 창 없음"
+    "noWindows": "열린 창 없음",
+    "pullToClear": "당겨서 컨텍스트 초기화",
+    "releaseToClear": "놓으면 컨텍스트 초기화"
+  },
+  "gestures": {
+    "newMonitor": "새 모니터"
   }
 }

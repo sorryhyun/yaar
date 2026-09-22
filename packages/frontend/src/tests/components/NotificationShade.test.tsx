@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, mock, jest } from 'bun:tes
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { NotificationShade } from '@/components/overlays/NotificationShade';
-import { DesktopStatusBar } from '@/components/desktop/DesktopStatusBar';
+import { DesktopStatusBar, PhoneStatusBadge } from '@/components/desktop/DesktopStatusBar';
 import { SHADE_SETTLE_MS } from '@/lib/gestures';
 import { clearGestureVars } from '@/lib/gesture-layer';
 
@@ -251,9 +251,14 @@ describe('DesktopStatusBar on a phone', () => {
 
   afterEach(cleanup);
 
-  const renderBar = () => render(<DesktopStatusBar interrupt={noop} interruptAgent={noop} />);
+  const renderBar = () => render(<PhoneStatusBadge />);
 
-  it('shows only the corner badge — no pill, no connection word, no stop buttons', () => {
+  it('renders no pill at all — DesktopSurface draws the badge, outside the desktop layer', () => {
+    const { container } = render(<DesktopStatusBar interrupt={noop} interruptAgent={noop} />);
+    expect(container.textContent).toBe('');
+  });
+
+  it('shows only the corner badge — no connection word, no stop buttons', () => {
     useDesktopStore.setState({ activeAgents: { a: agent('a', '0') } as never });
     const { container } = renderBar();
     expect(container.textContent).toBe('M11');
@@ -290,5 +295,16 @@ describe('DesktopStatusBar on a phone', () => {
     expect(container.querySelector('[data-status]')?.getAttribute('data-status')).toBe(
       'disconnected',
     );
+  });
+
+  it('takes the corner away from the thumb, following the handedness setting', () => {
+    useDesktopStore.setState({ handedness: 'right' });
+    const { container } = renderBar();
+    const hand = () => container.querySelector('[data-hand]')?.getAttribute('data-hand');
+    expect(hand()).toBe('right');
+
+    // A change made in the Configurations app arrives as desktop.updateSettings.
+    act(() => useDesktopStore.getState().applyServerSettings({ handedness: 'left' }));
+    expect(hand()).toBe('left');
   });
 });

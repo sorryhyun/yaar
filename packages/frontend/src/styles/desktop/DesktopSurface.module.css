@@ -607,9 +607,10 @@
 /* The phone's corner reading in place of the pill (see PhoneStatusBadge). Touches pass
    through: the top edge is the shade's pull-down, the right edge the monitor swipe. */
 .phoneStatusBadge {
-  position: absolute;
+  position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + var(--space-1));
-  right: var(--space-2);
+  /* The corner away from the thumb of the hand holding the phone (`handedness`). */
+  left: var(--space-2);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -623,9 +624,16 @@
   line-height: 1;
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(10px);
-  z-index: var(--z-modal);
+  /* Topmost: over cards, the shade and toasts alike. It takes no touches, so being over
+     them costs nothing but the few pixels it covers. */
+  z-index: var(--z-cursor);
   pointer-events: none;
   user-select: none;
+}
+
+.phoneStatusBadge[data-hand='left'] {
+  left: auto;
+  right: var(--space-2);
 }
 
 .phoneStatusBadge .statusDot {

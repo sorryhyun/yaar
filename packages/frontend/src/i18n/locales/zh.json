@@ -186,6 +186,11 @@
   "shade": {
     "monitors": "显示器",
     "windows": "窗口",
-    "noWindows": "没有打开的窗口"
+    "noWindows": "没有打开的窗口",
+    "pullToClear": "下拉以重置上下文",
+    "releaseToClear": "松开以重置上下文"
+  },
+  "gestures": {
+    "newMonitor": "新建显示器"
   }
 }

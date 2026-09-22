@@ -90,20 +90,6 @@ export const selectHasMaximizedWindow = (state: DesktopStore): boolean =>
   );
 
 /**
- * Whether a visible standard window is open on the active monitor, maximized or not —
- * on a phone every such window is a full-screen card, so this is what covers the desktop.
- */
-export const selectHasOpenStandardWindow = (state: DesktopStore): boolean =>
-  Object.values(state.windows).some(
-    (w) =>
-      w != null &&
-      !w.minimized &&
-      !w.windowStyle &&
-      (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
-  );
-
-/**
  * The phone card currently filling the whole screen, if any. The flag is only honoured
  * while that card is the focused one on the active monitor, so minimizing it, closing it,
  * or switching to another card brings the palette back without anyone clearing it.

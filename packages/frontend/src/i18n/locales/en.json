@@ -188,6 +188,11 @@
   "shade": {
     "monitors": "Monitors",
     "windows": "Windows",
-    "noWindows": "No open windows"
+    "noWindows": "No open windows",
+    "pullToClear": "Pull to clear context",
+    "releaseToClear": "Release to clear context"
+  },
+  "gestures": {
+    "newMonitor": "New monitor"
   }
 }

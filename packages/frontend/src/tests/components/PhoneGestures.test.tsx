@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
 import { render, cleanup, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { PhoneGestures } from '@/components/desktop/PhoneGestures';
-import { EDGE_GUTTER_PX, PEEK_SETTLE_MS } from '@/lib/gestures';
+import { MAX_MONITORS, APP_MSG } from '@yaar/shared';
+import { EDGE_GUTTER_PX, PEEK_SETTLE_MS, SHADE_CLEAR_PX } from '@/lib/gestures';
 import { clearGestureVars, getGestureVar } from '@/lib/gesture-layer';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
@@ -105,6 +106,8 @@ const panState = () => document.documentElement.getAttribute('data-monitor-peek'
 const pullState = () => document.documentElement.getAttribute('data-shade-pull');
 const pullPx = () => getGestureVar('shade-pull', '--shade-pull');
 
+const originalCreateMonitor = useDesktopStore.getState().createMonitor;
+
 describe('PhoneGestures', () => {
   beforeEach(() => {
     useDesktopStore.setState({
@@ -115,6 +118,8 @@ describe('PhoneGestures', () => {
       cliMode: false,
       notificationShadeOpen: false,
       paletteSheetOpen: false,
+      toasts: {},
+      createMonitor: originalCreateMonitor,
     });
     // Fake from before any touch in the test, not just around `settle()`/`slowly()`: the
     // handlers time a drag off `performance.now()`, which the fake clock also controls
@@ -130,6 +135,7 @@ describe('PhoneGestures', () => {
     document.documentElement.removeAttribute('data-monitor-peek');
     clearGestureVars('monitor-peek');
     document.documentElement.removeAttribute('data-shade-pull');
+    document.documentElement.removeAttribute('data-shade-clear');
     clearGestureVars('shade-pull');
   });
 
@@ -264,16 +270,76 @@ describe('PhoneGestures', () => {
   });
 
   it('resists rather than moves when there is nowhere to go', () => {
-    useDesktopStore.setState({ activeMonitorId: 'b' });
+    // Off the right of the last monitor is a new one — until the session is full, which
+    // is the one place the strip really ends. Off the left of monitor 1 is the CLI.
+    const full = Array.from({ length: MAX_MONITORS }, (_, i) => ({
+      id: String(i),
+      label: `Monitor ${i + 1}`,
+      createdAt: 0,
+    }));
+    useDesktopStore.setState({ monitors: full, activeMonitorId: String(MAX_MONITORS - 1) });
     const { container } = render(<PhoneGestures />);
     const right = gutters()[1];
     touch(right, 'touchstart', 396, 300);
     touch(right, 'touchmove', 316, 300);
-    // 80px of finger, a quarter of it on screen, and no monitor named — the edge says
-    // "no" rather than saying nothing. The right-hand end is the one that is really an
-    // end; off the left of monitor 1 is the CLI.
+    // 80px of finger, a quarter of it on screen, and nothing named — the edge says "no"
+    // rather than saying nothing.
     expect(peekOffsetPx()).toBe('-20px');
-    expect(container.textContent).not.toContain('Monitor');
+    expect(container.textContent).toBe('');
+  });
+
+  it('offers a new monitor off the right end of the strip, numbered as it will be', () => {
+    useDesktopStore.setState({ activeMonitorId: 'b' });
+    const createMonitor = jest.fn();
+    useDesktopStore.setState({ createMonitor });
+    const { container } = render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 300, 300);
+    touch(document.body, 'touchmove', 220, 305);
+
+    // Two monitors, ids 'a' and 'b': the server's lowest free integer id is 0.
+    expect(peekOffsetPx()).toBe('-80px');
+    expect(container.textContent).toContain('New monitor');
+    expect(container.querySelector('[data-new]')?.textContent).toContain('1');
+
+    touch(document.body, 'touchend', 140, 305);
+    settle();
+    expect(createMonitor).toHaveBeenCalledTimes(1);
+    // Held where it landed until the server's answer switches this tab over, so the
+    // desktop that was just left is not what fills the wait.
+    expect(panState()).toBe('settling');
+
+    act(() => {
+      useDesktopStore.setState({ activeMonitorId: 'c' });
+    });
+    expect(panState()).toBeNull();
+    expect(container.textContent).toBe('');
+  });
+
+  it('gives the old desktop back if the new monitor never arrives', () => {
+    useDesktopStore.setState({ activeMonitorId: 'b', createMonitor: () => {} });
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 300, 300);
+    touch(document.body, 'touchmove', 220, 305);
+    touch(document.body, 'touchend', 140, 305);
+    settle();
+    expect(panState()).toBe('settling');
+    act(() => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(panState()).toBeNull();
+    expect(useDesktopStore.getState().activeMonitorId).toBe('b');
+  });
+
+  it('shows the number of the monitor it is heading for, large, while the finger is down', () => {
+    const { container } = render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 300, 300);
+    touch(document.body, 'touchmove', 220, 305);
+    const badge = container.querySelector('[data-peek-badge]');
+    expect(badge?.textContent).toBe('2');
+
+    touch(document.body, 'touchend', 140, 305);
+    settle();
+    expect(container.querySelector('[data-peek-badge]')).toBeNull();
   });
 
   it('opens the CLI off the left end of the strip, where a phone has no Shift+Tab', () => {
@@ -356,7 +422,7 @@ describe('PhoneGestures', () => {
     below.remove();
   });
 
-  it('pulls the notification shade down from the top edge', () => {
+  it('pulls the notification shade down', () => {
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 200, 10);
     touch(document.body, 'touchend', 205, 120);
@@ -433,11 +499,118 @@ describe('PhoneGestures', () => {
     list.remove();
   });
 
-  it('leaves a pull that did not start at the top edge alone', () => {
+  it('pulls the shade from anywhere, not just the top edge, as the pan pans from anywhere', () => {
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 200, 400);
-    touch(document.body, 'touchend', 205, 520);
+    touch(document.body, 'touchmove', 203, 450);
+    expect(pullState()).toBe('dragging');
+    expect(pullPx()).toBe('50px');
+  });
+
+  /** The open shade's sheet, as `NotificationShade` marks it. */
+  function openShade() {
+    useDesktopStore.setState({ notificationShadeOpen: true });
+    const sheet = document.createElement('div');
+    sheet.setAttribute('data-shade-surface', '');
+    document.body.appendChild(sheet);
+    return sheet;
+  }
+
+  const clearState = () => document.documentElement.getAttribute('data-shade-clear');
+  const toasts = () => Object.values(useDesktopStore.getState().toasts);
+
+  it('clears the context when an open shade is pulled down again, far enough', () => {
+    const sheet = openShade();
+    render(<PhoneGestures />);
+    touch(sheet, 'touchstart', 200, 300);
+    touch(sheet, 'touchmove', 203, 360);
+    // Stretched, not yet armed: letting go here would do nothing.
+    expect(clearState()).toBe('dragging');
+    expect(getGestureVar('shade-pull', '--shade-overpull')).toBe('30px');
+
+    touch(sheet, 'touchmove', 203, 300 + SHADE_CLEAR_PX + 10);
+    expect(clearState()).toBe('armed');
+    touch(sheet, 'touchend', 203, 300 + SHADE_CLEAR_PX + 10);
+
+    expect(toasts().some((t) => t.id.startsWith('reset-'))).toBe(true);
+    settle();
+    // Done with: the pull was for the reset, and the shade has nothing left to be open for.
+    expect(clearState()).toBeNull();
     expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+    sheet.remove();
+  });
+
+  it('springs back and clears nothing when the second pull is let go short', () => {
+    const sheet = openShade();
+    render(<PhoneGestures />);
+    touch(sheet, 'touchstart', 200, 300);
+    touch(sheet, 'touchmove', 203, 300 + SHADE_CLEAR_PX + 10);
+    // Seen the hint turn, thought better of it, slid back up before lifting.
+    touch(sheet, 'touchmove', 203, 340);
+    touch(sheet, 'touchend', 203, 340);
+    settle();
+
+    expect(toasts()).toHaveLength(0);
+    expect(clearState()).toBeNull();
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    sheet.remove();
+  });
+
+  it('does not clear a pull that has started back up, even while still past the line', () => {
+    const sheet = openShade();
+    render(<PhoneGestures />);
+    touch(sheet, 'touchstart', 200, 300);
+    touch(sheet, 'touchmove', 203, 300 + SHADE_CLEAR_PX + 60);
+    expect(clearState()).toBe('armed');
+    // Coming back up: still well past the line, but no longer pulling down — disarmed,
+    // and the hint says so before the finger lifts.
+    touch(sheet, 'touchmove', 203, 300 + SHADE_CLEAR_PX + 20);
+    expect(clearState()).toBe('dragging');
+    touch(sheet, 'touchend', 203, 300 + SHADE_CLEAR_PX + 20);
+    settle();
+
+    expect(toasts()).toHaveLength(0);
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    sheet.remove();
+  });
+
+  it('still clears when a finger held at the bottom wobbles a few pixels', () => {
+    const sheet = openShade();
+    render(<PhoneGestures />);
+    touch(sheet, 'touchstart', 200, 300);
+    touch(sheet, 'touchmove', 203, 300 + SHADE_CLEAR_PX + 40);
+    touch(sheet, 'touchmove', 203, 300 + SHADE_CLEAR_PX + 34);
+    expect(clearState()).toBe('armed');
+    touch(sheet, 'touchend', 203, 300 + SHADE_CLEAR_PX + 34);
+    expect(toasts().some((t) => t.id.startsWith('reset-'))).toBe(true);
+    sheet.remove();
+  });
+
+  it('pulls the shade from over an app card, through the frame script', () => {
+    // The shape the router resolves a message's source from: a window holding an iframe.
+    // A synthetic event, because happy-dom's postMessage loses `source` identity.
+    const card = document.createElement('div');
+    card.setAttribute(WINDOW_ID_DATA_ATTR, 'w1');
+    const iframe = document.createElement('iframe');
+    card.appendChild(iframe);
+    document.body.appendChild(card);
+    render(<PhoneGestures />);
+    const frame = (phase: string, dy: number) =>
+      act(() => {
+        const ev = new document.defaultView!.Event('message');
+        Object.defineProperty(ev, 'data', {
+          value: { type: APP_MSG.touchPan, phase, dx: 0, dy, axis: 'y' },
+        });
+        Object.defineProperty(ev, 'source', { value: iframe.contentWindow });
+        window.dispatchEvent(ev);
+      });
+    frame('start', 12);
+    frame('move', 70);
+    expect(pullState()).toBe('dragging');
+    expect(pullPx()).toBe('70px');
+    // Not a monitor pan: the axis says so.
+    expect(panState()).toBeNull();
+    card.remove();
   });
 
   it('does not pull the shade over a palette that is already up', () => {

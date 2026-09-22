@@ -534,6 +534,7 @@ interface Settings {
   accentColor: string;
   iconSize: 'small' | 'medium' | 'large';
   theme: 'dark' | 'light';
+  handedness: 'right' | 'left';  // phone: the status badge sits in the opposite top corner
   allowAllApps: boolean;
   remote: boolean;       // Remote-mode preference, read at boot and applied to process.env.REMOTE
                           // (an explicit REMOTE env var overrides it); takes effect on restart

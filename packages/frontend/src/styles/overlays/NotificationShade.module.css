@@ -220,6 +220,12 @@
   initial-value: 1;
 }
 
+@property --shade-overpull {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 @property --shade-pull-ms {
   syntax: '<time>';
   inherits: false;
@@ -246,6 +252,78 @@
   transition:
     transform var(--shade-pull-ms, 200ms) ease-out,
     opacity var(--shade-pull-ms, 200ms) ease-out;
+}
+
+/* ============ The second pull ============
+   An open shade pulled down again stretches by `--shade-overpull` and uncovers the hint
+   behind it: pull-to-refresh, except what it refreshes is the monitor's whole context.
+   After the rules above so that it wins while both phases are on `<html>` — the sheet is
+   open underneath, and this only adds to that. See `lib/shade-pull.ts`. */
+:global(html[data-shade-clear]) .shade {
+  animation: none;
+  transform: translateY(var(--shade-overpull, 0px));
+}
+
+:global(html[data-shade-clear='settling']) .shade,
+:global(html[data-shade-clear='settling']) .clearHint {
+  transition:
+    transform var(--shade-pull-ms, 200ms) ease-out,
+    height var(--shade-pull-ms, 200ms) ease-out;
+}
+
+/* Sits at the top edge under the sheet — rendered before it at the same z-index — and
+   is exactly as tall as the gap the stretch has opened, so its text is never drawn
+   behind the sheet where it cannot be read. */
+.clearHint {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--shade-overpull, 0px);
+  overflow: hidden;
+  /* The sheet's own surface, so it reads as the shade stretching rather than a line of
+     text laid over whatever icons are under the top edge. */
+  background: var(--color-base);
+  color: var(--color-muted);
+  font-size: var(--text-base);
+  font-weight: 600;
+  pointer-events: none;
+  z-index: var(--z-toast);
+}
+
+:global(html[data-shade-clear]) .clearHint {
+  display: flex;
+}
+
+.clearRelease {
+  display: none;
+}
+
+/* Past the threshold: letting go now clears. Said in the danger color, and the glyph
+   turns, so the change is seen even by someone not reading the words. */
+:global(html[data-shade-clear='armed']) .clearHint {
+  color: var(--color-danger);
+}
+
+:global(html[data-shade-clear='armed']) .clearHint svg {
+  transform: rotate(-180deg);
+}
+
+:global(html[data-shade-clear='armed']) .clearPull {
+  display: none;
+}
+
+:global(html[data-shade-clear='armed']) .clearRelease {
+  display: inline;
+}
+
+.clearHint svg {
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
 }
 
 /* Keyframes live in the module that names them: the CSS-modules pass scopes an

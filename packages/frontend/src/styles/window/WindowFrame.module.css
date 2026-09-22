@@ -487,6 +487,17 @@
   cursor: default;
 }
 
+/* The phone's status badge sits over the top corner away from the thumb (the user's
+   handedness) and above every card, so the title bar leaves it room on that side —
+   exactly the badge's own width, which `PhoneStatusBadge` publishes as it changes. */
+:global(html[data-handedness='right']) .frame[data-card] .titleBar {
+  padding-left: calc(var(--space-2) + var(--phone-badge-w, 0px) + var(--space-2));
+}
+
+:global(html[data-handedness='left']) .frame[data-card] .titleBar {
+  padding-right: calc(var(--space-2) + var(--phone-badge-w, 0px) + var(--space-2));
+}
+
 .frame[data-card] .controlBtn {
   width: 40px;
   height: 40px;

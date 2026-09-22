@@ -17,6 +17,7 @@ const KNOWN_KEYS = [
   'accentColor',
   'iconSize',
   'theme',
+  'handedness',
   'allowAllApps',
   'remote',
 ];
@@ -121,14 +122,20 @@ export function SettingsView() {
         <div class="y-label s-section-title">👤 Profile</div>
         <div class="s-row">
           <label class="s-label">Display Name</label>
-          <input class="y-input s-input" type="text" placeholder="Your name"
+          <input
+            class="y-input s-input"
+            type="text"
+            placeholder="Your name"
             value=${() => String(get('userName') ?? '')}
             onInput=${onInputHandler((v) => set('userName', v))}
           />
         </div>
         <div class="s-row">
           <label class="s-label">Language <span class="s-hint">e.g. en, ko, ja</span></label>
-          <input class="y-input s-input" type="text" placeholder="en"
+          <input
+            class="y-input s-input"
+            type="text"
+            placeholder="en"
             value=${() => String(get('language') ?? 'en')}
             onInput=${onInputHandler((v) => set('language', v))}
           />
@@ -139,7 +146,8 @@ export function SettingsView() {
         <div class="y-label s-section-title">🎨 Appearance</div>
         <div class="s-row">
           <label class="s-label">Theme</label>
-          <select class="y-select s-select"
+          <select
+            class="y-select s-select"
             value=${() => String(get('theme') ?? 'dark')}
             onChange=${onChangeHandler((v) => set('theme', v))}
           >
@@ -148,7 +156,8 @@ export function SettingsView() {
         </div>
         <div class="s-row">
           <label class="s-label">Wallpaper</label>
-          <select class="y-select s-select"
+          <select
+            class="y-select s-select"
             value=${() => String(get('wallpaper') ?? '')}
             onChange=${onChangeHandler((v) => set('wallpaper', v))}
           >
@@ -163,19 +172,20 @@ export function SettingsView() {
             ${() =>
               Object.keys(ACCENT_COLORS).map(
                 (color) => html`
-              <button
-                class=${() => `s-accent-swatch ${get('accentColor') === color ? 'active' : ''}`}
-                style=${`background: ${ACCENT_COLORS[color]}`}
-                title=${color}
-                onClick=${() => set('accentColor', color)}
-              ></button>
-            `,
+                  <button
+                    class=${() => `s-accent-swatch ${get('accentColor') === color ? 'active' : ''}`}
+                    style=${`background: ${ACCENT_COLORS[color]}`}
+                    title=${color}
+                    onClick=${() => set('accentColor', color)}
+                  ></button>
+                `,
               )}
           </div>
         </div>
         <div class="s-row">
           <label class="s-label">Icon Size</label>
-          <select class="y-select s-select"
+          <select
+            class="y-select s-select"
             value=${() => String(get('iconSize') ?? '')}
             onChange=${onChangeHandler((v) => set('iconSize', v))}
           >
@@ -184,13 +194,29 @@ export function SettingsView() {
             )}
           </select>
         </div>
+        <div class="s-row">
+          <label class="s-label"
+            >Hand <span class="s-hint">Phone: status badge goes to the other corner</span></label
+          >
+          <select
+            class="y-select s-select"
+            value=${() => String(get('handedness') ?? 'right')}
+            onChange=${onChangeHandler((v) => set('handedness', v))}
+          >
+            ${[
+              ['right', 'Right hand'],
+              ['left', 'Left hand'],
+            ].map(([v, label]) => html`<option value=${v}>${label}</option>`)}
+          </select>
+        </div>
       </div>
 
       <div class="s-section">
         <div class="y-label s-section-title">⚙️ System</div>
         <div class="s-row">
           <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
-          <select class="y-select s-select"
+          <select
+            class="y-select s-select"
             value=${() => String(get('provider') ?? '')}
             onChange=${onChangeHandler((v) => set('provider', v))}
           >
@@ -201,10 +227,12 @@ export function SettingsView() {
         </div>
         <div class="s-row s-row-toggle">
           <div>
-            <label class="s-label">Remote Access <span class="s-hint">Restart required</span></label>
+            <label class="s-label"
+              >Remote Access <span class="s-hint">Restart required</span></label
+            >
             <div class="s-hint-block">
-              Serve over your Tailscale tailnet. Needs the <code>tailscale</code> daemon
-              logged in. A <code>REMOTE</code> env var overrides this.
+              Serve over your Tailscale tailnet. Needs the <code>tailscale</code> daemon logged in.
+              A <code>REMOTE</code> env var overrides this.
             </div>
           </div>
           ${() => Toggle('remote')}
@@ -213,9 +241,8 @@ export function SettingsView() {
           <div>
             <label class="s-label">Install Apps Without Asking</label>
             <div class="s-hint-block">
-              Skip the confirmation dialog when an app requests permissions or gated
-              SDKs. An installed app then gets whatever its <code>app.json</code> asks
-              for, unprompted.
+              Skip the confirmation dialog when an app requests permissions or gated SDKs. An
+              installed app then gets whatever its <code>app.json</code> asks for, unprompted.
             </div>
           </div>
           ${() => Toggle('allowAllApps')}
@@ -232,20 +259,27 @@ export function SettingsView() {
       <div class="s-section">
         <button class="s-extra-toggle" onClick=${() => setShowExtra((v) => !v)}>
           ${() => (showExtra() ? '▾' : '▸')} Advanced / Extra Settings
-          ${() => (extraRaw().trim() ? html`<span class="s-extra-badge">${() => Object.keys(parseJson(extraRaw(), {})).length} keys</span>` : '')}
+          ${() =>
+            extraRaw().trim()
+              ? html`<span class="s-extra-badge"
+                  >${() => Object.keys(parseJson(extraRaw(), {})).length} keys</span
+                >`
+              : ''}
         </button>
         ${() =>
           showExtra()
             ? html`
-          <textarea
-            class="y-input settings-editor"
-            style="margin-top: 8px; min-height: 120px;"
-            value=${extraRaw}
-            onInput=${(e: InputEvent) => setExtraRaw((e.target as HTMLTextAreaElement).value)}
-            placeholder="{}"
-          ></textarea>
-          <p class="s-hint-block" style="margin-top:4px;">Unknown or custom keys (raw JSON)</p>
-        `
+                <textarea
+                  class="y-input settings-editor"
+                  style="margin-top: 8px; min-height: 120px;"
+                  value=${extraRaw}
+                  onInput=${(e: InputEvent) => setExtraRaw((e.target as HTMLTextAreaElement).value)}
+                  placeholder="{}"
+                ></textarea>
+                <p class="s-hint-block" style="margin-top:4px;">
+                  Unknown or custom keys (raw JSON)
+                </p>
+              `
             : ''}
       </div>
 

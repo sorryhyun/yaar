@@ -12,7 +12,7 @@
  */
 import type { SliceCreator, DesktopStore } from '../types';
 import type { Monitor } from '@/types/state';
-import { DEFAULT_MONITOR_ID, ClientEventType } from '@yaar/shared';
+import { DEFAULT_MONITOR_ID, ClientEventType, MAX_MONITORS } from '@yaar/shared';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import { stepMonitorIndex } from '@/lib/gestures';
 
@@ -38,6 +38,25 @@ export interface MonitorSliceActions {
 }
 
 export type MonitorSlice = MonitorSliceState & MonitorSliceActions;
+
+/**
+ * The label the server will give the next monitor it mints, or `null` when the session
+ * is full. A prediction of `monitor-registry.ts`'s `mint()` — lowest free integer id,
+ * labelled one past it — so the phone's pan can name the monitor it is about to create
+ * while the finger is still down. The server stays the authority: it is only a label.
+ */
+export function predictNextMonitorLabel(monitors: { id: string }[]): string | null {
+  if (monitors.length >= MAX_MONITORS) return null;
+  const taken = new Set(monitors.map((m) => m.id));
+  let n = 0;
+  while (taken.has(String(n))) n++;
+  return `Monitor ${n + 1}`;
+}
+
+/** A monitor label's number — "Monitor 3" is 3 — or the label itself if it has none. */
+export function monitorNumber(label: string): string {
+  return /(\d+)\s*$/.exec(label)?.[1] ?? label;
+}
 
 export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, get) => ({
   monitors: [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }],

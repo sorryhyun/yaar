@@ -186,6 +186,11 @@
   "shade": {
     "monitors": "モニター",
     "windows": "ウィンドウ",
-    "noWindows": "開いているウィンドウはありません"
+    "noWindows": "開いているウィンドウはありません",
+    "pullToClear": "引っ張ってコンテキストをリセット",
+    "releaseToClear": "離すとコンテキストをリセット"
+  },
+  "gestures": {
+    "newMonitor": "新しいモニター"
   }
 }

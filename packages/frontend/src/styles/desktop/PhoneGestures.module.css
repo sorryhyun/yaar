@@ -122,3 +122,80 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* The number of the monitor a pan is heading for, held still in the middle of the screen
+   while the desktop and the peek slide past behind it. The peek names it too, but that
+   label is moving with the finger and is half off screen for most of the drag; this is
+   the one that can be read at a glance. Over both, under the palette. */
+.badge {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: var(--z-gesture);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 132px;
+  min-height: 132px;
+  padding: var(--space-3) var(--space-5);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation-name: badgeIn;
+  animation-duration: var(--duration-fast);
+  animation-timing-function: ease-out;
+}
+
+.badgeNumber {
+  font-family: var(--font-sans);
+  /* Off the type scale on purpose: the scale is for reading, this is for recognising a
+     single digit mid-gesture from arm's length. */
+  font-size: 88px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The CLI end — a word, not a digit — in the terminal's own face, and smaller so three
+   letters fit the box a digit does. */
+.badge[data-cli] .badgeNumber {
+  font-family: var(--font-mono);
+  font-size: 48px;
+  letter-spacing: 0.08em;
+}
+
+/* A monitor that does not exist yet: the number it will have, and a caption saying so. */
+.badge[data-new] {
+  border-style: dashed;
+}
+
+.badge[data-new] .badgeNumber {
+  color: var(--color-accent);
+}
+
+.badgeCaption {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+@keyframes badgeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

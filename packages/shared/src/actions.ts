@@ -494,6 +494,8 @@ export interface DesktopUpdateSettingsAction {
     accentColor?: string;
     iconSize?: 'small' | 'medium' | 'large';
     theme?: 'dark' | 'light';
+    /** Which hand holds the phone: the status badge sits in the corner away from its thumb. */
+    handedness?: 'right' | 'left';
   };
 }
 

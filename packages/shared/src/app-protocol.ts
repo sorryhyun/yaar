@@ -274,11 +274,13 @@ export const APP_MSG = {
   arrowDragEnd: 'yaar:arrow-drag-end',
   keydown: 'yaar:keydown',
   /**
-   * A sideways drag on the frame's content that nothing inside it had a use for, handed
-   * to the phone shell's monitor pan (`PhoneGestures`) — touches inside an iframe never
-   * reach the desktop's own listeners. `{ phase: 'start' | 'move' | 'end' | 'cancel',
-   * dx, dy }`, travel in screen pixels from where the finger landed: screen, not client,
-   * because the pan moves the frame along with the finger.
+   * A drag on the frame's content that nothing inside it had a use for, handed to the
+   * phone shell (`PhoneGestures`) — touches inside an iframe never reach the desktop's
+   * own listeners. Sideways it is the monitor pan; downwards, from content already at its
+   * top, it is the shade pull. `{ phase: 'start' | 'move' | 'end' | 'cancel', dx, dy,
+   * axis: 'x' | 'y' }`, travel in screen pixels from where the finger landed: screen, not
+   * client, because the pan moves the frame along with the finger. A missing `axis` is
+   * `'x'`, which is all a frame loaded before the pull existed ever sends.
    */
   touchPan: 'yaar:touch-pan',
 

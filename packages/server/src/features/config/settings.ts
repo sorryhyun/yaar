@@ -23,6 +23,7 @@ export const settingsContentSchema = z.object({
   accentColor: z.string().optional(),
   iconSize: z.enum(['small', 'medium', 'large']).optional(),
   theme: z.enum(['dark', 'light']).optional(),
+  handedness: z.enum(['right', 'left']).optional(),
   // Read by `features/apps/install.ts` to skip the capability-confirmation dialog.
   allowAllApps: z.boolean().optional(),
   // Persisted only; takes effect on next restart (IS_REMOTE is fixed at module load).
@@ -90,7 +91,8 @@ export async function applySettings(
   content: Record<string, unknown>,
 ): Promise<{ ok: true; settings: Settings } | { ok: false; message: string }> {
   const result = settingsContentSchema.safeParse(content);
-  if (!result.success) return { ok: false, message: `Invalid settings content: ${result.error.message}` };
+  if (!result.success)
+    return { ok: false, message: `Invalid settings content: ${result.error.message}` };
 
   const current = await readSettings();
 
@@ -104,6 +106,7 @@ export async function applySettings(
   if (result.data.accentColor !== undefined) partial.accentColor = result.data.accentColor;
   if (result.data.iconSize !== undefined) partial.iconSize = result.data.iconSize;
   if (result.data.theme !== undefined) partial.theme = result.data.theme;
+  if (result.data.handedness !== undefined) partial.handedness = result.data.handedness;
   if (result.data.allowAllApps !== undefined) partial.allowAllApps = result.data.allowAllApps;
   if (result.data.remote !== undefined) partial.remote = result.data.remote;
 
@@ -125,6 +128,7 @@ export async function applySettings(
     'accentColor',
     'iconSize',
     'theme',
+    'handedness',
   ];
   const changedSettings: DesktopUpdateSettingsAction['settings'] = {};
   for (const key of settingsKeys) {

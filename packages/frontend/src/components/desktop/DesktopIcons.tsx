@@ -114,6 +114,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
           if (data.accentColor) appearance.accentColor = data.accentColor;
           if (data.iconSize) appearance.iconSize = data.iconSize;
           if (data.theme) appearance.theme = data.theme;
+          if (data.handedness) appearance.handedness = data.handedness;
           if (Object.keys(appearance).length > 0) {
             useDesktopStore.getState().applyServerSettings(appearance);
           }

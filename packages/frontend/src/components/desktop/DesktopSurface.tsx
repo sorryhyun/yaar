@@ -14,7 +14,6 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   useDesktopStore,
   selectHasMaximizedWindow,
-  selectHasOpenStandardWindow,
   selectFullscreenCardId,
   selectPanelWindows,
 } from '@/store';
@@ -54,7 +53,7 @@ import { CommandPalette } from '../command-palette/CommandPalette';
 import { DrawingOverlay } from '../drawing/DrawingOverlay';
 import { resolveWallpaper, resolveAccent, resolveIconSize } from '@/constants/appearance';
 import { beginShellDrag } from '@/lib/selection';
-import { DesktopStatusBar } from './DesktopStatusBar';
+import { DesktopStatusBar, PhoneStatusBadge } from './DesktopStatusBar';
 import { DesktopIcons } from './DesktopIcons';
 import { PhoneGestures } from './PhoneGestures';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
@@ -68,7 +67,6 @@ export function DesktopSurface() {
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
   const hasMaximizedWindow = useDesktopStore(selectHasMaximizedWindow);
-  const hasOpenStandardWindow = useDesktopStore(selectHasOpenStandardWindow);
   const hasFullscreenCard = useDesktopStore((s) => selectFullscreenCardId(s) !== null);
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
@@ -214,6 +212,13 @@ export function DesktopSurface() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // Which top corner the phone's status badge takes; a card's title bar keys the side it
+  // leaves room on off :root[data-handedness] (WindowFrame.module.css).
+  const handedness = useDesktopStore((s) => s.handedness);
+  useEffect(() => {
+    document.documentElement.dataset.handedness = handedness;
+  }, [handedness]);
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent) => {
@@ -439,8 +444,7 @@ export function DesktopSurface() {
         onDragLeave={handleDesktopDragLeave}
         onDrop={handleDesktopDrop}
       >
-        {/* On a phone any open window is a full-screen card, so it covers the pill too. */}
-        <div hidden={hasMaximizedWindow || (isMobile && hasOpenStandardWindow)}>
+        <div hidden={hasMaximizedWindow}>
           <DesktopStatusBar interrupt={interrupt} interruptAgent={interruptAgent} />
         </div>
 
@@ -477,6 +481,9 @@ export function DesktopSurface() {
           shade. Above the desktop so the gutters sit over the cards they have to
           catch touches in front of. */}
       <PhoneGestures />
+      {/* The phone's status badge, over everything — outside the desktop so no card
+          covers it and no pan slides it. The CLI has its own monitor bar. */}
+      {isMobile && !cliMode && <PhoneStatusBadge />}
 
       <DrawingOverlay />
       {/* A phone keeps the palette under every window — it is the only way to talk to the

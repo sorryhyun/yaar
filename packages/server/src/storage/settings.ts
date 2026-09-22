@@ -13,6 +13,8 @@ export interface Settings {
   accentColor: string;
   iconSize: 'small' | 'medium' | 'large';
   theme: 'dark' | 'light';
+  /** Which hand holds the phone — the phone shell keeps its status badge out of that thumb's corner. */
+  handedness: 'right' | 'left';
   allowAllApps: boolean;
   /**
    * Remote mode preference. Read at boot by `config/env.ts` (`loadPersistedRemote`) and
@@ -31,13 +33,32 @@ const DEFAULTS: Settings = {
   accentColor: 'blue',
   iconSize: 'medium',
   theme: 'dark',
+  handedness: 'right',
   allowAllApps: false,
   remote: false,
 };
 
 export const LANGUAGE_CODES = [
-  'en', 'ko', 'ja', 'zh', 'es', 'fr', 'de', 'pt', 'ru', 'ar',
-  'hi', 'it', 'nl', 'pl', 'tr', 'vi', 'th', 'id', 'sv', 'uk',
+  'en',
+  'ko',
+  'ja',
+  'zh',
+  'es',
+  'fr',
+  'de',
+  'pt',
+  'ru',
+  'ar',
+  'hi',
+  'it',
+  'nl',
+  'pl',
+  'tr',
+  'vi',
+  'th',
+  'id',
+  'sv',
+  'uk',
 ] as const;
 
 const LANGUAGE_LABELS: Record<string, string> = {

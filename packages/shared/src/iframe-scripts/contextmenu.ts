@@ -88,17 +88,23 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     });
   });
 
-  // Sideways touch drags — the phone shell pans between monitors (and to the CLI) on a
-  // sideways drag, but a touch inside an app frame never reaches its listeners, so an
-  // app card was only pannable from the 20px gutters at the screen's edges. A drag that
-  // nothing in here has a use for is claimed and its travel handed out; the rule for
-  // "has a use for" mirrors the shell's own \`panBlockFrom\` in PhoneGestures.tsx, plus
-  // the two signals only the app has: a \`touch-action\` that keeps horizontal pans for
-  // itself, and a touchmove the app already cancelled. Touch screens only, so a desktop
-  // is never asked to give up a drag it has no pan for.
+  // Touch drags the phone shell has a use for — but a touch inside an app frame never
+  // reaches its listeners, so without this an app card was only pannable from the 20px
+  // gutters at the screen's edges and could not pull the shade down at all. Sideways is
+  // the monitor pan, downwards the shade. A drag nothing in here has a use for is claimed
+  // and its travel handed out; the rules for "has a use for" mirror the shell's own
+  // \`panBlockFrom\` / \`canPullFrom\` in PhoneGestures.tsx, plus the two signals only the
+  // app has: a \`touch-action\` that keeps that axis for itself, and a touchmove the app
+  // already cancelled. Touch screens only, so a desktop is never asked to give up a drag
+  // it has no pan for.
   var coarse = false;
   try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch(ex) {}
   var pan = null;
+
+  function keepsAxis(style, axis) {
+    var ta = style.touchAction;
+    return !!ta && ta !== 'auto' && ta !== 'manipulation' && ta.indexOf(axis) === -1;
+  }
 
   function panBlock(el) {
     var block = { left: false, right: false };
@@ -107,8 +113,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       if (node.getAttribute('role') === 'slider') return null;
       if (node.tagName === 'INPUT' && String(node.type).toLowerCase() === 'range') return null;
       var style = getComputedStyle(node);
-      var ta = style.touchAction;
-      if (ta && ta !== 'auto' && ta !== 'manipulation' && ta.indexOf('pan-x') === -1) return null;
+      if (keepsAxis(style, 'pan-x')) return null;
       if (node.scrollWidth > node.clientWidth + 1 &&
           (style.overflowX === 'auto' || style.overflowX === 'scroll')) {
         var at = Math.abs(node.scrollLeft);
@@ -120,19 +125,36 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     return block;
   }
 
-  function postPan(phase, dx, dy) {
-    window.parent.postMessage({ type: '${APP_MSG.touchPan}', phase: phase, dx: dx, dy: dy }, '*');
+  // Whether a downward drag from here would have scrolled nothing: every scroller under
+  // the finger, the document's own included, already at its top.
+  function canPull(el) {
+    var doc = document.scrollingElement;
+    if (doc && doc.scrollTop > 0) return false;
+    for (var node = el && el.nodeType === 1 ? el : null; node; node = node.parentElement) {
+      if (node.hasAttribute('data-no-pan')) return false;
+      var style = getComputedStyle(node);
+      if (keepsAxis(style, 'pan-y')) return false;
+      if (node.scrollTop > 0 && node.scrollHeight > node.clientHeight + 1 &&
+          (style.overflowY === 'auto' || style.overflowY === 'scroll')) return false;
+    }
+    return true;
+  }
+
+  function postPan(phase, dx, dy, axis) {
+    window.parent.postMessage(
+      { type: '${APP_MSG.touchPan}', phase: phase, dx: dx, dy: dy, axis: axis }, '*');
   }
 
   if (coarse) {
     document.addEventListener('touchstart', function(e) {
-      if (pan && pan.claimed) postPan('cancel', 0, 0);
+      if (pan && pan.claimed) postPan('cancel', 0, 0, pan.axis);
       pan = null;
       var t = e.touches[0];
       if (!t || e.touches.length > 1) return;
       var block = panBlock(e.target);
-      if (!block) return;
-      pan = { x: t.screenX, y: t.screenY, block: block, axis: null, claimed: false };
+      var pull = canPull(e.target);
+      if (!block && !pull) return;
+      pan = { x: t.screenX, y: t.screenY, block: block, pull: pull, axis: null, claimed: false };
     }, { capture: true, passive: true });
 
     // Bubble phase on \`window\`: every app handler has run, so one that cancelled the
@@ -142,20 +164,29 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       if (!pan || !t) return;
       var dx = t.screenX - pan.x, dy = t.screenY - pan.y;
       if (!pan.axis) {
+        var appTook = e.defaultPrevented;
+        // Claim a downward drag before the browser does, as the shell does: by the time
+        // the axis is known the moves may have stopped being cancelable.
+        if (pan.pull && !appTook && dy > 0 && dy >= Math.abs(dx) && e.cancelable) {
+          e.preventDefault();
+        }
         // DRAG_INTENT_PX / DRAG_AXIS_RATIO from the shell's lib/gestures.ts.
         var ax = Math.abs(dx), ay = Math.abs(dy);
         if (ax >= 10 && ax >= ay * 1.2) pan.axis = 'x';
         else if (ay >= 10) pan.axis = 'y';
         else return;
-        if (pan.axis === 'y' || e.defaultPrevented || pan.block[dx > 0 ? 'right' : 'left']) {
+        var ours = pan.axis === 'y'
+          ? pan.pull && dy > 0
+          : !!pan.block && !pan.block[dx > 0 ? 'right' : 'left'];
+        if (appTook || !ours) {
           pan = null;
           return;
         }
         pan.claimed = true;
-        postPan('start', dx, dy);
+        postPan('start', dx, dy, pan.axis);
       }
       if (e.cancelable) e.preventDefault();
-      postPan('move', dx, dy);
+      postPan('move', dx, dy, pan.axis);
     }, { passive: false });
 
     window.addEventListener('touchend', function(e) {
@@ -167,15 +198,22 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       // A fast flick can arrive as start and end with no move between: the shell decides
       // from the travel alone whether that was a swipe. SWIPE_MIN_PX / SWIPE_AXIS_RATIO.
       if (!p.claimed) {
-        if (p.axis || Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
-        if (p.block[dx > 0 ? 'right' : 'left']) return;
-        postPan('start', 0, 0);
+        if (p.axis) return;
+        var ax = Math.abs(dx), ay = Math.abs(dy);
+        if (p.block && ax >= 56 && ax >= ay * 1.4 && !p.block[dx > 0 ? 'right' : 'left']) {
+          p.axis = 'x';
+        } else if (p.pull && dy >= 56 && ay >= ax * 1.4) {
+          p.axis = 'y';
+        } else {
+          return;
+        }
+        postPan('start', 0, 0, p.axis);
       }
-      postPan('end', dx, dy);
+      postPan('end', dx, dy, p.axis);
     }, true);
 
     window.addEventListener('touchcancel', function() {
-      if (pan && pan.claimed) postPan('cancel', 0, 0);
+      if (pan && pan.claimed) postPan('cancel', 0, 0, pan.axis);
       pan = null;
     }, true);
   }

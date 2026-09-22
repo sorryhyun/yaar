@@ -14,6 +14,8 @@ export interface SettingsSliceState {
   accentColor: string;
   iconSize: 'small' | 'medium' | 'large';
   theme: 'dark' | 'light';
+  /** Which hand holds the phone. The status badge sits in the top corner away from it. */
+  handedness: 'right' | 'left';
 }
 
 export interface SettingsSliceActions {
@@ -25,6 +27,7 @@ export interface SettingsSliceActions {
   setAccentColor: (key: string) => void;
   setIconSize: (size: 'small' | 'medium' | 'large') => void;
   setTheme: (theme: 'dark' | 'light') => void;
+  setHandedness: (handedness: 'right' | 'left') => void;
 }
 
 export type SettingsSlice = SettingsSliceState & SettingsSliceActions;
@@ -38,6 +41,7 @@ interface PersistedSettings {
   accentColor: string;
   iconSize: IconSizeKey;
   theme: 'dark' | 'light';
+  handedness: 'right' | 'left';
 }
 
 function loadSettings(): PersistedSettings {
@@ -52,6 +56,7 @@ function loadSettings(): PersistedSettings {
         accentColor: parsed.accentColor ?? 'blue',
         iconSize: parsed.iconSize ?? 'medium',
         theme: parsed.theme === 'light' ? 'light' : 'dark',
+        handedness: parsed.handedness === 'left' ? 'left' : 'right',
       };
     }
   } catch {
@@ -64,6 +69,7 @@ function loadSettings(): PersistedSettings {
     accentColor: 'blue',
     iconSize: 'medium',
     theme: 'dark',
+    handedness: 'right',
   };
 }
 
@@ -83,6 +89,7 @@ function getAllSettings(
     accentColor: string;
     iconSize: IconSizeKey;
     theme: 'dark' | 'light';
+    handedness: 'right' | 'left';
   },
 ): PersistedSettings {
   const s = get();
@@ -93,6 +100,7 @@ function getAllSettings(
     accentColor: s.accentColor,
     iconSize: s.iconSize,
     theme: s.theme,
+    handedness: s.handedness,
   };
 }
 
@@ -105,6 +113,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   accentColor: initial.accentColor,
   iconSize: initial.iconSize,
   theme: initial.theme,
+  handedness: initial.handedness,
 
   setUserName: (name) =>
     set((state) => {
@@ -141,6 +150,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       if (settings.accentColor !== undefined) state.accentColor = settings.accentColor;
       if (settings.iconSize !== undefined) state.iconSize = settings.iconSize;
       if (settings.theme !== undefined) state.theme = settings.theme;
+      if (settings.handedness !== undefined) state.handedness = settings.handedness;
       saveSettings({ ...getAllSettings(get), ...settings } as PersistedSettings);
     });
     if (settings.language !== undefined) {
@@ -193,6 +203,18 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ iconSize: size }),
+    }).catch(() => {});
+  },
+
+  setHandedness: (handedness) => {
+    set((state) => {
+      state.handedness = handedness;
+      saveSettings({ ...getAllSettings(get), handedness });
+    });
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handedness }),
     }).catch(() => {});
   },
 });

@@ -15,19 +15,33 @@
  *   inside one reaches no listener here; the frame's own script makes the same decision
  *   and forwards the drag (`APP_MSG.touchPan`). The side gutters stay for a frame that
  *   carries no such script — an external page.
- * - **Pull down from the top** brings down the notification shade — which on a phone is
- *   also where the connection and agent readings live — and it comes down with the
- *   finger rather than after it, for the same reason the pan does: a sheet that appears
- *   only once the finger is up gives the user nothing to aim with and no way to change
- *   their mind. The placing is left to CSS through `lib/shade-pull`, which the shade's
- *   own grip writes to as well, so pulling it open and pushing it shut are one gesture
- *   described in one place.
+ * - **Pull down** brings down the notification shade — which on a phone is also where the
+ *   connection and agent readings live — and it comes down with the finger rather than
+ *   after it, for the same reason the pan does: a sheet that appears only once the finger
+ *   is up gives the user nothing to aim with and no way to change their mind. Like the
+ *   pan it may start anywhere, and for the same reason: it gives way only to a scroll
+ *   that still has somewhere to go (`canPullFrom`). The placing is left to CSS through
+ *   `lib/shade-pull`, which the shade's own grip writes to as well, so pulling it open and
+ *   pushing it shut are one gesture described in one place.
+ * - **Pull down again**, on the open shade, clears the active monitor's context. The sheet
+ *   stretches instead of following the finger, and uncovers a hint that turns from "pull"
+ *   to "release" at `SHADE_CLEAR_PX` — a drag that long has to be meant, which is the
+ *   confirmation a destructive gesture needs. It clears only if the finger is still
+ *   pulling *down* when it lifts (`shadeClearArmed`): one that has started back up, by
+ *   more than a held finger wobbles, has taken the pull back — past the line or not — and
+ *   the hint turns back to "pull" to say so.
  *
- * The strip the pan runs along is one wider than the monitor list: the **CLI** sits one
- * step to the left of the first monitor. `Shift+Tab` is the way into it on a desktop and
- * a phone has no Shift+Tab, so without this the tmux-style view was simply unreachable
- * there. It is the left-hand end of the strip rather than a mode toggle because that is
- * what makes it reversible by the same gesture, in the direction the finger already knows.
+ * The strip the pan runs along is wider than the monitor list at both ends. The **CLI**
+ * sits one step to the left of the first monitor: `Shift+Tab` is the way into it on a
+ * desktop and a phone has no Shift+Tab, so without this the tmux-style view was simply
+ * unreachable there. It is the left-hand end of the strip rather than a mode toggle
+ * because that is what makes it reversible by the same gesture, in the direction the
+ * finger already knows. The right-hand end is a **new monitor**, while the session has
+ * room for one: the "+" in the shade is otherwise the only way to make one, and a strip
+ * that stopped dead at the last monitor was an end the finger kept running into. What a
+ * pan is heading for is named twice while the finger is down — on the surface sliding in,
+ * and as a large number held still in the middle of the screen, which is the one that can
+ * be read while everything else is moving.
  *
  * Neither gesture consumes a touch it did not use. A drag that turns out to be vertical
  * is handed straight back to the page, and a touch in a gutter that turns out to be a tap
@@ -37,6 +51,7 @@
  * which is already the bottom edge of the screen.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import i18next from 'i18next';
 import { APP_MSG, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import {
@@ -44,16 +59,23 @@ import {
   PEEK_SETTLE_MS,
   PEEK_TITLE_LIMIT,
   dragAxis,
-  edgeZone,
   peekOffset,
+  shadeClearArmed,
   shouldCommitDrag,
   stepMonitorIndex,
   swipeDirection,
 } from '@/lib/gestures';
-import { settleShadePull, trackShadePull } from '@/lib/shade-pull';
+import {
+  settleShadeClear,
+  settleShadePull,
+  trackShadeClear,
+  trackShadePull,
+} from '@/lib/shade-pull';
 import { clearGestureVars, gestureLayerRef, setGestureVar } from '@/lib/gesture-layer';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { resolveWallpaper } from '@/constants/appearance';
+import { monitorNumber, predictNextMonitorLabel } from '@/store/slices/monitorSlice';
+import { resetActiveMonitorContext } from '../command-palette/ContextResetButton';
 import styles from '@/styles/desktop/PhoneGestures.module.css';
 
 /** The layer the desktop, the CLI panel and the peek panel all belong to. */
@@ -62,17 +84,30 @@ const PAN_LAYER = 'monitor-peek';
 const PEEK_X_VAR = '--monitor-peek-x';
 /** Published beside it so the settle transition and the settle timer cannot disagree. */
 const PEEK_MS_VAR = '--monitor-peek-ms';
+/**
+ * How long a pan onto a new monitor holds the slide while the server mints it. The
+ * switch arrives on the `MONITORS` answer, not on the finger lifting, and snapping back to
+ * the old desktop in between would show the user the one thing they just left.
+ */
+const NEW_MONITOR_WAIT_MS = 2000;
 
 /**
- * Where a pan can land: a monitor, the CLI to the left of the first one, or — from
- * inside the CLI — the desktop it was opened from.
+ * Where a pan can land: a monitor, the CLI to the left of the first one, a monitor not
+ * made yet to the right of the last one, or — from inside the CLI — the desktop it was
+ * opened from.
  */
-type PanTarget = { kind: 'monitor'; id: string } | { kind: 'cli' } | { kind: 'desktop' };
+type PanTarget =
+  | { kind: 'monitor'; id: string }
+  | { kind: 'new' }
+  | { kind: 'cli' }
+  | { kind: 'desktop' };
 
 /** The surface a pan is heading for, and enough of it to put on screen behind the drag. */
 interface Peek {
   target: PanTarget;
   label: string;
+  /** Shown large, held still mid-screen: the monitor's number, or `CLI`. */
+  badge: string;
   titles: string[];
   /** Which edge it is coming in from — left when the finger is dragging right. */
   side: 'left' | 'right';
@@ -85,9 +120,11 @@ interface Drag {
   at: number;
   /** Locked on the first frame that says which way this is going. */
   axis: 'x' | 'y' | null;
-  /** Whether this touch is allowed to pull the shade down — the top band, and nothing
-   *  vertically scrollable under the finger. */
+  /** Whether this touch is allowed to pull the shade down — nothing vertically
+   *  scrollable under the finger, and no sheet already up. */
   canPull: boolean;
+  /** Whether it is a second pull, on a shade that is already open, that can clear. */
+  canClear: boolean;
   /** Started in a side gutter, so a tap here belongs to whatever is underneath. */
   fromGutter: boolean;
   /** Which way this touch may not pan — decided from where it landed. */
@@ -127,6 +164,10 @@ export function PhoneGestures() {
   /** Whether the finger currently down is the one dragging the shade. */
   const pullingShade = useRef(false);
   const shadeSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Whether the finger down is pulling an open shade further, and whether it is armed. */
+  const clearing = useRef<{ armed: boolean; peak: number } | null>(null);
+  /** Waiting on the server for the monitor a pan created: how to stop waiting. */
+  const newMonitorWait = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!isMobile) return;
@@ -136,6 +177,8 @@ export function PhoneGestures() {
     const clearPeek = () => {
       if (settle.current) clearTimeout(settle.current);
       settle.current = null;
+      newMonitorWait.current?.();
+      newMonitorWait.current = null;
       root.removeAttribute('data-monitor-peek');
       clearGestureVars(PAN_LAYER);
       setPeekNow(null);
@@ -148,15 +191,35 @@ export function PhoneGestures() {
       // Nothing is drawn for it — the desktop is genuinely behind the panel, so the
       // slide uncovers the real thing rather than a picture of it.
       if (cliMode) {
-        return delta > 0 ? { target: { kind: 'desktop' }, label: '', titles: [], side } : null;
+        const active = monitors.find((m) => m.id === activeMonitorId);
+        return delta > 0
+          ? {
+              target: { kind: 'desktop' },
+              label: '',
+              badge: active ? monitorNumber(active.label) : '',
+              titles: [],
+              side,
+            }
+          : null;
       }
       const at = monitors.findIndex((m) => m.id === activeMonitorId);
       if (at === -1) return null;
       const next = stepMonitorIndex(at, monitors.length, delta);
       if (next === null) {
         // Off the left end of the monitor list is not nothing: it is the CLI.
-        return delta < 0 && at === 0
-          ? { target: { kind: 'cli' }, label: 'CLI', titles: [], side }
+        if (delta < 0 && at === 0) {
+          return { target: { kind: 'cli' }, label: 'CLI', badge: 'CLI', titles: [], side };
+        }
+        // And off the right end is the next monitor, until the session is full.
+        const label = delta > 0 && at === monitors.length - 1 && predictNextMonitorLabel(monitors);
+        return label
+          ? {
+              target: { kind: 'new' },
+              label: i18next.t('gestures.newMonitor'),
+              badge: monitorNumber(label),
+              titles: [],
+              side,
+            }
           : null;
       }
       const monitor = monitors[next];
@@ -170,7 +233,13 @@ export function PhoneGestures() {
         )
         .map((w) => w.title)
         .slice(0, PEEK_TITLE_LIMIT);
-      return { target: { kind: 'monitor', id: monitor.id }, label: monitor.label, titles, side };
+      return {
+        target: { kind: 'monitor', id: monitor.id },
+        label: monitor.label,
+        badge: monitorNumber(monitor.label),
+        titles,
+        side,
+      };
     };
 
     /** Land on whatever the pan chose. The one place a swipe changes what is on screen. */
@@ -178,7 +247,26 @@ export function PhoneGestures() {
       const state = useDesktopStore.getState();
       if (target.kind === 'cli') state.setCliMode(true);
       else if (target.kind === 'desktop') state.setCliMode(false);
+      else if (target.kind === 'new') state.createMonitor();
       else state.switchMonitor(target.id);
+    };
+
+    /**
+     * Hold the slide where it landed until the monitor the pan asked for is the one on
+     * screen — the server mints it and switches this tab to it on its `MONITORS` answer —
+     * then let the desktop come back. A server that refused (the session filled up from
+     * another tab) or never answered gets the old desktop back after a bounded wait.
+     */
+    const awaitNewMonitor = () => {
+      const from = useDesktopStore.getState().activeMonitorId;
+      const unsubscribe = useDesktopStore.subscribe((s) => {
+        if (s.activeMonitorId !== from) clearPeek();
+      });
+      const timer = setTimeout(clearPeek, NEW_MONITOR_WAIT_MS);
+      newMonitorWait.current = () => {
+        unsubscribe();
+        clearTimeout(timer);
+      };
     };
 
     /** Follow the finger: move the desktop, and keep the right neighbour behind it. */
@@ -225,8 +313,10 @@ export function PhoneGestures() {
       settle.current = setTimeout(() => {
         // Switch and un-translate in the same tick: React commits the new surface before
         // the browser paints, so the desktop is never seen at rest showing the old one.
+        settle.current = null;
         if (landing) commit(landing.target);
-        clearPeek();
+        if (landing?.target.kind === 'new') awaitNewMonitor();
+        else clearPeek();
       }, PEEK_SETTLE_MS);
     };
 
@@ -240,6 +330,35 @@ export function PhoneGestures() {
         useDesktopStore.getState().setNotificationShadeOpen(true);
       }
       trackShadePull(dy);
+    };
+
+    /** Stretch an open shade under a second pull, and say when letting go would clear. */
+    const trackClear = (dy: number) => {
+      const pull = clearing.current ?? (clearing.current = { armed: false, peak: 0 });
+      pull.peak = Math.max(pull.peak, dy);
+      // Armed only while still pulling down: past the line *and* not on the way back up,
+      // so a pull taken back is cancelled even before it is back above the line.
+      const armed = shadeClearArmed(dy, pull.peak);
+      trackShadeClear(dy, armed);
+      // A tick as it arms — the moment letting go starts to mean something. Where the
+      // platform has one; the hint's colour and wording change either way.
+      if (armed && !pull.armed) navigator.vibrate?.(10);
+      pull.armed = armed;
+    };
+
+    /** Let go of a second pull: spring the sheet back, and clear only if it was armed. */
+    const finishClear = (dy: number) => {
+      const pull = clearing.current;
+      clearing.current = null;
+      const clear = pull !== null && shadeClearArmed(dy, Math.max(pull.peak, dy));
+      // Cleared on the spot, not after the spring: the reset is a delivery that the
+      // server acks, and the toast saying so should not wait on an animation.
+      if (clear) resetActiveMonitorContext();
+      shadeSettle.current = settleShadeClear(() => {
+        shadeSettle.current = null;
+        // The pull was for this; the shade has nothing left to be open for.
+        if (clear) useDesktopStore.getState().setNotificationShadeOpen(false);
+      });
     };
 
     /** Let go of a pull: finish the slide, and put the shade away if it lost. */
@@ -261,11 +380,11 @@ export function PhoneGestures() {
         drag.current = null;
         if (pending?.axis === 'x' && peekRef.current) finishPan(0, 0);
         else if (pullingShade.current) finishShade(0, 0);
+        else if (clearing.current) finishClear(0);
         return;
       }
       // A touch landing mid-settle takes the pan over rather than fighting it.
-      if (settle.current) clearPeek();
-      const zone = edgeZone(touch.clientX, touch.clientY, globalThis.innerWidth);
+      if (settle.current || newMonitorWait.current) clearPeek();
       const state = useDesktopStore.getState();
       const fromGutter = (e.target as Element | null)?.hasAttribute?.('data-phone-gutter') === true;
       const sheetUp = state.paletteSheetOpen || state.notificationShadeOpen;
@@ -274,10 +393,19 @@ export function PhoneGestures() {
         y: touch.clientY,
         at: performance.now(),
         axis: null,
-        // The shade may be pulled from over a card's title bar — that is what the top
-        // band is sized for — so this asks a different question from `panBlockFrom`:
-        // not "which way may this pan?" but "would the finger have scrolled something?".
-        canPull: zone === 'top' && !sheetUp && (fromGutter || canPullFrom(e.target)),
+        // The shade may be pulled from over a card — which on a phone is most of the
+        // screen — so this asks a different question from `panBlockFrom`: not "which
+        // way may this pan?" but "would the finger have scrolled something?".
+        canPull: !sheetUp && (fromGutter || canPullFrom(e.target)),
+        // Only on the shade itself or its backdrop, and not mid-way through the pull that
+        // is still bringing it down: an open shade is the one thing a second pull clears.
+        canClear:
+          state.notificationShadeOpen &&
+          !state.paletteSheetOpen &&
+          !pullingShade.current &&
+          shadeSettle.current === null &&
+          isOnShade(e.target) &&
+          canPullFrom(e.target),
         fromGutter,
         // No monitor-count test: with the CLI on the end of the strip there is somewhere
         // to go even from a lone monitor, and a direction with nothing in it rubber-bands
@@ -300,9 +428,21 @@ export function PhoneGestures() {
         // being cancelable and the shade would come down over a page sliding under it.
         // Safe to claim this early, because `canPull` has already said that nothing
         // under the finger has anywhere left to scroll upwards to.
-        if (d.canPull && dy > 0 && e.cancelable) e.preventDefault();
+        // Only while the move is more down than sideways, so a sideways scroller under a
+        // finger that has not decided yet keeps its first frames.
+        if ((d.canPull || d.canClear) && dy > 0 && dy >= Math.abs(dx) && e.cancelable) {
+          e.preventDefault();
+        }
         d.axis = dragAxis(dx, dy);
         if (!d.axis) return;
+      }
+      if (d.axis === 'y' && d.canClear) {
+        // Upwards is not this gesture's — the grip pushes the shade shut — but a second
+        // pull already under way follows the finger back up, so it can be taken back.
+        if (dy <= 0 && !clearing.current) return;
+        if (e.cancelable) e.preventDefault();
+        trackClear(dy);
+        return;
       }
       if (d.axis === 'y') {
         // Upwards from the top edge is nothing to begin with — there is no shade up there
@@ -330,10 +470,16 @@ export function PhoneGestures() {
       if (!touch) {
         if (d.axis === 'x' && peekRef.current) finishPan(0, 0);
         else if (pullingShade.current) finishShade(0, 0);
+        else if (clearing.current) finishClear(0);
         return;
       }
       const dx = touch.clientX - d.x;
       const dy = touch.clientY - d.y;
+
+      if (clearing.current) {
+        finishClear(dy);
+        return;
+      }
 
       if (d.axis === 'x' && d.panning) {
         finishPan(dx, performance.now() - d.at);
@@ -373,15 +519,17 @@ export function PhoneGestures() {
       const d = drag.current;
       drag.current = null;
       if (pullingShade.current) finishShade(0, 0);
+      if (clearing.current) finishClear(0);
       if (d?.axis === 'x' && peekRef.current) finishPan(0, 0);
       else if (peekRef.current) clearPeek();
     };
 
     // An app card is an iframe, and a touch inside one reaches none of the listeners
-    // above. The frame's own script (iframe-scripts/contextmenu.ts) claims a sideways drag
-    // nothing in the app had a use for and hands its travel out here, so the pan runs the
-    // same way from over an app as from over anything else.
-    let framePan: { at: number; moved: boolean } | null = null;
+    // above. The frame's own script (iframe-scripts/contextmenu.ts) claims a drag nothing
+    // in the app had a use for and hands its travel out here — sideways for the pan,
+    // downwards from content already at its top for the shade — so both run the same way
+    // from over an app as from over anything else.
+    let framePan: { at: number; moved: boolean; axis: 'x' | 'y' } | null = null;
     const offFramePan = iframeMessages.on(APP_MSG.touchPan, ({ data, source }) => {
       if (!source) return;
       const dx = Number(data.dx) || 0;
@@ -391,24 +539,35 @@ export function PhoneGestures() {
         framePan =
           paletteSheetOpen || notificationShadeOpen
             ? null
-            : { at: performance.now(), moved: false };
-        if (framePan && settle.current) clearPeek();
+            : { at: performance.now(), moved: false, axis: data.axis === 'y' ? 'y' : 'x' };
+        if (framePan?.axis === 'x' && (settle.current || newMonitorWait.current)) clearPeek();
         return;
       }
       const pan = framePan;
       if (!pan) return;
       if (data.phase === 'move') {
         pan.moved = true;
-        trackPan(dx);
+        if (pan.axis === 'x') trackPan(dx);
+        // As from the shell: a pull follows the finger back up once it is under way.
+        else if (dy > 0 || pullingShade.current) trackShade(dy);
         return;
       }
       framePan = null;
+      const elapsed = performance.now() - pan.at;
+      if (pan.axis === 'y') {
+        if (pullingShade.current) finishShade(data.phase === 'cancel' ? 0 : dy, elapsed);
+        // A pull that arrived as start and end alone, as in onTouchEnd.
+        else if (data.phase === 'end' && swipeDirection(dx, dy) === 'down') {
+          useDesktopStore.getState().setNotificationShadeOpen(true);
+        }
+        return;
+      }
       if (data.phase === 'cancel') {
         if (pan.moved) finishPan(0, 0);
         return;
       }
       if (pan.moved) {
-        finishPan(dx, performance.now() - pan.at);
+        finishPan(dx, elapsed);
         return;
       }
       // A flick that arrived as start and end alone, as in onTouchEnd.
@@ -454,6 +613,20 @@ export function PhoneGestures() {
           style={{ width: EDGE_GUTTER_PX }}
         />
       ))}
+      {/* The number, held still while the surfaces slide past behind it — the one thing on
+          screen during a pan that can be read without chasing it. */}
+      {peek?.badge && (
+        <div
+          className={styles.badge}
+          data-peek-badge=""
+          data-new={peek.target.kind === 'new' || undefined}
+          data-cli={peek.target.kind === 'cli' || undefined}
+          aria-hidden
+        >
+          <span className={styles.badgeNumber}>{peek.badge}</span>
+          {peek.target.kind === 'new' && <span className={styles.badgeCaption}>{peek.label}</span>}
+        </div>
+      )}
       {peek && peek.target.kind !== 'desktop' && (
         <div
           className={styles.peek}
@@ -551,6 +724,11 @@ function canPullFrom(el: EventTarget | null): boolean {
     }
   }
   return true;
+}
+
+/** Whether a touch landed on the open shade or the backdrop around it. */
+function isOnShade(el: EventTarget | null): boolean {
+  return el instanceof Element && el.closest('[data-shade-surface]') !== null;
 }
 
 /**

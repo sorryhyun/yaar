@@ -29,13 +29,19 @@
  * is dragged shut by its own grip, and a drag has to be followed rather than waited out,
  * so the grip writes the same `lib/shade-pull` properties the pull-down does. The two
  * halves of the gesture are the same gesture; see that module.
+ *
+ * Pulled down *again* once it is open, the sheet stretches and a hint is uncovered above
+ * it — "pull to clear context", flipping to "release" past `SHADE_CLEAR_PX` — and letting
+ * go there resets the monitor, as the button in the status row does. `PhoneGestures`
+ * owns that drag like the first one; this component only draws the hint, and marks the
+ * sheet and its backdrop `data-shade-surface` so the recogniser knows the touch is here.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectNotifications, selectTaskbarWindows } from '@/store';
 import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
-import { ContextResetButton } from '../command-palette/ContextResetButton';
+import { ContextResetButton, ResetIcon } from '../command-palette/ContextResetButton';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { Taskbar } from '../taskbar/Taskbar';
 import { useDismissable } from '@/hooks/useDismissable';
@@ -110,6 +116,12 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
     // A tap wanders. Nothing moves until the drag has said it is one, or the sheet
     // twitches under every finger that meant to close it with a tap.
     if (!start.moved && Math.abs(dy) < 4) return;
+    // Downwards first is not a push shut but the second pull, which `PhoneGestures` is
+    // already following from its document listener.
+    if (!start.moved && dy > 0) {
+      dragStart.current = null;
+      return;
+    }
     start.moved = true;
     // No preventDefault: React's touchmove listener is passive, so `touch-action: none`
     // on the grip is what keeps the browser from scrolling the page along with this.
@@ -141,12 +153,25 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
       <div
         className={styles.backdrop}
         data-gesture-layer="shade-pull"
+        data-shade-surface=""
         ref={gestureLayerRef('shade-pull')}
         onClick={() => setOpen(false)}
       />
+      {/* Behind the sheet, and only uncovered by the second pull stretching it down. */}
+      <div
+        className={styles.clearHint}
+        data-gesture-layer="shade-pull"
+        ref={gestureLayerRef('shade-pull')}
+        aria-hidden
+      >
+        <ResetIcon size={18} />
+        <span className={styles.clearPull}>{t('shade.pullToClear')}</span>
+        <span className={styles.clearRelease}>{t('shade.releaseToClear')}</span>
+      </div>
       <div
         className={styles.shade}
         data-gesture-layer="shade-pull"
+        data-shade-surface=""
         ref={attachShade}
         role="dialog"
         aria-label={t('status.title')}

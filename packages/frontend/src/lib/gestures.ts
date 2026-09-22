@@ -23,13 +23,6 @@
 /** How far in from the left/right screen edge a monitor swipe has to start. */
 export const EDGE_GUTTER_PX = 20;
 
-/**
- * How far down from the top a pull-down has to start to mean "open the shade".
- * Sized to clear a card's 44px title bar plus the status notch, so the gesture is
- * available over the title bar without the title bar's buttons losing their taps.
- */
-export const TOP_EDGE_PX = 72;
-
 /** Travel before a drag counts as a swipe rather than a tap that wandered. */
 export const SWIPE_MIN_PX = 56;
 
@@ -79,24 +72,6 @@ export function stepMonitorIndex(current: number, count: number, delta: number):
   const next = current + delta;
   if (next < 0 || next >= count) return null;
   return next;
-}
-
-/**
- * Which gesture a touch starting at `(x, y)` is allowed to become.
- *
- * Answered from the start point alone, before any movement, because that is when the
- * shell has to decide whether to track the touch at all — and a gesture that could
- * start anywhere would have to fight every scrollable thing on the screen.
- */
-export function edgeZone(
-  x: number,
-  y: number,
-  viewportWidth: number,
-): 'left' | 'right' | 'top' | null {
-  if (y <= TOP_EDGE_PX) return 'top';
-  if (x <= EDGE_GUTTER_PX) return 'left';
-  if (x >= viewportWidth - EDGE_GUTTER_PX) return 'right';
-  return null;
 }
 
 /**
@@ -191,4 +166,44 @@ export const SHADE_DIM_PX = 180;
 /** How dark the screen behind a shade pulled down by `y` is, 0 to 1. */
 export function shadeDim(y: number): number {
   return Math.max(0, Math.min(1, y / SHADE_DIM_PX));
+}
+
+/**
+ * How far a second pull on an already-open shade has to travel to clear the context.
+ *
+ * Well past `SWIPE_MIN_PX`: the first pull is navigation and costs nothing to get wrong,
+ * this one throws away the monitor's windows and conversation. A drag that has to be
+ * *meant* is the gesture's own confirmation — the hint flips to "release" at this point,
+ * and a finger that sees that and changes its mind slides back up before lifting.
+ */
+export const SHADE_CLEAR_PX = 160;
+
+/**
+ * How far a second pull may come back up from the deepest point it reached and still
+ * clear. A finger held still wobbles a few pixels; one that has come back further than
+ * this is taking the pull back, and letting go then must not clear anything — the reset
+ * is armed only while the finger is still pulling *down*.
+ */
+export const SHADE_CLEAR_RETREAT_PX = 12;
+
+/**
+ * Whether letting go of a second pull now would clear the context: far enough down, and
+ * not on its way back up. `peak` is the deepest `dy` the pull has reached.
+ */
+export function shadeClearArmed(dy: number, peak: number): boolean {
+  return dy >= SHADE_CLEAR_PX && peak - dy <= SHADE_CLEAR_RETREAT_PX;
+}
+
+/** The most the sheet itself travels on that second pull, however far the finger goes. */
+export const SHADE_OVERPULL_MAX_PX = 110;
+
+/**
+ * How far an open shade is dragged down by a finger that has travelled `dy` past it.
+ *
+ * Half-speed and capped: the sheet is already all the way open, so this is the stretch
+ * of pull-to-refresh rather than a surface following the finger — it says "there is
+ * something more down here" without pretending the sheet has somewhere to go.
+ */
+export function shadeOverpull(dy: number): number {
+  return Math.min(SHADE_OVERPULL_MAX_PX, Math.max(0, dy) / 2);
 }

@@ -483,6 +483,7 @@ Update desktop-wide settings.
 | `accentColor` | `string` | Optional accent color |
 | `iconSize` | `'small' \| 'medium' \| 'large'` | Optional desktop icon size |
 | `theme` | `'dark' \| 'light'` | Optional color theme |
+| `handedness` | `'right' \| 'left'` | Optional hand holding the phone; the phone's status badge sits in the opposite top corner |
 
 ---
 

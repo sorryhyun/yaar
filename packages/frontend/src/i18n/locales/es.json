@@ -186,6 +186,11 @@
   "shade": {
     "monitors": "Monitores",
     "windows": "Ventanas",
-    "noWindows": "No hay ventanas abiertas"
+    "noWindows": "No hay ventanas abiertas",
+    "pullToClear": "Desliza para restablecer el contexto",
+    "releaseToClear": "Suelta para restablecer el contexto"
+  },
+  "gestures": {
+    "newMonitor": "Nuevo monitor"
   }
 }

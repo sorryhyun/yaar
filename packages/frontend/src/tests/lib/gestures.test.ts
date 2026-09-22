@@ -6,16 +6,18 @@
 import { describe, it, expect } from 'bun:test';
 import {
   DRAG_INTENT_PX,
-  EDGE_GUTTER_PX,
   FLICK_VELOCITY,
   RUBBER_BAND_DIVISOR,
+  SHADE_CLEAR_PX,
+  SHADE_CLEAR_RETREAT_PX,
   SHADE_DIM_PX,
+  SHADE_OVERPULL_MAX_PX,
   SWIPE_MIN_PX,
-  TOP_EDGE_PX,
   dragAxis,
-  edgeZone,
   peekOffset,
+  shadeClearArmed,
   shadeDim,
+  shadeOverpull,
   shouldCommitDrag,
   stepMonitorIndex,
   swipeDirection,
@@ -62,28 +64,6 @@ describe('stepMonitorIndex', () => {
   it('has nowhere to go with a single monitor', () => {
     expect(stepMonitorIndex(0, 1, 1)).toBeNull();
     expect(stepMonitorIndex(0, 1, -1)).toBeNull();
-  });
-});
-
-describe('edgeZone', () => {
-  const width = 400;
-
-  it('claims the top band, both side gutters, and nothing else', () => {
-    expect(edgeZone(200, 10, width)).toBe('top');
-    expect(edgeZone(2, 300, width)).toBe('left');
-    expect(edgeZone(width - 2, 300, width)).toBe('right');
-    expect(edgeZone(200, 300, width)).toBeNull();
-  });
-
-  it('gives the top band the corner: a pull from there is a pull-down', () => {
-    expect(edgeZone(2, 10, width)).toBe('top');
-  });
-
-  it('stops exactly where the constants say', () => {
-    expect(edgeZone(EDGE_GUTTER_PX, 300, width)).toBe('left');
-    expect(edgeZone(EDGE_GUTTER_PX + 1, 300, width)).toBeNull();
-    expect(edgeZone(200, TOP_EDGE_PX, width)).toBe('top');
-    expect(edgeZone(200, TOP_EDGE_PX + 1, width)).toBeNull();
   });
 });
 
@@ -163,5 +143,30 @@ describe('shadeDim', () => {
     // The grip drag measures from however much of the sheet was already down, so a
     // finger that overshoots upward asks for a negative one.
     expect(shadeDim(-40)).toBe(0);
+  });
+});
+
+describe('shadeOverpull', () => {
+  it('stretches an open shade at half the finger, and no further than its cap', () => {
+    expect(shadeOverpull(-40)).toBe(0);
+    expect(shadeOverpull(60)).toBe(30);
+    expect(shadeOverpull(10_000)).toBe(SHADE_OVERPULL_MAX_PX);
+  });
+
+  it('arms before the stretch runs out, so the hint says "release" while it still moves', () => {
+    expect(shadeOverpull(SHADE_CLEAR_PX)).toBeLessThan(SHADE_OVERPULL_MAX_PX);
+  });
+});
+
+describe('shadeClearArmed', () => {
+  it('arms past the line while the pull is still going down', () => {
+    expect(shadeClearArmed(SHADE_CLEAR_PX - 1, SHADE_CLEAR_PX - 1)).toBe(false);
+    expect(shadeClearArmed(SHADE_CLEAR_PX, SHADE_CLEAR_PX)).toBe(true);
+  });
+
+  it('disarms a pull on its way back up, before it is back above the line', () => {
+    const peak = SHADE_CLEAR_PX + 80;
+    expect(shadeClearArmed(peak - SHADE_CLEAR_RETREAT_PX, peak)).toBe(true);
+    expect(shadeClearArmed(peak - SHADE_CLEAR_RETREAT_PX - 1, peak)).toBe(false);
   });
 });
