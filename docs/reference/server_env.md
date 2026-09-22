@@ -471,7 +471,10 @@ it, nothing changes.
 
 The launcher (`scripts/dev/start-termux.sh`) separately takes a `termux-wake-lock` for as
 long as the server runs, so Android does not doze Termux with the screen off. That command
-ships with Termux itself and needs no extra app.
+ships with Termux itself and needs no extra app. The launcher is single-instance
+(`$TMPDIR/yaar-termux.pid`): a second launch opens the running desktop and exits, so the lock
+is taken once and never released under a live server. `install.sh` also drops
+`~/.shortcuts/YAAR`, which the Termux:Widget app shows as a home-screen button.
 
 **Source:** `packages/server/src/features/android/`, `packages/lib/src/termux/`
 

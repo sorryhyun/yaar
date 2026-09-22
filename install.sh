@@ -113,8 +113,16 @@ install_termux() {
     "$bun_dir" "$yaar_dir" > "$dest"
   chmod +x "$dest"
 
+  # A home-screen button, for the Termux:Widget app: it lists whatever is in ~/.shortcuts.
+  # Harmless without the app. Tapping it while YAAR runs just reopens the desktop
+  # (start-termux.sh's single-instance check).
+  mkdir -p "$HOME/.shortcuts"
+  printf '#!/usr/bin/env bash\nexec "%s"\n' "$dest" > "$HOME/.shortcuts/YAAR"
+  chmod +x "$HOME/.shortcuts/YAAR"
+
   echo ""
   echo "Installed to: $dest (runs ${yaar_dir})"
+  echo "Home-screen button: add the Termux:Widget widget and pick 'YAAR' (~/.shortcuts/YAAR)."
   # The login stays at first run whatever we do here: piped into bash, this script has
   # no TTY on stdin, and `claude auth login` is interactive.
   echo "Run 'yaar' to start. The first run asks you to log in to Claude."

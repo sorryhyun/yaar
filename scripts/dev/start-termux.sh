@@ -18,6 +18,23 @@ if ! bun --version >/dev/null 2>&1; then
   exit 1
 fi
 
+# One YAAR per phone. A second launch (a second tap on the home-screen widget, or `yaar` in
+# another session) would otherwise get a second server on the next free port, take the wake
+# lock again, and — worse — the first one's exit would release the lock under the one still
+# running. So if a launch is already up, just bring its desktop forward.
+pidfile="${TMPDIR:-/tmp}/yaar-termux.pid"
+if [ -f "$pidfile" ]; then
+  running_pid="$(cat "$pidfile" 2>/dev/null || true)"
+  if [ -n "$running_pid" ] && kill -0 "$running_pid" 2>/dev/null &&
+    tr '\0' ' ' < "/proc/$running_pid/cmdline" 2>/dev/null | grep -q start-termux.sh; then
+    echo "YAAR is already running (pid $running_pid) — opening its desktop."
+    command -v termux-open-url >/dev/null 2>&1 && termux-open-url "http://localhost:${PORT:-8000}"
+    exit 0
+  fi
+fi
+echo $$ > "$pidfile"
+trap 'rm -f "$pidfile"' EXIT
+
 [ -e node_modules/.bin/tsc ] || bun install
 
 if [ -z "${CLAUDE_CODE_PATH:-}" ]; then
@@ -60,10 +77,11 @@ fi
 # The wake lock is what keeps the server alive with the screen off. Without it Android dozes
 # Termux within minutes, and a phone that is both client and server loses both at once. It
 # comes from termux-tools, which ships with Termux itself, so there is no extra app behind
-# it. It is released on exit so a stopped YAAR does not hold the CPU awake.
+# it. It is released on exit so a stopped YAAR does not hold the CPU awake. Taken once per
+# phone: the single-instance check above means only the launch that owns the pidfile gets here.
 if command -v termux-wake-lock >/dev/null 2>&1; then
   termux-wake-lock
-  trap 'termux-wake-unlock' EXIT
+  trap 'termux-wake-unlock; rm -f "$pidfile"' EXIT
 fi
 
 # Termux:API is optional: with it, the server mirrors notifications into the Android shade
