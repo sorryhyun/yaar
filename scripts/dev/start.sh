@@ -322,8 +322,12 @@ if [ "${MOBILE:-0}" = "1" ]; then
 fi
 
 # Start server (in dev mode, server builds + watches frontend automatically)
+# NO_WATCH=1 runs the server without `bun --watch` (`start` instead of `dev`): no restart
+# on a source edit, and no file watcher to pay for — make termux sets it.
+server_script=dev
+[ "${NO_WATCH:-0}" = "1" ] && server_script=start
 echo "Starting server..."
-PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" bun run --filter @yaar/server dev --elide-lines=0 2>&1 &
+PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" bun run --filter @yaar/server "$server_script" --elide-lines=0 2>&1 &
 SERVER_PID=$!
 
 # Open a local debuggable Chrome on the YAAR desktop once the server is up (opt-in).

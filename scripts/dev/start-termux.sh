@@ -118,4 +118,7 @@ fi
 # is opened locally, above. Pinning it here also keeps a `REMOTE=1` exported in the
 # user's shell profile from quietly turning this launch into a tunnelled one.
 # Not `exec`, so the EXIT trap above can release the wake lock.
-MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" LAUNCH_CHROME=0 REMOTE=0 ./scripts/dev/start.sh claude
+# NO_WATCH: a phone is not editing the server, and --watch would restart it (dropping every
+# agent) on a `git pull` underneath a running YAAR. NO_WATCH=0 brings it back.
+MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" NO_WATCH="${NO_WATCH-1}" LAUNCH_CHROME=0 REMOTE=0 \
+  ./scripts/dev/start.sh claude
