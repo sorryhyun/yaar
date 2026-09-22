@@ -1,6 +1,6 @@
 {
   "name": "@yaar/frontend",
-  "version": "0.20.3",
+  "version": "0.20.4",
   "private": true,
   "type": "module",
   "scripts": {

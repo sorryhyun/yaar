@@ -53,7 +53,7 @@ Android용 바이너리가 없어서 Bun의 Android 빌드를 설치하고, 소�
 **버전 고정 / 설치 경로 지정:**
 
 ```bash
-VERSION=v0.20.3 curl -fsSL ... | bash             # 특정 버전 (기본: latest)
+VERSION=v0.20.4 curl -fsSL ... | bash             # 특정 버전 (기본: latest)
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 (기본: ~/.local/bin)
 ```
 

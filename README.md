@@ -57,7 +57,7 @@ Once running, start with something like "install essential apps".
 **Pin a version / custom install path:**
 
 ```bash
-VERSION=v0.20.3 curl -fsSL ... | bash             # Specific version (default: latest)
+VERSION=v0.20.4 curl -fsSL ... | bash             # Specific version (default: latest)
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Install path (default: ~/.local/bin)
 ```
 
