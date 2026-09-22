@@ -19,7 +19,7 @@ import { join, resolve } from 'path';
 import { initCompiler } from '../config.js';
 import { compileTypeScript } from '../compile.js';
 import { typecheckSandbox } from '../typecheck.js';
-import { ASSET_MIME_TYPES } from '../bundled/plugins.js';
+import { ASSET_MIME_TYPES, TEXT_ASSET_EXTENSIONS } from '../bundled/plugins.js';
 import { siblingAssetError } from '../build/build-app.js';
 import { BUNDLED_TYPES_DTS } from '../paths.js';
 
@@ -68,6 +68,17 @@ describe('imported binary assets', () => {
     expect(built.html).toContain('data:model/gltf-binary;base64,');
   });
 
+  test('an .html import inlines as its text, not a data URI', async () => {
+    const built = await compileWithAsset(
+      'panel.html',
+      new TextEncoder().encode('<section class="probe-panel">hi</section>\n'),
+    );
+    expect(built.errors ?? []).toEqual([]);
+    expect(built.success).toBe(true);
+    expect(built.html).toContain('probe-panel');
+    expect(built.html).not.toContain('data:text/html');
+  });
+
   test('an extension outside ASSET_MIME_TYPES fails the build instead of building green', async () => {
     const built = await compileWithAsset('scene.fbx', new Uint8Array([1, 2, 3, 4]));
     expect(built.success).toBe(false);
@@ -112,6 +123,29 @@ describe('imported binary assets', () => {
       ),
     );
     expect([...declared].sort()).toEqual(Object.keys(ASSET_MIME_TYPES).sort());
+  });
+
+  test('every text-inlined extension has an ambient module declaration, and vice versa', () => {
+    const dts = readFileSync(BUNDLED_TYPES_DTS, 'utf-8');
+    const declared = new Set(
+      [...dts.matchAll(/^declare module '\*(\.[a-z0-9]+)' \{\n  const text: string;/gm)].map(
+        (match) => match[1],
+      ),
+    );
+    expect([...declared].sort()).toEqual([...TEXT_ASSET_EXTENSIONS].sort());
+  });
+
+  test('an html import typechecks as a string', async () => {
+    sandbox = await mkdtemp(join(tmpdir(), 'yaar-asset-'));
+    await mkdir(join(sandbox, 'src'), { recursive: true });
+    await Bun.write(join(sandbox, 'src', 'panel.html'), '<p>hi</p>');
+    await Bun.write(
+      join(sandbox, 'src', 'main.ts'),
+      `import panel from './panel.html';\nexport const markup: string = panel;\n`,
+    );
+    const checked = await typecheckSandbox(sandbox, { bundles: [] });
+    expect(checked.diagnostics).toEqual([]);
+    expect(checked.success).toBe(true);
   });
 });
 

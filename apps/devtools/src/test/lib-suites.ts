@@ -106,6 +106,7 @@ const paths = suite('paths', {
 
   'assetImportLine writes a specifier relative to src/main.ts'() {
     eq(assetImportLine('src/assets/my-icon.png'), "import myIcon from './assets/my-icon.png';");
+    eq(assetImportLine('src/assets/panel.html'), "import panel from './assets/panel.html';");
   },
 
   'assetImportLine declines what the bundler would not inline'() {

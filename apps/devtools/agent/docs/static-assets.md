@@ -21,6 +21,10 @@ inlines too (`.bin` arrives as `data:application/octet-stream`) — the list is 
 `src/`, next to the code importing it. Use storage only for genuinely dynamic files —
 uploads, generated output, anything that changes without a recompile.
 
+**HTML fragments:** `import panel from './panel.html'` (also `.htm`) gives the file's
+**text**, not a data URI — hand it to `innerHTML`, an iframe's `srcdoc`, or `DOMParser`.
+`copyFile` from `yaar://storage/...` brings one in like any other asset.
+
 **3D models:** `import level from './level.glb'` gives `data:model/gltf-binary;base64,...`;
 decode it with `atob` and hand the bytes to `GLTFLoader.parse(buf, '', onLoad)` from
 `@bundled/three/addons`. A `.gltf` inlines as `data:model/gltf+json` and works the same

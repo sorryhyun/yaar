@@ -248,7 +248,10 @@ roots import the same `three.core.js` file and Bun dedupes them regardless.
 `bundled-types/index.d.ts` keep typecheck green, and `asset-imports.test.ts` asserts the two
 lists are the same set — each half-edit fails later and elsewhere. Written as a plugin because
 Bun's `loader: { '.png': 'dataurl' }` is silently a no-op in the *programmatic* bundler (1.3.14).
-Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total.
+Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total. The same plugin inlines
+`TEXT_ASSET_EXTENSIONS` (`.html`, `.htm`) as the file's *text* — markup for `innerHTML`/`srcdoc`,
+where a data URI is useless — declared as `const text: string` modules and parity-tested the
+same way. Without it Bun's native HTML loader claims the import and the build fails.
 
 An import of any *other* extension falls through to Bun's default `file` loader, which emits a
 sibling file beside the bundle and reports `success: true` — a green build, then a runtime 403

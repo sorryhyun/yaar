@@ -34,6 +34,7 @@ export {
 export { getBundledLibraryDetail, getDescribableLibraries } from './bundled/describe-library.js';
 export {
   ASSET_MIME_TYPES,
+  TEXT_ASSET_EXTENSIONS,
   bundledLibraryPluginBun,
   cssFilePlugin,
   assetDataUrlPlugin,

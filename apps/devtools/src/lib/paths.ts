@@ -190,8 +190,9 @@ export function globToRegExp(glob: string): RegExp {
 // `data:application/octet-stream`, with `dist/` still holding index.html alone. So this
 // list is not the bundler's capability; it is the set devtools vouches for by offering an
 // import line. An extension missing from it still builds; do not describe this list as
-// the limit of what builds.
-const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|gltf|bin)$/i;
+// the limit of what builds. `.html`/`.htm` import as the file's text, not a data: URI.
+const ASSET_EXT =
+  /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|gltf|bin|html?)$/i;
 
 /**
  * The `import` line that turns a file in the project into an inlined asset, or null

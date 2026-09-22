@@ -371,6 +371,22 @@ export const ASSET_MIME_TYPES: Record<string, string> = {
   '.bin': 'application/octet-stream',
 };
 
+/**
+ * Text extensions an import inlines as a plain string rather than a data URI.
+ *
+ * An HTML fragment is markup the app hands to `innerHTML`, an iframe's `srcdoc`, or a
+ * parser — a `data:text/html;base64,...` string is useless for all three. Without this
+ * entry Bun's native HTML loader claims the import and fails the build with "No matching
+ * export in page.html for import default". (`.txt` needs no entry: Bun's own `text`
+ * loader already default-exports it as a string.)
+ */
+export const TEXT_ASSET_EXTENSIONS: readonly string[] = ['.html', '.htm'];
+
+const TEXT_ASSET_FILTER = new RegExp(
+  `\\.(${TEXT_ASSET_EXTENSIONS.map((ext) => ext.slice(1)).join('|')})$`,
+  'i',
+);
+
 const ASSET_FILTER = new RegExp(
   `\\.(${Object.keys(ASSET_MIME_TYPES)
     .map((ext) => ext.slice(1))
@@ -392,6 +408,9 @@ const ASSET_FILTER = new RegExp(
  * `file`, which emits a *sibling* asset the single-HTML output would drop. This
  * `onLoad` hook reads the bytes and returns them inline, so nothing escapes the
  * one file.
+ *
+ * `TEXT_ASSET_EXTENSIONS` ride the same plugin but inline as the file's text, since
+ * their consumers want the markup, not a URL.
  */
 export function assetDataUrlPlugin(): Bun.BunPlugin {
   return {
@@ -404,6 +423,10 @@ export function assetDataUrlPlugin(): Bun.BunPlugin {
         const bytes = await Bun.file(toForwardSlash(args.path)).arrayBuffer();
         const url = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
         return { contents: `export default ${JSON.stringify(url)};`, loader: 'js' };
+      });
+      build.onLoad({ filter: TEXT_ASSET_FILTER }, async (args: Bun.OnLoadArgs) => {
+        const text = await Bun.file(toForwardSlash(args.path)).text();
+        return { contents: `export default ${JSON.stringify(text)};`, loader: 'js' };
       });
     },
   };

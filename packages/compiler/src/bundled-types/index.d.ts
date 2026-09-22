@@ -162,6 +162,18 @@ declare module '*.bin' {
   export default src;
 }
 
+// Text imports — inlined as the file's contents by the same plugin, for markup that
+// goes to `innerHTML` or `srcdoc`. The type-side half of `TEXT_ASSET_EXTENSIONS`,
+// asserted equal by the same test.
+declare module '*.html' {
+  const text: string;
+  export default text;
+}
+declare module '*.htm' {
+  const text: string;
+  export default text;
+}
+
 // ── Utilities ───────────────────────────────────────────────────────────────
 
 declare module '@bundled/uuid' {
