@@ -173,7 +173,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "No se pudieron cargar tus apps.",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "backAgainToExit": "Pulsa atrás de nuevo para salir"
   },
   "notifications": {
     "title": "Notificaciones",

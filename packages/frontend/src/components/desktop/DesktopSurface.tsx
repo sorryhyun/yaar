@@ -27,6 +27,7 @@ import {
   interrupt,
 } from '@/hooks/useAgentConnection';
 import { useFormFactorSync } from '@/hooks/useFormFactorSync';
+import { usePhoneBack } from '@/hooks/usePhoneBack';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
@@ -79,6 +80,7 @@ export function DesktopSurface() {
   const theme = useDesktopStore((s) => s.theme);
   useAgentConnectionOwner();
   useFormFactorSync();
+  usePhoneBack();
 
   // Rubber-band selection. The rectangle is presentational, so it is written straight to
   // the DOM node as CSS vars and never through React: a state write per mousemove re-ran

@@ -173,7 +173,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "Apps konnten nicht geladen werden.",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "backAgainToExit": "Zum Beenden erneut Zurück drücken"
   },
   "notifications": {
     "title": "Mitteilungen",

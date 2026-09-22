@@ -173,7 +173,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "アプリを読み込めませんでした。",
-    "retry": "再試行"
+    "retry": "再試行",
+    "backAgainToExit": "もう一度押すと終了します"
   },
   "notifications": {
     "title": "通知",

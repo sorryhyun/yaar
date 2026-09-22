@@ -173,7 +173,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "无法加载应用。",
-    "retry": "重试"
+    "retry": "重试",
+    "backAgainToExit": "再按一次返回键退出"
   },
   "notifications": {
     "title": "通知",

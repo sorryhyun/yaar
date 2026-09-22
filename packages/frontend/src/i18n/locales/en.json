@@ -175,7 +175,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "Couldn't load your apps.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "backAgainToExit": "Press back again to exit"
   },
   "notifications": {
     "title": "Notifications",

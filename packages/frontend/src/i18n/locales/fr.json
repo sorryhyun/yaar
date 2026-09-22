@@ -173,7 +173,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "Impossible de charger vos applications.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "backAgainToExit": "Appuyez de nouveau sur Retour pour quitter"
   },
   "notifications": {
     "title": "Notifications",

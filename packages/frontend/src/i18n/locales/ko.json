@@ -170,7 +170,8 @@
   },
   "desktop": {
     "iconsLoadFailed": "앱을 불러오지 못했습니다.",
-    "retry": "다시 시도"
+    "retry": "다시 시도",
+    "backAgainToExit": "한 번 더 누르면 종료됩니다"
   },
   "notifications": {
     "title": "알림",

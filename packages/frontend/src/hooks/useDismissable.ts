@@ -25,14 +25,24 @@ export interface DismissableOptions {
 /** Open surfaces that take Escape, oldest first. Each entry is a live ref to its handler. */
 const escapeStack: RefObject<() => void>[] = [];
 
+/**
+ * Put away the surface on top of the Escape stack, if there is one. Escape is one way in;
+ * a phone's Back button is the other — see `usePhoneBack`.
+ */
+export function dismissTopSurface(): boolean {
+  const top = escapeStack[escapeStack.length - 1];
+  if (!top) return false;
+  top.current?.();
+  return true;
+}
+
 function onDocumentKeyDown(e: KeyboardEvent) {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
   // The Escape that cancels an IME composition is the IME's — see `lib/ime.ts`.
   if (e.isComposing || e.keyCode === 229) return;
-  const top = escapeStack[escapeStack.length - 1];
-  if (!top) return;
+  if (escapeStack.length === 0) return;
   e.preventDefault();
-  top.current?.();
+  dismissTopSurface();
 }
 
 export function useDismissable({
