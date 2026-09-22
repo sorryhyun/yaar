@@ -32,6 +32,11 @@ import { defsOf, selfContained } from '../../lib/schema-refs.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
 import { splitStatePath, selectStatePath } from './state-path.js';
+import {
+  gatedStoragePath,
+  gatedStoragePathError,
+  isStorageOverrideCommand,
+} from './storage-override-path.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
@@ -569,11 +574,20 @@ export async function handleAppCommand(
   const readyErr = await requireAppReady(windowState, key);
   if (readyErr) return readyErr;
 
-  const req: AppProtocolRequest = {
-    kind: 'command',
-    command: payload.command as string,
-    params: payload.params as Record<string, unknown> | undefined,
-  };
+  const params = payload.params as Record<string, unknown> | undefined;
+  const req: AppProtocolRequest = { kind: 'command', command: payload.command as string, params };
+
+  // A storage override is promised a path it can resolve on its own authority; one past
+  // the commons is refused here, for every door (see storage-override-path.ts). The
+  // manifest is only fetched to resolve an alias, and only once such a path is named.
+  const gatedPath = gatedStoragePath(params);
+  if (gatedPath !== null) {
+    const commands = req.command.startsWith('storage:')
+      ? undefined
+      : (await fetchLiveManifest(windowState, windowId))?.commands;
+    if (isStorageOverrideCommand(req.command, commands))
+      return error(gatedStoragePathError(req.command, gatedPath));
+  }
 
   // A storage file named in the params is a file the caller is handing to this app —
   // grant it before the command runs, or the app 403s on the one path it was just told

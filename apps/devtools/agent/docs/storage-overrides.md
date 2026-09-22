@@ -52,7 +52,9 @@ Rules:
 - **One name per verb.** Never add an alias (`saveToStorage`) or a sibling
   (`deleteFromStorage`) "for the URI case" — every path your handler can reach is already
   routed to it, and a second name is a second door with the same semantics. The gated part
-  of the shared tree is the platform's, not yours, and never arrives.
+  of the shared tree is the platform's, not yours, and never arrives — on any door: a
+  monitor or another app invoking your override with a deeper `yaar://storage/` path is
+  refused before it reaches you, so your handler need not guard against it.
 - **Say in the description that it is an override and what it takes.** The agent reads
   `describe` before calling; "takes the document, not `content`" is the sentence that stops
   it from stuffing a string into `params`.
