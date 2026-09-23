@@ -18,6 +18,25 @@ if ! bun --version >/dev/null 2>&1; then
   exit 1
 fi
 
+# Open the desktop, in Chrome when it is installed. The default browser on a Galaxy is
+# Samsung Internet, which warns "can't be downloaded securely" on every plain-http download,
+# localhost included; Chrome counts loopback as secure and does not. A home-screen app runs
+# in the browser that installed it, so this also decides where "Install app" lands.
+# YAAR_TERMUX_BROWSER names another package; empty means the default browser.
+# termux-open-url is itself just `am start -a VIEW`; `-p` pins the package, and a phone
+# without it fails to resolve the intent, which falls through to the default browser.
+open_desktop() {
+  local url="$1" pkg="${YAAR_TERMUX_BROWSER-com.android.chrome}" user out
+  if [ -n "$pkg" ] && command -v am >/dev/null 2>&1; then
+    case "${TERMUX__USER_ID:-}" in '' | *[!0-9]* | 0[0-9]*) user=0 ;; *) user="$TERMUX__USER_ID" ;; esac
+    if out="$(am start --user "$user" -a android.intent.action.VIEW -d "$url" -p "$pkg" 2>&1)" &&
+      ! printf '%s' "$out" | grep -qiE 'error|exception'; then
+      return 0
+    fi
+  fi
+  command -v termux-open-url >/dev/null 2>&1 && termux-open-url "$url"
+}
+
 # One YAAR per phone. A second launch (a second tap on the home-screen widget, or `yaar` in
 # another session) would otherwise get a second server on the next free port, take the wake
 # lock again, and — worse — the first one's exit would release the lock under the one still
@@ -28,7 +47,7 @@ if [ -f "$pidfile" ]; then
   if [ -n "$running_pid" ] && kill -0 "$running_pid" 2>/dev/null &&
     tr '\0' ' ' < "/proc/$running_pid/cmdline" 2>/dev/null | grep -q start-termux.sh; then
     echo "YAAR is already running (pid $running_pid) — opening its desktop."
-    command -v termux-open-url >/dev/null 2>&1 && termux-open-url "http://localhost:${PORT:-8000}"
+    open_desktop "http://localhost:${PORT:-8000}"
     exit 0
   fi
 fi
@@ -82,16 +101,16 @@ if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
   echo "  For Remote Control: unset it and run \`$CLAUDE_CODE_PATH auth login\`."
 fi
 
-# No debuggable Chrome to launch on a phone; open the desktop in the default browser once
-# the server answers instead.
-if command -v termux-open-url >/dev/null 2>&1; then
+# No debuggable Chrome to launch on a phone; open the desktop in the phone's own browser
+# once the server answers instead.
+if command -v am >/dev/null 2>&1 || command -v termux-open-url >/dev/null 2>&1; then
   (
     url="http://localhost:${PORT:-8000}"
     for _ in $(seq 1 120); do
       curl -s --max-time 1 "$url" >/dev/null 2>&1 && break
       sleep 0.5
     done
-    termux-open-url "$url"
+    open_desktop "$url"
   ) &
 fi
 
