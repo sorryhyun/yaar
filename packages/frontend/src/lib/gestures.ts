@@ -194,6 +194,16 @@ export function shadeClearArmed(dy: number, peak: number): boolean {
   return dy >= SHADE_CLEAR_PX && peak - dy <= SHADE_CLEAR_RETREAT_PX;
 }
 
+/**
+ * How long a second pull that did clear stays stretched before springing back.
+ *
+ * The reset is sent the moment the finger lifts, and a sheet that sprang straight back
+ * and closed looked the same as one that had been let go short — the toast arrives
+ * after the eye has already moved on. Held open on "Context cleared" for this long, the
+ * gesture itself says it worked.
+ */
+export const SHADE_CLEAR_HOLD_MS = 300;
+
 /** The most the sheet itself travels on that second pull, however far the finger goes. */
 export const SHADE_OVERPULL_MAX_PX = 110;
 

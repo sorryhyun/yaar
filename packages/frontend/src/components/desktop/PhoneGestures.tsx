@@ -29,7 +29,9 @@
  *   confirmation a destructive gesture needs. It clears only if the finger is still
  *   pulling *down* when it lifts (`shadeClearArmed`): one that has started back up, by
  *   more than a held finger wobbles, has taken the pull back — past the line or not — and
- *   the hint turns back to "pull" to say so.
+ *   the hint turns back to "pull" to say so. One that cleared stays stretched on "Context
+ *   cleared" for `SHADE_CLEAR_HOLD_MS` before springing back, so the gesture shows it
+ *   worked rather than looking like one let go short.
  *
  * The strip the pan runs along is wider than the monitor list at both ends. The **CLI**
  * sits one step to the left of the first monitor: `Shift+Tab` is the way into it on a
@@ -66,6 +68,7 @@ import {
   swipeDirection,
 } from '@/lib/gestures';
 import {
+  holdShadeClear,
   settleShadeClear,
   settleShadePull,
   trackShadeClear,
@@ -353,12 +356,23 @@ export function PhoneGestures() {
       const clear = pull !== null && shadeClearArmed(dy, Math.max(pull.peak, dy));
       // Cleared on the spot, not after the spring: the reset is a delivery that the
       // server acks, and the toast saying so should not wait on an animation.
-      if (clear) resetActiveMonitorContext();
-      shadeSettle.current = settleShadeClear(() => {
-        shadeSettle.current = null;
-        // The pull was for this; the shade has nothing left to be open for.
-        if (clear) useDesktopStore.getState().setNotificationShadeOpen(false);
-      });
+      if (!clear) {
+        shadeSettle.current = settleShadeClear(() => {
+          shadeSettle.current = null;
+        });
+        return;
+      }
+      resetActiveMonitorContext();
+      // Held where the finger left it for a beat before springing back, so the gesture
+      // itself says the reset happened — see `SHADE_CLEAR_HOLD_MS`.
+      holdShadeClear(
+        () => {
+          shadeSettle.current = null;
+          // The pull was for this; the shade has nothing left to be open for.
+          useDesktopStore.getState().setNotificationShadeOpen(false);
+        },
+        (timer) => (shadeSettle.current = timer),
+      );
     };
 
     /** Let go of a pull: finish the slide, and put the shade away if it lost. */

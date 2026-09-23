@@ -44,40 +44,26 @@
   color: var(--color-text);
 }
 
-/* The phone's context reset, at the far end of the status row. Quiet until pressed:
-   it is destructive, and the row is otherwise a reading. */
-.resetButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+/* Stop All, at the far end of the status row while any agent is working — the desktop
+   agent panel's button, at a phone's touch height. */
+.stopAllButton {
+  min-height: 36px;
   margin-left: auto;
-  background: transparent;
-  border: 1px solid transparent;
+  padding: 0 var(--space-3);
+  background: var(--color-danger);
+  border: none;
   border-radius: var(--radius-md);
-  color: var(--color-muted);
+  color: var(--color-base);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
-.resetButton:hover,
-.resetButton:active {
-  color: var(--color-danger);
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
-}
-
-/* The agent census under it. Capped and scrollable on its own: ten agents plus their
-   sub-agents would otherwise push the notifications off a 70vh sheet. Empty when the
-   pool is — `AgentRoster` renders nothing then, which leaves this box childless. */
-.roster {
-  max-height: 40vh;
-  overflow-y: auto;
-  border-bottom: var(--border-subtle);
-}
-
-.roster:empty {
-  display: none;
+.stopAllButton:hover,
+.stopAllButton:active {
+  background: var(--color-danger-hover);
 }
 
 /* The two navigation rows under the readings: a label, then the row itself, which
@@ -299,17 +285,20 @@
   display: flex;
 }
 
-.clearRelease {
+.clearRelease,
+.clearDone {
   display: none;
 }
 
 /* Past the threshold: letting go now clears. Said in the danger color, and the glyph
    turns, so the change is seen even by someone not reading the words. */
-:global(html[data-shade-clear='armed']) .clearHint {
+:global(html[data-shade-clear='armed']) .clearHint,
+:global(html[data-shade-clear='cleared']) .clearHint {
   color: var(--color-danger);
 }
 
-:global(html[data-shade-clear='armed']) .clearHint svg {
+:global(html[data-shade-clear='armed']) .clearHint svg,
+:global(html[data-shade-clear='cleared']) .clearHint svg {
   transform: rotate(-180deg);
 }
 
@@ -318,6 +307,16 @@
 }
 
 :global(html[data-shade-clear='armed']) .clearRelease {
+  display: inline;
+}
+
+/* Let go past the line: it cleared, and the sheet holds still on saying so for
+   `SHADE_CLEAR_HOLD_MS` before it springs back. */
+:global(html[data-shade-clear='cleared']) .clearPull {
+  display: none;
+}
+
+:global(html[data-shade-clear='cleared']) .clearDone {
   display: inline;
 }
 

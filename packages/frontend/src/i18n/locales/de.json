@@ -188,7 +188,8 @@
     "windows": "Fenster",
     "noWindows": "Keine offenen Fenster",
     "pullToClear": "Ziehen, um Kontext zurückzusetzen",
-    "releaseToClear": "Loslassen, um Kontext zurückzusetzen"
+    "releaseToClear": "Loslassen, um Kontext zurückzusetzen",
+    "cleared": "Kontext zurückgesetzt"
   },
   "gestures": {
     "newMonitor": "Neuer Monitor"

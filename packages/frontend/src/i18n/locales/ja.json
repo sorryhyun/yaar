@@ -188,7 +188,8 @@
     "windows": "ウィンドウ",
     "noWindows": "開いているウィンドウはありません",
     "pullToClear": "引っ張ってコンテキストをリセット",
-    "releaseToClear": "離すとコンテキストをリセット"
+    "releaseToClear": "離すとコンテキストをリセット",
+    "cleared": "コンテキストをリセットしました"
   },
   "gestures": {
     "newMonitor": "新しいモニター"

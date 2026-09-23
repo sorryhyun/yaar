@@ -32,16 +32,24 @@
  *
  * Pulled down *again* once it is open, the sheet stretches and a hint is uncovered above
  * it — "pull to clear context", flipping to "release" past `SHADE_CLEAR_PX` — and letting
- * go there resets the monitor, as the button in the status row does. `PhoneGestures`
- * owns that drag like the first one; this component only draws the hint, and marks the
- * sheet and its backdrop `data-shade-surface` so the recogniser knows the touch is here.
+ * go there resets the monitor, then holds on "context cleared" for a beat before the
+ * sheet springs back. That pull is the phone's only reset: a button for it in the status
+ * row was one tap from throwing the monitor away, so the row keeps Stop All in that slot
+ * instead. `PhoneGestures` owns the drag like the first one; this component only draws
+ * the hint, and marks the sheet and its backdrop `data-shade-surface` so the recogniser
+ * knows the touch is here.
+ *
+ * There is no per-agent roster here. On a phone it was a block of agent ids and status
+ * lines between the status row and the navigation rows that pushed the notifications
+ * down the sheet; the corner badge already counts the working agents, and stopping them
+ * is what the row's Stop All is for.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectNotifications, selectTaskbarWindows } from '@/store';
-import { AgentRoster, ConnectionStatus } from '../desktop/AgentStatus';
-import { ContextResetButton, ResetIcon } from '../command-palette/ContextResetButton';
+import { ConnectionStatus } from '../desktop/AgentStatus';
+import { ResetIcon } from '../command-palette/ContextResetButton';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { Taskbar } from '../taskbar/Taskbar';
 import { useDismissable } from '@/hooks/useDismissable';
@@ -52,15 +60,15 @@ import styles from '@/styles/overlays/NotificationShade.module.css';
 
 interface NotificationShadeProps {
   interrupt: () => void;
-  interruptAgent: (agentId: string) => void;
 }
 
-export function NotificationShade({ interrupt, interruptAgent }: NotificationShadeProps) {
+export function NotificationShade({ interrupt }: NotificationShadeProps) {
   const { t } = useTranslation();
   const notifications = useDesktopStore(useShallow(selectNotifications));
   const windows = useDesktopStore(useShallow(selectTaskbarWindows));
   const dismissNotification = useDesktopStore((s) => s.dismissNotification);
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
+  const agentsWorking = useDesktopStore((s) => Object.keys(s.activeAgents).length > 0);
   const open = useDesktopStore((s) => s.notificationShadeOpen);
   const setOpen = useDesktopStore((s) => s.setNotificationShadeOpen);
 
@@ -167,6 +175,7 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
         <ResetIcon size={18} />
         <span className={styles.clearPull}>{t('shade.pullToClear')}</span>
         <span className={styles.clearRelease}>{t('shade.releaseToClear')}</span>
+        <span className={styles.clearDone}>{t('shade.cleared')}</span>
       </div>
       <div
         className={styles.shade}
@@ -176,15 +185,15 @@ export function NotificationShade({ interrupt, interruptAgent }: NotificationSha
         role="dialog"
         aria-label={t('status.title')}
       >
-        {/* What the desktop keeps in its status pill all session — and the reset, which
-            the desktop keeps in the palette but a phone keeps up here, out of the way of
-            the thumb that lives on the palette row. */}
+        {/* What the desktop keeps in its status pill all session, and — while there is
+            anything to stop — the button that stops it. */}
         <div className={styles.status}>
           <ConnectionStatus />
-          <ContextResetButton className={styles.resetButton} />
-        </div>
-        <div className={styles.roster}>
-          <AgentRoster interrupt={interrupt} interruptAgent={interruptAgent} />
+          {agentsWorking && (
+            <button className={styles.stopAllButton} onClick={interrupt}>
+              {t('status.stopAll')}
+            </button>
+          )}
         </div>
 
         {/* The two rows the desktop keeps around its input bar. Monitors first: a tap

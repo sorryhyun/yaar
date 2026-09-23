@@ -20,7 +20,7 @@
  * A second pull on the open sheet — the one that clears the context — has its own phase
  * (`data-shade-clear`) and its own stretch (`--shade-overpull`); see `trackShadeClear`.
  */
-import { SHADE_SETTLE_MS, shadeDim, shadeOverpull } from './gestures';
+import { SHADE_CLEAR_HOLD_MS, SHADE_SETTLE_MS, shadeDim, shadeOverpull } from './gestures';
 import { clearGestureVars, setGestureVar } from './gesture-layer';
 
 const LAYER = 'shade-pull';
@@ -34,7 +34,10 @@ const DIM_VAR = '--shade-dim';
 /** Published beside them so the settle transition and the settle timer cannot disagree. */
 const PULL_MS_VAR = '--shade-pull-ms';
 
-/** The second pull's phase: `dragging`, `armed` (see `shadeClearArmed`), or `settling`. */
+/**
+ * The second pull's phase: `dragging`, `armed` (see `shadeClearArmed`), `cleared` (held
+ * after a pull that cleared, see `holdShadeClear`), or `settling`.
+ */
 const CLEAR_STATE_ATTR = 'data-shade-clear';
 /** How far the open sheet has been stretched down by that second pull. */
 const OVERPULL_VAR = '--shade-overpull';
@@ -97,6 +100,20 @@ export function trackShadeClear(dy: number, armed: boolean): void {
   root.setAttribute(CLEAR_STATE_ATTR, armed ? 'armed' : 'dragging');
   setGestureVar(LAYER, PULL_MS_VAR, `${SHADE_SETTLE_MS}ms`);
   setGestureVar(LAYER, OVERPULL_VAR, `${shadeOverpull(dy)}px`);
+}
+
+/**
+ * A second pull that cleared: keep the sheet stretched where the finger left it and say
+ * so (`cleared`) for `SHADE_CLEAR_HOLD_MS`, then spring it back through
+ * {@link settleShadeClear}. The handle is the one that is live at the time — the hold's,
+ * then the settle's — through `onTimer`, so a caller that goes away mid-way can cancel.
+ */
+export function holdShadeClear(
+  done: () => void,
+  onTimer: (timer: ReturnType<typeof setTimeout>) => void,
+): void {
+  document.documentElement.setAttribute(CLEAR_STATE_ATTR, 'cleared');
+  onTimer(setTimeout(() => onTimer(settleShadeClear(done)), SHADE_CLEAR_HOLD_MS));
 }
 
 /** Let go of a second pull: spring the sheet back to open, then hand over. */

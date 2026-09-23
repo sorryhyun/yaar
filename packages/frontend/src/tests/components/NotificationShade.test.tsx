@@ -21,7 +21,7 @@ function open(mobile = true) {
     formFactor: mobile ? 'mobile' : 'desktop',
     notificationShadeOpen: true,
   });
-  return render(<NotificationShade interrupt={noop} interruptAgent={noop} />);
+  return render(<NotificationShade interrupt={noop} />);
 }
 
 describe('NotificationShade', () => {
@@ -51,7 +51,7 @@ describe('NotificationShade', () => {
     expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
   });
 
-  it('lists the agents the desktop would have shown as chips', () => {
+  function withAgent() {
     useDesktopStore.setState({
       activeAgents: {
         'agent-1': {
@@ -64,15 +64,29 @@ describe('NotificationShade', () => {
         },
       } as never,
     });
+  }
+
+  // The badge counts the agents; the sheet only offers to stop them.
+  it('puts Stop All in the status row, with no roster under it', () => {
+    withAgent();
+    noop.mockClear();
     open();
-    expect(screen.getByText('agent-1')).toBeInTheDocument();
-    expect(screen.getByText('Running: Bash')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Stop All'));
+    expect(noop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('agent-1')).toBeNull();
+    expect(screen.queryByText('Running: Bash')).toBeNull();
   });
 
-  // Issue #117: the phone's context reset lives here, not in the palette row.
-  it('carries the context reset in its top row', () => {
+  it('offers no Stop All while nothing is working', () => {
     open();
-    expect(screen.getByTitle('Reset windows and context')).toBeInTheDocument();
+    expect(screen.queryByText('Stop All')).toBeNull();
+  });
+
+  // The second pull is the phone's reset; a button one tap from it is not.
+  it('carries no context reset button', () => {
+    withAgent();
+    open();
+    expect(screen.queryByTitle('Reset windows and context')).toBeNull();
   });
 
   it('is where a disconnection is reported now that the phone has no status pill', () => {

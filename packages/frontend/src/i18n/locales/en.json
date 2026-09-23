@@ -190,7 +190,8 @@
     "windows": "Windows",
     "noWindows": "No open windows",
     "pullToClear": "Pull to clear context",
-    "releaseToClear": "Release to clear context"
+    "releaseToClear": "Release to clear context",
+    "cleared": "Context cleared"
   },
   "gestures": {
     "newMonitor": "New monitor"

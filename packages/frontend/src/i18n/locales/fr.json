@@ -188,7 +188,8 @@
     "windows": "Fenêtres",
     "noWindows": "Aucune fenêtre ouverte",
     "pullToClear": "Tirez pour réinitialiser le contexte",
-    "releaseToClear": "Relâchez pour réinitialiser le contexte"
+    "releaseToClear": "Relâchez pour réinitialiser le contexte",
+    "cleared": "Contexte réinitialisé"
   },
   "gestures": {
     "newMonitor": "Nouveau moniteur"

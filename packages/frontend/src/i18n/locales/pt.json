@@ -188,7 +188,8 @@
     "windows": "Janelas",
     "noWindows": "Nenhuma janela aberta",
     "pullToClear": "Puxe para redefinir o contexto",
-    "releaseToClear": "Solte para redefinir o contexto"
+    "releaseToClear": "Solte para redefinir o contexto",
+    "cleared": "Contexto redefinido"
   },
   "gestures": {
     "newMonitor": "Novo monitor"

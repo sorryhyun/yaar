@@ -11,7 +11,12 @@ import { render, cleanup, act } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { PhoneGestures } from '@/components/desktop/PhoneGestures';
 import { MAX_MONITORS, APP_MSG } from '@yaar/shared';
-import { EDGE_GUTTER_PX, PEEK_SETTLE_MS, SHADE_CLEAR_PX } from '@/lib/gestures';
+import {
+  EDGE_GUTTER_PX,
+  PEEK_SETTLE_MS,
+  SHADE_CLEAR_HOLD_MS,
+  SHADE_CLEAR_PX,
+} from '@/lib/gestures';
 import { clearGestureVars, getGestureVar } from '@/lib/gesture-layer';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
@@ -533,6 +538,17 @@ describe('PhoneGestures', () => {
     touch(sheet, 'touchend', 203, 300 + SHADE_CLEAR_PX + 10);
 
     expect(toasts().some((t) => t.id.startsWith('reset-'))).toBe(true);
+    // Held stretched on "cleared" for a beat, so the gesture itself says it worked.
+    expect(clearState()).toBe('cleared');
+    act(() => {
+      jest.advanceTimersByTime(SHADE_CLEAR_HOLD_MS - 10);
+    });
+    expect(clearState()).toBe('cleared');
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(true);
+    act(() => {
+      jest.advanceTimersByTime(10);
+    });
+    expect(clearState()).toBe('settling');
     settle();
     // Done with: the pull was for the reset, and the shade has nothing left to be open for.
     expect(clearState()).toBeNull();

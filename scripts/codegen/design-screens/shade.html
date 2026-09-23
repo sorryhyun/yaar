@@ -14,25 +14,7 @@
     <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: var(--border-subtle); font-size: var(--text-base); color: var(--color-text);">
       <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 8px var(--color-success);"></span>
       <span style="opacity: 0.9;">Connected (claude)</span>
-    </div>
-
-    <div style="border-bottom: var(--border-subtle);">
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: var(--border-subtle); font-size: var(--text-base); font-weight: 500; color: var(--color-text);">
-        <span>Active Agents</span>
-        <button type="button" style="padding: 4px 10px; border: none; border-radius: var(--radius-sm); background: var(--color-danger); color: var(--color-base); font-family: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer;">Stop All</button>
-      </div>
-      <div style="padding: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-md);">
-          <span style="flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--agent-monitor);"></span>
-          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
-            <span style="font-family: monospace; font-size: var(--text-base); font-weight: 500; color: var(--color-text);">monitor-0-msg-1789885904213-sk0fc</span>
-            <span style="font-size: var(--text-sm); color: var(--color-success);">Preparing: Bash</span>
-            <span style="font-size: var(--text-sm); color: var(--color-text-muted); font-variant-numeric: tabular-nums;">18s</span>
-            <span style="font-size: var(--text-xs); color: var(--color-muted);">Window: Release notes</span>
-          </div>
-          <button type="button" style="padding: 4px 10px; border: 1px solid var(--bg-overlay-hover); border-radius: var(--radius-sm); background: var(--bg-overlay-strong); color: var(--color-text); font-family: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer;">Stop</button>
-        </div>
-      </div>
+      <button type="button" style="min-height: 36px; margin-left: auto; padding: 0 12px; border: none; border-radius: var(--radius-md); background: var(--color-danger); color: var(--color-base); font-family: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer;">Stop All</button>
     </div>
 
     <div style="display: flex; align-items: center; gap: 12px; min-width: 0; padding: 8px 16px; border-bottom: var(--border-subtle);">
@@ -86,5 +68,7 @@
     </button>
 
   </div>
+
+  <div aria-hidden="true" style="position: absolute; top: 4px; left: 8px; display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: var(--radius-full); background: var(--bg-dark-overlay-strong); backdrop-filter: blur(10px); color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none;"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--color-success);"></span><span>M1<span style="opacity: 0.6;">/2</span></span><span style="display: flex; align-items: center; gap: 3px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent);"></span>1</span></div>
 
 </div>

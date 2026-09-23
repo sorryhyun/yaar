@@ -1,11 +1,11 @@
 /**
  * ContextResetButton - resets the active monitor's windows and agent context.
  *
- * One button, two homes: the desktop keeps it in the command palette's icon cluster,
- * the phone in the pull-down shade's top row. On a phone the palette row is under the
- * thumb all session, which is the wrong place for a destructive control — the pen took
- * that slot, and the reset moved up to where reaching it takes a deliberate pull. Pulling
- * the open shade down a second time runs the same reset (`resetActiveMonitorContext`).
+ * The desktop keeps it in the command palette's icon cluster. A phone has no button for
+ * it at all: the palette row is under the thumb all session, the wrong place for a
+ * destructive control, so the pen took that slot — and pulling the open shade down a
+ * second time runs the same reset (`resetActiveMonitorContext`), a drag long enough that
+ * it has to be meant.
  */
 import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -14,7 +14,7 @@ import { useDesktopStore } from '@/store';
 
 /**
  * Reset the monitor this tab is looking at, and say so. A plain function rather than the
- * button's handler because the phone has a second way in — pulling the already-open
+ * button's handler because the phone's way in is not a button but pulling the already-open
  * shade down again (`PhoneGestures`) — and the two must toast the same thing.
  */
 export function resetActiveMonitorContext(): void {

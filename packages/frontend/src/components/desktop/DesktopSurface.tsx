@@ -476,7 +476,7 @@ export function DesktopSurface() {
 
       {/* The phone's status surface as well as its notifications — the pull-down is
           where the connection and agent readings live there. */}
-      <NotificationShade interrupt={interrupt} interruptAgent={interruptAgent} />
+      <NotificationShade interrupt={interrupt} />
       {/* Edge gestures: swipe in from the side to change monitor, pull down for the
           shade. Above the desktop so the gutters sit over the cards they have to
           catch touches in front of. */}
