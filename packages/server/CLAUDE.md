@@ -45,6 +45,7 @@ before changing a default or adding a knob.
 | `YAAR_CLIPBOARD_SECRETS` | **on** | Redact credentials out of clipboard text (`=0` disables) |
 | `YAAR_CLIPBOARD_GRANT` | **on** | Pre-grant clipboard to the desktop origin over CDP (`=0` disables) |
 | `YAAR_TERMUX_API` | on for Android if it answers | Termux:API notifications, clipboard, share sheet (`=0` disables) |
+| `YAAR_TERMUX_HTTPS` | off | `=1`: Termux launcher + notification taps open the local TLS socket (needs the local CA installed on the phone) |
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` (the inline cap stays 10MB) |
 | `YAAR_FREEDPI` | on | Route outbound TLS through a local fragmenting proxy, to get past SNI-matching DPI (`0` disables) |
 | `MONITOR_MAX_CONCURRENT` / `_ACTIONS_PER_MIN` / `_OUTPUT_PER_MIN` | `2` / `30` / `50000` | Background monitor budget |

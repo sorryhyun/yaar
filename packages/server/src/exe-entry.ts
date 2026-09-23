@@ -83,7 +83,7 @@ function openAppWindow() {
   const chromium = findChromiumBrowser();
 
   if (chromium) {
-    // The Chromium we launch can trust the local TLS socket's self-signed key by its
+    // The Chromium we launch can trust the local TLS socket's leaf key by its
     // SPKI, so it gets h2 instead of HTTP/1.1's six connections per host (see
     // http/local-tls.ts). The default-browser fallback below cannot, so it keeps HTTP.
     const tls = getLocalTlsEndpoint();

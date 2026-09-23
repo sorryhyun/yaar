@@ -6,13 +6,15 @@
  * preview eval, a build) queue everything else behind them and the desktop freezes.
  * h2 multiplexes them on one connection.
  *
- * The Chrome YAAR launches opens this socket, trusting the self-signed key by the SPKI
- * that `/health` advertises. Plain HTTP on `PORT` stays for everything else (MCP, the
- * Tailscale backend, other browsers).
+ * The Chrome YAAR launches opens this socket, trusting the leaf's key by the SPKI that
+ * `/health` advertises. Any other browser can trust it by installing the local CA that
+ * signed the leaf, served at `/local-ca.crt` — the road for a phone running the server
+ * under Termux, whose browser warns on every plain-http download. Plain HTTP on `PORT`
+ * stays for everything else (MCP, the Tailscale backend, browsers without the CA).
  */
 
 import { join } from 'node:path';
-import { ensureSelfSignedCert, type SelfSignedCert } from '@yaar/lib/tls';
+import { ensureLocalCert, type LocalCert } from '@yaar/lib/tls';
 import { DESKTOP_ORIGIN_HOST, getConfigDir } from '../config.js';
 
 export interface LocalTlsEndpoint {
@@ -24,13 +26,21 @@ export interface LocalTlsEndpoint {
 export const LOCAL_TLS_PORT_OFFSET = 443;
 
 let endpoint: LocalTlsEndpoint | null = null;
+let caPem: string | null = null;
 
-export function loadLocalTlsCert(): Promise<SelfSignedCert | null> {
-  return ensureSelfSignedCert(join(getConfigDir(), 'local-tls'));
+export function loadLocalTlsCert(): Promise<LocalCert | null> {
+  return ensureLocalCert(join(getConfigDir(), 'local-tls'));
 }
 
-export function setLocalTlsEndpoint(e: LocalTlsEndpoint | null): void {
+/** Record the socket once it is listening, and the CA a browser installs to trust it. */
+export function setLocalTlsEndpoint(e: LocalTlsEndpoint | null, ca: string | null = null): void {
   endpoint = e;
+  caPem = e ? ca : null;
+}
+
+/** The local CA (PEM) behind the TLS socket's leaf, or null when the socket is down. */
+export function getLocalCaPem(): string | null {
+  return caPem;
 }
 
 export function getLocalTlsEndpoint(): LocalTlsEndpoint | null {

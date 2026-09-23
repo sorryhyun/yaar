@@ -3,7 +3,7 @@
  * iframe-token, pick-directory, embeddable, hooks/link.
  */
 
-import { getLocalTlsEndpoint } from '../local-tls.js';
+import { getLocalCaPem, getLocalTlsEndpoint } from '../local-tls.js';
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../features/apps/discovery.js';
@@ -44,6 +44,21 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     // the SPKI to trust from here. Both are public — a port number and a public-key hash.
     const tls = getLocalTlsEndpoint();
     return jsonResponse({ status: 'ok', remote: IS_REMOTE, ...(tls ? { tls } : {}) });
+  }
+
+  // The local CA behind that socket's certificate, for a browser to install once and
+  // then trust `https://localhost:<tls port>` (http/local-tls.ts). A CA certificate is
+  // public by design; its key never leaves config/local-tls/. Beside /health rather than
+  // under /api/ because a phone fetches it as a top-level download.
+  if (url.pathname === '/local-ca.crt' && req.method === 'GET') {
+    const ca = getLocalCaPem();
+    if (!ca) return errorResponse('The local TLS socket is not running', 404);
+    return new Response(ca, {
+      headers: {
+        'Content-Type': 'application/x-x509-ca-cert',
+        'Content-Disposition': 'attachment; filename="yaar-local-ca.crt"',
+      },
+    });
   }
 
   // What is running, and in which shape. Deliberately a REST route rather than a

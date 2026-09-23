@@ -79,7 +79,7 @@ async function startLocalTls(
       websocket,
       { key: cert.key, cert: cert.cert },
     );
-    setLocalTlsEndpoint({ port, spki: cert.spki });
+    setLocalTlsEndpoint({ port, spki: cert.spki }, cert.ca);
     console.log(`[local-tls] HTTPS + HTTP/2 on https://localhost:${port}`);
     return server;
   } catch (err) {

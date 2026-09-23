@@ -15,6 +15,7 @@ import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { isUserWatching, onPresenceChange } from '../../session/client-presence.js';
 import { IS_REMOTE } from '../../config.js';
 import { getRemoteInfo } from '../../lifecycle.js';
+import { localTlsDesktopOrigin } from '../../http/local-tls.js';
 import { NativeNotificationBridge } from './native-notifications.js';
 import { getTermux, wantsTermuxApi } from './termux.js';
 
@@ -22,9 +23,14 @@ export { getTermux } from './termux.js';
 
 let unsubscribe: (() => void)[] = [];
 
-/** The desktop, as a tap should open it — with the remote token when the desktop needs one. */
+/**
+ * The desktop, as a tap should open it — with the remote token when the desktop needs one.
+ * The local TLS socket under `YAAR_TERMUX_HTTPS=1`, the launcher's own choice (see
+ * `scripts/dev/start-termux.sh`): a tap must land on the origin the home-screen app lives on.
+ */
 function desktopUrl(port: number): string {
-  const base = `http://localhost:${port}/`;
+  const tlsOrigin = process.env.YAAR_TERMUX_HTTPS === '1' ? localTlsDesktopOrigin() : null;
+  const base = tlsOrigin ? `${tlsOrigin}/` : `http://localhost:${port}/`;
   const token = IS_REMOTE ? getRemoteInfo()?.token : null;
   return token ? `${base}#remote=${token}` : base;
 }
