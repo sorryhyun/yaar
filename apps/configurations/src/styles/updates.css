@@ -84,6 +84,7 @@
 
 .u-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-bottom: var(--yaar-sp-2);

@@ -24,3 +24,36 @@ body,
   min-height: 0;
   position: relative;
 }
+
+/* Five tabs do not fit a phone as a row of icon + label, and a strip that scrolls
+   hides the last one. Narrow (≤768px, the SDK's isNarrow): each tab takes an equal
+   share, label under its icon — the shape of a phone's bottom nav. */
+@media (max-width: 768px) {
+  .cfg-tabs {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .cfg-tabs .y-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: var(--yaar-sp-2) 2px;
+    font-size: var(--yaar-text-xs);
+  }
+
+  .cfg-tab-icon {
+    font-size: var(--yaar-text-lg);
+    line-height: 1;
+  }
+
+  .cfg-tab-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

@@ -10,6 +10,12 @@
   grid-column: 1 / -1;
 }
 
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .field-label {
   font-size: 11px;
   color: var(--yaar-text-muted);

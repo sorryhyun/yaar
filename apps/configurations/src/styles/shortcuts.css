@@ -81,6 +81,13 @@
   opacity: 1;
 }
 
+/* No hover on a touch screen, so the delete button cannot wait for one. */
+@media (hover: none) {
+  .folder-del-btn {
+    opacity: 1;
+  }
+}
+
 .folder-del-btn:hover {
   color: var(--yaar-error);
   background: var(--yaar-wash-error);

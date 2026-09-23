@@ -24,13 +24,14 @@ function App() {
       <div class="y-tabs cfg-tabs">
         ${TABS.map(
           (tab) => html`
-          <button
-            class=${() => `y-tab${activeTab() === tab.id ? ' active' : ''}`}
-            onClick=${() => setActiveTab(tab.id)}
-          >
-            ${tab.icon} ${tab.label}
-          </button>
-        `,
+            <button
+              class=${() => `y-tab${activeTab() === tab.id ? ' active' : ''}`}
+              onClick=${() => setActiveTab(tab.id)}
+            >
+              <span class="cfg-tab-icon">${tab.icon}</span>
+              <span class="cfg-tab-label">${tab.label}</span>
+            </button>
+          `,
         )}
       </div>
 
@@ -46,8 +47,6 @@ function App() {
                   ? UpdatesView()
                   : DomainsView()}
       </div>
-
-
     </div>
   `;
 }

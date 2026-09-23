@@ -235,7 +235,7 @@ export function ShortcutsView() {
       </div>
 
       <!-- ── Body: sidebar + detail ── -->
-      <div class="view-split">
+      <div class=${() => `view-split${selected() ? ' has-selection' : ''}`}>
 
         <!-- Sidebar -->
         <div class="view-sidebar">
@@ -267,7 +267,8 @@ export function ShortcutsView() {
                 <${Show} when=${() => !isCollapsed(folderId)}>
                   <${For} each=${getItems}>${(s: Shortcut) => html`
                     <div
-                      class=${() => `y-list-item sidebar-item sc-item-indented${selected()?.id === s.id ? ' active' : ''}`}
+                      class=${() =>
+                        `y-list-item sidebar-item sc-item-indented${selected()?.id === s.id ? ' active' : ''}`}
                       onClick=${() => selectShortcut(s)}
                     >
                       <span class="sidebar-item-icon">${() => s.icon}</span>
@@ -293,7 +294,8 @@ export function ShortcutsView() {
                 <${Show} when=${() => !isCollapsed('__ungrouped__')}>
                   <${For} each=${() => grouped().ungrouped}>${(s: Shortcut) => html`
                     <div
-                      class=${() => `y-list-item sidebar-item sc-item-indented${selected()?.id === s.id ? ' active' : ''}`}
+                      class=${() =>
+                        `y-list-item sidebar-item sc-item-indented${selected()?.id === s.id ? ' active' : ''}`}
                       onClick=${() => selectShortcut(s)}
                     >
                       <span class="sidebar-item-icon">${() => s.icon}</span>
@@ -312,13 +314,16 @@ export function ShortcutsView() {
             const s = selected();
             if (!s)
               return html`
-              <div class="y-empty detail-empty">
-                <span class="y-empty-icon detail-empty-icon">⚡</span>
-                <span>Select a shortcut to view details</span>
-              </div>
-            `;
+                <div class="y-empty detail-empty">
+                  <span class="y-empty-icon detail-empty-icon">⚡</span>
+                  <span>Select a shortcut to view details</span>
+                </div>
+              `;
             return html`
               <div class="detail-card">
+                <button class="y-btn y-btn-ghost y-btn-sm detail-back" onClick=${() => setSelected(null)}>
+                  ← All shortcuts
+                </button>
                 <div class="detail-header">
                   <div class="detail-big-icon">${s.icon}</div>
                   <div>
@@ -359,8 +364,12 @@ export function ShortcutsView() {
                   </div>
                   ${() =>
                     s.folderId
-                      ? html`<div class="sc-folder-current">Current: <strong>${s.folderId}</strong></div>`
-                      : html`<div class="sc-folder-current" style="color:var(--yaar-text-muted)">Currently ungrouped</div>`}
+                      ? html`<div class="sc-folder-current">
+                          Current: <strong>${s.folderId}</strong>
+                        </div>`
+                      : html`<div class="sc-folder-current" style="color:var(--yaar-text-muted)">
+                          Currently ungrouped
+                        </div>`}
                 </div>
 
                 <div class="detail-actions">

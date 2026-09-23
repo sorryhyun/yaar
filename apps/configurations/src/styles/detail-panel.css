@@ -1,4 +1,10 @@
 /* Detail panel */
+/* Only a narrow window shows list and detail one at a time (sidebar.css), so only
+   there does the detail need a way back. */
+.detail-back {
+  display: none;
+}
+
 .view-detail {
   flex: 1;
   overflow-y: auto;
@@ -81,4 +87,15 @@
   border-top: 1px solid var(--yaar-border);
   display: flex;
   gap: var(--yaar-sp-2);
+}
+
+@media (max-width: 768px) {
+  .view-detail {
+    padding: var(--yaar-sp-3);
+  }
+
+  .detail-back {
+    display: inline-flex;
+    margin: calc(-1 * var(--yaar-sp-2)) 0 var(--yaar-sp-3) calc(-1 * var(--yaar-sp-2));
+  }
 }

@@ -75,3 +75,28 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Narrow: no room for list and detail side by side, so they take turns — the list
+   until something is picked, then the detail with a back button (detail-panel.css). */
+@media (max-width: 768px) {
+  .view-add-section {
+    padding: var(--yaar-sp-3);
+  }
+
+  .view-sidebar {
+    flex: 1;
+    width: auto;
+    border-right: none;
+  }
+
+  .view-split.has-selection .view-sidebar,
+  .view-split:not(.has-selection) .view-detail {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .sidebar-item {
+    min-height: 48px;
+  }
+}

@@ -163,3 +163,38 @@
   font-size: 10px;
   color: var(--yaar-text-muted);
 }
+
+/* Narrow: a label beside a 180px control leaves the label a few words per line,
+   so a row holding a field stacks — label on top, control full width. A toggle
+   row stays side by side; the switch is small enough to share the line. */
+@media (max-width: 768px) {
+  .s-section {
+    padding: var(--yaar-sp-3);
+  }
+
+  .s-row:has(.s-input, .s-select, .s-accent-picker) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--yaar-sp-2);
+  }
+
+  .s-row .s-input,
+  .s-row .s-select {
+    width: 100%;
+  }
+
+  .s-row .s-accent-picker {
+    justify-content: flex-start;
+  }
+}
+
+@media (pointer: coarse) {
+  .s-accent-picker {
+    gap: var(--yaar-sp-2);
+  }
+
+  .s-accent-swatch {
+    width: 32px;
+    height: 32px;
+  }
+}

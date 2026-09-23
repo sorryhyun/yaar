@@ -160,7 +160,7 @@ export function HooksView() {
         </${Show}>
       </div>
 
-      <div class="view-split">
+      <div class=${() => `view-split${selected() ? ' has-selection' : ''}`}>
         <div class="view-sidebar">
           ${() =>
             hooks().length === 0 ? html`<div class="sidebar-empty">🪝 No hooks yet</div>` : null}
@@ -183,20 +183,30 @@ export function HooksView() {
             const h = selected();
             if (!h)
               return html`
-              <div class="y-empty detail-empty">
-                <span class="y-empty-icon detail-empty-icon">🪝</span>
-                <span>Select a hook to view details</span>
-              </div>
-            `;
+                <div class="y-empty detail-empty">
+                  <span class="y-empty-icon detail-empty-icon">🪝</span>
+                  <span>Select a hook to view details</span>
+                </div>
+              `;
             return html`
               <div class="detail-card">
+                <button
+                  class="y-btn y-btn-ghost y-btn-sm detail-back"
+                  onClick=${() => setSelected(null)}
+                >
+                  ← All hooks
+                </button>
                 <div class="detail-header">
                   <div class="detail-big-icon">🪝</div>
                   <div style="flex:1;min-width:0">
                     <div class="detail-title">${h.label}</div>
                     <div class="detail-title-sub" style="display:flex;gap:6px;margin-top:4px">
                       <span class="y-badge y-badge-accent item-badge">${h.event}</span>
-                      <span class=${h.enabled ? 'y-badge y-badge-success item-badge' : 'y-badge item-badge'}>
+                      <span
+                        class=${h.enabled
+                          ? 'y-badge y-badge-success item-badge'
+                          : 'y-badge item-badge'}
+                      >
                         ${h.enabled ? '✓ enabled' : '○ disabled'}
                       </span>
                     </div>
@@ -212,7 +222,12 @@ export function HooksView() {
                 </div>
                 <div class="detail-field">
                   <div class="y-label detail-field-label">ID</div>
-                  <div class="detail-field-value" style="color:var(--yaar-text-muted);font-size:11px">${h.id}</div>
+                  <div
+                    class="detail-field-value"
+                    style="color:var(--yaar-text-muted);font-size:11px"
+                  >
+                    ${h.id}
+                  </div>
                 </div>
                 <div class="detail-actions">
                   <button class="y-btn y-btn-danger" onClick=${() => remove(h.id)}>
