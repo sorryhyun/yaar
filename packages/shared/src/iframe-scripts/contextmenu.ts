@@ -157,19 +157,28 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       pan = { x: t.screenX, y: t.screenY, block: block, pull: pull, axis: null, claimed: false };
     }, { capture: true, passive: true });
 
-    // Bubble phase on \`window\`: every app handler has run, so one that cancelled the
-    // move has already said the drag is its own.
+    // Passive, and it must stay so. A non-passive touchmove on \`window\` makes every touch
+    // scroll in the frame wait for this frame's main thread to run it, and every isolated
+    // app shares one origin and so one main thread. With this listener non-passive, any
+    // app busy for ten seconds froze touch scrolling in *every* app for those ten seconds,
+    // and tapping did not help. There is nothing to cancel anyway: a drag is only ever
+    // claimed when the browser has nothing to scroll in that direction (\`panBlock\`,
+    // \`canPull\`). The one thing the browser could still do with it is chain it out of
+    // the frame into the shell's pull-to-refresh or back-swipe, and the
+    // \`overscroll-behavior\` below stops that without a listener.
+    //
+    // Bubble phase on \`window\`: every app handler has run, so an app that cancelled the
+    // move from its own non-passive listener has already said the drag is its own.
+    var contain = document.createElement('style');
+    contain.textContent = ':where(html){overscroll-behavior:none}';
+    (document.head || document.documentElement).appendChild(contain);
+
     window.addEventListener('touchmove', function(e) {
       var t = e.touches[0];
       if (!pan || !t) return;
       var dx = t.screenX - pan.x, dy = t.screenY - pan.y;
       if (!pan.axis) {
         var appTook = e.defaultPrevented;
-        // Claim a downward drag before the browser does, as the shell does: by the time
-        // the axis is known the moves may have stopped being cancelable.
-        if (pan.pull && !appTook && dy > 0 && dy >= Math.abs(dx) && e.cancelable) {
-          e.preventDefault();
-        }
         // DRAG_INTENT_PX / DRAG_AXIS_RATIO from the shell's lib/gestures.ts.
         var ax = Math.abs(dx), ay = Math.abs(dy);
         if (ax >= 10 && ax >= ay * 1.2) pan.axis = 'x';
@@ -185,9 +194,8 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
         pan.claimed = true;
         postPan('start', dx, dy, pan.axis);
       }
-      if (e.cancelable) e.preventDefault();
       postPan('move', dx, dy, pan.axis);
-    }, { passive: false });
+    }, { passive: true });
 
     window.addEventListener('touchend', function(e) {
       var p = pan;

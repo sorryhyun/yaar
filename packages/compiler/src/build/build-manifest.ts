@@ -162,8 +162,13 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * (`APP_MSG.touchPan`), so the phone shell's monitor pan works over an app card and not
  * only from the screen-edge gutters. `installGuard` lets the first copy win, so the
  * baked one in an unrebuilt `dist/` shadows the injected upgrade even same-origin.
+ *
+ * '36': that touch relay's `touchmove` listener is passive. Non-passive, it made every
+ * touch scroll in an app wait for the app's main thread, and all isolated apps share one
+ * main thread, so any busy app froze touch scrolling in every app until it finished.
+ * Same shadowing as '35': the baked copy is the one that runs.
  */
-export const COMPILER_VERSION = '35';
+export const COMPILER_VERSION = '36';
 
 export interface BuildManifest {
   sourceHash: string;
