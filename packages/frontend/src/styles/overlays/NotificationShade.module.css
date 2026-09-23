@@ -134,28 +134,42 @@
 }
 
 .notification {
+  /* `overflow: hidden` zeroes a flex item's automatic minimum height, so without this
+     a list taller than the sheet squeezes every card instead of scrolling — each one
+     clipped to a sliver of its header, stacked so they read as overlapping. */
+  flex-shrink: 0;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
+/* The row is as tall as the dismiss button, not the button plus padding around it:
+   the title is one line and should look like one. */
 .notificationHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px var(--space-3);
+  gap: var(--space-2);
+  min-height: 36px;
+  padding-left: var(--space-3);
   background: var(--color-mantle);
 }
 
 .title {
+  min-width: 0;
+  padding: var(--space-1) 0;
   font-size: var(--text-base);
   font-weight: 600;
+  line-height: 1.3;
   color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
+/* Full touch width, but only the row's height: the target is widened, not the row. */
 .dismiss {
+  flex-shrink: 0;
+  align-self: stretch;
   min-width: 44px;
-  min-height: 44px;
   border: none;
   background: transparent;
   color: var(--color-muted);
