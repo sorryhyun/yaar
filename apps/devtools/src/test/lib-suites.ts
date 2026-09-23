@@ -25,7 +25,9 @@ import {
   truncatePatch,
   resolveCompileStatus,
   bumpPatch,
-  bumpAppJson,
+  withAppJsonVersion,
+  planDeployVersion,
+  installedVersionOf,
   manifestString,
   identifierAt,
   isReferenceLookupPath,
@@ -487,16 +489,65 @@ const appManifest = suite('app-manifest', {
     eq(bumpPatch(3), { from: '3', to: '0.0.1', restarted: true });
   },
 
-  'bumping app.json keeps its other fields, key order and trailing newline'() {
-    const out = bumpAppJson('{\n  "appId": "demo",\n  "version": "1.0.0",\n  "icon": "x"\n}\n');
-    eq(out.to, '1.0.1');
-    eq(out.text, '{\n  "appId": "demo",\n  "version": "1.0.1",\n  "icon": "x"\n}\n');
-    eq(bumpAppJson('{"appId":"demo"}').text, '{\n  "appId": "demo",\n  "version": "0.0.1"\n}');
+  'setting the version keeps other fields, key order and trailing newline'() {
+    const out = withAppJsonVersion(
+      '{\n  "appId": "demo",\n  "version": "1.0.0",\n  "icon": "x"\n}\n',
+      '1.0.1',
+    );
+    eq(out, '{\n  "appId": "demo",\n  "version": "1.0.1",\n  "icon": "x"\n}\n');
+    eq(
+      withAppJsonVersion('{"appId":"demo"}', '0.0.1'),
+      '{\n  "appId": "demo",\n  "version": "0.0.1"\n}',
+    );
   },
 
   'an app.json that is not a JSON object is refused'() {
-    throwsWith(() => bumpAppJson('{ nope'), 'not valid JSON');
-    throwsWith(() => bumpAppJson('[1]'), 'not a JSON object');
+    throwsWith(() => withAppJsonVersion('{ nope', '1.0.0'), 'not valid JSON');
+    throwsWith(() => withAppJsonVersion('[1]', '1.0.0'), 'not a JSON object');
+  },
+
+  // The rule that stops a deploy shipping the installed version number again.
+  'a deploy at or below the installed version bumps one patch above the higher'() {
+    const same = planDeployVersion('1.6.2', '1.6.2');
+    eq(same.version, '1.6.3');
+    eq(same.bumped?.from, '1.6.2');
+    eq(same.bumped?.to, '1.6.3');
+    ok(same.bumped?.reason.includes('already installed'), 'reason names the collision');
+    eq(planDeployVersion('1.6.0', '1.6.2').version, '1.6.3', 'continues from installed');
+    eq(planDeployVersion(null, '2.0.0').version, '2.0.1', 'no project version');
+  },
+
+  'a hand-set version above the installed one is kept'() {
+    eq(planDeployVersion('2.0.0', '1.6.2'), { version: '2.0.0' });
+    eq(planDeployVersion('1.6.3-beta.1', '1.6.2'), { version: '1.6.3-beta.1' });
+    eq(planDeployVersion('1.10.0', '1.9.9'), { version: '1.10.0' }, 'numeric, not lexical');
+    eq(planDeployVersion('1.6.2', '1.6.2-rc.1'), { version: '1.6.2' }, 'a release outranks its rc');
+  },
+
+  'nothing installed, or an installed version that is not semver, leaves it alone'() {
+    eq(planDeployVersion('1.0.0', null), { version: '1.0.0' });
+    eq(planDeployVersion(null, null), { version: null });
+    eq(planDeployVersion('1.0.0', 'latest'), { version: '1.0.0' });
+  },
+
+  'bump: false deploys as written, even over the same installed version'() {
+    eq(planDeployVersion('1.6.2', '1.6.2', false), { version: '1.6.2' });
+  },
+
+  'bump: true always raises one patch step, from the higher of the two'() {
+    eq(planDeployVersion('2.0.0', '1.6.2', true).version, '2.0.1');
+    eq(planDeployVersion('1.6.0', '1.6.2', true).version, '1.6.3');
+    eq(planDeployVersion('1.0.0', null, true).version, '1.0.1');
+    const restarted = planDeployVersion(null, null, true);
+    eq(restarted.version, '0.0.1');
+    eq(restarted.bumped?.restarted, true);
+  },
+
+  'the installed version is found bare or wrapped in content'() {
+    eq(installedVersionOf({ id: 'x', version: '1.6.2' }), '1.6.2');
+    eq(installedVersionOf({ content: { version: '1.6.2' } }), '1.6.2');
+    eq(installedVersionOf(null), null);
+    eq(installedVersionOf({ version: 3 }), null);
   },
 
   'manifestString answers null rather than throwing'() {

@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { errMsg, invoke, AppCommandError } from '@bundled/yaar';
+import { errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
 import {
   compile as devCompile,
   typecheck as devTypecheck,
@@ -24,7 +24,13 @@ import {
 } from '../core';
 import { projectPath, relativizeProjectPaths } from '../lib/paths';
 import { parseDiagnostics } from '../lib/parse-diagnostics';
-import { bumpAppJson, manifestString, type VersionBump } from '../lib/app-manifest';
+import {
+  installedVersionOf,
+  manifestString,
+  planDeployVersion,
+  withAppJsonVersion,
+  type DeployBump,
+} from '../lib/app-manifest';
 import { readFileText, writeFile } from './files';
 
 // Build, type check and deploy — the calls that talk to the dev server and
@@ -146,7 +152,9 @@ export async function deploy(opts: {
   appId: string;
   name: string;
   version?: string;
-  bumped?: VersionBump;
+  installedVersion?: string | null;
+  bumped?: DeployBump;
+  versionNote?: string;
   previewClosed?: boolean;
   closedWindows?: string[];
   staleWindow?: string;
@@ -155,9 +163,13 @@ export async function deploy(opts: {
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');
   const { bump, ...serverOpts } = opts;
   const appJsonBefore = await readFileText('app.json');
+  const installed: { version: string | null; error?: string } =
+    bump === false ? { version: null } : await installedVersion(opts.appId);
+  const plan = planDeployVersion(manifestString(appJsonBefore, 'version'), installed.version, bump);
+  const bumped = plan.bumped;
   // Written before the deploy because the server reads the version from the sandbox's app.json.
-  const bumped = bump ? await bumpVersion(appJsonBefore) : undefined;
-  const version = bumped?.to ?? manifestString(appJsonBefore, 'version');
+  if (bumped) await writeVersion(appJsonBefore, bumped);
+  const version = plan.version;
 
   setStatusText('Deploying...');
   let result: Awaited<ReturnType<typeof devDeploy>>;
@@ -210,7 +222,9 @@ export async function deploy(opts: {
     appId: result.appId ?? opts.appId,
     name,
     ...(version ? { version } : {}),
+    ...(bump === false ? {} : { installedVersion: installed.version }),
     ...(bumped ? { bumped } : {}),
+    ...(installed.error ? { versionNote: installed.error } : {}),
     ...(previewClosed ? { previewClosed } : {}),
     ...(closedWindows.length > 0 ? { closedWindows } : {}),
     ...(staleWindow ? { staleWindow } : {}),
@@ -225,16 +239,35 @@ async function writeAppJson(text: string, label: string): Promise<void> {
   setTypecheckState(verdict);
 }
 
-async function bumpVersion(appJson: string | null): Promise<VersionBump> {
-  if (appJson === null) throw new AppCommandError('Cannot bump: the project has no app.json.');
-  let next: ReturnType<typeof bumpAppJson>;
+/**
+ * The installed app's version, or null when nothing is installed under that id. A lookup
+ * that fails for another reason is reported rather than read as "not installed", since
+ * that reading would let a deploy ship the installed version number again.
+ */
+async function installedVersion(
+  appId: string,
+): Promise<{ version: string | null; error?: string }> {
   try {
-    next = bumpAppJson(appJson);
+    return { version: installedVersionOf(await read(`yaar://apps/${appId}`, { missingOk: true })) };
+  } catch (err) {
+    // `missingOk` does not cover an app id: an uninstalled one throws `App "x" not found.`
+    if (/not found/i.test(errMsg(err))) return { version: null };
+    return {
+      version: null,
+      error: `installed version unreadable (${errMsg(err)}), so no automatic bump was made`,
+    };
+  }
+}
+
+async function writeVersion(appJson: string | null, bumped: DeployBump): Promise<void> {
+  if (appJson === null) throw new AppCommandError('Cannot bump: the project has no app.json.');
+  let text: string;
+  try {
+    text = withAppJsonVersion(appJson, bumped.to);
   } catch (err) {
     throw new AppCommandError(`Cannot bump: ${errMsg(err)}`);
   }
-  await writeAppJson(next.text, `bump version ${next.from ?? '(none)'} → ${next.to}`);
-  return { from: next.from, to: next.to, restarted: next.restarted };
+  await writeAppJson(text, `bump version ${bumped.from ?? '(none)'} → ${bumped.to}`);
 }
 
 /**
@@ -243,7 +276,7 @@ async function bumpVersion(appJson: string | null): Promise<VersionBump> {
  */
 async function deployFailure(
   reason: string,
-  bumped: VersionBump | undefined,
+  bumped: DeployBump | undefined,
   appJsonBefore: string | null,
 ): Promise<AppCommandError> {
   let note = '';

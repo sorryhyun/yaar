@@ -133,7 +133,6 @@ async function deployFromToolbar(): Promise<void> {
     showToast('app.json has no appId to deploy under', 'error');
     return;
   }
-  // Version bumps are the agent's call (`deploy({ bump })`), so the button never bumps.
   const confirmed = await showConfirm(`Deploy this project over the installed "${appId}"?`, {
     title: 'Deploy',
     okLabel: 'Deploy',
@@ -144,7 +143,8 @@ async function deployFromToolbar(): Promise<void> {
     const result = await tryToast(() => deploy({ appId }));
     if (result) {
       const version = result.version ? ` v${result.version}` : '';
-      showToast(`Deployed "${result.name}"${version}`, 'success', 5000);
+      const bumped = result.bumped ? ` (raised from ${result.bumped.from ?? 'none'})` : '';
+      showToast(`Deployed "${result.name}"${version}${bumped}`, 'success', 5000);
     }
   } finally {
     setDeploying(false);

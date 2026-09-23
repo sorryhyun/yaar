@@ -20,6 +20,17 @@ breaks the tool you would use to fix devtools.**
 - The agent editing this app runs the prompt in `agent/prompt.md`. Editing it takes effect at the
   *next* deploy — an agent that just rewrote its own prompt is still running the old one.
 
+## Deploy raises the version by default
+
+The marketplace keys builds by version, so a deploy that re-ships the installed number cannot be
+published. `planDeployVersion` in `lib/app-manifest.ts` is the one rule: with `bump` omitted, a
+project version not strictly above the installed one (`read('yaar://apps/{appId}')`) becomes one
+patch step above the higher of the two; a hand-set higher version is kept. `bump: false` is the
+opt-out, `bump: true` the always-bump. An unreadable installed version is reported as
+`versionNote`, never read as "not installed". The marketplace version is not consulted — this
+app holds no URI for it, and publishing from here makes it trail the installed one. The `app-manifest` suite pins
+the rule.
+
 ## Layers
 
 `ui → services → lib → core`. Imports point one direction only, and each directory's `index.ts`

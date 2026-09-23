@@ -222,9 +222,11 @@ export const buildCommands = {
       'that window was spared (closing it would have killed this call) and is STILL ' +
       'RUNNING THE OLD BUNDLE, so verifying the change in it reports the code from before ' +
       "the deploy. Reload it — invoke('yaar://windows/{staleWindow}', {action:'reload'}) — " +
-      'which re-mounts the iframe without discarding its app agent. `version` in the result is ' +
-      "app.json's version as deployed; with `bump`, `bumped: { from, to, restarted }` says what " +
-      'changed.',
+      'which re-mounts the iframe without discarding its app agent. A deploy never ships the ' +
+      'installed version number again: unless app.json `version` is already above the ' +
+      'installed one, it is raised one patch step above the higher of the two and saved in ' +
+      'the project. The result carries `version` (as deployed), `installedVersion`, and ' +
+      '`bumped: { from, to, reason }` whenever it moved.',
     params: {
       type: 'object',
       properties: {
@@ -241,9 +243,9 @@ export const buildCommands = {
         bump: {
           type: 'boolean',
           description:
-            'Raise app.json `version` one patch step (1.2.3 → 1.2.4) and save it in the project ' +
-            'before deploying, so the next bump continues from it. A missing or non-semver ' +
-            'version restarts at 0.0.1 (`bumped.restarted`). Reverted if the deploy fails.',
+            'Omit for the automatic rule above. true: always raise one patch step, even over ' +
+            'a hand-set higher version. false: deploy app.json `version` as written, for a ' +
+            'pure redeploy of an unchanged build. Any bump is reverted if the deploy fails.',
         },
       },
       required: ['appId'],
@@ -258,7 +260,7 @@ export const buildCommands = {
         message: p.message ? String(p.message) : undefined,
         skipTypecheck: p.skipTypecheck === true,
         allowProtocolShrink: p.allowProtocolShrink === true,
-        bump: p.bump === true,
+        bump: typeof p.bump === 'boolean' ? p.bump : undefined,
       }),
   }),
 };
