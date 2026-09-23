@@ -339,17 +339,17 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             )}
           </div>
           <div className={styles.controls}>
-            {!isCard && (
-              <button
-                className={styles.controlBtn}
-                data-action="export"
-                title={t('window.export')}
-                aria-label={t('window.export')}
-                onClick={() => exportContent(window.content, window.title, window.id)}
-              >
-                <ExportIcon />
-              </button>
-            )}
+            {/* TEMP: shown on phone cards too, to test whether Samsung Internet warns on a
+                download started from the desktop origin (localhost) rather than an app's. */}
+            <button
+              className={styles.controlBtn}
+              data-action="export"
+              title={t('window.export')}
+              aria-label={t('window.export')}
+              onClick={() => exportContent(window.content, window.title, window.id)}
+            >
+              <ExportIcon />
+            </button>
             <button
               className={styles.controlBtn}
               data-action="minimize"
