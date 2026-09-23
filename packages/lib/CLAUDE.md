@@ -38,7 +38,7 @@ direction is one-way forever.
 | `freedpi/` | Loopback CONNECT proxy that fragments TLS past SNI-matching DPI. On by default; `YAAR_FREEDPI=0` turns it off |
 | `pdf/` | PDF rasterization and text extraction via poppler |
 | `termux/` | Termux:API client (notification, clipboard, share sheet, toast) — every call timed, because a missing Termux:API app makes the commands hang rather than fail |
-| `tls/` | Loopback certificate signed by a local CA (via `openssl`) + its Chromium SPKI hash — a launched Chrome pins the SPKI, any other browser installs the CA |
+| `tls/` | Self-signed loopback certificate (via `openssl`) + its Chromium SPKI hash, for a local h2 socket |
 | `tunnel/` | Tailscale Serve tunnel driver and `config/tunnel.json` parsing |
 | `ytdlp/` | Optional yt-dlp binary wrapper — discovered on PATH, never bundled |
 | `errors.ts` | `errMessage(unknown)` |

@@ -18,18 +18,6 @@ if ! bun --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# The desktop's address. Plain http unless YAAR_TERMUX_HTTPS=1 says the phone's browser
-# trusts the local CA (see below), in which case the local TLS socket's port is read from
-# /health — it is PORT+443 unless that was taken.
-desktop_url() {
-  local port="${PORT:-8000}" tls_port=""
-  if [ "${YAAR_TERMUX_HTTPS:-0}" = 1 ]; then
-    tls_port="$(curl -s --max-time 1 "http://localhost:${port}/health" |
-      sed -n 's/.*"tls":{[^}]*"port":\([0-9][0-9]*\).*/\1/p')"
-  fi
-  if [ -n "$tls_port" ]; then echo "https://localhost:${tls_port}"; else echo "http://localhost:${port}"; fi
-}
-
 # One YAAR per phone. A second launch (a second tap on the home-screen widget, or `yaar` in
 # another session) would otherwise get a second server on the next free port, take the wake
 # lock again, and — worse — the first one's exit would release the lock under the one still
@@ -40,7 +28,7 @@ if [ -f "$pidfile" ]; then
   if [ -n "$running_pid" ] && kill -0 "$running_pid" 2>/dev/null &&
     tr '\0' ' ' < "/proc/$running_pid/cmdline" 2>/dev/null | grep -q start-termux.sh; then
     echo "YAAR is already running (pid $running_pid) — opening its desktop."
-    command -v termux-open-url >/dev/null 2>&1 && termux-open-url "$(desktop_url)"
+    command -v termux-open-url >/dev/null 2>&1 && termux-open-url "http://localhost:${PORT:-8000}"
     exit 0
   fi
 fi
@@ -96,28 +84,13 @@ fi
 
 # No debuggable Chrome to launch on a phone; open the desktop in the default browser once
 # the server answers instead.
-#
-# Over https when YAAR_TERMUX_HTTPS=1. The phone's own browser cannot be handed the SPKI
-# flag the desktop launcher gives Chrome, and Samsung Internet warns on every plain-http
-# download — localhost included — so the phone trusts the local TLS socket the ordinary
-# way: by installing the local CA that signs its certificate, once. That needs openssl
-# (`pkg install openssl-tool`), without which the server has no TLS socket at all.
 if command -v termux-open-url >/dev/null 2>&1; then
   (
-    base="http://localhost:${PORT:-8000}"
+    url="http://localhost:${PORT:-8000}"
     for _ in $(seq 1 120); do
-      curl -s --max-time 1 "$base/health" >/dev/null 2>&1 && break
+      curl -s --max-time 1 "$url" >/dev/null 2>&1 && break
       sleep 0.5
     done
-    url="$(desktop_url)"
-    if [ "${YAAR_TERMUX_HTTPS:-0}" = 1 ] && [ "${url#https:}" = "$url" ]; then
-      echo "YAAR_TERMUX_HTTPS=1, but the server has no TLS socket — is openssl installed?" \
-        "(pkg install openssl-tool). Opening plain http."
-    elif [ "${YAAR_TERMUX_HTTPS:-0}" != 1 ]; then
-      echo "Tip: downloads warn over plain http. For https: open $base/local-ca.crt, install it"
-      echo "  under Settings → Security → Install from device storage → CA certificate, then"
-      echo "  relaunch with YAAR_TERMUX_HTTPS=1 (and re-add the home-screen app from there)."
-    fi
     termux-open-url "$url"
   ) &
 fi

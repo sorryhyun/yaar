@@ -480,44 +480,6 @@ is taken once and never released under a live server. `install.sh` also drops
 
 ---
 
-## HTTPS on the phone
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `YAAR_TERMUX_HTTPS` | off | `1`: the launcher (and a notification tap) opens the desktop on the local TLS socket, `https://localhost:8443`, instead of plain http |
-
-### Why it exists
-
-Samsung Internet warns "can't be downloaded securely" on **every** plain-http download,
-`localhost` included — measured on a phone, from the desktop origin as well as an app's.
-Chrome exempts loopback; Samsung's browser does not, and it is the default browser the
-launcher's `termux-open-url` lands in on a Galaxy. So a phone needs real HTTPS, and the
-server already has the socket: the local TLS listener (`http/local-tls.ts`) the desktop
-launcher opens Chrome on for HTTP/2.
-
-What it lacked was a certificate an ordinary browser can trust. Chrome is handed the
-leaf's SPKI on its command line; nothing can hand a flag to the phone's browser. So the
-leaf is signed by a **local CA** (`config/local-tls/ca.pem`, minted once by
-`@yaar/lib/tls`, key kept beside it), and the phone trusts that the ordinary way:
-
-1. Open `http://localhost:8000/local-ca.crt` and keep the download.
-2. Settings → Security → Install from device storage → **CA certificate**, pick the file.
-3. Relaunch with `YAAR_TERMUX_HTTPS=1`, and re-add the home-screen app from the https page —
-   an installed app is bound to the origin it was installed from.
-
-### Why off by default
-
-Until the CA is installed, `https://localhost:8443` is a certificate error page — worse
-than a download warning. The server cannot tell whether a browser trusts its CA, so the
-user who installed it says so. The leaf is re-minted under the same CA before it expires,
-so the CA is installed once. The TLS socket needs `openssl` (`pkg install openssl-tool`);
-without it there is no socket and the launcher says so and stays on http.
-
-**Source:** `packages/lib/src/tls/local-cert.ts`, `packages/server/src/http/local-tls.ts`,
-`scripts/dev/start-termux.sh`
-
----
-
 ## Agent budgets
 
 | Variable | Default | Meaning |

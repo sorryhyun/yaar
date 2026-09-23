@@ -1,1 +1,1 @@
-export * from './local-cert.js';
+export * from './self-signed.js';
