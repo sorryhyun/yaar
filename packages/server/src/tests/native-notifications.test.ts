@@ -60,6 +60,22 @@ describe('NativeNotificationBridge', () => {
     expect(posted[0].action).toBe("termux-open-url 'http://localhost:8000/'");
   });
 
+  it("taps through the launcher's opener when there is one, quoted for the shell", () => {
+    const withOpener = new NativeNotificationBridge({
+      termux: { notify: async (n) => (posted.push(n), true), removeNotification: async () => {} },
+      isUserWatching: () => false,
+      desktopUrl: () => 'http://localhost:8000/',
+      opener: "/data/it's/yaar/scripts/dev/termux-open-desktop.sh",
+    });
+    withOpener.handle(
+      SESSION,
+      actions({ type: 'notification.show', id: 'a', title: 'Build done', body: '' }),
+    );
+    expect(posted[0].action).toBe(
+      "'/data/it'\\''s/yaar/scripts/dev/termux-open-desktop.sh' 'http://localhost:8000/'",
+    );
+  });
+
   it('posts nothing while the user is watching', () => {
     watching = true;
     bridge.handle(

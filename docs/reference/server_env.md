@@ -476,12 +476,17 @@ ships with Termux itself and needs no extra app. The launcher is single-instance
 is taken once and never released under a live server. `install.sh` also drops
 `~/.shortcuts/YAAR`, which the Termux:Widget app shows as a home-screen button.
 
-The launcher opens the desktop in **Chrome** when it is installed, not the default browser:
-on a Galaxy that is Samsung Internet, which warns "can't be downloaded securely" on every
-plain-http download — `localhost` included, measured — where Chrome counts loopback as
-secure. A home-screen app runs in the browser that installed it, so this is also where
-"Install app" lands. `YAAR_TERMUX_BROWSER=<package>` picks another browser; empty means the
-default one. Notification taps still use `termux-open-url`, i.e. the default browser.
+The launcher opens the desktop in the **installed app** when there is one: "Install app" in
+Chrome mints a WebAPK (`org.chromium.webapk.*`), found by asking the package manager which
+activities handle the desktop URL. Otherwise it opens in **Chrome** when that is installed,
+not the default browser: on a Galaxy that is Samsung Internet, which warns "can't be
+downloaded securely" on every plain-http download — `localhost` included, measured — where
+Chrome counts loopback as secure. A home-screen app runs in the browser that installed it,
+so this is also where "Install app" lands. `YAAR_TERMUX_BROWSER=<package>` picks another
+browser; empty means the default one. Notification taps go through the same opener
+(`scripts/dev/termux-open-desktop.sh`), so they land in the app too.
+
+Setup and day-to-day use: [`docs/guides/termux.md`](../guides/termux.md).
 
 **Source:** `packages/server/src/features/android/`, `packages/lib/src/termux/`
 

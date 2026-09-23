@@ -11,9 +11,11 @@
  * - `shareFile` — Android's share sheet, behind `invoke { action: 'share' }` on storage.
  */
 
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { isUserWatching, onPresenceChange } from '../../session/client-presence.js';
-import { IS_REMOTE } from '../../config.js';
+import { IS_REMOTE, PROJECT_ROOT } from '../../config.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { NativeNotificationBridge } from './native-notifications.js';
 import { getTermux, wantsTermuxApi } from './termux.js';
@@ -29,6 +31,16 @@ function desktopUrl(port: number): string {
   return token ? `${base}#remote=${token}` : base;
 }
 
+/**
+ * What a tap runs: the launcher's own opener, so a tap lands where `yaar` does — the
+ * installed app if there is one, else Chrome. Absent (not a `make termux` checkout), the
+ * bridge falls back to `termux-open-url`.
+ */
+function desktopOpener(): string | undefined {
+  const script = join(PROJECT_ROOT, 'scripts', 'dev', 'termux-open-desktop.sh');
+  return existsSync(script) ? script : undefined;
+}
+
 export async function startAndroidIntegration(port: number): Promise<void> {
   if (!wantsTermuxApi()) return;
   const termux = await getTermux();
@@ -38,6 +50,7 @@ export async function startAndroidIntegration(port: number): Promise<void> {
     termux,
     isUserWatching,
     desktopUrl: () => desktopUrl(port),
+    opener: desktopOpener(),
   });
   unsubscribe = [
     getBroadcastCenter().observe((sessionId, event) => bridge.handle(sessionId, event)),

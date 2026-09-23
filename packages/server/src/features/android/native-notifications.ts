@@ -47,6 +47,8 @@ export interface NativeNotificationDeps {
   isUserWatching: (sessionId: string) => boolean;
   /** The URL a tap opens — the desktop, with whatever token it needs. */
   desktopUrl: () => string;
+  /** The program a tap runs with that URL; `termux-open-url` (the default browser) if unset. */
+  opener?: string;
 }
 
 /** A turn's text, flattened for a one-glance preview. */
@@ -140,11 +142,12 @@ export class NativeNotificationBridge {
       this.posted.set(sessionId, ids);
     }
     ids.add(id);
+    const opener = this.deps.opener ? shellQuote(this.deps.opener) : 'termux-open-url';
     void this.deps.termux.notify({
       id,
       group: GROUP,
       ...n,
-      action: `termux-open-url ${shellQuote(this.deps.desktopUrl())}`,
+      action: `${opener} ${shellQuote(this.deps.desktopUrl())}`,
     });
   }
 
