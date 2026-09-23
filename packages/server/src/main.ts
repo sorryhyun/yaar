@@ -20,6 +20,7 @@ import {
 } from './lifecycle.js';
 import { IS_REMOTE, getPort, setPort, TRANSPORT_IDLE_TIMEOUT_S } from './config.js';
 import { loadLocalTlsCert, setLocalTlsEndpoint, LOCAL_TLS_PORT_OFFSET } from './http/local-tls.js';
+import { watchLauncher } from './launcher-watchdog.js';
 
 const MAX_PORT_ATTEMPTS = 20;
 
@@ -186,6 +187,10 @@ async function startup() {
 
   process.on('SIGINT', handleShutdown);
   process.on('SIGTERM', handleShutdown);
+
+  // A launcher that dies without its cleanup (SIGKILL) would leave this server orphaned
+  // on the port — see launcher-watchdog.ts. A no-op unless the launcher named itself.
+  watchLauncher(handleShutdown);
 
   // Benchmarking hook: `kill -USR2 <pid>` prints a one-line memory snapshot of
   // THIS server process (RSS + JS heap). Lets an external harness mark phase

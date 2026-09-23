@@ -97,7 +97,7 @@ worker and clears its caches.
 |---|---|
 | Start YAAR | `yaar`, or tap the home-screen button (below) |
 | Bring the desktop back | Run `yaar` again, or tap the button again: a second launch opens the running desktop and exits |
-| Stop YAAR | `Ctrl-C` in the Termux session running it |
+| Stop YAAR | `Ctrl-C` in the Termux session running it, or close that session: the server notices its launcher is gone and stops within a few seconds |
 | Update | Re-run the install one-liner (it moves `~/yaar` to the new tag). The next launch notices the changed `bun.lock`, reinstalls, and unpacks a newer Claude Code if the SDK moved |
 
 **One YAAR per phone.** The launcher writes `$TMPDIR/yaar-termux.pid`, so a second `yaar`

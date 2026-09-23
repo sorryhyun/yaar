@@ -121,5 +121,9 @@ fi
 # Not `exec`, so the EXIT trap above can release the wake lock.
 # NO_WATCH: a phone is not editing the server, and --watch would restart it (dropping every
 # agent) on a `git pull` underneath a running YAAR. NO_WATCH=0 brings it back.
-MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" NO_WATCH="${NO_WATCH-1}" LAUNCH_CHROME=0 REMOTE=0 \
+# YAAR_LAUNCHER_PID: start.sh's cleanup trap is the only thing that stops the server, and
+# a trap does not run on SIGKILL — which is how Termux ends a closed session, and how the
+# phantom-process killer ends anything. So the server watches this script and exits when
+# it is gone, instead of lingering on the port (packages/server/src/launcher-watchdog.ts).
+YAAR_LAUNCHER_PID=$$ MCP_SKIP_AUTH="${MCP_SKIP_AUTH-1}" NO_WATCH="${NO_WATCH-1}" LAUNCH_CHROME=0 REMOTE=0 \
   ./scripts/dev/start.sh claude

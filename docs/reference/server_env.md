@@ -26,6 +26,7 @@ passes in review.
 | `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
 | `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock — no model, no tokens (`make mobile-bench`) |
 | `YAAR_REACT_PROD` | on for Android, off elsewhere | Dev bundler ships React's production build (`1` forces on, `0` off) |
+| `YAAR_LAUNCHER_PID` | unset | Shut down once this process is gone (set by `make termux`) |
 
 ### `YAAR_MOCK_AGENT`
 
@@ -62,6 +63,25 @@ Before that, it did not: Bun inlines `process.env.NODE_ENV` from the *building* 
 environment, and `minify: true` does not set it, so every release shipped React's dev build.
 
 **Source:** `packages/server/src/http/dev-bundler.ts` (`reactProduction`), `packages/frontend/build.ts`
+
+### `YAAR_LAUNCHER_PID`
+
+The PID of whatever launched the server. The server checks on it every two seconds and shuts
+down the normal way once it is gone; unset, nothing is watched. `start-termux.sh` sets it to
+itself.
+
+It exists because `start.sh` runs the server as a background job under `set -m`, in a process
+group of its own, so the terminal's hangup never reaches it: the only thing that stops the
+server is `start.sh`'s cleanup trap. A trap does not run on SIGKILL, and on Android that is
+how a launcher usually dies — Termux kills a closed session's process outright, and so does the
+phantom-process killer. Before this, the server lived on as an orphan on port 8000, the next
+`yaar` quietly took 8001, and the installed app, bound to 8000, kept opening the orphan.
+
+Where there is a `/proc`, "gone" also covers the PID being recycled: the check compares the
+process's start time, not just whether the PID answers. The variable is removed from the
+environment once read, so the agents the server spawns do not inherit it.
+
+**Source:** `packages/server/src/launcher-watchdog.ts`, `scripts/dev/start-termux.sh`
 
 ### `FABLE`
 
