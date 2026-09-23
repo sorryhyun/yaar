@@ -24,7 +24,7 @@ make codex                       # Start with Codex provider (REMOTE=1, serves f
 make claude-dev                  # Claude provider without MCP auth (local dev)
 make claude-dev-mobile           # Same, but the browser is a phone (see MOBILE below)
 make codex-dev                   # Codex provider without MCP auth (local dev)
-make termux                      # Claude provider on Android/Termux (unpacks claude to JS for Android Bun)
+make termux                      # Claude provider on Android/Termux (unpacks claude to JS for Android Bun; opens the desktop in Chrome — Samsung Internet warns on plain-http downloads)
 make build                       # Build all packages
 bun run typecheck                # Type check all packages
 make lint                        # Lint all packages
