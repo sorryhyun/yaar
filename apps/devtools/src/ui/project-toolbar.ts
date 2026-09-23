@@ -22,6 +22,7 @@ import {
   type InstalledApp,
 } from '../services';
 import { Icon } from './icons';
+import { drawerOpen, setDrawerOpen } from './panel-state';
 
 // Project selection and build actions in the app chrome.
 //
@@ -325,11 +326,22 @@ export function ProjectToolbar() {
     onShortcut('escape', () => {
       if (picker()) closePicker();
       else if (menuOpen()) closeMenu();
+      else if (drawerOpen()) setDrawerOpen(false);
     }),
   );
 
   return html`
     <div class="y-toolbar y-toolbar-dense dt-toolbar">
+      <button
+        class=${() =>
+          `y-btn y-btn-sm y-btn-ghost dt-btn toolbar-drawer-btn${drawerOpen() ? ' active' : ''}`}
+        onClick=${() => setDrawerOpen((open) => !open)}
+        title="Files, changes and worker"
+        aria-expanded=${() => String(drawerOpen())}
+      >
+        ${Icon('sidebar')}
+      </button>
+
       <${ProjectMenu} />
 
       <button

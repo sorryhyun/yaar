@@ -26,6 +26,14 @@ export const [changesMode, setChangesMode] = createSignal<ChangesMode>('changes'
 export const [bottomTab, setBottomTab] = createSignal<BottomTab>('problems');
 
 /**
+ * Whether the sidebar is pulled out over the editor. Only a narrow window (≤768px,
+ * the SDK's `isNarrow`) has a drawer: there the sidebar leaves the grid so the
+ * editor gets the whole width. A wide window lays the sidebar out beside the
+ * editor and never reads this.
+ */
+export const [drawerOpen, setDrawerOpen] = createSignal(false);
+
+/**
  * A position the editor should move its caret to once `path` is the open file. Set by
  * whoever opens a file at a location; the editor clears it after revealing.
  */

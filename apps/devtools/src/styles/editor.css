@@ -74,6 +74,12 @@
   border-radius: var(--yaar-radius-sm);
 }
 
+@media (pointer: coarse) {
+  .devtools .editor-toggle {
+    height: 34px;
+  }
+}
+
 .devtools .editor-toggle:hover:not(:disabled) {
   color: var(--yaar-text);
   background: var(--yaar-bg-surface-hover);

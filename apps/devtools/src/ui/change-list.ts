@@ -4,7 +4,7 @@ import html from '@bundled/solid-js/html';
 import { formatClock } from '@bundled/yaar';
 import { fileChanges, selectedChangeId, type FileChange } from '../core';
 import { selectChange } from '../services';
-import { setMainView } from './panel-state';
+import { setDrawerOpen, setMainView } from './panel-state';
 
 // The change-history list (row markup; changes-panel.ts renders the diff). The list is a
 // sidebar tab and the diff fills the editor area, so picking a row here opens the diff there.
@@ -45,6 +45,7 @@ export function ChangeList() {
             onClick=${() => {
               selectChange(change.id);
               setMainView('changes');
+              setDrawerOpen(false);
             }}
           >
             <span class="change-kind">${KIND_ICON[change.kind]}</span>

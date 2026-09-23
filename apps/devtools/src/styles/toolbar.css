@@ -220,3 +220,21 @@
     display: none;
   }
 }
+
+/* The drawer toggle exists only where the sidebar is a drawer (sidebar.css). */
+.devtools .dt-toolbar .toolbar-drawer-btn {
+  display: none;
+  width: var(--dt-control-h);
+  padding: 0;
+}
+
+.devtools .dt-toolbar .toolbar-drawer-btn.active {
+  background: var(--yaar-wash-accent);
+  color: var(--yaar-accent);
+}
+
+@media (max-width: 768px) {
+  .devtools .dt-toolbar .toolbar-drawer-btn {
+    display: inline-flex;
+  }
+}

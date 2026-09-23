@@ -3,7 +3,7 @@ import { createEffect, createSignal, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { files, openFilePath, activeProject, type FileEntry } from '../core';
 import { openFile } from '../services';
-import { setMainView } from './panel-state';
+import { setDrawerOpen, setMainView } from './panel-state';
 import { Icon } from './icons';
 
 /** A short type label for the file badge; its colour comes from `kind-*` in file-tree.css. */
@@ -114,8 +114,10 @@ export function FileTree() {
           toggleDir(path);
         } else {
           // Opening a file has to reclaim the main pane from the diff view; the
-          // editor is only one of the two things that can be showing there.
+          // editor is only one of the two things that can be showing there. On a
+          // phone the drawer covers that pane, so it gets out of the way too.
           setMainView('editor');
+          setDrawerOpen(false);
           openFile(path);
         }
       }}
@@ -138,13 +140,11 @@ export function FileTree() {
                   `file-tree-item${openFilePath() === entry.path ? ' active' : ''}${isDir ? ' dir' : ''}${isDir && collapsedDirs().has(entry.path) ? ' collapsed' : ''}`}
                 style=${`padding-left: ${6 + indent}px`}
               >
-                ${
-                  isDir
-                    ? Icon('chevron', 'file-chevron')
-                    : html`<span class=${`file-badge kind-${fileKind(entry.path)[1]}`}
+                ${isDir
+                  ? Icon('chevron', 'file-chevron')
+                  : html`<span class=${`file-badge kind-${fileKind(entry.path)[1]}`}
                       >${fileKind(entry.path)[0]}</span
-                    >`
-                }
+                    >`}
                 <span class="file-name">${name}</span>
               </div>
             `;

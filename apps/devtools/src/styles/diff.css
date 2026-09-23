@@ -54,6 +54,12 @@
   cursor: pointer;
 }
 
+@media (pointer: coarse) {
+  .change-item {
+    height: 44px;
+  }
+}
+
 .changes-list {
   padding: 6px 0;
 }

@@ -13,6 +13,21 @@
   --dt-control-h: 26px;
 }
 
+/* A finger needs bigger targets than a cursor (the SDK's isTouch). Every chrome
+   row reads these, so the rows still line up across the column divider. */
+@media (pointer: coarse) {
+  :root {
+    --dt-toolbar-h: 52px;
+    --dt-header-h: 44px;
+    --dt-control-h: 40px;
+  }
+
+  .devtools .sidebar-tab-action,
+  .devtools .bottom-tab-action {
+    height: 36px;
+  }
+}
+
 #app {
   height: 100%;
 }

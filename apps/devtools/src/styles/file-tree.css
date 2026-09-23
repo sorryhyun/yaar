@@ -27,6 +27,12 @@
   user-select: none;
 }
 
+@media (pointer: coarse) {
+  .file-tree-item {
+    height: 40px;
+  }
+}
+
 .file-tree-item:hover {
   background: var(--yaar-bg-surface-hover);
   color: var(--yaar-text);
