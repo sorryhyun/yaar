@@ -47,7 +47,7 @@ yaar
 
 Android ([Termux](https://termux.dev/), Claude only): With no
 Android binary to download, it installs Bun's Android build, checks out the source to `~/yaar`,
-and puts a `yaar` launcher on your PATH.
+and puts a `yaar` launcher on your PATH. [Guide](./docs/guides/termux.md)
 
 Once running, start with something like "install essential apps".
 
