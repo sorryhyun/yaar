@@ -1,6 +1,6 @@
 import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
-import { assetImportLine, isImagePath, type EditSpec } from '../lib';
+import { assetImportLine, editText, isImagePath, type EditSpec } from '../lib';
 import {
   openFile,
   writeFile,
@@ -76,6 +76,14 @@ function projectRelative(raw: string, role: 'Source' | 'Destination' = 'Destinat
 }
 
 const projectDestination = (raw: string): string => projectRelative(raw);
+
+const textOrLines = (description: string) => ({
+  oneOf: [
+    { type: 'string' },
+    { type: 'array', items: { type: 'string' }, description: 'Lines, joined with "\\n".' },
+  ],
+  description,
+});
 
 export const fileCommands = {
   readFile: defineAppCommand({
@@ -205,23 +213,21 @@ export const fileCommands = {
       'memory and written once, all-or-nothing: any failure names which edit failed, counting ' +
       'from 1 ("edit 2 of 3"), and nothing is written; later line numbers refer to content ' +
       'after earlier edits. `oldString`/`newString` are accepted as aliases for ' +
-      'search/replace, in every mode. Returns ' +
+      'search/replace, in every mode. search and replace take a string or an array of lines ' +
+      '(joined with "\\n", no trailing newline added); any other type is refused. Returns ' +
       '{ editsApplied, lines, removed } — removed echoes the replaced text (truncated, middle elided).',
     params: {
       type: 'object',
       properties: {
         path: { type: 'string' },
-        search: {
-          type: 'string',
-          description: 'Text to find (first match). Mutually exclusive with startLine/endLine.',
-        },
-        replace: {
-          type: 'string',
-          description:
-            'Replacement text. With startLine/endLine, omit or pass an empty string to delete the range.',
-        },
-        oldString: { type: 'string', description: 'Alias for search.' },
-        newString: { type: 'string', description: 'Alias for replace.' },
+        search: textOrLines(
+          'Text to find (first match). Mutually exclusive with startLine/endLine.',
+        ),
+        replace: textOrLines(
+          'Replacement text. With startLine/endLine, omit or pass an empty string to delete the range.',
+        ),
+        oldString: textOrLines('Alias for search.'),
+        newString: textOrLines('Alias for replace.'),
         startLine: {
           type: 'number',
           description:
@@ -243,8 +249,10 @@ export const fileCommands = {
           items: {
             type: 'object',
             properties: {
-              search: { type: 'string' },
-              replace: { type: 'string' },
+              search: textOrLines('Text to find (first match).'),
+              replace: textOrLines('Replacement text.'),
+              oldString: textOrLines('Alias for search.'),
+              newString: textOrLines('Alias for replace.'),
               startLine: { type: 'number' },
               endLine: { type: 'number' },
               anchor: { type: 'string', description: 'Required with startLine/endLine.' },
@@ -256,31 +264,48 @@ export const fileCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      const normalize = (e: {
-        search?: string;
-        replace?: string;
-        oldString?: string;
-        newString?: string;
-        startLine?: number;
-        endLine?: number;
-        anchor?: string;
-      }): EditSpec => {
-        const search = e.search ?? e.oldString;
-        const replace = e.replace ?? e.newString;
+      const normalize = (
+        e: {
+          search?: unknown;
+          replace?: unknown;
+          oldString?: unknown;
+          newString?: unknown;
+          startLine?: number;
+          endLine?: number;
+          anchor?: unknown;
+        },
+        at: string,
+      ): EditSpec => {
+        const text = (value: unknown, field: string) => {
+          try {
+            return editText(value, `${at}${field}`);
+          } catch (err) {
+            throw new AppCommandError(errMsg(err));
+          }
+        };
+        const search =
+          e.search !== undefined ? text(e.search, 'search') : text(e.oldString, 'oldString');
+        const replace =
+          e.replace !== undefined ? text(e.replace, 'replace') : text(e.newString, 'newString');
+        const anchor = e.anchor;
+        if (anchor !== undefined && typeof anchor !== 'string')
+          throw new AppCommandError(
+            `${at}anchor must be a string: the current text of startLine, one line.`,
+          );
         return {
-          ...(search !== undefined ? { search: String(search) } : {}),
-          ...(replace !== undefined ? { replace: String(replace) } : {}),
+          ...(search !== undefined ? { search } : {}),
+          ...(replace !== undefined ? { replace } : {}),
           ...(e.startLine !== undefined ? { startLine: Number(e.startLine) } : {}),
           ...(e.endLine !== undefined ? { endLine: Number(e.endLine) } : {}),
-          ...(e.anchor !== undefined ? { anchor: String(e.anchor) } : {}),
+          ...(typeof anchor === 'string' ? { anchor } : {}),
         };
       };
       let edits: EditSpec[];
       if (Array.isArray(p.edits)) {
         if (p.edits.length === 0) throw new AppCommandError('edits array is empty');
-        edits = p.edits.map(normalize);
+        edits = p.edits.map((e, i) => normalize(e, `edits[${i}].`));
       } else {
-        edits = [normalize(p)];
+        edits = [normalize(p, '')];
       }
       try {
         return await editFile(String(p.path), edits);

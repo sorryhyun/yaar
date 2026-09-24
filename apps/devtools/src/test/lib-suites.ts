@@ -15,6 +15,7 @@ import {
   scaffoldMain,
   parseDiagnostics,
   applyEdits,
+  editText,
   countOccurrences,
   truncateRemoved,
   formatRemoved,
@@ -238,6 +239,19 @@ const diagnosticsSuite = suite('parse-diagnostics', {
 });
 
 const edits = suite('edits', {
+  // String() on an array comma-joins it, and the edit wrote that into the file silently.
+  'an array of lines is joined with newlines, never commas'() {
+    eq(editText(['a', 'b', ''], 'replace'), 'a\nb\n');
+    eq(editText('a,b', 'replace'), 'a,b');
+    eq(editText(undefined, 'replace'), undefined);
+  },
+
+  'a text param that is not a string or string lines is refused by name'() {
+    throwsWith(() => editText(['a', 1], 'edits[0].replace'), 'edits[0].replace[1]');
+    throwsWith(() => editText({ a: 1 }, 'search'), 'search must be a string');
+    throwsWith(() => editText(3, 'replace'), 'got number');
+  },
+
   'search mode replaces the first match only'() {
     eq(applyEdits('x\nx', [{ search: 'x', replace: 'y' }]).content, 'y\nx');
   },

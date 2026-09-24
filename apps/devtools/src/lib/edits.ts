@@ -21,6 +21,27 @@ export interface EditSpec {
   anchor?: string;
 }
 
+/**
+ * A search/replace text param as the caller sent it: a string, or an array of lines joined with
+ * "\n" (writeFile's array form). Anything else is refused by name — `String()` on an array
+ * comma-joins it, and that corrupted file was written without a word.
+ */
+export function editText(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const bad = value.findIndex((line) => typeof line !== 'string');
+    if (bad >= 0)
+      throw new Error(
+        `${field}[${bad}] is not a string; an array ${field} is lines of text, joined with "\\n".`,
+      );
+    return value.join('\n');
+  }
+  throw new Error(
+    `${field} must be a string or an array of line strings, got ${value === null ? 'null' : typeof value}.`,
+  );
+}
+
 /** What one edit step produced: the new content, and the text it took out. */
 interface EditResult {
   content: string;
