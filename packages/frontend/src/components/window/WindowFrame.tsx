@@ -303,8 +303,9 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
         </button>
       )}
 
-      {/* Title bar — standard variant only (hidden for frameless) */}
-      {!isWidget && !isPanel && !isFrameless && (
+      {/* Title bar — standard variant only (hidden for frameless). A full-screen card is
+          all content: Back or a sideways swipe off the card is the way out, not a button. */}
+      {!isWidget && !isPanel && !isFrameless && !isFullscreen && (
         <div
           className={styles.titleBar}
           onMouseDown={isCard ? undefined : handleTitleBarDragStart}

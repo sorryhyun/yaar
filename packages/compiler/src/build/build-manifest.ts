@@ -175,8 +175,11 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * '38': the device SDK (`yaar.device` — form factor and orientation, #121) is baked in.
  * It is new rather than changed, so nothing shadows it; the bump is for the isolated
  * apps, which get no injected copy and would go without it until rebuilt.
+ *
+ * '39': the device SDK reports `fullscreen` and gains `setFullscreen`. Same shadowing as
+ * '35': `installGuard` lets the baked copy win over the injected upgrade.
  */
-export const COMPILER_VERSION = '38';
+export const COMPILER_VERSION = '39';
 
 export interface BuildManifest {
   sourceHash: string;

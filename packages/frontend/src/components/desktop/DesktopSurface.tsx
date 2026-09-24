@@ -521,13 +521,15 @@ export function DesktopSurface() {
           catch touches in front of. */}
       <PhoneGestures />
       {/* The phone's status badge, over everything — outside the desktop so no card
-          covers it and no pan slides it. The CLI has its own monitor bar. */}
-      {isMobile && !cliMode && <PhoneStatusBadge />}
+          covers it and no pan slides it. The CLI has its own monitor bar, and a full-screen
+          card has no title bar left to make room for it. */}
+      {isMobile && !cliMode && !hasFullscreenCard && <PhoneStatusBadge />}
 
       <DrawingOverlay />
       {/* A phone keeps the palette under every window — it is the only way to talk to the
           agent, and there is no desktop edge to reach it from — unless the user put the top
-          card in full screen, whose title bar button is the way back. */}
+          card in full screen, handle and all; Back or a swipe to another monitor brings it
+          back. */}
       <div hidden={isMobile ? hasFullscreenCard : hasMaximizedWindow}>
         <CommandPalette />
       </div>

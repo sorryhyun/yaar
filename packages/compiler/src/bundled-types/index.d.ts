@@ -1176,17 +1176,32 @@ interface YaarDeviceState {
    * aspect, which a soft keyboard or a split screen changes without the device turning.
    */
   orientation: 'portrait' | 'landscape';
+  /**
+   * Whether this app's own phone card fills the whole screen — no title bar, no command
+   * palette. Only ever true on `mobile`, and only while the card is the one on top.
+   */
+  fullscreen: boolean;
 }
 
 /**
  * The screen this app is shown on, pushed by the desktop. Also mirrored onto
- * `<html data-form-factor data-orientation>` for CSS, e.g.
+ * `<html data-form-factor data-orientation>` (and `data-fullscreen`, present only while
+ * true) for CSS, e.g.
  * `:root[data-form-factor="mobile"][data-orientation="landscape"] .sidebar { … }`.
  */
 interface YaarDevice {
   get(): YaarDeviceState;
   /** Called once immediately, then on every change. Returns an unsubscribe. */
   onChange(callback: (state: YaarDeviceState) => void): () => void;
+  /**
+   * Ask for this app's phone card to fill the whole screen (`true`) or give it back
+   * (`false`). A request, not a command — there is no return value; watch `fullscreen`
+   * through `onChange` for the outcome. Leaving is always granted. Entering is refused on
+   * the desktop layout, for a card that is not the one on top, and for a card the user
+   * took out of full screen (Back, or the title bar button) until the device next turns —
+   * so "go full screen whenever landscape" is safe: the user's Back sticks.
+   */
+  setFullscreen(on: boolean): void;
 }
 
 // -- Windows SDK --

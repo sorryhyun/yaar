@@ -79,7 +79,9 @@ type RoutedMessageKey =
   | 'interaction'
   | 'event'
   | 'openUrl'
-  | 'dropAccept';
+  | 'dropAccept'
+  // IFRAME_DEVICE_SDK_SCRIPT — `yaar.device.setFullscreen`.
+  | 'deviceSetFullscreen';
 
 export type YaarMessageType = (typeof APP_MSG)[RoutedMessageKey];
 

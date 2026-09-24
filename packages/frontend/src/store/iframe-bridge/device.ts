@@ -5,31 +5,66 @@
  * is what reaches an origin-isolated app, which `IframeRenderer` cannot push to on load
  * because it cannot touch the frame's document. After that every change is pushed to
  * every mounted frame.
+ *
+ * `fullscreen` is per window, so every answer is addressed: a frame is told whether *its*
+ * card is the full-screen one. A frame outside any window is told `false`.
  */
 import { APP_MSG } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
-import { getDesktopStore } from './store-access';
+import { iframeMessages } from '@/lib/iframeMessageRouter';
+import { selectFullscreenCardId } from '../selectors';
+import type { DesktopStore } from '../types';
+import { getDesktopState, getDesktopStore } from './store-access';
 import { postToIframe } from './target';
 
-function deviceUpdate() {
-  const { formFactor, orientation } = getDesktopStore().getState();
-  return { type: APP_MSG.deviceUpdate, formFactor, orientation };
+function deviceUpdate(state: DesktopStore, windowId: string | undefined) {
+  const { formFactor, orientation } = state;
+  const fullscreen = windowId !== undefined && selectFullscreenCardId(state) === windowId;
+  return { type: APP_MSG.deviceUpdate, formFactor, orientation, fullscreen };
+}
+
+function windowIdOf(iframe: HTMLIFrameElement): string | undefined {
+  return iframe.closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`)?.dataset.windowId;
+}
+
+function windowFrames() {
+  return document.querySelectorAll<HTMLIFrameElement>(`[${WINDOW_ID_DATA_ATTR}] iframe`);
 }
 
 export function initDeviceBroadcaster() {
   window.addEventListener('message', (e: MessageEvent) => {
     if (e.data?.type !== APP_MSG.deviceRequest) return;
+    const source = e.source as Window | null;
+    if (!source) return;
+    let windowId: string | undefined;
+    for (const iframe of windowFrames()) {
+      if (iframe.contentWindow === source) windowId = windowIdOf(iframe);
+    }
     // Nothing in the answer is private to the desktop, so any origin may have it.
-    (e.source as Window | null)?.postMessage(deviceUpdate(), '*');
+    source.postMessage(deviceUpdate(getDesktopState(), windowId), '*');
+  });
+
+  // Only a frame inside a window can ask, and only for its own window.
+  iframeMessages.on(APP_MSG.deviceSetFullscreen, (ctx) => {
+    if (!ctx.source) return;
+    getDesktopState().requestAppFullscreen(ctx.source.windowId, ctx.data.on === true);
   });
 
   const store = getDesktopStore();
   let prev = store.getState();
+  let prevFullscreen = selectFullscreenCardId(prev);
   store.subscribe((state) => {
-    if (state.formFactor === prev.formFactor && state.orientation === prev.orientation) return;
+    const fullscreen = selectFullscreenCardId(state);
+    if (
+      state.formFactor === prev.formFactor &&
+      state.orientation === prev.orientation &&
+      fullscreen === prevFullscreen
+    )
+      return;
     prev = state;
-    const message = deviceUpdate();
-    const iframes = document.querySelectorAll<HTMLIFrameElement>(`[${WINDOW_ID_DATA_ATTR}] iframe`);
-    for (const iframe of iframes) postToIframe(iframe, message);
+    prevFullscreen = fullscreen;
+    for (const iframe of windowFrames()) {
+      postToIframe(iframe, deviceUpdate(state, windowIdOf(iframe)));
+    }
   });
 }
