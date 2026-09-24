@@ -8,8 +8,15 @@
  * `auto 1fr` template would hand it the canvas's row the moment it appeared.
  * An absent strip leaves row 2 at zero height, which is exactly right.
  */
+/*
+ * The column is pinned too. Left implicit it is `auto`, which never goes below the
+ * toolbar's min-content — and on a phone that is wider than the window, so the stage
+ * grew with it: the canvas centred the frame in a box wider than the iframe (page shoved
+ * right, its right edge clipped) and syncViewport handed that width to the remote tab.
+ */
 .browser-chrome {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr;
   height: 100vh;
 }
@@ -28,6 +35,13 @@
 
 .url-bar {
   min-height: 40px;
+  /* Last resort once everything that can shrink has: scroll, never widen the window. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.url-bar::-webkit-scrollbar {
+  height: 0;
 }
 
 .url-bar .lock {
@@ -47,12 +61,52 @@
 
 .url-bar .url-text {
   flex: 1;
+  min-width: 6em;
   border-radius: 16px;
 }
 
 .url-bar .title-text {
   flex-shrink: 0;
   max-width: 200px;
+}
+
+/*
+ * A phone-width window has room for the controls or the title, not both — and the
+ * title is the one the URL already stands in for. The download status stays, but
+ * truncates instead of holding its full width. The rest is tightening so the controls
+ * fit one row at ~355px: the Live button keeps its dot (primary-filled when on, which
+ * is the state), and the URL gives up the width a desktop spends on it.
+ */
+@media (max-width: 560px) {
+  .url-bar {
+    gap: var(--yaar-sp-1);
+  }
+
+  .url-bar .y-btn-sm {
+    padding-inline: 6px;
+  }
+
+  .url-bar .url-text {
+    min-width: 4em;
+    padding-inline: var(--yaar-sp-2);
+  }
+
+  .url-bar .live-label {
+    display: none;
+  }
+
+  .url-bar .quality-select {
+    padding-inline: var(--yaar-sp-1);
+  }
+
+  .url-bar .title-text {
+    display: none;
+  }
+
+  .url-bar .download-status {
+    flex-shrink: 1;
+    min-width: 0;
+  }
 }
 
 .screenshot-area {

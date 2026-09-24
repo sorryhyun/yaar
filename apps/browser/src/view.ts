@@ -103,7 +103,7 @@ function UrlBar() {
         aria-pressed=${() => String(liveMode())}
         onClick=${() => void toggleLive()}
       >
-        ◉ Live
+        ◉<span class="live-label"> Live</span>
       </button>
       <button
         class="y-btn y-btn-sm y-btn-ghost download-btn"
