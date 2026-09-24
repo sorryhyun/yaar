@@ -28,7 +28,6 @@ import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { apiFetch, isRemoteMode } from '@/lib/api';
-import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { swipeDirection } from '@/lib/gestures';
 import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
@@ -158,22 +157,6 @@ export function CommandPalette() {
       setIsExpanded(false);
     }
   }, [isMobile, sheetOpen]);
-
-  // A tap on the content behind the sheet puts it away. Taps inside an app iframe never
-  // reach this document, so the iframe's own forwarded click backs the pointer listener
-  // up — the same pair `isExpanded` uses below, for the same reason.
-  useEffect(() => {
-    if (!isMobile || !sheetOpen) return;
-    const closeIfOutside = (e: PointerEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setPaletteSheetOpen(false);
-    };
-    document.addEventListener('pointerdown', closeIfOutside);
-    const offIframeClick = iframeMessages.on('yaar:click', () => setPaletteSheetOpen(false));
-    return () => {
-      document.removeEventListener('pointerdown', closeIfOutside);
-      offIframeClick();
-    };
-  }, [isMobile, sheetOpen, setPaletteSheetOpen]);
 
   // Open app windows for @mention dropdown
   const appWindows = useMemo(() => {
@@ -453,6 +436,17 @@ export function CommandPalette() {
   return (
     <>
       {qrCodeOpen && <QrCodeModal onClose={() => setQrCodeOpen(false)} />}
+      {/* The raised sheet's backdrop, as the shade has one: the card behind dims, and a tap
+          on it puts the sheet away *instead of* landing on the card. A document-level
+          pointerdown used to do the closing, and the same tap went on to press whatever
+          was under it — an iframe's forwarded click included. */}
+      {isMobile && sheetOpen && (
+        <div
+          className={styles.sheetBackdrop}
+          data-palette-backdrop=""
+          onClick={() => setPaletteSheetOpen(false)}
+        />
+      )}
       <div
         ref={containerRef}
         className={styles.container}

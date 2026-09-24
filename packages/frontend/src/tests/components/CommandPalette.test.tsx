@@ -158,6 +158,21 @@ describe('CommandPalette bottom sheet', () => {
     expect(document.activeElement).toBe(screen.getByRole('textbox'));
   });
 
+  // The shade's bargain: the screen behind a raised sheet dims, and a tap there is the
+  // backdrop's — it puts the sheet away rather than also pressing the card underneath.
+  it('puts a backdrop behind the raised sheet that closes it on a tap', () => {
+    const { container } = render(<CommandPalette />);
+    const backdrop = () => container.querySelector('[data-palette-backdrop]');
+    expect(backdrop()).toBeNull();
+
+    act(() => useDesktopStore.setState({ paletteSheetOpen: true }));
+    expect(backdrop()).not.toBeNull();
+
+    fireEvent.click(backdrop()!);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    expect(backdrop()).toBeNull();
+  });
+
   it('pulling back down puts it away and takes the keyboard with it', () => {
     useDesktopStore.setState({ paletteSheetOpen: true });
     render(<CommandPalette />);

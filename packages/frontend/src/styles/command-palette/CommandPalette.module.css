@@ -467,6 +467,28 @@
   color: var(--color-muted);
 }
 
+/* Behind the raised sheet, the same dim the pull-down shade puts behind itself — and, like
+   the shade's, the thing a tap outside lands on, so it closes the sheet without also
+   pressing the card underneath. Over the cards and the pan gutters, under the palette. It
+   fades in over the sheet's own slide rather than arriving before the sheet does. Only
+   rendered on a phone with the sheet up, so no form-factor guard. */
+.sheetBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-gesture);
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-tap-highlight-color: transparent;
+  animation-name: sheetBackdropIn;
+  animation-duration: var(--duration-normal);
+  animation-timing-function: ease;
+}
+
+@keyframes sheetBackdropIn {
+  from {
+    opacity: 0;
+  }
+}
+
 :global(html[data-form-factor='mobile']) .container[data-collapsed] {
   padding-bottom: 0;
   transform: translateY(calc(100% - var(--sheet-handle-h)));
