@@ -10,7 +10,12 @@
  */
 import { describe, it, expect } from 'bun:test';
 import { handleMediaProxyRoutes, parseReferer } from '../http/routes/media-proxy.js';
-import { limitStream, safeContentType } from '../features/http/stream-proxy.js';
+import {
+  DECLARED_LENGTH_HEADER,
+  forwardedHeaders,
+  limitStream,
+  safeContentType,
+} from '../features/http/stream-proxy.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
 
 function get(query: string, token?: string) {
@@ -119,6 +124,40 @@ describe('safeContentType', () => {
     expect(safeContentType('video/mp4')).toBe('video/mp4');
     expect(safeContentType('audio/webm; codecs=opus')).toBe('audio/webm; codecs=opus');
     expect(safeContentType('application/octet-stream')).toBe('application/octet-stream');
+  });
+});
+
+describe('forwardedHeaders', () => {
+  it('carries the declared length where Bun will not drop it', () => {
+    // Bun sends a ReadableStream body chunked and discards a Content-Length set on it, so
+    // the copy under DECLARED_LENGTH_HEADER is the one a caller can check truncation by.
+    const out = forwardedHeaders(
+      new Headers({ 'content-length': '6400000', 'content-range': 'bytes 0-6399999/9000000' }),
+    );
+    expect(out[DECLARED_LENGTH_HEADER]).toBe('6400000');
+    expect(out['content-length']).toBe('6400000');
+    expect(out['content-range']).toBe('bytes 0-6399999/9000000');
+  });
+
+  it('omits the length when fetch will have decoded the body it describes', () => {
+    const out = forwardedHeaders(
+      new Headers({ 'content-length': '1000', 'content-encoding': 'gzip', etag: '"a"' }),
+    );
+    expect(out[DECLARED_LENGTH_HEADER]).toBeUndefined();
+    expect(out['content-length']).toBeUndefined();
+    expect(out.etag).toBe('"a"');
+    expect(
+      forwardedHeaders(new Headers({ 'content-length': '1000', 'content-encoding': 'identity' }))[
+        DECLARED_LENGTH_HEADER
+      ],
+    ).toBe('1000');
+  });
+
+  it('omits a length that is absent or not a number', () => {
+    expect(forwardedHeaders(new Headers({}))[DECLARED_LENGTH_HEADER]).toBeUndefined();
+    expect(
+      forwardedHeaders(new Headers({ 'content-length': 'abc' }))[DECLARED_LENGTH_HEADER],
+    ).toBeUndefined();
   });
 });
 

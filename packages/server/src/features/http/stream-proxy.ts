@@ -33,13 +33,36 @@ export interface StreamProxyOptions {
   stallMs?: number;
 }
 
-const FORWARDED_RESPONSE_HEADERS = [
-  'content-length',
-  'etag',
-  'accept-ranges',
-  'content-range',
-  'last-modified',
-];
+const FORWARDED_RESPONSE_HEADERS = ['etag', 'accept-ranges', 'content-range', 'last-modified'];
+
+/**
+ * The upstream's declared length, under a name Bun leaves alone.
+ *
+ * Bun frames every `ReadableStream` body itself — chunked on HTTP/1.1, unframed on h2 —
+ * and drops a `Content-Length` set on it, so the real header never reaches the client and
+ * a caller cannot tell a complete body from one a stall abort or the byte ceiling cut
+ * short. This one survives. It is only set when the length describes the bytes the caller
+ * will read: `fetch` decodes a `Content-Encoding`, and the declared length is of the
+ * encoded body. Absent means unknown.
+ */
+export const DECLARED_LENGTH_HEADER = 'X-Content-Length';
+
+/** The response headers `streamProxy` carries over from `upstream`. */
+export function forwardedHeaders(upstream: Headers): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const h of FORWARDED_RESPONSE_HEADERS) {
+    const v = upstream.get(h);
+    if (v) headers[h] = v;
+  }
+  const length = upstream.get('content-length');
+  const encoding = upstream.get('content-encoding')?.trim().toLowerCase();
+  if (length && /^\d+$/.test(length.trim()) && (!encoding || encoding === 'identity')) {
+    // Also as the real header: a HEAD response has no body, and Bun sends it as given.
+    headers['content-length'] = length.trim();
+    headers[DECLARED_LENGTH_HEADER] = length.trim();
+  }
+  return headers;
+}
 
 /**
  * Types a browser would render or execute when navigated to. The proxy serves on YAAR's
@@ -170,12 +193,9 @@ export async function streamProxy(
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "sandbox; default-src 'none'",
     'Cache-Control': 'no-store',
-    'Access-Control-Expose-Headers': 'Content-Length, ETag, Accept-Ranges, Content-Range',
+    'Access-Control-Expose-Headers': `Content-Length, ${DECLARED_LENGTH_HEADER}, ETag, Accept-Ranges, Content-Range`,
+    ...forwardedHeaders(upstream.headers),
   };
-  for (const h of FORWARDED_RESPONSE_HEADERS) {
-    const v = upstream.headers.get(h);
-    if (v) headers[h] = v;
-  }
 
   const body =
     req.method === 'HEAD' || !upstream.body

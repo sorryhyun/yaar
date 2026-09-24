@@ -564,7 +564,11 @@ export async function fetchWeights(
     throw new Error(`Failed to download weights (${res.status}): ${detail || res.statusText}`);
   }
 
-  const total = Number(res.headers.get('content-length') || 0);
+  // The weights proxy streams, and a streamed body goes out without Content-Length — the
+  // declared length rides in X-Content-Length instead. A local file has the real header.
+  const total = Number(
+    res.headers.get('x-content-length') || res.headers.get('content-length') || 0,
+  );
   const etag = res.headers.get('etag') || undefined;
 
   if (!res.body) {

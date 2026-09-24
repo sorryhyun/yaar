@@ -3091,6 +3091,10 @@ declare module '@bundled/yaar-media' {
    * and is capped at 10MB. The domain goes through the same allowlist prompt as any
    * other fetch.
    *
+   * The response streams, so it has no `Content-Length`; when the upstream declared an
+   * unencoded length it is in `X-Content-Length` — compare it with the bytes read to
+   * detect a truncated body. Absent means unknown.
+   *
    * @param opts.referer Sent upstream as `Referer`, for CDNs that reject hotlinks.
    */
   export function mediaUrl(url: string, opts?: { referer?: string }): string;

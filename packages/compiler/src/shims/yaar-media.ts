@@ -41,6 +41,10 @@ const URI = 'yaar://system/ytdlp';
  * the remote token (`token`, REMOTE mode) and the iframe token (`__yaar_token`, which
  * carries the `yaar-media` bundle declaration). `referer` is forwarded upstream as the
  * `Referer` header, for CDNs that refuse hotlinked requests without one.
+ *
+ * The response streams, so it carries no `Content-Length`. When the upstream declared an
+ * unencoded length, it arrives as `X-Content-Length`: compare it with the bytes read to
+ * tell a complete body from a truncated one. Absent means the length is unknown.
  */
 export function mediaUrl(url: string, opts: { referer?: string } = {}): string {
   const out = new URL('/api/media-proxy', location.href);
