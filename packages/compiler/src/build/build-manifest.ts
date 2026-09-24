@@ -178,8 +178,12 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  *
  * '39': the device SDK reports `fullscreen` and gains `setFullscreen`. Same shadowing as
  * '35': `installGuard` lets the baked copy win over the injected upgrade.
+ *
+ * '40': the touch relay forwards an upward drag from content already at its bottom too,
+ * so a pull up from over an app card raises the phone's palette sheet. Same shadowing as
+ * '35'.
  */
-export const COMPILER_VERSION = '39';
+export const COMPILER_VERSION = '40';
 
 export interface BuildManifest {
   sourceHash: string;

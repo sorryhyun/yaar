@@ -645,6 +645,131 @@ describe('PhoneGestures', () => {
     expect(panState()).toBeNull();
   });
 
+  /** The palette's sheet body and its input, as `CommandPalette` renders them collapsed. */
+  function paletteSheet() {
+    const sheet = document.createElement('div');
+    sheet.id = 'palette-sheet';
+    sheet.inert = true;
+    const input = document.createElement('textarea');
+    input.setAttribute('data-palette-input', '');
+    sheet.appendChild(input);
+    document.body.appendChild(sheet);
+    return { sheet, input };
+  }
+
+  // The bottom edge is the system's as well as the handle's, and a pull that starts there
+  // keeps bringing up the phone's own navigation bar — so the pull-up works from anywhere.
+  it('raises the palette on a pull up from anywhere, and asks for the keyboard on the lift', () => {
+    const { sheet, input } = paletteSheet();
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchmove', 203, 420);
+    // Up while the finger is still pulling, as from the handle.
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    expect(document.activeElement).not.toBe(input);
+
+    touch(document.body, 'touchend', 203, 420);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    // From inside the gesture, which is the only focus() a phone opens a keyboard for.
+    expect(document.activeElement).toBe(input);
+    // And not the shade, which a vertical drag also belongs to.
+    expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
+    sheet.remove();
+  });
+
+  it('puts the palette back down when the pull is taken back before the lift', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchmove', 203, 420);
+    touch(document.body, 'touchmove', 203, 490);
+    touch(document.body, 'touchend', 203, 490);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+  });
+
+  it('raises it on a pull up the browser coalesced into a start and an end', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchend', 205, 380);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+  });
+
+  it('leaves an upward drag to a scroller with anything left below', () => {
+    const list = scroller(50);
+    render(<PhoneGestures />);
+    touch(list, 'touchstart', 200, 500);
+    touch(list, 'touchmove', 203, 420);
+    touch(list, 'touchend', 203, 420);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    list.remove();
+  });
+
+  it('takes the upward drag once that scroller is at its bottom', () => {
+    const list = scroller(300);
+    render(<PhoneGestures />);
+    touch(list, 'touchstart', 200, 500);
+    touch(list, 'touchmove', 203, 420);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    list.remove();
+  });
+
+  it('does not raise the palette over a full-screen card, which has hidden it', () => {
+    useDesktopStore.setState({
+      windows: {
+        w1: {
+          id: 'w1',
+          title: 'Game',
+          monitorId: 'a',
+          bounds: { x: 0, y: 0, w: 400, h: 800 },
+          content: { renderer: 'markdown', data: '' },
+          minimized: false,
+          maximized: false,
+        },
+      } as never,
+      focusedWindowId: 'w1',
+      fullscreenWindowId: 'w1',
+    });
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchmove', 203, 420);
+    touch(document.body, 'touchend', 203, 420);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+  });
+
+  it('does not raise the palette over the open shade', () => {
+    useDesktopStore.setState({ notificationShadeOpen: true });
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchend', 205, 380);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+  });
+
+  it('raises the palette from over an app card, through the frame script', () => {
+    const { sheet, input } = paletteSheet();
+    const card = document.createElement('div');
+    card.setAttribute(WINDOW_ID_DATA_ATTR, 'w1');
+    const iframe = document.createElement('iframe');
+    card.appendChild(iframe);
+    document.body.appendChild(card);
+    render(<PhoneGestures />);
+    const frame = (phase: string, dy: number) =>
+      act(() => {
+        const ev = new document.defaultView!.Event('message');
+        Object.defineProperty(ev, 'data', {
+          value: { type: APP_MSG.touchPan, phase, dx: 0, dy, axis: 'y' },
+        });
+        Object.defineProperty(ev, 'source', { value: iframe.contentWindow });
+        window.dispatchEvent(ev);
+      });
+    frame('start', -12);
+    frame('move', -80);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    expect(pullState()).toBeNull();
+    frame('end', -80);
+    expect(document.activeElement).toBe(input);
+    card.remove();
+    sheet.remove();
+  });
+
   it('sizes the gutters from the constant the recogniser uses', () => {
     render(<PhoneGestures />);
     for (const gutter of gutters()) {

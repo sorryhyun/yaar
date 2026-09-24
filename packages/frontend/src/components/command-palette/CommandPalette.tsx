@@ -10,7 +10,9 @@
  * The pull-up is a request for the keyboard as much as for the panel, and the two are
  * hurried along separately: the sheet goes up on touchmove, the moment the pull has said
  * "up", while the keyboard has to wait for touchend because that is the last moment a
- * phone will still open one — see `openSheetWithKeyboard`.
+ * phone will still open one — see `lib/palette-sheet`. A pull up from anywhere else on
+ * the screen raises it too (`PhoneGestures`): the bottom edge is also the system's, and a
+ * pull that starts there keeps bringing up the phone's own navigation bar.
  */
 import { useState, useCallback, useEffect, useMemo, useRef, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +32,7 @@ import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { apiFetch, isRemoteMode } from '@/lib/api';
 import { swipeDirection } from '@/lib/gestures';
 import { isComposingKey } from '@/lib/ime';
+import { PALETTE_SHEET_ID, openPaletteSheetWithKeyboard } from '@/lib/palette-sheet';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
 
 function statusClass(status: MessageStatus['status']): string {
@@ -87,7 +90,6 @@ export function CommandPalette() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLButtonElement>(null);
-  const sheetBodyRef = useRef<HTMLDivElement>(null);
   const isConnected = useIsConnected();
   const activeAgents = useDesktopStore((state) => state.activeAgents);
   const applyAction = useDesktopStore((state) => state.applyAction);
@@ -146,8 +148,8 @@ export function CommandPalette() {
   // get at the input field, and making the user tap the textarea afterwards would undo
   // half of it. Lowering it gives the focus back so the keyboard goes away with it.
   //
-  // A sheet raised by a *gesture* is focused by `openSheetWithKeyboard` instead, inside
-  // the touch handler — see there for why. This effect is what catches every other way
+  // A sheet raised by a *gesture* is focused by `openPaletteSheetWithKeyboard` instead,
+  // inside the touch handler — see there for why. This effect is what catches every other way
   // the sheet can open, and a second focus() on an already-focused textarea is a no-op.
   useEffect(() => {
     if (!isMobile) return;
@@ -351,22 +353,6 @@ export function CommandPalette() {
   // both directions and neither needs an overlay over the app.
   const handleDragStart = useRef<{ x: number; y: number } | null>(null);
 
-  /**
-   * Raise the sheet and bring the keyboard up with it.
-   *
-   * The focus has to happen here, in the handler the user's gesture is still running,
-   * and not in an effect keyed on `sheetOpen`: a phone opens its keyboard only for a
-   * focus() that a user gesture is currently activating, and by the time an effect fires
-   * that gesture is over — so the sheet came up and the keyboard waited for a second tap
-   * on the textarea. `inert` is cleared on the node first because React has not
-   * re-rendered yet and nothing inside an inert subtree can take focus.
-   */
-  const openSheetWithKeyboard = useCallback(() => {
-    if (sheetBodyRef.current) sheetBodyRef.current.inert = false;
-    textareaRef.current?.focus({ preventScroll: true });
-    setPaletteSheetOpen(true);
-  }, [setPaletteSheetOpen]);
-
   const onHandleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     handleDragStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
@@ -398,10 +384,10 @@ export function CommandPalette() {
       // The drag has already decided. Without this the browser follows it with a click,
       // which the tap handler would read as a second request and toggle straight back.
       e.preventDefault();
-      if (direction === 'up') openSheetWithKeyboard();
+      if (direction === 'up') openPaletteSheetWithKeyboard();
       else setPaletteSheetOpen(false);
     },
-    [openSheetWithKeyboard, setPaletteSheetOpen],
+    [setPaletteSheetOpen],
   );
 
   const pencilButton = (
@@ -460,12 +446,14 @@ export function CommandPalette() {
           <button
             ref={handleRef}
             className={styles.sheetHandle}
-            onClick={() => (sheetOpen ? setPaletteSheetOpen(false) : openSheetWithKeyboard())}
+            onClick={() =>
+              sheetOpen ? setPaletteSheetOpen(false) : openPaletteSheetWithKeyboard()
+            }
             onTouchStart={onHandleTouchStart}
             onTouchMove={onHandleTouchMove}
             onTouchEnd={onHandleTouchEnd}
             aria-expanded={sheetOpen}
-            aria-controls="palette-sheet"
+            aria-controls={PALETTE_SHEET_ID}
             aria-label={t(sheetOpen ? 'commandPalette.sheet.close' : 'commandPalette.sheet.open')}
           >
             <span className={styles.sheetGrip} />
@@ -477,7 +465,7 @@ export function CommandPalette() {
         {/* `inert` and not just `hidden`: collapsed, the sheet is still laid out (its own
             height is what the collapse transform is measured against), so without this its
             buttons stay tabbable and its textarea stays focusable off the bottom edge. */}
-        <div id="palette-sheet" ref={sheetBodyRef} inert={collapsed}>
+        <div id={PALETTE_SHEET_ID} inert={collapsed}>
           {hasDrawing && (
             <div className={styles.drawingIndicator}>
               <span className={styles.drawingIcon}>&#9998;</span>
@@ -664,6 +652,7 @@ export function CommandPalette() {
               )}
               <textarea
                 ref={textareaRef}
+                data-palette-input=""
                 className={styles.input}
                 value={input}
                 onChange={(e) => {

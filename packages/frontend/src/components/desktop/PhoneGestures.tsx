@@ -32,6 +32,13 @@
  *   the hint turns back to "pull" to say so. One that cleared stays stretched on "Context
  *   cleared" for `SHADE_CLEAR_HOLD_MS` before springing back, so the gesture shows it
  *   worked rather than looking like one let go short.
+ * - **Pull up**, from anywhere nothing scrolls, raises the palette sheet and the keyboard
+ *   with it — what the handle at the bottom edge does, from further up the screen. The
+ *   bottom edge is the system's as well as ours, and a pull that starts there keeps
+ *   bringing up the phone's own navigation bar instead. It is the pull-down's mirror
+ *   (`canRaiseFrom` is `canPullFrom` the other way up) except that it does not follow the
+ *   finger: the sheet goes up once the pull has said "up", as from the handle, and the
+ *   keyboard on the finger lifting — see `lib/palette-sheet`.
  *
  * The strip the pan runs along is wider than the monitor list at both ends. The **CLI**
  * sits one step to the left of the first monitor: `Shift+Tab` is the way into it on a
@@ -49,13 +56,13 @@
  * is handed straight back to the page, and a touch in a gutter that turns out to be a tap
  * is replayed to whatever the gutter was covering.
  *
- * The palette's own pull-up is not here; it lives on the handle in `CommandPalette`,
- * which is already the bottom edge of the screen.
+ * The handle's own pull-up is not here; it lives on the handle in `CommandPalette`, which
+ * is `data-no-pan` and so never reaches the pull-up above.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import i18next from 'i18next';
 import { APP_MSG, DEFAULT_MONITOR_ID } from '@yaar/shared';
-import { useDesktopStore } from '@/store';
+import { useDesktopStore, selectFullscreenCardId } from '@/store';
 import {
   EDGE_GUTTER_PX,
   PEEK_SETTLE_MS,
@@ -76,6 +83,7 @@ import {
 } from '@/lib/shade-pull';
 import { clearGestureVars, gestureLayerRef, setGestureVar } from '@/lib/gesture-layer';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
+import { openPaletteSheetWithKeyboard } from '@/lib/palette-sheet';
 import { resolveWallpaper } from '@/constants/appearance';
 import { monitorNumber, predictNextMonitorLabel } from '@/store/slices/monitorSlice';
 import { resetActiveMonitorContext } from '../command-palette/ContextResetButton';
@@ -128,6 +136,12 @@ interface Drag {
   canPull: boolean;
   /** Whether it is a second pull, on a shade that is already open, that can clear. */
   canClear: boolean;
+  /** Whether this touch is allowed to raise the palette sheet — the pull-up's `canPull`. */
+  canRaise: boolean;
+  /** Set off upwards with `canRaise`, so the vertical half of this touch is the sheet's. */
+  raising: boolean;
+  /** Whether the sheet has gone up under this touch, so a pull taken back takes it down. */
+  raised: boolean;
   /** Started in a side gutter, so a tap here belongs to whatever is underneath. */
   fromGutter: boolean;
   /** Which way this touch may not pan — decided from where it landed. */
@@ -397,6 +411,7 @@ export function PhoneGestures() {
         if (pending?.axis === 'x' && peekRef.current) finishPan(0, 0);
         else if (pullingShade.current) finishShade(0, 0);
         else if (clearing.current) finishClear(0);
+        else if (pending?.raised) useDesktopStore.getState().setPaletteSheetOpen(false);
         return;
       }
       // A touch landing mid-settle takes the pan over rather than fighting it.
@@ -422,6 +437,14 @@ export function PhoneGestures() {
           shadeSettle.current === null &&
           isOnShade(e.target) &&
           canPullFrom(e.target),
+        // Not over a full-screen card: the palette is hidden under it, handle and all, and
+        // the card has the whole screen because the user asked for that.
+        canRaise:
+          !sheetUp &&
+          selectFullscreenCardId(state) === null &&
+          (fromGutter || canRaiseFrom(e.target)),
+        raising: false,
+        raised: false,
         fromGutter,
         // No monitor-count test: with the CLI on the end of the strip there is somewhere
         // to go even from a lone monitor, and a direction with nothing in it rubber-bands
@@ -449,8 +472,12 @@ export function PhoneGestures() {
         if ((d.canPull || d.canClear) && dy > 0 && dy >= Math.abs(dx) && e.cancelable) {
           e.preventDefault();
         }
+        // The same claim the other way up, and safe for the same reason: `canRaise` has
+        // said nothing under the finger has anywhere left to scroll downwards to.
+        if (d.canRaise && dy < 0 && -dy >= Math.abs(dx) && e.cancelable) e.preventDefault();
         d.axis = dragAxis(dx, dy);
         if (!d.axis) return;
+        d.raising = d.axis === 'y' && d.canRaise && dy < 0;
       }
       if (d.axis === 'y' && d.canClear) {
         // Upwards is not this gesture's — the grip pushes the shade shut — but a second
@@ -458,6 +485,16 @@ export function PhoneGestures() {
         if (dy <= 0 && !clearing.current) return;
         if (e.cancelable) e.preventDefault();
         trackClear(dy);
+        return;
+      }
+      if (d.raising) {
+        if (e.cancelable) e.preventDefault();
+        // Up the moment the pull has said "up", as from the handle: the slide and the rest
+        // of the drag overlap instead of queueing. The keyboard waits for touchend.
+        if (!d.raised && swipeDirection(dx, dy) === 'up') {
+          d.raised = true;
+          useDesktopStore.getState().setPaletteSheetOpen(true);
+        }
         return;
       }
       if (d.axis === 'y') {
@@ -505,6 +542,16 @@ export function PhoneGestures() {
         finishShade(dy, performance.now() - d.at);
         return;
       }
+      if (d.raising) {
+        // Otherwise the browser may follow the drag with a click, which would land on the
+        // sheet's backdrop — mounted under the finger mid-pull — and put it straight away.
+        if (e.cancelable) e.preventDefault();
+        // Still up when the finger lifts: the keyboard, from inside the gesture. Brought
+        // back down first: a pull taken back, and the sheet goes with it.
+        if (swipeDirection(dx, dy) === 'up') openPaletteSheetWithKeyboard();
+        else if (d.raised) useDesktopStore.getState().setPaletteSheetOpen(false);
+        return;
+      }
       // No touchmove ever arrived — a browser can coalesce a fast flick into start and
       // end alone. There was nothing to animate, so just go.
       if (!d.axis) {
@@ -524,6 +571,11 @@ export function PhoneGestures() {
         useDesktopStore.getState().setNotificationShadeOpen(true);
         return;
       }
+      if (d.canRaise && swipeDirection(dx, dy) === 'up') {
+        if (e.cancelable) e.preventDefault();
+        openPaletteSheetWithKeyboard();
+        return;
+      }
       // A gutter touch that went nowhere was a tap on whatever the gutter is covering —
       // the left edge of a home-screen icon, a title bar button. Hand it over. A tap
       // wanders, so this asks whether the touch was a swipe rather than whether it held
@@ -536,16 +588,29 @@ export function PhoneGestures() {
       drag.current = null;
       if (pullingShade.current) finishShade(0, 0);
       if (clearing.current) finishClear(0);
+      // The system took the touch; a sheet it raised goes back, as a shade pull does.
+      if (d?.raised) useDesktopStore.getState().setPaletteSheetOpen(false);
       if (d?.axis === 'x' && peekRef.current) finishPan(0, 0);
       else if (peekRef.current) clearPeek();
     };
 
+    /** The frame's own script cannot see a full-screen card, so the shell asks. */
+    const canRaiseOverFrame = () => selectFullscreenCardId(useDesktopStore.getState()) === null;
+
     // An app card is an iframe, and a touch inside one reaches none of the listeners
     // above. The frame's own script (iframe-scripts/contextmenu.ts) claims a drag nothing
     // in the app had a use for and hands its travel out here — sideways for the pan,
-    // downwards from content already at its top for the shade — so both run the same way
-    // from over an app as from over anything else.
-    let framePan: { at: number; moved: boolean; axis: 'x' | 'y' } | null = null;
+    // downwards from content already at its top for the shade, upwards from content
+    // already at its bottom for the palette — so all three run the same way from over an
+    // app as from over anything else.
+    let framePan: {
+      at: number;
+      moved: boolean;
+      axis: 'x' | 'y';
+      /** Which way a vertical one set off: up raises the palette, down pulls the shade. */
+      up: boolean | null;
+      raised: boolean;
+    } | null = null;
     const offFramePan = iframeMessages.on(APP_MSG.touchPan, ({ data, source }) => {
       if (!source) return;
       const dx = Number(data.dx) || 0;
@@ -555,7 +620,13 @@ export function PhoneGestures() {
         framePan =
           paletteSheetOpen || notificationShadeOpen
             ? null
-            : { at: performance.now(), moved: false, axis: data.axis === 'y' ? 'y' : 'x' };
+            : {
+                at: performance.now(),
+                moved: false,
+                axis: data.axis === 'y' ? 'y' : 'x',
+                up: null,
+                raised: false,
+              };
         if (framePan?.axis === 'x' && (settle.current || newMonitorWait.current)) clearPeek();
         return;
       }
@@ -563,13 +634,32 @@ export function PhoneGestures() {
       if (!pan) return;
       if (data.phase === 'move') {
         pan.moved = true;
-        if (pan.axis === 'x') trackPan(dx);
+        if (pan.axis === 'x') {
+          trackPan(dx);
+          return;
+        }
+        pan.up ??= dy < 0;
+        if (pan.up) {
+          // As from the shell: up once the pull has said so, the keyboard on the lift.
+          if (!pan.raised && canRaiseOverFrame() && swipeDirection(dx, dy) === 'up') {
+            pan.raised = true;
+            useDesktopStore.getState().setPaletteSheetOpen(true);
+          }
+        }
         // As from the shell: a pull follows the finger back up once it is under way.
         else if (dy > 0 || pullingShade.current) trackShade(dy);
         return;
       }
       framePan = null;
       const elapsed = performance.now() - pan.at;
+      if (pan.axis === 'y' && (pan.up ?? dy < 0)) {
+        // The keyboard from here rides on the frame's touchend: activation reaches the
+        // frame's ancestors, this document included, and this arrives inside its window.
+        if (data.phase === 'end' && swipeDirection(dx, dy) === 'up' && canRaiseOverFrame()) {
+          openPaletteSheetWithKeyboard();
+        } else if (pan.raised) useDesktopStore.getState().setPaletteSheetOpen(false);
+        return;
+      }
       if (pan.axis === 'y') {
         if (pullingShade.current) finishShade(data.phase === 'cancel' ? 0 : dy, elapsed);
         // A pull that arrived as start and end alone, as in onTouchEnd.
@@ -735,6 +825,22 @@ function canPullFrom(el: EventTarget | null): boolean {
     // `scrollTop` first: it is a read, where `getComputedStyle` is a style resolution,
     // and at the top of the scroll the answer is the same either way.
     if (node.scrollTop > 0 && node.scrollHeight > node.clientHeight + 1) {
+      const overflow = getComputedStyle(node).overflowY;
+      if (overflow === 'auto' || overflow === 'scroll') return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Whether a touch that landed on `el` is allowed to raise the palette sheet: `canPullFrom`
+ * the other way up. A scroller with anything left below it keeps the upward drag, since
+ * that drag is how it gets there; one already at its bottom has nothing left to give it.
+ */
+function canRaiseFrom(el: EventTarget | null): boolean {
+  for (let node = el instanceof Element ? el : null; node; node = node.parentElement) {
+    if (node.hasAttribute('data-no-pan')) return false;
+    if (node.scrollTop < node.scrollHeight - node.clientHeight - 1) {
       const overflow = getComputedStyle(node).overflowY;
       if (overflow === 'auto' || overflow === 'scroll') return false;
     }

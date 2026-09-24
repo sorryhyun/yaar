@@ -92,9 +92,10 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
   // Touch drags the phone shell has a use for — but a touch inside an app frame never
   // reaches its listeners, so without this an app card was only pannable from the 20px
   // gutters at the screen's edges and could not pull the shade down at all. Sideways is
-  // the monitor pan, downwards the shade. A drag nothing in here has a use for is claimed
-  // and its travel handed out; the rules for "has a use for" mirror the shell's own
-  // \`panBlockFrom\` / \`canPullFrom\` in PhoneGestures.tsx, plus the two signals only the
+  // the monitor pan, downwards the shade, upwards the palette. A drag nothing in here has
+  // a use for is claimed and its travel handed out; the rules for "has a use for" mirror
+  // the shell's own \`panBlockFrom\` / \`canPullFrom\` / \`canRaiseFrom\` in
+  // PhoneGestures.tsx, plus the two signals only the
   // app has: a \`touch-action\` that keeps that axis for itself, and a touchmove the app
   // already cancelled. Touch screens only, so a desktop is never asked to give up a drag
   // it has no pan for.
@@ -126,19 +127,27 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     return block;
   }
 
-  // Whether a downward drag from here would have scrolled nothing: every scroller under
-  // the finger, the document's own included, already at its top.
-  function canPull(el) {
+  // Which vertical drags from here would have scrolled nothing: downwards when every
+  // scroller under the finger, the document's own included, is already at its top, and
+  // upwards when every one is already at its bottom. One walk for both, since the
+  // computed style is the expensive half of it.
+  var NO_PULL = { down: false, up: false };
+  function pulls(el) {
     var doc = document.scrollingElement;
-    if (doc && doc.scrollTop > 0) return false;
+    var down = !doc || doc.scrollTop <= 0;
+    var up = !doc || doc.scrollTop >= doc.scrollHeight - doc.clientHeight - 1;
     for (var node = el && el.nodeType === 1 ? el : null; node; node = node.parentElement) {
-      if (node.hasAttribute('data-no-pan')) return false;
+      if (!down && !up) return NO_PULL;
+      if (node.hasAttribute('data-no-pan')) return NO_PULL;
       var style = getComputedStyle(node);
-      if (keepsAxis(style, 'pan-y')) return false;
-      if (node.scrollTop > 0 && node.scrollHeight > node.clientHeight + 1 &&
-          (style.overflowY === 'auto' || style.overflowY === 'scroll')) return false;
+      if (keepsAxis(style, 'pan-y')) return NO_PULL;
+      if (node.scrollHeight > node.clientHeight + 1 &&
+          (style.overflowY === 'auto' || style.overflowY === 'scroll')) {
+        if (node.scrollTop > 0) down = false;
+        if (node.scrollTop < node.scrollHeight - node.clientHeight - 1) up = false;
+      }
     }
-    return true;
+    return { down: down, up: up };
   }
 
   function postPan(phase, dx, dy, axis) {
@@ -153,9 +162,12 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       var t = e.touches[0];
       if (!t || e.touches.length > 1) return;
       var block = panBlock(e.target);
-      var pull = canPull(e.target);
-      if (!block && !pull) return;
-      pan = { x: t.screenX, y: t.screenY, block: block, pull: pull, axis: null, claimed: false };
+      var pull = pulls(e.target);
+      if (!block && !pull.down && !pull.up) return;
+      pan = {
+        x: t.screenX, y: t.screenY, block: block, pull: pull.down, raise: pull.up,
+        axis: null, claimed: false
+      };
     }, { capture: true, passive: true });
 
     // Passive, and it must stay so. A non-passive touchmove on \`window\` makes every touch
@@ -164,7 +176,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     // app busy for ten seconds froze touch scrolling in *every* app for those ten seconds,
     // and tapping did not help. There is nothing to cancel anyway: a drag is only ever
     // claimed when the browser has nothing to scroll in that direction (\`panBlock\`,
-    // \`canPull\`). The one thing the browser could still do with it is chain it out of
+    // \`pulls\`). The one thing the browser could still do with it is chain it out of
     // the frame into the shell's pull-to-refresh or back-swipe, and the
     // \`overscroll-behavior\` below stops that without a listener.
     //
@@ -186,7 +198,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
         else if (ay >= 10) pan.axis = 'y';
         else return;
         var ours = pan.axis === 'y'
-          ? pan.pull && dy > 0
+          ? (pan.pull && dy > 0) || (pan.raise && dy < 0)
           : !!pan.block && !pan.block[dx > 0 ? 'right' : 'left'];
         if (appTook || !ours) {
           pan = null;
@@ -211,7 +223,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
         var ax = Math.abs(dx), ay = Math.abs(dy);
         if (p.block && ax >= 56 && ax >= ay * 1.4 && !p.block[dx > 0 ? 'right' : 'left']) {
           p.axis = 'x';
-        } else if (p.pull && dy >= 56 && ay >= ax * 1.4) {
+        } else if (((p.pull && dy >= 56) || (p.raise && dy <= -56)) && ay >= ax * 1.4) {
           p.axis = 'y';
         } else {
           return;
