@@ -89,6 +89,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         iconSize: settings.iconSize,
         theme: settings.theme,
         handedness: settings.handedness,
+        windowSize: settings.windowSize,
       });
     } catch {
       return errorResponse('Failed to list apps');

@@ -11,7 +11,7 @@ import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { registerLocalToastAction } from '@/lib/localToastActions';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
-import { extractAppId, WINDOW_PLACEMENT, cascadeWindowBounds } from '@yaar/shared';
+import { extractAppId, cascadeWindowBounds, defaultWindowSize } from '@yaar/shared';
 import { toWindowKey } from '@/store/helpers'; // Used for user-initiated window creation
 import { DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT } from '@/constants/layout';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
@@ -115,6 +115,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
           if (data.iconSize) appearance.iconSize = data.iconSize;
           if (data.theme) appearance.theme = data.theme;
           if (data.handedness) appearance.handedness = data.handedness;
+          if (data.windowSize) appearance.windowSize = data.windowSize;
           if (Object.keys(appearance).length > 0) {
             useDesktopStore.getState().applyServerSettings(appearance);
           }
@@ -180,18 +181,20 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
             // Request iframe token from server so verb SDK can resolve `self`
             const openWindow = (iframeToken: string) => {
               const content = { renderer: 'iframe' as const, data: app.run! };
-              const w = app.defaultWidth ?? WINDOW_PLACEMENT.defaultWidth;
-              const h = app.defaultHeight ?? WINDOW_PLACEMENT.defaultHeight;
+              const viewport = {
+                w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
+                h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
+              };
+              const fallback = defaultWindowSize(store.windowSize, viewport);
+              const w = app.defaultWidth ?? fallback.w;
+              const h = app.defaultHeight ?? fallback.h;
               // Icon-launched windows used a hardcoded (100, 100) with no cascade, so
               // every app opened from the desktop landed on the same spot and buried
               // the last one. Same policy as the server's AI path now.
               const openOnMonitor = Object.values(store.windows).filter(
                 (win) => win.monitorId === monitorId,
               ).length;
-              const bounds = cascadeWindowBounds(openOnMonitor, w, h, {
-                w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
-                h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
-              });
+              const bounds = cascadeWindowBounds(openOnMonitor, w, h, viewport);
               store.applyActions([
                 {
                   type: 'window.create',

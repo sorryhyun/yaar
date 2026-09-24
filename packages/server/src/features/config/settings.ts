@@ -24,6 +24,7 @@ export const settingsContentSchema = z.object({
   iconSize: z.enum(['small', 'medium', 'large']).optional(),
   theme: z.enum(['dark', 'light']).optional(),
   handedness: z.enum(['right', 'left']).optional(),
+  windowSize: z.enum(['small', 'medium', 'large']).optional(),
   // Read by `features/apps/install.ts` to skip the capability-confirmation dialog.
   allowAllApps: z.boolean().optional(),
   // Persisted only; takes effect on next restart (IS_REMOTE is fixed at module load).
@@ -107,6 +108,7 @@ export async function applySettings(
   if (result.data.iconSize !== undefined) partial.iconSize = result.data.iconSize;
   if (result.data.theme !== undefined) partial.theme = result.data.theme;
   if (result.data.handedness !== undefined) partial.handedness = result.data.handedness;
+  if (result.data.windowSize !== undefined) partial.windowSize = result.data.windowSize;
   if (result.data.allowAllApps !== undefined) partial.allowAllApps = result.data.allowAllApps;
   if (result.data.remote !== undefined) partial.remote = result.data.remote;
 
@@ -129,6 +131,7 @@ export async function applySettings(
     'iconSize',
     'theme',
     'handedness',
+    'windowSize',
   ];
   const changedSettings: DesktopUpdateSettingsAction['settings'] = {};
   for (const key of settingsKeys) {

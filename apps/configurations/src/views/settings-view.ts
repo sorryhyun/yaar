@@ -18,6 +18,7 @@ const KNOWN_KEYS = [
   'iconSize',
   'theme',
   'handedness',
+  'windowSize',
   'allowAllApps',
   'remote',
 ];
@@ -38,6 +39,13 @@ const ACCENT_COLORS: Record<string, string> = {
   green: '#3fb950',
   red: '#f85149',
 };
+
+// Mirrors WINDOW_SIZE_PRESETS in packages/shared/src/actions.ts.
+const WINDOW_SIZE_LABELS: [string, string][] = [
+  ['small', 'Small (640×480)'],
+  ['medium', 'Medium (820×600)'],
+  ['large', 'Large (1040×740)'],
+];
 
 const WALLPAPER_LABELS: Record<string, string> = {
   'dark-blue': '🌌 Dark Blue',
@@ -192,6 +200,19 @@ export function SettingsView() {
             ${['small', 'medium', 'large'].map(
               (v) => html`<option value=${v}>${capitalize(v)}</option>`,
             )}
+          </select>
+        </div>
+        <div class="s-row">
+          <label class="s-label"
+            >Window Size
+            <span class="s-hint">Desktop: new windows without a size of their own</span></label
+          >
+          <select
+            class="y-select s-select"
+            value=${() => String(get('windowSize') ?? 'medium')}
+            onChange=${onChangeHandler((v) => set('windowSize', v))}
+          >
+            ${WINDOW_SIZE_LABELS.map(([v, label]) => html`<option value=${v}>${label}</option>`)}
           </select>
         </div>
         <div class="s-row">

@@ -223,7 +223,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
   // ── yaar://config/settings ──
   registry.register('yaar://config/settings', {
     description:
-      'User preferences — name, language, provider, appearance (wallpaper, accentColor, iconSize, theme), handedness.',
+      'User preferences — name, language, provider, appearance (wallpaper, accentColor, iconSize, theme), default window size, handedness.',
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
       type: 'object',
@@ -256,6 +256,12 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
           enum: ['right', 'left'],
           description:
             'Which hand holds the phone; the status badge sits in the opposite top corner',
+        },
+        windowSize: {
+          type: 'string',
+          enum: ['small', 'medium', 'large'],
+          description:
+            'Size of a new desktop window that neither the caller nor its app.json sizes (640×480, 820×600, 1040×740)',
         },
       },
     },

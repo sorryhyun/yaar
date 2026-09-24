@@ -2,6 +2,7 @@
  * Unified settings helper — reads/writes config/settings.json.
  */
 
+import type { WindowSizePreset } from '@yaar/shared';
 import { configRead, configWrite } from './storage-manager.js';
 
 export interface Settings {
@@ -15,6 +16,8 @@ export interface Settings {
   theme: 'dark' | 'light';
   /** Which hand holds the phone — the phone shell keeps its status badge out of that thumb's corner. */
   handedness: 'right' | 'left';
+  /** Size of a window that neither its caller nor its app.json sizes. Ignored on a phone. */
+  windowSize: WindowSizePreset;
   allowAllApps: boolean;
   /**
    * Remote mode preference. Read at boot by `config/env.ts` (`loadPersistedRemote`) and
@@ -34,6 +37,7 @@ const DEFAULTS: Settings = {
   iconSize: 'medium',
   theme: 'dark',
   handedness: 'right',
+  windowSize: 'medium',
   allowAllApps: false,
   remote: false,
 };

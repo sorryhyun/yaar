@@ -6,6 +6,7 @@ import type { SliceCreator } from '../types';
 import { apiFetch } from '@/lib/api';
 import type { IconSizeKey } from '@/constants/appearance';
 import i18next from 'i18next';
+import { DEFAULT_WINDOW_SIZE_PRESET, type WindowSizePreset } from '@yaar/shared';
 
 export interface SettingsSliceState {
   userName: string;
@@ -16,6 +17,8 @@ export interface SettingsSliceState {
   theme: 'dark' | 'light';
   /** Which hand holds the phone. The status badge sits in the top corner away from it. */
   handedness: 'right' | 'left';
+  /** Size of a window that neither its opener nor its app.json sizes. */
+  windowSize: WindowSizePreset;
 }
 
 export interface SettingsSliceActions {
@@ -28,6 +31,7 @@ export interface SettingsSliceActions {
   setIconSize: (size: 'small' | 'medium' | 'large') => void;
   setTheme: (theme: 'dark' | 'light') => void;
   setHandedness: (handedness: 'right' | 'left') => void;
+  setWindowSize: (size: WindowSizePreset) => void;
 }
 
 export type SettingsSlice = SettingsSliceState & SettingsSliceActions;
@@ -42,7 +46,10 @@ interface PersistedSettings {
   iconSize: IconSizeKey;
   theme: 'dark' | 'light';
   handedness: 'right' | 'left';
+  windowSize: WindowSizePreset;
 }
+
+const WINDOW_SIZES: readonly WindowSizePreset[] = ['small', 'medium', 'large'];
 
 function loadSettings(): PersistedSettings {
   try {
@@ -57,6 +64,9 @@ function loadSettings(): PersistedSettings {
         iconSize: parsed.iconSize ?? 'medium',
         theme: parsed.theme === 'light' ? 'light' : 'dark',
         handedness: parsed.handedness === 'left' ? 'left' : 'right',
+        windowSize: WINDOW_SIZES.includes(parsed.windowSize)
+          ? parsed.windowSize
+          : DEFAULT_WINDOW_SIZE_PRESET,
       };
     }
   } catch {
@@ -70,6 +80,7 @@ function loadSettings(): PersistedSettings {
     iconSize: 'medium',
     theme: 'dark',
     handedness: 'right',
+    windowSize: DEFAULT_WINDOW_SIZE_PRESET,
   };
 }
 
@@ -90,6 +101,7 @@ function getAllSettings(
     iconSize: IconSizeKey;
     theme: 'dark' | 'light';
     handedness: 'right' | 'left';
+    windowSize: WindowSizePreset;
   },
 ): PersistedSettings {
   const s = get();
@@ -101,6 +113,7 @@ function getAllSettings(
     iconSize: s.iconSize,
     theme: s.theme,
     handedness: s.handedness,
+    windowSize: s.windowSize,
   };
 }
 
@@ -114,6 +127,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   iconSize: initial.iconSize,
   theme: initial.theme,
   handedness: initial.handedness,
+  windowSize: initial.windowSize,
 
   setUserName: (name) =>
     set((state) => {
@@ -151,6 +165,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       if (settings.iconSize !== undefined) state.iconSize = settings.iconSize;
       if (settings.theme !== undefined) state.theme = settings.theme;
       if (settings.handedness !== undefined) state.handedness = settings.handedness;
+      if (settings.windowSize !== undefined) state.windowSize = settings.windowSize;
       saveSettings({ ...getAllSettings(get), ...settings } as PersistedSettings);
     });
     if (settings.language !== undefined) {
@@ -215,6 +230,18 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ handedness }),
+    }).catch(() => {});
+  },
+
+  setWindowSize: (windowSize) => {
+    set((state) => {
+      state.windowSize = windowSize;
+      saveSettings({ ...getAllSettings(get), windowSize });
+    });
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windowSize }),
     }).catch(() => {});
   },
 });

@@ -45,7 +45,7 @@
  *   the agent only once the app has taken the link. `"launch": false` on the hook opts
  *   out per rule.
  */
-import { cascadeWindowBounds, WINDOW_PLACEMENT } from '@yaar/shared';
+import { cascadeWindowBounds, defaultWindowSize } from '@yaar/shared';
 import type { OSAction, WindowBounds } from '@yaar/shared';
 import { apiFetch } from '@/lib/api';
 import { toWindowKey } from '@/store/helpers';
@@ -67,15 +67,21 @@ const BROWSER_APP_ID = 'browser';
  */
 const PROBE_TIMEOUT_MS = 3_000;
 
-/** Bounds for a new window on the active monitor, cascaded past the ones already open. */
-function nextBounds(monitorId: string, width: number, height: number) {
-  const openOnMonitor = Object.values(getDesktopState().windows).filter(
+/**
+ * Bounds for a new window on the active monitor at the user's default size, cascaded
+ * past the ones already open.
+ */
+function nextBounds(monitorId: string) {
+  const state = getDesktopState();
+  const openOnMonitor = Object.values(state.windows).filter(
     (win) => win.monitorId === monitorId,
   ).length;
-  return cascadeWindowBounds(openOnMonitor, width, height, {
+  const viewport = {
     w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
     h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
-  });
+  };
+  const { w, h } = defaultWindowSize(state.windowSize, viewport);
+  return cascadeWindowBounds(openOnMonitor, w, h, viewport);
 }
 
 /**
@@ -236,11 +242,7 @@ async function launchAppWindow(appId: string, runQuery?: string): Promise<Launch
   }
 
   const content = { renderer: 'iframe' as const, data: runUrl };
-  const bounds = nextBounds(
-    monitorId,
-    WINDOW_PLACEMENT.defaultWidth,
-    WINDOW_PLACEMENT.defaultHeight,
-  );
+  const bounds = nextBounds(monitorId);
   getDesktopState().applyActions([
     {
       type: 'window.create',
@@ -396,11 +398,7 @@ function openIframeWindow(href: string, title: string, sourceWindowId?: string):
   const monitorId = store.activeMonitorId;
   const windowId = `link-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   const content = { renderer: 'iframe' as const, data: href };
-  const bounds = nextBounds(
-    monitorId,
-    WINDOW_PLACEMENT.defaultWidth,
-    WINDOW_PLACEMENT.defaultHeight,
-  );
+  const bounds = nextBounds(monitorId);
 
   store.applyActions([{ type: 'window.create', windowId, title, bounds, content }]);
   recordOpened({

@@ -607,11 +607,13 @@ export function registerWindowHandlers(
         y: { type: 'number', description: 'Optional. See x — omit unless positioning on purpose.' },
         width: {
           type: 'number',
-          description: 'Optional. Defaults to 640, or the app’s declared defaultWidth.',
+          description:
+            'Optional. Defaults to the app’s declared defaultWidth, else the user’s window-size setting (820 at the default). Omit unless the content needs a specific size.',
         },
         height: {
           type: 'number',
-          description: 'Optional. Defaults to 480, or the app’s declared defaultHeight.',
+          description:
+            'Optional. Defaults to the app’s declared defaultHeight, else the user’s window-size setting (600 at the default).',
         },
         minimized: { type: 'boolean' },
         jsonfile: { type: 'string' },

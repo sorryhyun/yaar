@@ -8,8 +8,9 @@ import {
   type ComponentLayout,
   type WindowBounds,
   extractAppId,
-  WINDOW_PLACEMENT,
+  type WindowSizePreset,
   cascadeWindowBounds,
+  defaultWindowSize,
 } from '@yaar/shared';
 import { componentLayoutSchema } from '@yaar/shared/schemas';
 import type { VerbResult } from '../../handlers/uri-registry.js';
@@ -21,6 +22,7 @@ import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
+import { readSettings } from '../../storage/settings.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
 import { grantsFromPayload, mayDelegateGrants, undelegatedUris } from './delegated-grants.js';
@@ -40,7 +42,7 @@ const IFRAME_RENDER_TIMEOUT_MS = 2_000;
 /**
  * Single source of truth for a new window's bounds.
  *
- * Size resolves explicit → app.json → 640x480. Position cascades from a centered
+ * Size resolves explicit → app.json → the user's `windowSize` preset. Position cascades from a centered
  * origin, so the first window on a monitor lands in the middle of the viewport and
  * each subsequent one steps down-right instead of burying its predecessor.
  *
@@ -57,26 +59,26 @@ const IFRAME_RENDER_TIMEOUT_MS = 2_000;
 function resolveDefaultBounds(
   payload: Record<string, unknown>,
   appMeta: { defaultWidth?: number; defaultHeight?: number } | null,
+  sizePreset: WindowSizePreset,
 ): WindowBounds {
-  const w = (payload.width as number) ?? appMeta?.defaultWidth ?? WINDOW_PLACEMENT.defaultWidth;
-  const h = (payload.height as number) ?? appMeta?.defaultHeight ?? WINDOW_PLACEMENT.defaultHeight;
+  const sid = getSessionId();
+  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+  const monitorId = actionEmitter.resolveWindowMonitor();
+  const viewport = session?.layoutContext.getViewport(monitorId);
+
+  const fallback = defaultWindowSize(sizePreset, viewport);
+  const w = (payload.width as number) ?? appMeta?.defaultWidth ?? fallback.w;
+  const h = (payload.height as number) ?? appMeta?.defaultHeight ?? fallback.h;
 
   const explicitX = payload.x as number | undefined;
   const explicitY = payload.y as number | undefined;
   if (explicitX != null && explicitY != null) return { x: explicitX, y: explicitY, w, h };
 
-  const sid = getSessionId();
-  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-  const monitorId = actionEmitter.resolveWindowMonitor();
-
-  let count = 0;
-  let viewport: { w: number; h: number } | undefined;
-  if (session) {
-    viewport = session.layoutContext.getViewport(monitorId);
-    count = session.windowState
-      .listWindows()
-      .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId).length;
-  }
+  const count = session
+    ? session.windowState
+        .listWindows()
+        .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId).length
+    : 0;
 
   const cascaded = cascadeWindowBounds(count, w, h, viewport);
   return { x: explicitX ?? cascaded.x, y: explicitY ?? cascaded.y, w, h };
@@ -167,13 +169,14 @@ export async function handleCreate(
     }
 
     const appMeta = payload.appId ? await getAppMeta(payload.appId as string) : null;
+    const { windowSize } = await readSettings();
 
     const componentAppId = payload.appId as string | undefined;
     const osAction: OSAction = {
       type: 'window.create',
       windowId: actualId,
       title,
-      bounds: resolveDefaultBounds(payload, appMeta),
+      bounds: resolveDefaultBounds(payload, appMeta, windowSize),
       content: { renderer: 'component', data: layoutData },
       ...getAppMetaOverrides(appMeta),
       ...(componentAppId ? { appId: componentAppId } : {}),
@@ -216,6 +219,7 @@ export async function handleCreate(
   }
 
   const appMeta = appId ? await getAppMeta(appId) : null;
+  const { windowSize } = await readSettings();
 
   // App-origin isolation (docs/guides/remote_mode.md): only installed
   // (`source:'user'`) apps move to the pinned app origin — bundled apps and
@@ -243,7 +247,7 @@ export async function handleCreate(
     type: 'window.create',
     windowId: actualId,
     title,
-    bounds: resolveDefaultBounds(payload, appMeta),
+    bounds: resolveDefaultBounds(payload, appMeta, windowSize),
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),
     ...(appId ? { appId } : {}),

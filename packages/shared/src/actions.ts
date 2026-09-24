@@ -48,9 +48,6 @@ export interface WindowBounds {
  * window on a monitor lands mid-viewport and each next one steps down-right.
  */
 export const WINDOW_PLACEMENT = {
-  /** Fallback size when neither the caller nor app.json specifies one. */
-  defaultWidth: 640,
-  defaultHeight: 480,
   /** Diagonal offset between consecutively opened windows. */
   cascadeStep: 28,
   /** Offset at which the cascade wraps back to the origin. */
@@ -72,6 +69,35 @@ export const WINDOW_PLACEMENT = {
    */
   statusBarInset: 52,
 } as const;
+
+/** The user's `windowSize` setting: how big a window opens when nothing sizes it. */
+export type WindowSizePreset = 'small' | 'medium' | 'large';
+
+export const WINDOW_SIZE_PRESETS: Record<WindowSizePreset, { w: number; h: number }> = {
+  small: { w: 640, h: 480 },
+  medium: { w: 820, h: 600 },
+  large: { w: 1040, h: 740 },
+};
+
+export const DEFAULT_WINDOW_SIZE_PRESET: WindowSizePreset = 'medium';
+
+/**
+ * Fallback size for a window when neither the caller nor app.json specifies one.
+ *
+ * Shrunk to the usable viewport, because a preset picked on a large monitor would
+ * otherwise open past the edge of a small one — the cascade can move a window back
+ * on screen but never narrows it.
+ */
+export function defaultWindowSize(
+  preset: WindowSizePreset | undefined,
+  viewport?: { w: number; h: number },
+): { w: number; h: number } {
+  const size =
+    WINDOW_SIZE_PRESETS[preset ?? DEFAULT_WINDOW_SIZE_PRESET] ?? WINDOW_SIZE_PRESETS.medium;
+  if (!viewport) return size;
+  const usableH = viewport.h - WINDOW_PLACEMENT.paletteInset - WINDOW_PLACEMENT.statusBarInset;
+  return { w: Math.min(size.w, viewport.w), h: Math.min(size.h, Math.max(0, usableH)) };
+}
 
 /**
  * Cascade a new window from a centered origin, clamped to stay fully on screen.
@@ -496,6 +522,7 @@ export interface DesktopUpdateSettingsAction {
     theme?: 'dark' | 'light';
     /** Which hand holds the phone: the status badge sits in the corner away from its thumb. */
     handedness?: 'right' | 'left';
+    windowSize?: WindowSizePreset;
   };
 }
 
