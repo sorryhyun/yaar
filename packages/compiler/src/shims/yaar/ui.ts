@@ -354,3 +354,78 @@ export function createKeyState(options: KeyStateOptions = {}): KeyState {
     },
   };
 }
+
+// ── Swipe ────────────────────────────────────────────────────────
+
+export interface SwipeOptions {
+  /**
+   * Touches that start inside an element matching this selector are ignored —
+   * e.g. `'video, audio'`, where a horizontal drag is a seek.
+   */
+  ignore?: string;
+  /** Horizontal travel, in px, before a drag counts. Default 50. */
+  minDistance?: number;
+}
+
+/** True when a horizontal drag from `from` would scroll something between it and `root`. */
+function pansHorizontally(from: Element, root: Element): boolean {
+  for (let n: Element | null = from; n; n = n.parentElement) {
+    if (n.scrollWidth > n.clientWidth + 1) {
+      const overflow = getComputedStyle(n).overflowX;
+      if (overflow === 'auto' || overflow === 'scroll') return true;
+    }
+    if (n === root) break;
+  }
+  return false;
+}
+
+/**
+ * Call `handler` for a one-finger horizontal swipe on `el`; returns a cleanup.
+ * The direction is the finger's: `'left'` is conventionally "next".
+ *
+ * A swipe has to be mostly horizontal (|dx| > 1.5·|dy|), so scrolling a page
+ * never flips it, and a second finger (a pinch) cancels it. A touch that starts
+ * inside something that can scroll sideways — a page zoomed past the viewport —
+ * is a pan of that, not a swipe.
+ */
+export function onSwipe(
+  el: HTMLElement,
+  handler: (direction: 'left' | 'right') => void,
+  options: SwipeOptions = {},
+): () => void {
+  const minDistance = options.minDistance ?? 50;
+  let start: { x: number; y: number } | null = null;
+
+  const onStart = (e: TouchEvent) => {
+    const t = e.touches[0];
+    const target = e.target as Element;
+    const ignored = options.ignore ? !!target.closest?.(options.ignore) : false;
+    start =
+      e.touches.length === 1 && t && !ignored && !pansHorizontally(target, el)
+        ? { x: t.clientX, y: t.clientY }
+        : null;
+  };
+  const onEnd = (e: TouchEvent) => {
+    const t = e.changedTouches[0];
+    const from = start;
+    start = null;
+    if (!from || !t) return;
+    const dx = t.clientX - from.x;
+    const dy = t.clientY - from.y;
+    if (Math.abs(dx) > minDistance && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      handler(dx < 0 ? 'left' : 'right');
+    }
+  };
+  const onCancel = () => {
+    start = null;
+  };
+
+  el.addEventListener('touchstart', onStart, { passive: true });
+  el.addEventListener('touchend', onEnd);
+  el.addEventListener('touchcancel', onCancel);
+  return () => {
+    el.removeEventListener('touchstart', onStart);
+    el.removeEventListener('touchend', onEnd);
+    el.removeEventListener('touchcancel', onCancel);
+  };
+}

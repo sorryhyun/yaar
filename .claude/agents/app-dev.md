@@ -117,6 +117,7 @@ Available via `@bundled/*` imports — no npm install needed:
 | matter-js | `@bundled/matter-js` | 2D physics |
 | tone | `@bundled/tone` | Audio/music |
 | pixi.js | `@bundled/pixi.js` | 2D WebGL |
+| lucide | `@bundled/lucide` | Icons — named exports + `icon()` → SVG node |
 | diff | `@bundled/diff` | Text diffing |
 | diff2html | `@bundled/diff2html` | Diff rendering |
 | marked | `@bundled/marked` | Markdown parsing |

@@ -61,13 +61,14 @@ src/
     │   ├── app-identity.ts # setAppId/getAppId — the app's own id, recorded by defineApp for shared-storage.ts
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
     │   ├── dialogs.ts     # showConfirm / showPrompt (no showAlert — showToast covers it)
-    │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, tryToast, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
+    │   ├── ui.ts          # showToast, onShortcut, createKeyState, onSwipe, withLoading, tryToast, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms) — and escapeHtml
     │   ├── boundary.ts    # safeParseOr — parse untrusted JSON, log, fall back (absence stays silent; `onInvalid` replaces the log)
     │   ├── standard-schema.ts # internal: isStandardSchema + describeIssues, shared by defineApp and safeParseOr
     │   ├── files.ts       # downloadBlob, blobToDataUrl, dataUrlToBlob, base64ToBytes
     │   ├── format.ts      # formatBytes, formatDuration, formatClock — one rendering per value, OS-wide
     │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
+    │   ├── image-cache.ts # createBlobUrlCache + decodeImage — LRU blob URLs, peek, neighbour preload for readers/lightboxes
     │   ├── fonts.ts       # fonts.faces/faceCss/inline — YAAR's faces, subsetted server-side into a data: URL @font-face
     │   ├── rasterize.ts   # rasterize() — DOM → SVG foreignObject → canvas, with the six quiet failures closed
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()

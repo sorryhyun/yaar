@@ -301,6 +301,47 @@ declare module '@bundled/pixi.js' {
   export * from 'pixi.js';
 }
 
+// ── Icons ───────────────────────────────────────────────────────────────────
+
+declare module '@bundled/lucide' {
+  // Every icon on lucide.dev, exported as data under its PascalCase name:
+  // `folder-open` → `FolderOpen`, `trash-2` → `Trash2`. Import the ones you use by
+  // name — an app pays only for those — and render them with `icon()` below. Never
+  // copy a path string out of memory: a wrong export name fails typecheck, a wrong
+  // path just draws a wrong icon.
+  //
+  // Skip lucide's own `createIcons` (scans the document for `data-lucide`) and the
+  // `icons` map (defeats tree-shaking — it is every icon).
+  export * from 'lucide';
+  import type { IconNode } from 'lucide';
+
+  export interface IconOptions {
+    /** CSS px for width and height. Default 16. */
+    size?: number | string;
+    /** Default 2 (Lucide's). Lighter UI chrome often wants 1.5–1.75. */
+    strokeWidth?: number | string;
+    class?: string;
+    /** An accessible name. Without one the icon is `aria-hidden` — put the label on the button. */
+    title?: string;
+  }
+
+  /**
+   * A fresh `<svg>` node for `node`, stroked in `currentColor` so it takes the
+   * color and hover state of whatever holds it. Call it per render: a DOM node
+   * can sit in one place only.
+   *
+   * ```ts
+   * import { icon, Scissors } from '@bundled/lucide';
+   * html`<button class="y-btn" title="Cut">${icon(Scissors)}</button>`
+   * ```
+   *
+   * An app's own glyph is an `IconNode` too — `[tag, attrs][]` on a 24-unit grid —
+   * so a domain icon Lucide lacks renders through the same call:
+   * `const Vertex: IconNode = [['circle', { cx: '12', cy: '12', r: '2' }]]`.
+   */
+  export function icon(node: IconNode, options?: IconOptions): SVGSVGElement;
+}
+
 // ── Physics ─────────────────────────────────────────────────────────────────
 
 declare module '@bundled/matter-js' {
@@ -2037,6 +2078,52 @@ declare module '@bundled/yaar' {
     opts?: EncodeImageOptions,
   ): Promise<EncodedImage | null>;
 
+  // ── Paging through fetched images ─────────────────────────────
+
+  export interface BlobUrlCacheOptions<K> {
+    /**
+     * How many blob URLs stay alive; past it the least recently used is revoked.
+     * An `<img>` already showing a revoked URL keeps painting — only handing that
+     * URL to a *new* element breaks — so size it above what one screen shows.
+     */
+    max: number;
+    /** The bytes for a key. A rejection is not cached: the next `get` retries. */
+    load: (key: K) => Promise<Blob>;
+    /** The cache key for a non-string `K`. Defaults to `String(key)`. */
+    keyOf?: (key: K) => string;
+  }
+
+  export interface BlobUrlCache<K> {
+    /** The blob URL for `key`, loading it on first ask. Marks it most recently used. */
+    get(key: K): Promise<string>;
+    /** The URL if it has already loaded, else `undefined` — show it with no spinner frame. */
+    peek(key: K): string | undefined;
+    /** Load and `decodeImage` `key` in the background, swallowing failure — for neighbours. */
+    preload(key: K): void;
+    /** Revoke every URL and forget everything, including loads still in flight. */
+    clear(): void;
+  }
+
+  /**
+   * Blob URLs for images whose bytes an app fetches itself (a Referer-guarded CDN
+   * via `httpFetch`, a local file) — the cache behind a reader or lightbox:
+   *
+   * ```ts
+   * const pages = createBlobUrlCache<Page>({ max: 24, load: fetchPageBlob, keyOf: (p) => p.id });
+   * setSrc(pages.peek(page));                        // instant when already fetched
+   * pages.get(page).then((url) => fresh() && setSrc(url));
+   * for (const d of [1, -1, 2]) if (list[i + d]) pages.preload(list[i + d]);
+   * ```
+   */
+  export function createBlobUrlCache<K = string>(options: BlobUrlCacheOptions<K>): BlobUrlCache<K>;
+
+  /**
+   * Decode `url` off-screen and hold the result (the last 10), so an `<img>` given
+   * it next paints on the first frame. Swap a viewer's `src` only after this
+   * resolves and stepping never flashes an empty stage. Resolves on failure too.
+   */
+  export function decodeImage(url: string): Promise<void>;
+
   // ── The platform's fonts ──────────────────────────────────────
 
   export interface YaarServedFace {
@@ -2285,6 +2372,31 @@ declare module '@bundled/yaar' {
    * `e.code` so a modifier changing `e.key` mid-hold never wedges a key.
    */
   export function createKeyState(options?: KeyStateOptions): KeyState;
+
+  export interface SwipeOptions {
+    /** Touches starting inside a match are ignored — e.g. `'video, audio'`, whose drags seek. */
+    ignore?: string;
+    /** Horizontal travel, in px, before a drag counts. Default 50. */
+    minDistance?: number;
+  }
+
+  /**
+   * Call `handler` for a one-finger horizontal swipe on `el`; returns a cleanup.
+   * The direction is the finger's: `'left'` is conventionally "next".
+   *
+   * Mostly-horizontal only (|dx| > 1.5·|dy|), so scrolling never flips a page; a
+   * second finger cancels; a touch inside something that scrolls sideways (a page
+   * zoomed past the viewport) is a pan, not a swipe.
+   *
+   * ```ts
+   * ref=${(el: HTMLElement) => onCleanup(onSwipe(el, (d) => step(d === 'left' ? 1 : -1)))}
+   * ```
+   */
+  export function onSwipe(
+    el: HTMLElement,
+    handler: (direction: 'left' | 'right') => void,
+    options?: SwipeOptions,
+  ): () => void;
 
   /**
    * Create a Solid.js signal that auto-persists to appStorage.

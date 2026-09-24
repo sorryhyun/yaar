@@ -172,6 +172,7 @@ AI는 이 모든 것을 `read('yaar://skills/marketplace')`를 통해 접근합�
 | Tone.js | `@bundled/tone` | 오디오/음악 |
 | mediabunny | `@bundled/mediabunny` | 미디어 파일 읽기/쓰기/변환 (mp4, webm, mp3, wav). 실시간에 묶이지 않는 프레임 단위 인코딩 — 부하가 걸리면 프레임을 흘리고 기존 파일은 읽지도 못하는 `MediaRecorder` + `canvas.captureStream()` 대신 사용하세요. WebCodecs 가 필요하므로 인코딩 전에 `getFirstEncodableVideoCodec([...])` 로 확인하세요. 약 0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL 렌더링 |
+| Lucide | `@bundled/lucide` | 아이콘: 이름으로 import, `icon()`으로 렌더링 |
 | marked | `@bundled/marked` | 마크다운 → HTML |
 | Mermaid | `@bundled/mermaid` | 텍스트 → 다이어그램 (flowchart, sequence, class, state, ER, gantt, mindmap 등). `renderMermaid(src)` 를 쓰면 디자인 토큰에 맞춰 테마가 적용된 새니타이즈된 SVG 를 반환합니다 — 다시 새니타이즈하지 마세요. 약 3.3 MB 이므로 다이어그램을 그리는 앱에서만 임포트하세요 |
 | Prism | `@bundled/prismjs` | 구문 강조 |

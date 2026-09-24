@@ -205,6 +205,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | Tone.js | `@bundled/tone` | Audio/music synthesis |
 | mediabunny | `@bundled/mediabunny` | Media files: read/write/convert mp4, webm, mp3, wav. Frame-accurate encoding decoupled from real time — use it instead of `MediaRecorder` + `canvas.captureStream()`, which drops frames under load and cannot read an existing file. Needs WebCodecs; call `getFirstEncodableVideoCodec([...])` before encoding. ~0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
+| Lucide | `@bundled/lucide` | Icons: import by name, render with `icon()` |
 | marked | `@bundled/marked` | Markdown → HTML — render it through `renderMarkdown` (parse → sanitize → links out of the frame), not `marked.parse` by hand |
 | Mermaid | `@bundled/mermaid` | Text → diagrams (flowchart, sequence, class, state, ER, gantt, mindmap…). Use `renderMermaid(src)`, which themes to the design tokens and returns sanitized SVG — do not sanitize it again. ~3.3 MB, so import it only in apps that draw diagrams |
 | Prism | `@bundled/prismjs` | Syntax highlighting |

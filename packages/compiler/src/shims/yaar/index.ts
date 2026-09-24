@@ -59,8 +59,9 @@ export {
   createStaleGuard,
   onShortcut,
   createKeyState,
+  onSwipe,
 } from './ui.js';
-export type { KeyState, KeyStateOptions } from './ui.js';
+export type { KeyState, KeyStateOptions, SwipeOptions } from './ui.js';
 
 // ── Untrusted input ─────────────────────────────────────────────
 export { safeParseOr } from './boundary.js';
@@ -79,6 +80,10 @@ export { formatBytes, formatDuration, formatClock } from './format.js';
 // ── Image re-encoding ───────────────────────────────────────────
 export { toWebP } from './image.js';
 export type { EncodeImageOptions, EncodedImage, ImageSource } from './image.js';
+
+// ── Paging through fetched images ───────────────────────────────
+export { createBlobUrlCache, decodeImage } from './image-cache.js';
+export type { BlobUrlCache, BlobUrlCacheOptions } from './image-cache.js';
 
 // ── The platform's fonts, subsetted and inlinable ───────────────
 export { fonts } from './fonts.js';

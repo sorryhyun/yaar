@@ -28,6 +28,9 @@ export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
   dompurify: toForwardSlash(join(SHIMS_DIR, 'dompurify.ts')),
   lodash: toForwardSlash(join(SHIMS_DIR, 'lodash.ts')),
+  // `icon()` — the IconNode → SVG node renderer five apps hand-rolled. Also keeps
+  // lucide's one-module-per-icon barrel from collapsing when prebundled.
+  lucide: toForwardSlash(join(SHIMS_DIR, 'lucide.ts')),
   mammoth: toForwardSlash(join(SHIMS_DIR, 'mammoth.ts')),
   // `renderMarkdown` — parse → sanitize → rewrite links, the render seven apps
   // hand-rolled. Same placement rule as mermaid: the helper lives with the library.
@@ -106,6 +109,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   'solid-js/store': 'solid-js/store',
   uuid: 'uuid',
   lodash: 'lodash-es',
+  lucide: 'lucide',
   'date-fns': 'date-fns',
   anime: 'animejs',
   three: 'three',

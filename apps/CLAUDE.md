@@ -196,5 +196,7 @@ list for drift.
 Notable libraries: `mermaid` — `renderMermaid()` returns token-themed, already-sanitized SVG; at
 3.3 MB it is by far the largest, so import it only where diagrams are drawn. `dompurify` —
 mandatory for any externally-sourced HTML. `mediabunny` — read/write/convert mp4/webm/mp3/wav,
-frame-accurate and not real-time-bound like `MediaRecorder`. Compiler internals (shims, guards,
+frame-accurate and not real-time-bound like `MediaRecorder`. `lucide` — icons: import by name
+(`Trash2`, `FolderOpen`) and render with `icon()`; never hand-copy an SVG path, and write a
+domain glyph Lucide lacks as an `IconNode` rendered by the same call. Compiler internals (shims, guards,
 protocol extraction): [`packages/compiler/CLAUDE.md`](../packages/compiler/CLAUDE.md).
