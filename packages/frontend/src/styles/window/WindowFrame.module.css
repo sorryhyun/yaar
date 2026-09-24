@@ -470,7 +470,7 @@
 /* ============ Phone: full-screen card ============
    No drag, no resize, no chrome to grab — so no rounded card edge or shadow either, and
    a taller title bar with thumb-sized controls. The top inset keeps the title clear of a
-   notch or status bar when installed as a standalone app. */
+   notch when installed as a full-screen app. */
 .frame[data-card] {
   border-radius: 0;
   outline: none;

@@ -4,7 +4,7 @@
   "description": "A reactive AI interface where the AI decides what to show next",
   "start_url": "/",
   "scope": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#161b22",
   "theme_color": "#161b22",
   "icons": [

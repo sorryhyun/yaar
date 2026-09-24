@@ -1200,6 +1200,10 @@ interface YaarDevice {
    * the desktop layout, for a card that is not the one on top, and for a card the user
    * took out of full screen (Back, or the title bar button) until the device next turns —
    * so "go full screen whenever landscape" is safe: the user's Back sticks.
+   *
+   * Use this, not `element.requestFullscreen()`: Chrome answers every Fullscreen API
+   * entry with a "swipe down to exit" toast no page can suppress, and the browser's own
+   * bars are already gone when YAAR runs as an installed PWA.
    */
   setFullscreen(on: boolean): void;
 }
