@@ -9,6 +9,7 @@
 #   VERSION      — specific version tag (default: latest)
 #   YAAR_DIR     — Termux only: where the source checkout goes (default: ~/yaar)
 #   YAAR_SKIP_CLAUDE — Termux only: 1 leaves Claude Code for the first run to fetch
+#   YAAR_SKIP_YTDLP  — Termux only: 1 skips installing yt-dlp (YouTube audio download)
 
 set -euo pipefail
 
@@ -104,6 +105,16 @@ install_termux() {
   if [ "${YAAR_SKIP_CLAUDE:-0}" != "1" ]; then
     if ! (cd "$yaar_dir" && ./scripts/dev/ensure-claude-android.sh > /dev/null); then
       echo "⚠  Could not fetch Claude Code — the first 'yaar' run will try again." >&2
+    fi
+  fi
+
+  # yt-dlp, for yaar://system/ytdlp (the transcribe app's YouTube leg). Optional everywhere
+  # else, where a package manager is one command away; a phone user is far less likely to
+  # go and find it, and Termux packages it, landing on the PATH the server probes.
+  # Non-fatal: without it only the media download is missing.
+  if [ "${YAAR_SKIP_YTDLP:-0}" != "1" ] && ! command -v yt-dlp > /dev/null 2>&1; then
+    if ! pkg install -y yt-dlp; then
+      echo "⚠  Could not install yt-dlp — YouTube download stays off. Later: pkg install yt-dlp" >&2
     fi
   fi
 

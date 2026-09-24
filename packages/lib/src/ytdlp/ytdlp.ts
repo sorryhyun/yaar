@@ -204,7 +204,7 @@ function requireBin(): string {
   const bin = resolveYtDlpPath();
   if (!bin) {
     throw new YtDlpError(
-      'yt-dlp is not installed. Install it (e.g. `brew install yt-dlp`, or the standalone ' +
+      'yt-dlp is not installed. Install it (e.g. `brew install yt-dlp`, `pkg install yt-dlp` on Termux, or the standalone ' +
         'binary into ~/.local/bin) or set YTDLP_PATH, then retry.',
       '',
     );

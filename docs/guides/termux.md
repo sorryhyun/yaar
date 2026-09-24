@@ -24,7 +24,9 @@ There is no Android release binary, so on Termux the installer builds from sourc
 3. Clones the release tag to `~/yaar` and runs `bun install`.
 4. Fetches **Claude Code** and unpacks it for Android — about 220 MB, and the one big
    download. It lands in `~/.cache/yaar/claude-js/<sdk-version>-<arch>/`.
-5. Puts a `yaar` launcher in `$PREFIX/bin` (it runs `make termux` in `~/yaar`), and a
+5. Installs **yt-dlp** (`pkg install yt-dlp`) unless it is already there — what
+   `yaar://system/ytdlp` and the transcribe app's YouTube download run. Non-fatal.
+6. Puts a `yaar` launcher in `$PREFIX/bin` (it runs `make termux` in `~/yaar`), and a
    home-screen shortcut in `~/.shortcuts/YAAR`.
 
 | Option | Default | Meaning |
@@ -33,6 +35,7 @@ There is no Android release binary, so on Termux the installer builds from sourc
 | `YAAR_DIR` | `~/yaar` | Where the source checkout goes |
 | `INSTALL_DIR` | `$PREFIX/bin` | Where the `yaar` launcher goes |
 | `YAAR_SKIP_CLAUDE` | off | `1` leaves the Claude Code download to the first `yaar` run |
+| `YAAR_SKIP_YTDLP` | off | `1` skips installing yt-dlp |
 
 Pass them in front of `bash`, e.g. `curl -fsSL … | VERSION=v0.20.4 bash`.
 
