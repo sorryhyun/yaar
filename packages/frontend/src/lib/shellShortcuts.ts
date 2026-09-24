@@ -1,9 +1,11 @@
 /**
- * Decisions behind the shell's reserved keyboard shortcuts, kept out of the
+ * Decisions behind the shell's keyboard shortcuts, kept out of the
  * component so they can be unit-tested against a plain store snapshot.
  */
 import { DEFAULT_MONITOR_ID, keybindingsClaimKey } from '@yaar/shared';
 import type { DesktopStore } from '@/store/types';
+import { stepMonitorIndex } from '@/lib/gestures';
+import { predictNextMonitorLabel } from '@/store/slices/monitorSlice';
 
 type ShortcutState = Pick<
   DesktopStore,
@@ -73,4 +75,62 @@ export function isCloseWindowShortcut(e: {
  */
 export function shouldConfirmUnload(state: Pick<DesktopStore, 'zOrder'>): boolean {
   return state.zOrder.length > 0;
+}
+
+/**
+ * Which way Shift+Left/Right steps along the monitor strip: -1, 1, or null for any
+ * other key. Shift alone — Ctrl+Shift+Arrow is word selection, Alt+Shift+Arrow and
+ * Meta+Shift+Arrow are line/document selection on a Mac, and none of them are ours.
+ */
+export function monitorStepDirection(e: {
+  key: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey?: boolean;
+}): -1 | 1 | null {
+  if (!e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return null;
+  if (e.key === 'ArrowLeft') return -1;
+  if (e.key === 'ArrowRight') return 1;
+  return null;
+}
+
+/**
+ * Where Shift+Left/Right lands: the neighbouring monitor, or — off the right end of
+ * the list, while the session has room — a new one. The phone's sideways pan walks
+ * the same strip (`PhoneGestures`), so a hand that learned it on one knows it on the
+ * other. The phone's left-hand end, the CLI, is not here: a keyboard already has
+ * Shift+Tab for that, and a step that toggled a mode would not be undone by stepping
+ * back the way the pan's is.
+ */
+export function resolveMonitorStep(
+  state: Pick<DesktopStore, 'monitors' | 'activeMonitorId' | 'maxMonitors'>,
+  delta: -1 | 1,
+): { kind: 'monitor'; id: string } | { kind: 'new' } | null {
+  const at = state.monitors.findIndex((m) => m.id === state.activeMonitorId);
+  if (at === -1) return null;
+  const next = stepMonitorIndex(at, state.monitors.length, delta);
+  if (next !== null) return { kind: 'monitor', id: state.monitors[next].id };
+  if (delta > 0 && predictNextMonitorLabel(state.monitors, state.maxMonitors)) {
+    return { kind: 'new' };
+  }
+  return null;
+}
+
+/**
+ * Whether Shift+Arrow on `target` is text selection someone is doing. Shift+Arrow is
+ * not a reserved combo: in a field with text in it, it extends the selection, and the
+ * shell stepping monitors out from under that would be the surprise. An *empty* field
+ * is different — there is nothing to select, and the palette's textarea is focused
+ * most of the time on a desktop, so skipping every editable would mean the shortcut
+ * almost never fired. Keep in sync with `holdsText` in `iframe-scripts/contextmenu.ts`.
+ */
+export function editableHoldsText(target: EventTarget | null): boolean {
+  if (!target || typeof (target as Element).tagName !== 'string') return false;
+  const el = target as HTMLElement;
+  if (el.isContentEditable) return (el.textContent ?? '') !== '';
+  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+    return (el as HTMLInputElement | HTMLTextAreaElement).value !== '';
+  }
+  return el.tagName === 'SELECT';
 }

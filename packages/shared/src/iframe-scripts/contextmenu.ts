@@ -8,7 +8,8 @@
  *    cursor keep following it while the pointer is inside the frame
  * 4. Left click — posts `yaar:click` so parent can dismiss overlays
  * 5. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
- * 6. Reserved shortcuts — posts `yaar:keydown` for the combos the shell owns
+ * 6. Reserved shortcuts — posts `yaar:keydown` for the combos the shell owns, and
+ *    for Shift+Left/Right (monitor stepping) when the app let that one go by
  * 7. File drops — posts `yaar:file-drop` for OS files dropped on content the app did
  *    not handle itself, instead of letting the browser open the file
  *
@@ -288,6 +289,39 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       metaKey: e.metaKey
     }, '*');
   }, true);
+
+  // Shift+Left/Right steps the shell along its monitors, but it is *not* reserved:
+  // text fields and plenty of apps (editors, spreadsheets, games) use it for selection
+  // or movement. So this listener claims nothing. It waits until the whole dispatch is
+  // over (setTimeout, not a microtask — microtasks run between listeners) and forwards
+  // the keystroke only if nobody called preventDefault() on it, which is what a
+  // \`keybindings\` entry, CodeMirror, or any app handling the key does. A native field
+  // with text in it never preventDefaults its own selection, so that case is excluded
+  // up front (\`holdsText\`, which mirrors \`editableHoldsText\` in the frontend's
+  // \`lib/shellShortcuts.ts\`), as is a pointer-locked app, which owns the keyboard.
+  function holdsText(el) {
+    if (!el || typeof el.tagName !== 'string') return false;
+    if (el.isContentEditable) return (el.textContent || '') !== '';
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return el.value !== '';
+    return el.tagName === 'SELECT';
+  }
+  window.addEventListener('keydown', function(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (!e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.repeat || e.isComposing || document.pointerLockElement) return;
+    if (holdsText(e.target)) return;
+    setTimeout(function() {
+      if (e.defaultPrevented) return;
+      (window.top || window.parent).postMessage({
+        type: '${APP_MSG.keydown}',
+        key: e.key,
+        shiftKey: true,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false
+      }, '*');
+    }, 0);
+  });
 
   // Drag: notify parent so it can track cross-window drags.
   // Handles both text selection drags and draggable element drags (e.g. storage items).

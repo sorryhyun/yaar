@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
+  editableHoldsText,
   isCloseWindowShortcut,
+  monitorStepDirection,
   resolveCloseTopWindow,
+  resolveMonitorStep,
   shouldConfirmUnload,
 } from '@/lib/shellShortcuts';
 import type { WindowModel } from '@/types/state';
@@ -95,5 +98,73 @@ describe('shouldConfirmUnload', () => {
 
   it('stays quiet on a bare desktop, where the dock is the only thing on screen', () => {
     expect(shouldConfirmUnload(state([]))).toBe(false);
+  });
+});
+
+describe('monitorStepDirection', () => {
+  const key = (
+    k: string,
+    mods: Partial<Record<'ctrlKey' | 'altKey' | 'metaKey', boolean>> = {},
+  ) => ({
+    key: k,
+    shiftKey: true,
+    ctrlKey: false,
+    altKey: false,
+    metaKey: false,
+    ...mods,
+  });
+
+  it('reads Shift+Left/Right as a step', () => {
+    expect(monitorStepDirection(key('ArrowLeft'))).toBe(-1);
+    expect(monitorStepDirection(key('ArrowRight'))).toBe(1);
+  });
+
+  it('leaves every other selection chord alone', () => {
+    expect(monitorStepDirection(key('ArrowRight', { ctrlKey: true }))).toBeNull();
+    expect(monitorStepDirection(key('ArrowRight', { altKey: true }))).toBeNull();
+    expect(monitorStepDirection(key('ArrowRight', { metaKey: true }))).toBeNull();
+    expect(monitorStepDirection({ ...key('ArrowRight'), shiftKey: false })).toBeNull();
+    expect(monitorStepDirection(key('ArrowUp'))).toBeNull();
+  });
+});
+
+describe('resolveMonitorStep', () => {
+  const monitors = (ids: string[]) =>
+    ids.map((id) => ({ id, label: `Monitor ${Number(id) + 1}`, createdAt: 0 }));
+
+  it('steps to the neighbouring monitor', () => {
+    const s = { monitors: monitors(['0', '1', '2']), activeMonitorId: '1', maxMonitors: 4 };
+    expect(resolveMonitorStep(s, -1)).toEqual({ kind: 'monitor', id: '0' });
+    expect(resolveMonitorStep(s, 1)).toEqual({ kind: 'monitor', id: '2' });
+  });
+
+  it('makes a new monitor off the right end while the session has room', () => {
+    const s = { monitors: monitors(['0', '1']), activeMonitorId: '1', maxMonitors: 4 };
+    expect(resolveMonitorStep(s, 1)).toEqual({ kind: 'new' });
+  });
+
+  it('stops at the right end of a full session and at the left end always', () => {
+    const full = { monitors: monitors(['0', '1']), activeMonitorId: '1', maxMonitors: 2 };
+    expect(resolveMonitorStep(full, 1)).toBeNull();
+    const first = { monitors: monitors(['0', '1']), activeMonitorId: '0', maxMonitors: 4 };
+    expect(resolveMonitorStep(first, -1)).toBeNull();
+  });
+});
+
+describe('editableHoldsText', () => {
+  it('lets an empty field go, and keeps one that has text to select', () => {
+    const input = document.createElement('input');
+    expect(editableHoldsText(input)).toBe(false);
+    input.value = 'hi';
+    expect(editableHoldsText(input)).toBe(true);
+    const area = document.createElement('textarea');
+    expect(editableHoldsText(area)).toBe(false);
+    area.value = 'hi';
+    expect(editableHoldsText(area)).toBe(true);
+  });
+
+  it('treats a non-editable target as nothing to select', () => {
+    expect(editableHoldsText(document.createElement('div'))).toBe(false);
+    expect(editableHoldsText(null)).toBe(false);
   });
 });

@@ -709,7 +709,12 @@ export default defineApp({
   unparseable combo, two spellings of one chord, and the shell's reserved combos (`Shift+Tab`,
   `Ctrl+1-9`, `Ctrl+W`, `Ctrl+R`, `F5`). Bindings appear in the manifest, so agents can tell
   users about them — and the shell reads them back: an app that binds the `w` key at all keeps
-  its window when the user presses Ctrl+W, which otherwise closes the topmost one. For a shortcut that needs an argument, use the imperative
+  its window when the user presses Ctrl+W, which otherwise closes the topmost one.
+  `Shift+ArrowLeft`/`Shift+ArrowRight` are *not* reserved but are the shell's fallback: a press
+  nothing in the app `preventDefault()`s — and that is not selecting text in a field — steps the
+  desktop to the neighbouring monitor. Binding them (or handling them with `preventDefault()`)
+  keeps them for the app; a key sampled with `createKeyState` alone does not, unless the app
+  holds pointer lock. For a shortcut that needs an argument, use the imperative
   `onShortcut(combo, handler)` from `@bundled/yaar`; for held-key movement, `createKeyState`.
 - **Splitting up.** `state`/`commands` maps may live in other modules and be spread in — see
   [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`

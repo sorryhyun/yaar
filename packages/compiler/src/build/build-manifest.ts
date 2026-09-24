@@ -167,8 +167,12 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * touch scroll in an app wait for the app's main thread, and all isolated apps share one
  * main thread, so any busy app froze touch scrolling in every app until it finished.
  * Same shadowing as '35': the baked copy is the one that runs.
+ *
+ * '37': the contextmenu script forwards Shift+Left/Right out of an app that let it go by
+ * (nothing preventDefault()ed it, no text field was selecting with it), so the desktop's
+ * monitor stepping works while an app window has focus. Same shadowing as '35'.
  */
-export const COMPILER_VERSION = '36';
+export const COMPILER_VERSION = '37';
 
 export interface BuildManifest {
   sourceHash: string;

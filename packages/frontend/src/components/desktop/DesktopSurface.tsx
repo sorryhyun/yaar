@@ -32,8 +32,11 @@ import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionCon
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import { runLocalToastAction } from '@/lib/localToastActions';
 import {
+  editableHoldsText,
   isCloseWindowShortcut,
+  monitorStepDirection,
   resolveCloseTopWindow,
+  resolveMonitorStep,
   shouldConfirmUnload,
 } from '@/lib/shellShortcuts';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
@@ -61,6 +64,17 @@ import styles from '@/styles/desktop/DesktopSurface.module.css';
 /** Whether `list` holds exactly the members of `set` — the rubber band's no-op check. */
 function sameMembers(list: readonly string[], set: ReadonlySet<string>): boolean {
   return list.length === set.size && list.every((id) => set.has(id));
+}
+
+/**
+ * Shift+Left/Right: one step along the monitor strip, or a new monitor off its right end.
+ * The server mints that one and switches this tab to it on its `MONITORS` answer.
+ */
+function stepMonitor(delta: -1 | 1) {
+  const state = useDesktopStore.getState();
+  const target = resolveMonitorStep(state, delta);
+  if (target?.kind === 'new') state.createMonitor();
+  else if (target) state.switchMonitor(target.id);
 }
 
 export function DesktopSurface() {
@@ -151,6 +165,24 @@ export function DesktopSurface() {
     return () => document.removeEventListener('keydown', handler, true);
   }, [switchMonitor]);
 
+  // Shift+Left/Right steps along the monitor strip, making a new monitor off the right
+  // end — the keyboard half of the phone's sideways pan. Unlike the combos above this one
+  // is *not* reserved: text fields and apps use Shift+Arrow for selection, so it is a
+  // bubble-phase listener on `window` that only acts on a keystroke nobody else took
+  // (`defaultPrevented`) and that is not selecting text in a field (`editableHoldsText`).
+  // Key repeat is ignored so holding the key cannot mint monitors until the session fills.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat || e.isComposing) return;
+      const delta = monitorStepDirection(e);
+      if (delta === null || editableHoldsText(e.target)) return;
+      e.preventDefault();
+      stepMonitor(delta);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   // ⌘W (and Ctrl+W on a browser build that keeps the accelerator) can't be cancelled
   // from the page — see shouldConfirmUnload. A beforeunload handler is the one thing
   // browsers still honour: it can't stop the close, only make Chrome ask first, and
@@ -172,7 +204,7 @@ export function DesktopSurface() {
   // Forward keyboard shortcuts from focused iframes (they can't bubble to document)
   useEffect(() => {
     return iframeMessages.on('yaar:keydown', (ctx) => {
-      const { key, shiftKey, ctrlKey, altKey } = ctx.data;
+      const { key, shiftKey, ctrlKey, altKey, metaKey } = ctx.data;
       // F5 / Ctrl+R from iframes — nothing to do (iframe can't refresh parent)
       if (key === 'F5' || (ctrlKey && key === 'r')) return;
       if (key === 'Tab' && shiftKey) {
@@ -183,6 +215,13 @@ export function DesktopSurface() {
         const idx = parseInt(key) - 1;
         const mons = useDesktopStore.getState().monitors;
         if (idx < mons.length) switchMonitor(mons[idx].id);
+      }
+      // Forwarded only once the app has let the keystroke go by (see the contextmenu
+      // script), so here it is simply ours.
+      const delta = monitorStepDirection({ key, shiftKey, ctrlKey, altKey: !!altKey, metaKey });
+      if (delta !== null) {
+        stepMonitor(delta);
+        return;
       }
       // The iframe script already called preventDefault() on its side, so the browser
       // window is safe whatever we decide here.
