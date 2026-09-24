@@ -43,6 +43,7 @@ function registry(maxMonitors: () => number) {
     isCompanion: () => false,
     setViewport: () => {},
     setFormFactor: () => {},
+    setOrientation: () => {},
     clearLayout: () => {},
     removeMonitorAgent: () => {},
     maxMonitors,

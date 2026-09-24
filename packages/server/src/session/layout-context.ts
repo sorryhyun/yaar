@@ -11,7 +11,12 @@
  * every standard window is a full-screen card — so both notes report the screen instead.
  */
 
-import { WINDOW_PLACEMENT, type FormFactor, type WindowBounds } from '@yaar/shared';
+import {
+  WINDOW_PLACEMENT,
+  type FormFactor,
+  type Orientation,
+  type WindowBounds,
+} from '@yaar/shared';
 import type { WindowStateRegistry } from './window-state.js';
 import type { WindowHandleMap } from './window-handle-map.js';
 
@@ -30,6 +35,7 @@ interface WindowSnapshot {
 interface MonitorLayoutSnapshot {
   viewport?: Viewport;
   formFactor: FormFactor;
+  orientation?: Orientation;
   windows: WindowSnapshot[];
 }
 
@@ -67,6 +73,8 @@ export class LayoutContext {
   private viewports = new Map<string, Viewport>();
   /** Monitor shell layout (reported by frontend). Absent means desktop. */
   private formFactors = new Map<string, FormFactor>();
+  /** How the monitor's device is held (reported by frontend). Absent until it says. */
+  private orientations = new Map<string, Orientation>();
   /** Per-agent last-seen state. */
   private agentStates = new Map<string, AgentLayoutState>();
 
@@ -91,6 +99,16 @@ export class LayoutContext {
 
   getFormFactor(monitorId: string): FormFactor {
     return this.formFactors.get(monitorId) ?? 'desktop';
+  }
+
+  /** Undefined clears it: a report without one (an older tab) must not keep a stale one. */
+  setOrientation(monitorId: string, orientation: Orientation | undefined): void {
+    if (orientation) this.orientations.set(monitorId, orientation);
+    else this.orientations.delete(monitorId);
+  }
+
+  getOrientation(monitorId: string): Orientation | undefined {
+    return this.orientations.get(monitorId);
   }
 
   /**
@@ -174,6 +192,7 @@ export class LayoutContext {
   clearMonitor(monitorId: string): void {
     this.viewports.delete(monitorId);
     this.formFactors.delete(monitorId);
+    this.orientations.delete(monitorId);
   }
 
   // ── Snapshot building ──
@@ -194,7 +213,12 @@ export class LayoutContext {
       });
     }
 
-    return { viewport, formFactor: this.getFormFactor(monitorId), windows };
+    return {
+      viewport,
+      formFactor: this.getFormFactor(monitorId),
+      orientation: this.getOrientation(monitorId),
+      windows,
+    };
   }
 
   // ── Formatting ──
@@ -207,7 +231,8 @@ export class LayoutContext {
       mobile ? 'full-screen' : `at (${w.bounds.x},${w.bounds.y}) ${w.bounds.w}×${w.bounds.h}`;
 
     if (snapshot.viewport) {
-      const size = `${snapshot.viewport.w}×${snapshot.viewport.h}${mobile ? ' (phone)' : ''}`;
+      const phone = snapshot.orientation ? `phone, ${snapshot.orientation}` : 'phone';
+      const size = `${snapshot.viewport.w}×${snapshot.viewport.h}${mobile ? ` (${phone})` : ''}`;
       parts.push(`monitor: ${size}`);
       data.monitor = size;
     }
@@ -238,6 +263,7 @@ export class LayoutContext {
       return true;
     }
     if (prev.formFactor !== current.formFactor) return true;
+    if (prev.orientation !== current.orientation) return true;
     // Window count changed?
     if (prev.windows.length !== current.windows.length) return true;
     // Any window bounds changed?

@@ -12,6 +12,7 @@ import {
   IFRAME_APP_PROTOCOL_SCRIPT,
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
+  IFRAME_DEVICE_SDK_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
   IFRAME_VERB_SDK_SCRIPT,
 } from '@yaar/shared';
@@ -539,6 +540,12 @@ function IframeRenderer({
             notifScript.setAttribute('data-yaar-notifications', '1');
             notifScript.textContent = IFRAME_NOTIFICATIONS_SDK_SCRIPT;
             doc.head.appendChild(notifScript);
+          }
+          if (doc && !doc.querySelector('script[data-yaar-device]')) {
+            const deviceScript = doc.createElement('script');
+            deviceScript.setAttribute('data-yaar-device', '1');
+            deviceScript.textContent = IFRAME_DEVICE_SDK_SCRIPT;
+            doc.head.appendChild(deviceScript);
           }
           if (doc && !doc.querySelector('script[data-yaar-windows]')) {
             const windowsScript = doc.createElement('script');

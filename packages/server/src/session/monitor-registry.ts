@@ -19,7 +19,7 @@
  */
 
 import { MAX_MONITORS, DEFAULT_MONITOR_ID, ServerEventType, type MonitorInfo } from '@yaar/shared';
-import type { FormFactor, ServerEvent } from '@yaar/shared';
+import type { FormFactor, Orientation, ServerEvent } from '@yaar/shared';
 import type { Viewport } from './layout-context.js';
 import type { ConnectionId } from './broadcast-center.js';
 import type { SessionId } from './types.js';
@@ -48,6 +48,8 @@ export interface MonitorRegistryDeps {
   setViewport(monitorId: string, viewport: Viewport): void;
   /** Record a connection's shell layout — whether the monitor agent is designing for a phone. */
   setFormFactor(monitorId: string, formFactor: FormFactor): void;
+  /** Record how a connection's device is held; undefined forgets an earlier report. */
+  setOrientation(monitorId: string, orientation: Orientation | undefined): void;
   /** Forget a removed monitor's viewport, so its id's successor does not inherit it. */
   clearLayout(monitorId: string): void;
   /** Tear down the monitor's agent. Absent before the pool is initialized. */
@@ -143,9 +145,10 @@ export class MonitorRegistry {
   }
 
   /**
-   * A tab reporting which monitor it is now looking at, how big its viewport is, and
-   * which shell layout it renders. A report with a viewport but no form factor is from a
-   * desktop tab, so it clears a phone's earlier claim on the monitor.
+   * A tab reporting which monitor it is now looking at, how big its viewport is, which
+   * shell layout it renders, and which way it is held. A report with a viewport but no
+   * form factor is from a desktop tab, so it clears a phone's earlier claim on the monitor
+   * — orientation included, which travels with the form factor for the same reason.
    *
    * The layout is one per monitor, so whoever reports last owns it — and the companion
    * desktop reports too, forced to `?ui=desktop`, on the same monitor as the phone it
@@ -158,11 +161,15 @@ export class MonitorRegistry {
     monitorId: string,
     viewport?: Viewport,
     formFactor?: FormFactor,
+    orientation?: Orientation,
   ): void {
     this.deps.subscribeConnection(connectionId, monitorId);
     if (this.deps.isCompanion(connectionId)) return;
     if (viewport) this.deps.setViewport(monitorId, viewport);
-    if (viewport || formFactor) this.deps.setFormFactor(monitorId, formFactor ?? 'desktop');
+    if (viewport || formFactor) {
+      this.deps.setFormFactor(monitorId, formFactor ?? 'desktop');
+      this.deps.setOrientation(monitorId, orientation);
+    }
   }
 
   /**

@@ -144,6 +144,7 @@ export class ClientEventController {
           event.monitorId,
           event.viewport,
           event.formFactor,
+          event.orientation,
         ),
       [ClientEventType.CLIENT_PRESENCE]: (event, connectionId) =>
         noteClientPresence(this.deps.sessionId, connectionId, event.state),

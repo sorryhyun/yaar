@@ -114,7 +114,11 @@ export class ContextPool implements PoolContext {
   readonly contextAssembly = new ContextAssemblyPolicy((monitorId) => {
     const layout = getSessionHub().get(this.sessionId)?.layoutContext;
     return layout
-      ? { formFactor: layout.getFormFactor(monitorId), viewport: layout.getViewport(monitorId) }
+      ? {
+          formFactor: layout.getFormFactor(monitorId),
+          viewport: layout.getViewport(monitorId),
+          orientation: layout.getOrientation(monitorId),
+        }
       : undefined;
   });
   readonly reloadPolicy: ReloadCachePolicy;

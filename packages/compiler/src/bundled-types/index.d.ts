@@ -1163,6 +1163,32 @@ interface YaarNotifications {
   onChange(callback: (items: YaarNotificationItem[]) => void): () => void;
 }
 
+// -- Device SDK --
+
+interface YaarDeviceState {
+  /**
+   * The desktop's shell layout. `mobile` is the phone shell: this app's window is a
+   * full-screen card, one on screen at a time.
+   */
+  formFactor: 'mobile' | 'desktop';
+  /**
+   * How the device is held, from the browser's `screen.orientation` — not this window's
+   * aspect, which a soft keyboard or a split screen changes without the device turning.
+   */
+  orientation: 'portrait' | 'landscape';
+}
+
+/**
+ * The screen this app is shown on, pushed by the desktop. Also mirrored onto
+ * `<html data-form-factor data-orientation>` for CSS, e.g.
+ * `:root[data-form-factor="mobile"][data-orientation="landscape"] .sidebar { … }`.
+ */
+interface YaarDevice {
+  get(): YaarDeviceState;
+  /** Called once immediately, then on every change. Returns an unsubscribe. */
+  onChange(callback: (state: YaarDeviceState) => void): () => void;
+}
+
 // -- Windows SDK --
 
 interface YaarWindowReadOptions {
@@ -1510,6 +1536,7 @@ interface YaarGlobal {
   app: YaarApp;
   storage: YaarStorage;
   notifications: YaarNotifications;
+  device: YaarDevice;
   windows: YaarWindows;
   links: YaarLinks;
 
@@ -1641,6 +1668,7 @@ declare module '@bundled/yaar' {
 
   export const app: YaarApp;
   export const notifications: YaarNotifications;
+  export const device: YaarDevice;
   export const windows: YaarWindows;
   export const links: YaarLinks;
 

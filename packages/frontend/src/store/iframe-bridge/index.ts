@@ -2,7 +2,8 @@
  * Iframe Bridge - all communication between the desktop store and iframe windows.
  *
  * Covers: window capture (direct WS send), App Protocol relay, verb subscription
- * forwarding, iframe message routing, windows SDK handler, and notification broadcasting.
+ * forwarding, iframe message routing, windows SDK handler, and notification and device
+ * broadcasting.
  *
  * This barrel is the bridge's only entry point — `import ... from '@/store/iframe-bridge'`
  * (or via `@/store`). The modules beside it are internal ownership boundaries, not a set of
@@ -25,3 +26,4 @@ export {
 export { dropFilesOnWindow, dropTextOnWindow } from './drop';
 export { initWindowsSdkHandler } from './windows-sdk';
 export { initNotificationBroadcaster } from './notifications';
+export { initDeviceBroadcaster } from './device';

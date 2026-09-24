@@ -7,13 +7,14 @@
  * windows opened at 640×480 on a 360-wide screen (#119).
  */
 import { describe, it, expect } from 'bun:test';
-import type { FormFactor } from '@yaar/shared';
+import type { FormFactor, Orientation } from '@yaar/shared';
 import { MonitorRegistry } from '../session/monitor-registry.js';
 import type { Viewport } from '../session/layout-context.js';
 
 function registry(companions: string[]) {
   const viewports = new Map<string, Viewport>();
   const formFactors = new Map<string, FormFactor>();
+  const orientations = new Map<string, Orientation | undefined>();
   const watching = new Map<string, string>();
   const reg = new MonitorRegistry({
     sessionId: 'sess' as never,
@@ -25,10 +26,11 @@ function registry(companions: string[]) {
     isCompanion: (c) => companions.includes(c),
     setViewport: (m, v) => viewports.set(m, v),
     setFormFactor: (m, f) => formFactors.set(m, f),
+    setOrientation: (m, o) => orientations.set(m, o),
     clearLayout: () => {},
     removeMonitorAgent: () => {},
   });
-  return { reg, viewports, formFactors, watching };
+  return { reg, viewports, formFactors, orientations, watching };
 }
 
 describe('MonitorRegistry.subscribe layout', () => {
@@ -50,5 +52,18 @@ describe('MonitorRegistry.subscribe layout', () => {
 
     expect(formFactors.get('0')).toBe('desktop');
     expect(viewports.get('0')).toEqual({ w: 1440, h: 900 });
+  });
+
+  it('records the phone’s orientation, and a desktop tab taking over clears it', () => {
+    const { reg, orientations } = registry(['companion']);
+    reg.subscribe('phone', '0', { w: 697, h: 330 }, 'mobile', 'landscape');
+    reg.subscribe('companion', '0', { w: 1280, h: 800 }, 'desktop', 'landscape');
+    expect(orientations.get('0')).toBe('landscape');
+
+    reg.subscribe('phone', '0', { w: 360, h: 697 }, 'mobile', 'portrait');
+    expect(orientations.get('0')).toBe('portrait');
+
+    reg.subscribe('laptop', '0', { w: 1440, h: 900 });
+    expect(orientations.get('0')).toBeUndefined();
   });
 });

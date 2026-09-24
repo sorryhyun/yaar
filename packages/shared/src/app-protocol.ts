@@ -287,6 +287,11 @@ export const APP_MSG = {
   // Console capture (iframe-scripts/console-capture.ts).
   console: 'yaar:console',
 
+  // Device SDK (iframe-scripts/device-sdk.ts): the frame asks once on install, the
+  // desktop answers and then pushes `{ formFactor, orientation }` on every change.
+  deviceRequest: 'yaar:device-request',
+  deviceUpdate: 'yaar:device-update',
+
   // Parent → iframe pushes.
   notificationsUpdate: 'yaar:notifications-update',
   subscriptionUpdate: 'yaar:subscription-update',

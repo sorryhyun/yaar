@@ -5,19 +5,23 @@
 import { useDesktopStore } from '@/store';
 import { ClientEventType, type ClientEvent } from '@/types';
 import type { SubscribeMonitorEvent } from '@yaar/shared';
+import { settledViewport } from '@/lib/device';
 
 /**
  * The one spelling of "this tab is looking at `monitorId`": which monitor, how big the
- * screen is, and which shell layout it renders. The server sizes new windows from the
- * viewport and tells the monitor agent it is on a phone from the form factor, so every
- * send carries both — including the one on (re)connect.
+ * screen is, which shell layout it renders, and which way it is held. The server sizes
+ * new windows from the viewport and tells the monitor agent it is on a phone (and turned
+ * sideways) from the rest, so every send carries all of it — including the one on
+ * (re)connect. The viewport is the keyboard-down one; see `settledViewport`.
  */
 export function monitorSubscription(monitorId: string): SubscribeMonitorEvent {
+  const { formFactor, orientation } = useDesktopStore.getState();
   return {
     type: ClientEventType.SUBSCRIBE_MONITOR,
     monitorId,
-    viewport: { w: window.innerWidth, h: window.innerHeight },
-    formFactor: useDesktopStore.getState().formFactor,
+    viewport: settledViewport(),
+    formFactor,
+    orientation,
   };
 }
 

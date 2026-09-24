@@ -65,6 +65,7 @@ import {
   initIframeMessageHandlers,
   initWindowsSdkHandler,
   initNotificationBroadcaster,
+  initDeviceBroadcaster,
 } from './iframe-bridge';
 
 /**
@@ -542,3 +543,4 @@ export const useDesktopStore = create<DesktopStore>()(
 initIframeMessageHandlers();
 initWindowsSdkHandler();
 initNotificationBroadcaster();
+initDeviceBroadcaster();

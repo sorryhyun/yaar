@@ -1,7 +1,9 @@
 /**
- * UI slice - manages the restore prompt, window selection, and the shell form factor.
+ * UI slice - manages the restore prompt, window selection, and the shell form factor and
+ * orientation.
  */
 import { detectFormFactor, type FormFactor } from '@/lib/formFactor';
+import { readOrientation, type Orientation } from '@/lib/device';
 import type { SliceCreator } from '../types';
 import type { RestorePrompt } from '@/types/state';
 
@@ -10,6 +12,8 @@ export interface UiSliceState {
   selectedWindowIds: string[];
   /** Shell layout: floating windows, or full-screen cards on a phone. See `lib/formFactor.ts`. */
   formFactor: FormFactor;
+  /** How the device is held. See `lib/device.ts`. */
+  orientation: Orientation;
   /**
    * The phone card the user blew up to fill the whole screen, command palette and all.
    * Only in effect while that card is the one on top — see `selectFullscreenCardId`.
@@ -31,6 +35,7 @@ export interface UiSliceActions {
   dismissRestorePrompt: () => void;
   setSelectedWindows: (ids: string[]) => void;
   setFormFactor: (formFactor: FormFactor) => void;
+  setOrientation: (orientation: Orientation) => void;
   toggleFullscreenWindow: (windowId: string) => void;
   setPaletteSheetOpen: (open: boolean) => void;
   setNotificationShadeOpen: (open: boolean) => void;
@@ -42,6 +47,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   restorePrompt: null,
   selectedWindowIds: [],
   formFactor: detectFormFactor(),
+  orientation: readOrientation(),
   fullscreenWindowId: null,
   // Both phone surfaces start put away. The palette's handle says it is there; the
   // shade answers a pull from the top edge — see `CommandPalette` and `PhoneGestures`.
@@ -66,6 +72,11 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   setFormFactor: (formFactor) =>
     set((state) => {
       state.formFactor = formFactor;
+    }),
+
+  setOrientation: (orientation) =>
+    set((state) => {
+      state.orientation = orientation;
     }),
 
   toggleFullscreenWindow: (windowId) =>

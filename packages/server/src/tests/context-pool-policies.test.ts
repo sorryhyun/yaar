@@ -216,6 +216,26 @@ describe('ContextAssemblyPolicy', () => {
       expect(text).not.toContain('covers');
     });
 
+    it('says which way the phone is held, and lays out for it', () => {
+      const held = (orientation: 'portrait' | 'landscape') =>
+        new ContextAssemblyPolicy(() => ({
+          formFactor: 'mobile',
+          viewport: orientation === 'landscape' ? { w: 697, h: 330 } : { w: 360, h: 697 },
+          orientation,
+        })).formatOpenWindows([], { monitorId: '0' });
+
+      const sideways = held('landscape');
+      expect(sideways).toContain(
+        '<device form_factor="mobile" orientation="landscape" screen="697×330">',
+      );
+      expect(sideways).toContain('side by side');
+      expect(sideways).not.toContain('one narrow column');
+
+      const upright = held('portrait');
+      expect(upright).toContain('orientation="portrait"');
+      expect(upright).toContain('one narrow column');
+    });
+
     it('leaves a desktop monitor as it was', () => {
       const text = phone.formatOpenWindows([win('a')], { monitorId: '1' });
       expect(text).not.toContain('<device');

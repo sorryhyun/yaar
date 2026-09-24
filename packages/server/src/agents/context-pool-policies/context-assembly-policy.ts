@@ -1,4 +1,10 @@
-import type { FormFactor, UserInteraction, WindowBounds, WindowState } from '@yaar/shared';
+import type {
+  FormFactor,
+  Orientation,
+  UserInteraction,
+  WindowBounds,
+  WindowState,
+} from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
 import type { InteractionTimeline } from '../interaction-timeline.js';
 
@@ -15,22 +21,36 @@ function rectsOverlap(a: WindowBounds, b: WindowBounds): boolean {
 /** What a monitor's screen is, as far as the prompt needs to know. */
 export interface MonitorDevice {
   formFactor: FormFactor;
+  /** With the soft keyboard down — see `SubscribeMonitorEvent.viewport`. */
   viewport?: { w: number; h: number };
+  orientation?: Orientation;
 }
 
 /**
- * Told every turn on a phone, not once: the monitor's tab can switch form factor
- * mid-session (rotation, a desktop tab taking over), and an agent that saw "phone" ten
- * turns ago in a compacted context has no reason to still believe it.
+ * Told every turn on a phone, not once: the monitor's tab can switch form factor or be
+ * turned mid-session (rotation, a desktop tab taking over), and an agent that saw
+ * "phone" ten turns ago in a compacted context has no reason to still believe it.
+ *
+ * The layout advice follows the orientation. "One narrow column" is right for a phone
+ * held upright and wrong for one on its side, where the screen is wide and only a few
+ * hundred pixels tall — stacking there is what pushes content below the fold.
  */
 function formatDevice(device: MonitorDevice): string {
+  const orientation = device.orientation ? ` orientation="${device.orientation}"` : '';
   const screen = device.viewport ? ` screen="${device.viewport.w}×${device.viewport.h}"` : '';
+  const layout =
+    device.orientation === 'landscape'
+      ? 'The phone is turned sideways: the screen is wide but short, so keep vertical ' +
+        'chrome to a minimum (one compact header, no stacked banners) and put content ' +
+        'side by side rather than in a tall column; no fixed pixel sizes, large tap ' +
+        'targets, short titles.'
+      : 'Lay content out as one narrow column: no side-by-side panes, no fixed pixel ' +
+        'widths, large tap targets, short titles.';
   return (
-    `<device form_factor="mobile"${screen}>The user is on a phone. Every window is shown ` +
-    'full-screen, one at a time — the last visible window in <open_windows> is the one on ' +
-    'screen — so x/y/width/height and tiling are ignored. Lay content out as one narrow ' +
-    'column: no side-by-side panes, no fixed pixel widths, large tap targets, short titles.' +
-    '</device>\n\n'
+    `<device form_factor="mobile"${orientation}${screen}>The user is on a phone. Every ` +
+    'window is shown full-screen, one at a time — the last visible window in ' +
+    '<open_windows> is the one on screen — so x/y/width/height and tiling are ignored. ' +
+    `${layout}</device>\n\n`
   );
 }
 

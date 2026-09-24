@@ -170,5 +170,6 @@ export function storagePath(ref: string | undefined | null): string | null {
 }
 export const app = y.app;
 export const notifications = y.notifications;
+export const device = y.device;
 export const windows = y.windows;
 export const links = y.links;

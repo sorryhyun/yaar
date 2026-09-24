@@ -171,8 +171,12 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * '37': the contextmenu script forwards Shift+Left/Right out of an app that let it go by
  * (nothing preventDefault()ed it, no text field was selecting with it), so the desktop's
  * monitor stepping works while an app window has focus. Same shadowing as '35'.
+ *
+ * '38': the device SDK (`yaar.device` — form factor and orientation, #121) is baked in.
+ * It is new rather than changed, so nothing shadows it; the bump is for the isolated
+ * apps, which get no injected copy and would go without it until rebuilt.
  */
-export const COMPILER_VERSION = '37';
+export const COMPILER_VERSION = '38';
 
 export interface BuildManifest {
   sourceHash: string;

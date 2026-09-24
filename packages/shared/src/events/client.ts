@@ -294,6 +294,13 @@ export interface AppEventEvent {
 export type FormFactor = 'mobile' | 'desktop';
 
 /**
+ * Which way the user is holding the device, from `screen.orientation` — not guessed from
+ * the viewport's aspect, which a soft keyboard or a split screen can flip without the
+ * device turning.
+ */
+export type Orientation = 'portrait' | 'landscape';
+
+/**
  * How able the desktop is to answer, in its own words.
  *
  * `hidden` is the tab going to the background; `frozen` is the browser saying it has
@@ -325,10 +332,17 @@ export interface ClientPresenceEvent {
 export interface SubscribeMonitorEvent {
   type: typeof ClientEventType.SUBSCRIBE_MONITOR;
   monitorId: string;
-  /** Desktop viewport dimensions (reported by frontend on subscribe and resize). */
+  /**
+   * Desktop viewport dimensions (reported by frontend on subscribe and resize). On a
+   * touch device this is the size with the soft keyboard *down*: the keyboard is up
+   * whenever the user is typing a prompt, so the raw size would describe the moment of
+   * typing rather than the screen the answer is shown on.
+   */
   viewport?: { w: number; h: number };
   /** The tab's shell layout, reported alongside the viewport. Absent means desktop. */
   formFactor?: FormFactor;
+  /** How the device is held, reported alongside the viewport. */
+  orientation?: Orientation;
 }
 
 /**

@@ -32,6 +32,7 @@ export {
   storagePath,
   app,
   notifications,
+  device,
   windows,
   links,
 } from './verbs.js';

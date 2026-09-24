@@ -6,7 +6,7 @@ import { monitorSubscription } from '@/lib/transport/frames';
 /**
  * Tells the server which monitor this connection is looking at.
  * - Sends SUBSCRIBE_MONITOR when the active monitor changes (includes viewport)
- * - Reports viewport resize to server
+ * - Reports viewport resize, form-factor and orientation changes to server
  *
  * It no longer announces monitor *creation or deletion* by diffing the local list: the
  * list is the server's now, and the store asks for changes directly (ADD_MONITOR /
@@ -36,13 +36,20 @@ export function useMonitorSync() {
   useEffect(() => {
     let previousMonitorId = useDesktopStore.getState().activeMonitorId;
     let previousFormFactor = useDesktopStore.getState().formFactor;
+    let previousOrientation = useDesktopStore.getState().orientation;
 
     const unsubscribe = useDesktopStore.subscribe((state) => {
-      // A form-factor flip (rotation, `?ui=`) re-reports on the same monitor — the agent's
-      // picture of the screen is wrong until it does.
-      if (state.activeMonitorId !== previousMonitorId || state.formFactor !== previousFormFactor) {
+      // A form-factor flip (rotation, `?ui=`) or a rotation that stays on the phone shell
+      // re-reports on the same monitor — the agent's picture of the screen is wrong until
+      // it does.
+      if (
+        state.activeMonitorId !== previousMonitorId ||
+        state.formFactor !== previousFormFactor ||
+        state.orientation !== previousOrientation
+      ) {
         previousMonitorId = state.activeMonitorId;
         previousFormFactor = state.formFactor;
+        previousOrientation = state.orientation;
         if (wsManager.ws?.readyState === WebSocket.OPEN) {
           sendEvent(wsManager, monitorSubscription(state.activeMonitorId));
           // Deliberately no RESYNC here. Window state and agent streams are delivered

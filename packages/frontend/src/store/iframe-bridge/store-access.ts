@@ -18,7 +18,7 @@ export function getDesktopState() {
   return useDesktopStore.getState();
 }
 
-/** The store itself, for the one consumer that needs `subscribe` (notification broadcast). */
+/** The store itself, for the consumers that `subscribe` (notification and device broadcast). */
 export function getDesktopStore() {
   return useDesktopStore;
 }

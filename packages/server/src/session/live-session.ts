@@ -236,6 +236,8 @@ export class LiveSession {
       setViewport: (monitorId, viewport) => this.layoutContext.setViewport(monitorId, viewport),
       setFormFactor: (monitorId, formFactor) =>
         this.layoutContext.setFormFactor(monitorId, formFactor),
+      setOrientation: (monitorId, orientation) =>
+        this.layoutContext.setOrientation(monitorId, orientation),
       clearLayout: (monitorId) => this.layoutContext.clearMonitor(monitorId),
       removeMonitorAgent: (monitorId) => this.pool?.removeMonitorAgent(monitorId),
       maxMonitors: effectiveMaxMonitors,
