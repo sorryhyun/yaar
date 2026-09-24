@@ -46,6 +46,7 @@ import { sessionEventRouter, type SessionEventSink } from './session-event-route
 import { ClientEventRouter } from './client-event-router.js';
 import { ClientEventController } from './client-event-controller.js';
 import { MonitorRegistry } from './monitor-registry.js';
+import { isCompanionConnection } from './client-presence.js';
 import { SessionSnapshotService } from './session-snapshot-service.js';
 import { AppWindowCoordinator } from './app-window-coordinator.js';
 import {
@@ -228,6 +229,7 @@ export class LiveSession {
       subscribeConnection: (connectionId, monitorId) =>
         getBroadcastCenter().subscribeToMonitor(connectionId, monitorId),
       connectionMonitor: (connectionId) => getBroadcastCenter().monitorOf(connectionId),
+      isCompanion: (connectionId) => isCompanionConnection(sessionId, connectionId),
       unsubscribeMonitor: (monitorId) =>
         getBroadcastCenter().unsubscribeMonitor(sessionId, monitorId),
       setViewport: (monitorId, viewport) => this.layoutContext.setViewport(monitorId, viewport),

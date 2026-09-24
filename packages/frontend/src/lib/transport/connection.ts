@@ -23,8 +23,7 @@ import {
   replaceDeadSocket,
 } from './transport-manager';
 import { dispatchServerEvent } from './server-event-dispatcher';
-import { monitorSubscription } from './frames';
-import { clientPresence } from './frames';
+import { monitorSubscription, clientPresence } from './frames';
 import { createLivenessProbe } from './liveness-probe';
 import { flushPending, resync } from './commands';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
@@ -207,6 +206,12 @@ export function retryConnection(): void {
  * it. Both halves are idempotent — re-announcing readiness for a window the server
  * already knows is a no-op, and the snapshot is authoritative by design.
  *
+ * Plus the one frame reattach sends that resync does not: which monitor this tab is on,
+ * at what size, in which layout. The server keeps that per monitor, not per tab, and
+ * nothing guarantees it still holds this tab's answer after a freeze — a rotation the
+ * frozen page never reported, or another connection's report in between. Sent first, so
+ * a window a queued message creates is sized for the screen it will appear on.
+ *
  * And then we check that any of it landed. "Its socket intact" is what our end of the
  * socket claims, not a fact: a phone that spent ten minutes in another app usually
  * comes back holding a connection whose peer is long gone, where the resync above goes
@@ -222,6 +227,7 @@ export function recoverAfterResume(): void {
     return;
   }
   if (socket.readyState === WebSocket.OPEN && wsManager.attached) {
+    sendEvent(wsManager, monitorSubscription(useDesktopStore.getState().activeMonitorId));
     flushPending();
     resync();
   } else if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {

@@ -45,7 +45,7 @@ beforeEach(() => {
   globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
   FakeSocket.instances = [];
   wsManager.stopped = false;
-  useDesktopStore.setState({ windows: {}, outbox: [], activeAgents: {} });
+  useDesktopStore.setState({ windows: {}, outbox: [], activeAgents: {}, formFactor: 'desktop' });
 });
 
 afterEach(() => {
@@ -121,6 +121,22 @@ describe('mobile connection recovery', () => {
     expect(old.sent.map((frame) => frame.type)).toEqual(['SUBSCRIBE_MONITOR', 'CLIENT_PRESENCE']);
     jest.advanceTimersByTime(LIVENESS_PROBE_TIMEOUT_MS);
     expect(FakeSocket.instances).toHaveLength(2);
+  });
+
+  it('re-reports the monitor layout on resume, before anything queued goes out', () => {
+    // The server keeps viewport and form factor per monitor, not per tab. A socket that
+    // survived a freeze never reconnects, so without this the phone never corrects a
+    // layout someone else wrote while it was away (#119).
+    connect();
+    const socket = FakeSocket.instances[0];
+    socket.readyState = FakeSocket.OPEN;
+    wsManager.attached = true;
+    useDesktopStore.setState({ formFactor: 'mobile' });
+    recoverAfterResume();
+    const first = socket.sent[0] as { type: string; formFactor?: string };
+    expect(first.type).toBe('SUBSCRIBE_MONITOR');
+    expect(first.formFactor).toBe('mobile');
+    expect(socket.sent.map((frame) => frame.type)).toContain('RESYNC');
   });
 
   it('resyncs an attached socket and cancels replacement when the server answers', () => {

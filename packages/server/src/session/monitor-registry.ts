@@ -39,6 +39,11 @@ export interface MonitorRegistryDeps {
   connectionMonitor(connectionId: ConnectionId): string | undefined;
   /** Detach every connection watching a monitor that no longer exists. */
   unsubscribeMonitor(monitorId: string): void;
+  /**
+   * Whether a connection is the server's companion desktop — never looked at by a person,
+   * so its screen is not the one windows should be laid out for.
+   */
+  isCompanion(connectionId: ConnectionId): boolean;
   /** Record a connection's viewport for layout. */
   setViewport(monitorId: string, viewport: Viewport): void;
   /** Record a connection's shell layout — whether the monitor agent is designing for a phone. */
@@ -114,6 +119,12 @@ export class MonitorRegistry {
    * A tab reporting which monitor it is now looking at, how big its viewport is, and
    * which shell layout it renders. A report with a viewport but no form factor is from a
    * desktop tab, so it clears a phone's earlier claim on the monitor.
+   *
+   * The layout is one per monitor, so whoever reports last owns it — and the companion
+   * desktop reports too, forced to `?ui=desktop`, on the same monitor as the phone it
+   * stands in for. Letting it write stamped the phone's monitor desktop-sized, and every
+   * window after that opened at 640×480 on a 360-wide screen. The companion still watches
+   * the monitor; it just has no say in what the user's screen is.
    */
   subscribe(
     connectionId: ConnectionId,
@@ -122,6 +133,7 @@ export class MonitorRegistry {
     formFactor?: FormFactor,
   ): void {
     this.deps.subscribeConnection(connectionId, monitorId);
+    if (this.deps.isCompanion(connectionId)) return;
     if (viewport) this.deps.setViewport(monitorId, viewport);
     if (viewport || formFactor) this.deps.setFormFactor(monitorId, formFactor ?? 'desktop');
   }
