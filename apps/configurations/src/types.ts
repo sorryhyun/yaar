@@ -55,6 +55,15 @@ export interface UpdateProgress {
   finishedAt?: number;
 }
 
+// Mirrors `ChildProcessLimitStatus` in
+// `packages/server/src/features/android/child-process-limit.ts`, plus `platform`.
+export interface AndroidStatus {
+  platform: string;
+  restrictions: 'not-applicable' | 'disabled' | 'enabled' | 'unknown';
+  sdk?: number;
+  maxMonitors: number;
+}
+
 export interface UpdateStatus {
   current: string;
   bundled: boolean;

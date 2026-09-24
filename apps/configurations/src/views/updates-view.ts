@@ -2,7 +2,7 @@ import { createSignal, onCleanup, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { read, invoke, errMsg, tryToast } from '@bundled/yaar';
 import { showToast } from '../store';
-import type { UpdateStatus } from '../types';
+import type { AndroidStatus, UpdateStatus } from '../types';
 
 /**
  * Version display and self-update.
@@ -44,8 +44,58 @@ function summarizeNotes(notes: string): string {
   return trimmed.length > 600 ? `${trimmed.slice(0, 600)}…` : trimmed;
 }
 
+/**
+ * Android's phantom-process killer, as the server reads it. Rendered only on a phone
+ * running YAAR under Termux — everywhere else the answer is "not-applicable" and the
+ * section would only be noise.
+ */
+function AndroidSection(android: () => AndroidStatus | null) {
+  return () => {
+    const a = android();
+    if (!a || a.restrictions === 'not-applicable') return '';
+    const sdk = a.sdk ? ` (API ${a.sdk})` : '';
+    const banner =
+      a.restrictions === 'disabled'
+        ? html`
+            <div class="u-banner u-banner-ok">
+              <span
+                >Child process restrictions are off — Android will not kill YAAR's background
+                processes.</span
+              >
+            </div>
+          `
+        : a.restrictions === 'enabled'
+          ? html`
+              <div class="u-banner u-banner-warn">
+                <span>
+                  <strong>Child process restrictions are on.</strong> Android may kill YAAR without
+                  warning while Termux is in the background, so this session is limited to
+                  ${a.maxMonitors} monitors. Turn on Developer options →
+                  <em>Disable child process restrictions</em>, then reopen this tab.
+                </span>
+              </div>
+            `
+          : html`
+              <div class="u-banner u-banner-warn">
+                <span>Couldn't read the child process restriction setting.</span>
+              </div>
+            `;
+    return html`
+      <div class="s-section">
+        <div class="y-label s-section-title">📱 Android${sdk}</div>
+        ${banner}
+        <div class="s-row">
+          <label class="s-label">Monitors</label>
+          <div class="u-value">up to ${a.maxMonitors}</div>
+        </div>
+      </div>
+    `;
+  };
+}
+
 export function UpdatesView() {
   const [status, setStatus] = createSignal<UpdateStatus | null>(null);
+  const [android, setAndroid] = createSignal<AndroidStatus | null>(null);
   const [checking, setChecking] = createSignal(false);
   const [starting, setStarting] = createSignal(false);
   const [loadError, setLoadError] = createSignal('');
@@ -116,6 +166,10 @@ export function UpdatesView() {
   };
 
   onMount(async () => {
+    // Its own read, so a server without the resource costs only this section.
+    read<AndroidStatus>('yaar://system/android')
+      .then(setAndroid)
+      .catch((err) => console.error('[configurations] failed to read yaar://system/android', err));
     // Read first so the current version paints immediately, then check the network.
     try {
       const initial = await read<UpdateStatus>('yaar://system/update');
@@ -159,10 +213,7 @@ export function UpdatesView() {
           <span>${() => (pct === null ? '' : `${pct}%`)}</span>
         </div>
         <div class=${() => `y-progress${pct === null ? ' y-progress-indeterminate' : ''}`}>
-          <div
-            class="y-progress-fill"
-            style=${() => (pct === null ? '' : `width: ${pct}%`)}
-          ></div>
+          <div class="y-progress-fill" style=${() => (pct === null ? '' : `width: ${pct}%`)}></div>
         </div>
       </div>
     `;
@@ -191,7 +242,10 @@ export function UpdatesView() {
           <div>
             <div class="u-release-title">${s.latest.name}</div>
             <div class="s-hint">
-              ${s.current} → ${s.latest.version}${formatDate(s.latest.publishedAt) ? ` · ${formatDate(s.latest.publishedAt)}` : ''}
+              ${s.current} →
+              ${s.latest.version}${formatDate(s.latest.publishedAt)
+                ? ` · ${formatDate(s.latest.publishedAt)}`
+                : ''}
             </div>
           </div>
           <a class="y-btn y-btn-ghost" href=${s.latest.url} target="_blank" rel="noreferrer">
@@ -238,11 +292,11 @@ export function UpdatesView() {
         </div>
       </div>
 
+      ${AndroidSection(android)}
+
       <div class="s-section">
         <div class="y-label s-section-title">⬆️ Updates</div>
-        ${Latest}
-        ${Blocked}
-        ${Progress}
+        ${Latest} ${Blocked} ${Progress}
         <div class="u-actions">
           <button class="y-btn" onClick=${() => check(true)} disabled=${() => checking() || busy()}>
             ${() => (checking() ? 'Checking…' : 'Check for updates')}
@@ -264,8 +318,8 @@ export function UpdatesView() {
         </div>
         <p class="s-hint-block">
           Downloads are verified against the release's published
-          <code>SHA256SUMS</code> before anything is replaced. Installing does not restart
-          YAAR — quit and start it again to run the new version.
+          <code>SHA256SUMS</code> before anything is replaced. Installing does not restart YAAR —
+          quit and start it again to run the new version.
         </p>
       </div>
     </div>

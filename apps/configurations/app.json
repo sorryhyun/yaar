@@ -4,11 +4,12 @@
   "run": "dist/index.html",
   "permissions": [
     "yaar://config/",
-    "yaar://system/update"
+    "yaar://system/update",
+    "yaar://system/android"
   ],
   "version": "1.0.3",
   "author": "YAAR",
-  "description": "System settings — user profile, wallpaper and accent, desktop shortcuts, event-driven hooks, allowed HTTP domains, and YAAR updates.",
+  "description": "System settings — user profile, wallpaper and accent, desktop shortcuts, event-driven hooks, allowed HTTP domains, YAAR updates, and Android process limits.",
   "kind": "system",
   "appId": "configurations"
 }

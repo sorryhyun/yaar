@@ -134,7 +134,8 @@ src/
 │   └── index.ts          # Re-exports for server, system tools, verb tools
 ├── features/             # Domain business logic (imported by handlers/)
 │   ├── agents/           # Agent-facing feature logic
-│   ├── android/          # Termux:API — native notifications while the desktop is out of sight, phone clipboard, share sheet
+│   ├── android/          # Termux:API — native notifications while the desktop is out of sight, phone clipboard, share sheet;
+│   │                     #   child-process-limit.ts — reads Android's phantom-process toggle, caps monitors while it is on (yaar://system/android)
 │   ├── apps/             # App listing, agent docs loading, docs.ts (agent/docs/ topic tier), describe.ts, capabilities.ts (grant ceiling), marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
@@ -207,7 +208,7 @@ SessionHub (singleton registry)
 
 `LiveSession` is the aggregate root. It owns four collaborators, each reached only through it and given narrow callbacks rather than the session itself:
 
-- `MonitorRegistry` — the authoritative monitor list, id minting (lowest free non-negative integer), `MAX_MONITORS` enforcement, per-connection monitor subscription + viewport, and monitor removal (unsubscribes watchers, then removes the monitor agent).
+- `MonitorRegistry` — the authoritative monitor list, id minting (lowest free non-negative integer), `MAX_MONITORS` enforcement (lowered to 2 on Android while child-process restrictions are on — the cap rides every `MONITORS` event as `maxMonitors`), per-connection monitor subscription + viewport, and monitor removal (unsubscribes watchers, then removes the monitor agent).
 - `ClientEventController` — owns the total `ClientEventRoutes` table and every frame handler. `LiveSession.routeMessage()` is still the public entry: it lazily initializes the pool and settles message-id acceptance, then delegates to `ClientEventRouter`.
 - `SessionSnapshotService` — window→`window.create` conversion, iframe-token refresh, surface snapshot, busy-agent snapshot. Strictly read-only over injected registries.
 - `AppWindowCoordinator` — per-(session, window) app readiness, command replay on iframe remount, app-channel/`APP_EVENT` routing, bridge-event fan-out to Real Browser windows, and app-protocol request delivery to the frontend.

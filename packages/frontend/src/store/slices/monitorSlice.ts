@@ -19,6 +19,12 @@ import { stepMonitorIndex } from '@/lib/gestures';
 export interface MonitorSliceState {
   monitors: Monitor[];
   activeMonitorId: string;
+  /**
+   * How many monitors the session may have — the server's answer on MONITORS, which is
+   * below `MAX_MONITORS` when its host cannot afford more (Android with child-process
+   * restrictions on). Existing monitors past it stay; only new ones are refused.
+   */
+  maxMonitors: number;
 }
 
 export interface MonitorSliceActions {
@@ -27,7 +33,11 @@ export interface MonitorSliceActions {
   /** Ask the server to delete a monitor; the list comes back on MONITORS. */
   removeMonitor: (id: string) => void;
   /** Apply the session's authoritative monitor list. `focus` switches this tab to it. */
-  setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
+  setMonitors: (
+    monitors: { id: string; label: string }[],
+    focus?: string,
+    maxMonitors?: number,
+  ) => void;
   switchMonitor: (id: string) => void;
   /**
    * Switch `delta` monitors along the list, clamped at both ends. Returns the id it
@@ -45,8 +55,11 @@ export type MonitorSlice = MonitorSliceState & MonitorSliceActions;
  * labelled one past it — so the phone's pan can name the monitor it is about to create
  * while the finger is still down. The server stays the authority: it is only a label.
  */
-export function predictNextMonitorLabel(monitors: { id: string }[]): string | null {
-  if (monitors.length >= MAX_MONITORS) return null;
+export function predictNextMonitorLabel(
+  monitors: { id: string }[],
+  maxMonitors: number = MAX_MONITORS,
+): string | null {
+  if (monitors.length >= maxMonitors) return null;
   const taken = new Set(monitors.map((m) => m.id));
   let n = 0;
   while (taken.has(String(n))) n++;
@@ -61,6 +74,7 @@ export function monitorNumber(label: string): string {
 export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, get) => ({
   monitors: [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }],
   activeMonitorId: DEFAULT_MONITOR_ID,
+  maxMonitors: MAX_MONITORS,
 
   /** Ask the server for a monitor. The id comes back on MONITORS, with `focus` set. */
   createMonitor: () => {
@@ -81,8 +95,10 @@ export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, get) => ({
    * Apply the session's monitor list. Authoritative: monitors the server does not have
    * are gone, and their windows with them.
    */
-  setMonitors: (monitors, focus) =>
+  setMonitors: (monitors, focus, maxMonitors) =>
     set((state) => {
+      // Absent from an older server, which only ever enforced the shared constant.
+      state.maxMonitors = maxMonitors ?? MAX_MONITORS;
       const known = new Set(monitors.map((m) => m.id));
       const existing = new Map(state.monitors.map((m) => [m.id, m]));
       state.monitors = monitors.map((m) => ({

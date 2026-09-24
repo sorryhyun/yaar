@@ -307,6 +307,12 @@ export interface MonitorsEvent {
   type: typeof ServerEventType.MONITORS;
   monitors: MonitorInfo[];
   focus?: string;
+  /**
+   * How many monitors this session may have right now. Below `MAX_MONITORS` when the
+   * server's host cannot afford more (Android with child-process restrictions on).
+   * Absent from an older server, which means `MAX_MONITORS`.
+   */
+  maxMonitors?: number;
 }
 
 /** An agent the server considers to be running right now. */

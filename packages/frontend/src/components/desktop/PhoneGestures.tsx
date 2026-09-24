@@ -189,7 +189,8 @@ export function PhoneGestures() {
 
     /** The surface `delta` steps away, with a look at what is open on it. */
     const neighbour = (delta: number, side: 'left' | 'right'): Peek | null => {
-      const { monitors, activeMonitorId, windows, cliMode } = useDesktopStore.getState();
+      const { monitors, activeMonitorId, maxMonitors, windows, cliMode } =
+        useDesktopStore.getState();
       // Inside the CLI the strip has one exit, and it is the way back in: rightwards.
       // Nothing is drawn for it — the desktop is genuinely behind the panel, so the
       // slide uncovers the real thing rather than a picture of it.
@@ -214,7 +215,8 @@ export function PhoneGestures() {
           return { target: { kind: 'cli' }, label: 'CLI', badge: 'CLI', titles: [], side };
         }
         // And off the right end is the next monitor, until the session is full.
-        const label = delta > 0 && at === monitors.length - 1 && predictNextMonitorLabel(monitors);
+        const label =
+          delta > 0 && at === monitors.length - 1 && predictNextMonitorLabel(monitors, maxMonitors);
         return label
           ? {
               target: { kind: 'new' },

@@ -199,10 +199,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
 
       // The session's monitors, before its windows — a window arrives on a monitor, and a
       // reconnecting tab that had never heard of that monitor could not render it.
-      session.sendTo(connectionId, {
-        type: ServerEventType.MONITORS,
-        monitors: session.getMonitors(),
-      });
+      session.sendTo(connectionId, session.getMonitorsEvent());
 
       // No snapshot is pushed here. The client asks for one (`RESYNC`) once it has flushed
       // what it was holding — the interactions it buffered while the socket was down, the

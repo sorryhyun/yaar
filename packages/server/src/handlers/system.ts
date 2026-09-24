@@ -5,6 +5,7 @@
  *   read('yaar://system/update')                       → cached status + live install progress
  *   invoke('yaar://system/update', { action: 'check' })   → ask GitHub for the latest release
  *   invoke('yaar://system/update', { action: 'install' }) → download, verify, and swap it in
+ *   read('yaar://system/android')                      → Android child-process restrictions + monitor cap
  *   list('yaar://system/browsers')                     → the sandbox browser's sessions
  *   read('yaar://system/browsers/{id}')                → one session
  *   invoke('yaar://system/browsers/{id}', { action })  → revive a suspended session
@@ -25,6 +26,7 @@ import {
   startInstall,
   UpdateRefused,
 } from '../features/update/updater.js';
+import { getChildProcessLimit } from '../features/android/child-process-limit.js';
 import { getHeadlessBrowser } from '../lib/browser/index.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { getSessionId } from '../agents/agent-context.js';
@@ -52,6 +54,12 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
           description: 'Running version, latest release, and self-update',
         },
         {
+          uri: 'yaar://system/android',
+          name: 'android',
+          description:
+            "Whether Android may kill YAAR's child processes, and the monitor cap that follows",
+        },
+        {
           uri: 'yaar://system/fonts',
           name: 'fonts',
           description: 'The webfonts YAAR serves, and subsets of them inlined as data: URLs',
@@ -71,6 +79,17 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
   });
 
   registerBrowserHandlers(registry);
+
+  // ── yaar://system/android — phantom-process restrictions ──
+  registry.register('yaar://system/android', {
+    description:
+      'Whether Android (12+) may kill YAAR\'s child processes — the Bun server, agent CLIs and the companion browser under Termux — when Termux is in the background. restrictions is "enabled" (Android\'s default: sessions are capped at maxMonitors), "disabled" (the user turned on Developer options → "Disable child process restrictions"), "unknown", or "not-applicable" off Android. Read re-checks the setting.',
+    verbs: ['describe', 'read'],
+
+    async read(): Promise<VerbResult> {
+      return okJson({ platform: process.platform, ...getChildProcessLimit(true) });
+    },
+  });
 
   // ── yaar://system/update — version check + self-update ──
   registry.register('yaar://system/update', {

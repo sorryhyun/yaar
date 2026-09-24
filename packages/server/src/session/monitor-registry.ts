@@ -52,6 +52,12 @@ export interface MonitorRegistryDeps {
   clearLayout(monitorId: string): void;
   /** Tear down the monitor's agent. Absent before the pool is initialized. */
   removeMonitorAgent(monitorId: string): Promise<void> | void;
+  /**
+   * The cap on monitors, asked each time one is minted. `MAX_MONITORS` unless the host
+   * says it cannot afford that many (`features/android/child-process-limit.ts`). A lower
+   * cap never removes monitors that already exist; it only stops new ones.
+   */
+  maxMonitors?(): number;
 }
 
 export class MonitorRegistry {
@@ -62,6 +68,21 @@ export class MonitorRegistry {
   /** The session's monitors. Authoritative — the client renders this, it does not mint it. */
   list(): MonitorInfo[] {
     return this.monitors.map((m) => ({ ...m }));
+  }
+
+  /** The cap on this session's monitors right now. */
+  maxMonitors(): number {
+    return this.deps.maxMonitors?.() ?? MAX_MONITORS;
+  }
+
+  /** The list as the MONITORS event carries it, with the cap the client should honor. */
+  event(focus?: string): ServerEvent {
+    return {
+      type: ServerEventType.MONITORS,
+      monitors: this.list(),
+      maxMonitors: this.maxMonitors(),
+      ...(focus !== undefined ? { focus } : {}),
+    };
   }
 
   has(monitorId: string): boolean {
@@ -76,7 +97,7 @@ export class MonitorRegistry {
    * two tabs asking at once get two different monitors.
    */
   private mint(): MonitorInfo | null {
-    if (this.monitors.length >= MAX_MONITORS) return null;
+    if (this.monitors.length >= this.maxMonitors()) return null;
     const taken = new Set(this.monitors.map((m) => m.id));
     let n = 0;
     while (taken.has(String(n))) n++;
@@ -85,23 +106,29 @@ export class MonitorRegistry {
     return monitor;
   }
 
+  /** The cap, and why it is lower than usual when it is. */
+  private limitReason(): string {
+    const max = this.maxMonitors();
+    return max < MAX_MONITORS
+      ? `${max} while Android's child process restrictions are on — see Configurations → Updates`
+      : String(max);
+  }
+
   /** A tab asked for a new monitor. */
   add(connectionId: ConnectionId): void {
     const monitor = this.mint();
     if (!monitor) {
       this.deps.sendTo(connectionId, {
         type: ServerEventType.ERROR,
-        error: `Monitor limit reached (${MAX_MONITORS}).`,
+        error: `Monitor limit reached (${this.limitReason()}).`,
       });
+      // The cap may have dropped since this tab last heard it — tell it the current one.
+      this.deps.sendTo(connectionId, this.event());
       return;
     }
     // Everyone gets the new list; only the tab that asked is told to go there.
-    this.deps.broadcast({ type: ServerEventType.MONITORS, monitors: this.list() });
-    this.deps.sendTo(connectionId, {
-      type: ServerEventType.MONITORS,
-      monitors: this.list(),
-      focus: monitor.id,
-    });
+    this.deps.broadcast(this.event());
+    this.deps.sendTo(connectionId, this.event(monitor.id));
   }
 
   /**
@@ -168,7 +195,7 @@ export class MonitorRegistry {
 
     // Broadcast before awaiting the agent: the list is already true, and the frontend
     // should stop rendering the desktop without waiting on a provider teardown.
-    this.deps.broadcast({ type: ServerEventType.MONITORS, monitors: this.list() });
+    this.deps.broadcast(this.event());
 
     try {
       await this.deps.removeMonitorAgent(monitorId);

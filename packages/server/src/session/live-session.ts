@@ -61,6 +61,7 @@ import { getWarmPool } from '../providers/warm-pool.js';
 import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent, type Hook } from '../features/config/hooks.js';
+import { effectiveMaxMonitors } from '../features/android/child-process-limit.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { windowSharedStore } from '../http/window-shared.js';
 import { revokeTokensForWindow } from '../http/iframe-tokens.js';
@@ -237,6 +238,7 @@ export class LiveSession {
         this.layoutContext.setFormFactor(monitorId, formFactor),
       clearLayout: (monitorId) => this.layoutContext.clearMonitor(monitorId),
       removeMonitorAgent: (monitorId) => this.pool?.removeMonitorAgent(monitorId),
+      maxMonitors: effectiveMaxMonitors,
     });
 
     this.snapshots = new SessionSnapshotService({
@@ -747,6 +749,11 @@ export class LiveSession {
   /** See {@link MonitorRegistry.list}. */
   getMonitors(): MonitorInfo[] {
     return this.monitorRegistry.list();
+  }
+
+  /** The MONITORS event for this session — the list plus the cap the client should honor. */
+  getMonitorsEvent(): ServerEvent {
+    return this.monitorRegistry.event();
   }
 
   /** Whether this session has that monitor. The same question the client's list answers. */

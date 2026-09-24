@@ -29,7 +29,11 @@ export interface ServerEventDispatchHandlers {
   }) => void;
   checkForPreviousSession: (sessionId: string) => void;
   /** Apply the session's authoritative monitor list; `focus` answers this tab's ADD_MONITOR. */
-  setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
+  setMonitors: (
+    monitors: { id: string; label: string }[],
+    focus?: string,
+    maxMonitors?: number,
+  ) => void;
   setAgentActive: (agentId: string, status: string, monitorId?: string) => void;
   clearAgent: (agentId: string) => void;
   registerWindowAgent: (
@@ -425,8 +429,12 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       break;
     }
     case ServerEventType.MONITORS: {
-      const m = message as { monitors: { id: string; label: string }[]; focus?: string };
-      handlers.setMonitors(m.monitors, m.focus);
+      const m = message as {
+        monitors: { id: string; label: string }[];
+        focus?: string;
+        maxMonitors?: number;
+      };
+      handlers.setMonitors(m.monitors, m.focus, m.maxMonitors);
       break;
     }
     // The two acks. Either one means the server has taken responsibility for the message,

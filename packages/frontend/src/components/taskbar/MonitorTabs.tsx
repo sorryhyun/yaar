@@ -48,6 +48,7 @@ export function MonitorTabs() {
   const monitors = useDesktopStore((s) => s.monitors);
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const activeMonitorId = useDesktopStore((s) => s.activeMonitorId);
+  const maxMonitors = useDesktopStore((s) => s.maxMonitors);
   const switchMonitor = useDesktopStore((s) => s.switchMonitor);
   const createMonitor = useDesktopStore((s) => s.createMonitor);
   const removeMonitor = useDesktopStore((s) => s.removeMonitor);
@@ -147,7 +148,7 @@ export function MonitorTabs() {
   // a list of one. The chip is also the only thing on a phone that says which monitor
   // the pan is currently on.
   const showMonitorTabs = monitors.length > 1 || isMobile;
-  const showNewMonitor = monitors.length < 4;
+  const showNewMonitor = monitors.length < maxMonitors;
 
   if (!showMonitorTabs && !showNewMonitor) return null;
 
