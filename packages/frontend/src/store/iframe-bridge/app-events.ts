@@ -2,6 +2,7 @@
  * Inbound iframe messages — everything an app pushes at the desktop unprompted:
  * readiness, agent interactions, app events, text drags, and file drops.
  */
+import { APP_MSG } from '@yaar/shared';
 import { ClientEventType } from '@/types';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
@@ -31,7 +32,7 @@ export function consumeIframeDragSource() {
  * Handles: yaar:app-ready, yaar:app-interaction, yaar:app-event, yaar:drag-start.
  */
 export function initIframeMessageHandlers() {
-  iframeMessages.on('yaar:app-ready', (ctx) => {
+  iframeMessages.on(APP_MSG.ready, (ctx) => {
     if (!ctx.source) return;
     const { windowId } = ctx.source;
     // `noReplay` crosses a postMessage boundary from app code — accept it only when it is
@@ -55,7 +56,7 @@ export function initIframeMessageHandlers() {
     });
   });
 
-  iframeMessages.on('yaar:app-interaction', (ctx) => {
+  iframeMessages.on(APP_MSG.interaction, (ctx) => {
     if (!ctx.source) return;
     const content = ctx.data.content;
     if (typeof content !== 'string' || !content) return;
@@ -69,7 +70,7 @@ export function initIframeMessageHandlers() {
     });
   });
 
-  iframeMessages.on('yaar:app-event', (ctx) => {
+  iframeMessages.on(APP_MSG.event, (ctx) => {
     if (!ctx.source) return;
     const channel = ctx.data.channel;
     if (typeof channel !== 'string' || !channel) return;
@@ -88,7 +89,7 @@ export function initIframeMessageHandlers() {
   // windows SDK is read-only — and `window.open` would leave YAAR for a browser tab,
   // so the destination lands in a window here. Which *kind* of window depends on
   // whether the site permits being framed at all; `open-url.ts` decides that.
-  iframeMessages.on('yaar:open-url', (ctx) => {
+  iframeMessages.on(APP_MSG.openUrl, (ctx) => {
     const raw = typeof ctx.data.url === 'string' ? ctx.data.url : '';
     if (!raw) return;
     const title = typeof ctx.data.title === 'string' ? ctx.data.title : '';
@@ -100,12 +101,12 @@ export function initIframeMessageHandlers() {
   // Which drops a frame's app takes over (`app.onDrop`), and OS files dropped on a frame's
   // content that the app did not handle itself. Both feed `drop.ts`, which decides between
   // the app and the agent for every drop on a window, frame or content.
-  iframeMessages.on('yaar:drop-accept', (ctx) => {
+  iframeMessages.on(APP_MSG.dropAccept, (ctx) => {
     if (!ctx.source) return;
     setWindowDropClaims(ctx.source.windowId, ctx.data.kinds);
   });
 
-  iframeMessages.on('yaar:file-drop', (ctx) => {
+  iframeMessages.on(APP_MSG.fileDrop, (ctx) => {
     if (!ctx.source) return;
     const raw: unknown = ctx.data.files;
     // Structured clone rebuilds each File in this realm, so anything else is not a file.
@@ -115,7 +116,7 @@ export function initIframeMessageHandlers() {
 
   // yaar:click — no-op (context menu removed)
 
-  iframeMessages.on('yaar:drag-start', (ctx) => {
+  iframeMessages.on(APP_MSG.dragStart, (ctx) => {
     if (!ctx.source) return;
     const text = String(ctx.data.text ?? '').trim();
     if (!text) return;

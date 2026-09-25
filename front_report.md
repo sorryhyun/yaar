@@ -12,26 +12,19 @@ one likely interaction bug, several duplicated code paths, and test gaps on a fe
 components.
 
 Batch A (shared/compiler lint coverage, dispatcher casts, window-key suffix helper, script
-injection table, dead exports, typed action factory, routing and helpers tests) has landed and
-is removed from this report; item numbers are kept so references stay stable.
+injection table, dead exports, typed action factory, routing and helpers tests) and Batch B
+(one app-launch primitive, `device.ts` on the router, image-filter reuse, `APP_MSG` at send
+sites with `postToIframe` typed by `AppMessageType`, `TOOL_PROGRESS` formatting helpers) have
+landed and are removed from this report; item numbers are kept so references stay stable.
 
-**Baseline (after Batch A):** `bun run typecheck` clean · `bun run lint` clean (0 warnings,
-now incl. shared and compiler) · shared tests 197 pass / 16 files · frontend tests 530 pass /
-54 files · compiler tests 449 pass / 27 files.
+**Baseline (after Batch B):** `bun run typecheck` clean · `bun run lint` clean · shared tests
+197 pass / 16 files · frontend tests 555 pass / 57 files · compiler tests 449 pass / 27 files.
 
 Items marked **(verified)** were re-checked by hand after the agent audit.
 
 ---
 
 ## Priority 1 — Do first
-
-### 1.2a `TOOL_PROGRESS` case is doing two jobs
-
-`packages/frontend/src/lib/transport/server-event-dispatcher.ts` — the `TOOL_PROGRESS` case
-(~145 lines) mixes five status branches with display-string formatting. Extract the formatting
-into named pure helpers and test them; preserve the finalize-before-append ordering documented
-in that case.
-**Effort:** M · **Risk:** low.
 
 ### 1.3 Likely bug: rubber-band selection over app windows
 
@@ -55,23 +48,6 @@ selection across an app window before and after.
 ---
 
 ## Priority 2 — Duplication worth removing
-
-### 2.1 App launch sequence implemented twice
-
-- `packages/frontend/src/components/desktop/DesktopIcons.tsx:181-271` (`openWindow`/`launch`
-  closures in `handleShortcutClick`)
-- `packages/frontend/src/store/iframe-bridge/open-url.ts` — `nextBounds()` (74–85),
-  `recordOpened()` (91–116), `launchAppWindow()` (213+)
-
-Both do: POST `/api/iframe-token` → validate token → `defaultWindowSize` +
-`cascadeWindowBounds` → build `window.create` → push `pendingInteractions`. They have
-drifted: DesktopIcons adds focus/restore-if-open and a retry toast; open-url returns `null`
-on failure; error messages differ (`'iframe-token response carried no token'` vs
-`'iframe-token carried no token'`).
-
-**Fix:** export one launch primitive from `open-url.ts`; DesktopIcons keeps only its
-focus-existing and toast behavior on top.
-**Payoff:** high · **Effort:** M · **Risk:** low (async path, testable with mocked `apiFetch`).
 
 ### 2.4 Shell shortcut dispatch written twice
 
@@ -101,43 +77,27 @@ called from both event sources (~50 lines removed).
 **Verify:** real browser — draw a stroke that crosses a window boundary.
 **Payoff:** medium · **Effort:** M · **Risk:** medium.
 
-### 2.6 `device.ts` re-implements the router's source lookup
-
-`packages/frontend/src/store/iframe-bridge/device.ts:26-44` hand-rolls
-`querySelectorAll('[data-window-id] iframe')` + `contentWindow === source` for
-`APP_MSG.deviceRequest`. `lib/iframeMessageRouter.ts:93-114` (`resolveSource`) exists to
-centralize exactly this, and `deviceRequest` is not one of the router's documented
-exclusions (timeout-bearing request/response RPCs such as app-protocol replies and capture,
-which correctly keep their inline spoof checks).
-
-**Fix:** register via `iframeMessages.on(...)` and use `ctx.source.windowId`.
-**Payoff:** medium · **Effort:** S · **Risk:** low.
-
-### 2.7 Image-file filtering (minor)
-
-`CommandPalette.tsx:60-74` and `:267-277` re-write the `type.startsWith('image/')` predicate
-that `lib/uploadImage.ts` `filterImageFiles` already provides. Call the helper.
-**Payoff:** low · **Effort:** S.
-
 ---
 
 ## Priority 3 — Cheap cleanup
 
-### 3.2 Raw `'yaar:*'` postMessage literals on the send side
+### 3.3 Dead `windows-sdk` listener (found in Batch B)
 
-43 raw `'yaar:…'` literals in non-test frontend code (e.g. `DrawingOverlay.tsx`,
-`CursorSpinner.tsx`, `DesktopSurface.tsx`, `IframeRenderer.tsx`,
-`store/iframe-bridge/{app-events,app-protocol-relay,windows-sdk,subscription-relay,notifications,capture}.ts`),
-while `PhoneGestures.tsx`, `drop.ts`, and `device.ts` use `APP_MSG.*`.
+`packages/frontend/src/store/iframe-bridge/windows-sdk.ts` (`initWindowsSdkHandler`, called at
+`store/desktop.ts:544`) answers `yaar:window-read` / `yaar:window-list`, but nothing in the repo
+posts either — the iframe-side windows SDK now reads through the verb SDK
+(`yaar.read('yaar://windows/…')`). These are also the last raw `'yaar:*'` literals left after
+3.2, since they never got `APP_MSG` entries. **Fix:** delete the module, its barrel export and
+the init call. **Effort:** S · **Risk:** low.
 
-The **listen** side is still typo-safe (`iframeMessages.on()` keys are derived from `APP_MSG`).
-The **send** side (`postToIframe` / `postMessage` object literals) is not — a typo is a
-silent no-op, the same drift the router's comment (`iframeMessageRouter.ts:58`) records
-having happened once before.
+### 3.4 `replayed` never reaches an app command handler (found in Batch B)
 
-**Fix:** use `APP_MSG.x` at every send site. Optionally type `postToIframe`'s `type` field
-with `AppMessageType` (`packages/shared/src/app-protocol.ts`), which has no importers yet and
-was kept for this.
+`AppCommandRequest.replayed` (`packages/shared/src/app-protocol.ts:348`) is read by the iframe
+script (`iframe-scripts/app-protocol.ts:681`, `ctx.replayed`), but the relay in
+`store/iframe-bridge/app-protocol-relay.ts` builds `{ type, requestId, command, params }`
+without it, and nothing in the server sets `replayed: true`. So `ctx.replayed` is always
+false. Decide whether the flag is still wanted (then thread it server → relay) or remove it
+from the protocol. **Effort:** S–M · **Risk:** low.
 
 ---
 
@@ -148,7 +108,8 @@ was kept for this.
 - `components/window/WindowFrame.tsx` (496 lines) — the primary window chrome. Cheapest
   entry point: extract the pure style-variant computation (216–270: card / panel /
   maximized / widget / default) into `computeWindowStyle(...)` and unit-test the five modes.
-- `components/desktop/DesktopIcons.tsx` (436) — becomes easier to test after 2.1.
+- `components/desktop/DesktopIcons.tsx` — the launch itself is now tested via
+  `launchAppWindow`; the focus-existing / retry-toast wiring is not.
 - `components/drawing/DrawingOverlay.tsx` (349) — the math in `lib/gestures.ts` is tested;
   the wiring is not.
 - `store/slices/settingsSlice.ts` (247).
@@ -182,8 +143,7 @@ was kept for this.
   axis-lock refs is deliberate; splitting would thread shared refs across modules.
 - `store/desktop.ts`, `slices/windowsSlice.ts` — dense but each branch is load-bearing and
   documented against a past bug.
-- `open-url.ts`, `app-protocol-relay.ts` — long but single-owner state machines (aside from
-  2.1).
+- `open-url.ts`, `app-protocol-relay.ts` — long but single-owner state machines.
 - `lib/gestures.ts`, `gesture-layer.ts`, `shade-pull.ts`, `palette-sheet.ts`, `phoneBack.ts` —
   already factored; remaining per-gesture code genuinely differs.
 - `WindowFrame.tsx` structure — already uses `useDragWindow` / `useResizeWindow` /
@@ -203,7 +163,7 @@ was kept for this.
 
 ## Suggested sequencing
 
-1. **Batch B (small, isolated):** 2.1, 2.6, 2.7, 3.2, 1.2a.
-2. **Batch C (needs real-browser verification):** 1.3, 2.4, 2.5 — one at a time, each with a
+1. **Batch C (needs real-browser verification):** 1.3, 2.4, 2.5 — one at a time, each with a
    manual check in a live desktop.
-3. **Batch D (tests):** `computeWindowStyle` extraction + test, `settingsSlice` tests.
+2. **Batch D (tests):** `computeWindowStyle` extraction + test, `settingsSlice` tests.
+3. **Anytime:** 3.3, 3.4.

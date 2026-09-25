@@ -7,7 +7,8 @@
  * every mounted frame.
  *
  * `fullscreen` is per window, so every answer is addressed: a frame is told whether *its*
- * card is the full-screen one. A frame outside any window is told `false`.
+ * card is the full-screen one. A frame outside any window gets no answer — every frame the
+ * desktop renders sits in one — and keeps the SDK's local guess.
  */
 import { APP_MSG } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
@@ -32,16 +33,13 @@ function windowFrames() {
 }
 
 export function initDeviceBroadcaster() {
-  window.addEventListener('message', (e: MessageEvent) => {
-    if (e.data?.type !== APP_MSG.deviceRequest) return;
-    const source = e.source as Window | null;
-    if (!source) return;
-    let windowId: string | undefined;
-    for (const iframe of windowFrames()) {
-      if (iframe.contentWindow === source) windowId = windowIdOf(iframe);
-    }
+  iframeMessages.on(APP_MSG.deviceRequest, (ctx) => {
+    if (!ctx.source) return;
     // Nothing in the answer is private to the desktop, so any origin may have it.
-    source.postMessage(deviceUpdate(getDesktopState(), windowId), '*');
+    ctx.source.iframe.contentWindow?.postMessage(
+      deviceUpdate(getDesktopState(), ctx.source.windowId),
+      '*',
+    );
   });
 
   // Only a frame inside a window can ask, and only for its own window.

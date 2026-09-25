@@ -14,7 +14,7 @@
  * captured at send time via captureMonitorScreenshot().
  */
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { PALETTE_DARK, alpha } from '@yaar/shared';
+import { APP_MSG, PALETTE_DARK, alpha } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { registerDrawingCanvas } from '@/lib/captureMonitorScreenshot';
@@ -293,7 +293,7 @@ export function DrawingOverlay() {
   // events keep flowing even after the cursor exits the iframe. All drawing
   // for iframe-initiated drags flows through this postMessage bridge.
   useEffect(() => {
-    const offStart = iframeMessages.on('yaar:arrow-drag-start', (ctx) => {
+    const offStart = iframeMessages.on(APP_MSG.arrowDragStart, (ctx) => {
       if (!ctx.source) return;
       const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
       rightDrawingRef.current = true;
@@ -304,7 +304,7 @@ export function DrawingOverlay() {
       // continuous event delivery; all drawing goes through this bridge.
     });
 
-    const offMove = iframeMessages.on('yaar:arrow-drag-move', (ctx) => {
+    const offMove = iframeMessages.on(APP_MSG.arrowDragMove, (ctx) => {
       if (!ctx.source || !rightDrawingRef.current) return;
       const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
       if (!rightStartRef.current) return;
@@ -322,7 +322,7 @@ export function DrawingOverlay() {
       setHasStrokes(true);
     });
 
-    const offEnd = iframeMessages.on('yaar:arrow-drag-end', (_ctx) => {
+    const offEnd = iframeMessages.on(APP_MSG.arrowDragEnd, (_ctx) => {
       // If the native mouseup handler already cleaned up, ignore.
       if (!rightDrawingRef.current) return;
       const wasDragged = rightMovedRef.current;

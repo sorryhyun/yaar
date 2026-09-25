@@ -2,7 +2,12 @@
  * App Protocol relay — the frontend leg between the server (WebSocket) and an app's iframe
  * (postMessage), plus the readiness handshake and close notification that bracket it.
  */
-import type { AppProtocolPostMessage, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import {
+  APP_MSG,
+  type AppProtocolPostMessage,
+  type AppProtocolRequest,
+  type AppProtocolResponse,
+} from '@yaar/shared';
 import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import { getDesktopState } from './store-access';
@@ -152,7 +157,7 @@ export function notifyIframeClose(windowId: string) {
   const el = findWindowElement(windowId);
   const iframe = el ? findIframeIn(el) : null;
   if (iframe?.contentWindow) {
-    iframe.contentWindow.postMessage({ type: 'yaar:app-close' }, getIframeTargetOrigin(iframe));
+    iframe.contentWindow.postMessage({ type: APP_MSG.close }, getIframeTargetOrigin(iframe));
   }
 }
 
@@ -201,7 +206,7 @@ export function sendLocalAppCommand(
   const iframe = localCommandTarget(windowKey);
   if (!iframe) return false;
   postToIframe(iframe, {
-    type: 'yaar:app-command-request',
+    type: APP_MSG.commandRequest,
     requestId: localRequestId(),
     command,
     params,
@@ -242,7 +247,7 @@ export function runLocalAppCommand(
     function handler(e: MessageEvent) {
       if (!e.data?.requestId || e.data.requestId !== requestId) return;
       const msg = e.data as AppProtocolPostMessage;
-      if (msg.type !== 'yaar:app-command-response') return;
+      if (msg.type !== APP_MSG.commandResponse) return;
       // Same spoofing check the server-bound relay makes: only the frame we asked.
       if (e.source !== iframe!.contentWindow) return;
       if (msg.error) {
@@ -257,7 +262,7 @@ export function runLocalAppCommand(
       finish(null);
     }, timeoutMs);
     window.addEventListener('message', handler);
-    postToIframe(iframe, { type: 'yaar:app-command-request', requestId, command, params });
+    postToIframe(iframe, { type: APP_MSG.commandRequest, requestId, command, params });
     console.debug(`[AppProtocol] → local command ${command} for ${windowKey}`, params);
   });
 }
@@ -313,23 +318,23 @@ export function handleAppProtocolRequest(
   }
 
   // Build postMessage based on request kind
-  let msg: Record<string, unknown>;
+  let msg: AppProtocolPostMessage;
   if (request.kind === 'manifest') {
-    msg = { type: 'yaar:app-manifest-request', requestId };
+    msg = { type: APP_MSG.manifestRequest, requestId };
   } else if (request.kind === 'query') {
-    msg = { type: 'yaar:app-query-request', requestId, stateKey: request.stateKey };
+    msg = { type: APP_MSG.queryRequest, requestId, stateKey: request.stateKey };
   } else if (request.kind === 'eval') {
-    msg = { type: 'yaar:app-eval-request', requestId, expression: request.expression };
+    msg = { type: APP_MSG.evalRequest, requestId, expression: request.expression };
   } else if (request.kind === 'describe') {
     msg = {
-      type: 'yaar:app-describe-request',
+      type: APP_MSG.describeRequest,
       requestId,
       target: request.target,
       key: request.key,
     };
   } else {
     msg = {
-      type: 'yaar:app-command-request',
+      type: APP_MSG.commandRequest,
       requestId,
       command: request.command,
       params: request.params,
@@ -371,27 +376,27 @@ export function handleAppProtocolRequest(
     window.removeEventListener('message', handler);
 
     let response: AppProtocolResponse;
-    if (msg.type === 'yaar:app-manifest-response') {
+    if (msg.type === APP_MSG.manifestResponse) {
       if (msg.manifest == null && msg.error == null) {
         console.warn(`[AppProtocol] Manifest response missing both manifest and error fields`);
       }
       response = { kind: 'manifest', manifest: msg.manifest, error: msg.error };
-    } else if (msg.type === 'yaar:app-query-response') {
+    } else if (msg.type === APP_MSG.queryResponse) {
       if (msg.data === undefined && msg.error == null) {
         console.warn(`[AppProtocol] Query response missing both data and error fields`);
       }
       response = { kind: 'query', data: msg.data, error: msg.error };
-    } else if (msg.type === 'yaar:app-command-response') {
+    } else if (msg.type === APP_MSG.commandResponse) {
       if (msg.result === undefined && msg.error == null) {
         console.warn(`[AppProtocol] Command response missing both result and error fields`);
       }
       response = { kind: 'command', result: msg.result, error: msg.error };
-    } else if (msg.type === 'yaar:app-eval-response') {
+    } else if (msg.type === APP_MSG.evalResponse) {
       if (msg.value === undefined && msg.error == null) {
         console.warn(`[AppProtocol] Eval response missing both value and error fields`);
       }
       response = { kind: 'eval', value: msg.value, error: msg.error };
-    } else if (msg.type === 'yaar:app-describe-response') {
+    } else if (msg.type === APP_MSG.describeResponse) {
       // `doc: null` is a real answer here — the key exists and the app defines no
       // describe() for it — so, unlike the branches above, a null carries no warning.
       response = { kind: 'describe', doc: msg.doc ?? null, error: msg.error };

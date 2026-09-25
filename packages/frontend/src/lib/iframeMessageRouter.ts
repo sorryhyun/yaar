@@ -10,7 +10,7 @@
  *   import { iframeMessages } from '@/lib/iframeMessageRouter';
  *
  *   // Persistent subscription (returns unsubscribe function)
- *   const off = iframeMessages.on('yaar:arrow-drag-start', (ctx) => {
+ *   const off = iframeMessages.on(APP_MSG.arrowDragStart, (ctx) => {
  *     if (!ctx.source) return;
  *     const { x, y } = ctx.source.toViewport(ctx.data.clientX, ctx.data.clientY);
  *     beginStroke(x, y, ctx.source.windowId);
@@ -80,8 +80,10 @@ type RoutedMessageKey =
   | 'event'
   | 'openUrl'
   | 'dropAccept'
-  // IFRAME_DEVICE_SDK_SCRIPT — `yaar.device.setFullscreen`.
-  | 'deviceSetFullscreen';
+  // IFRAME_DEVICE_SDK_SCRIPT — `yaar.device.setFullscreen`, and the initial-state
+  // `yaar.device` request (answered by posting `deviceUpdate` back, no requestId).
+  | 'deviceSetFullscreen'
+  | 'deviceRequest';
 
 export type YaarMessageType = (typeof APP_MSG)[RoutedMessageKey];
 

@@ -32,6 +32,7 @@ import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { apiFetch, isRemoteMode } from '@/lib/api';
 import { dragAxis, swipeDirection } from '@/lib/gestures';
 import { isComposingKey } from '@/lib/ime';
+import { filterImageFiles } from '@/lib/uploadImage';
 import {
   PALETTE_SHEET_ID,
   cancelPaletteRaise,
@@ -59,17 +60,15 @@ function statusLabel(status: MessageStatus): string {
 
 function readFilesAsDataUrls(files: File[]): Promise<string[]> {
   return Promise.all(
-    files
-      .filter((f) => f.type.startsWith('image/'))
-      .map(
-        (file) =>
-          new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          }),
-      ),
+    files.map(
+      (file) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        }),
+    ),
   );
 }
 
@@ -239,14 +238,11 @@ export function CommandPalette() {
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-      const items = e.clipboardData.items;
-      const imageFiles: File[] = [];
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith('image/')) {
-          const file = items[i].getAsFile();
-          if (file) imageFiles.push(file);
-        }
-      }
+      const imageFiles = filterImageFiles(
+        Array.from(e.clipboardData.items, (item) => item.getAsFile()).filter(
+          (file): file is File => file !== null,
+        ),
+      );
       if (imageFiles.length === 0) return;
       e.preventDefault();
       const dataUrls = await readFilesAsDataUrls(imageFiles);
@@ -268,7 +264,7 @@ export function CommandPalette() {
     async (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
-      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+      const files = filterImageFiles(e.dataTransfer.files);
       if (files.length === 0) return;
       const dataUrls = await readFilesAsDataUrls(files);
       addAttachedImages(dataUrls);

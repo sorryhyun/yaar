@@ -1,6 +1,7 @@
 /**
  * Window capture — asks an iframe to draw itself, sends the result straight down the socket.
  */
+import { APP_MSG } from '@yaar/shared';
 import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import {
@@ -50,7 +51,7 @@ export function tryIframeSelfCapture(
 
     function handler(e: MessageEvent) {
       if (
-        e.data?.type === 'yaar:capture-response' &&
+        e.data?.type === APP_MSG.captureResponse &&
         e.data.requestId === requestId &&
         e.source === iframe.contentWindow
       ) {
@@ -76,7 +77,7 @@ export function tryIframeSelfCapture(
 
     window.addEventListener('message', handler);
     iframe.contentWindow?.postMessage(
-      { type: 'yaar:capture-request', requestId },
+      { type: APP_MSG.captureRequest, requestId },
       getIframeTargetOrigin(iframe),
     );
   });

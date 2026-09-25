@@ -8,6 +8,12 @@ import type {
   CliEntry,
 } from '@/types';
 import { NO_AGENT_ACK, ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
+import {
+  errorStatusText,
+  isSubagentTool,
+  runningStatusText,
+  toolEntryContent,
+} from './tool-progress-format';
 
 export interface ServerEventDispatchHandlers {
   applyActions: (actions: OSAction[]) => void;
@@ -237,111 +243,34 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         break;
       }
 
-      // A tool call ends the current text/thinking block. Flush it into `cliHistory`
-      // *before* appending the tool entry so the two land in true chronological order —
-      // otherwise the live text sits in `cliStreaming`, which TerminalPane renders after
-      // all of history, and every tool appears to precede everything the agent said.
       if (status === 'running') {
+        // A tool call ends the current text/thinking block. Flush it into `cliHistory`
+        // *before* appending the tool entry so the two land in true chronological order —
+        // otherwise the live text sits in `cliStreaming`, which TerminalPane renders after
+        // all of history, and every tool appears to precede everything the agent said.
         handlers.finalizeCliStreaming(agentId);
-      }
-      // Track subagent lifecycle (exact match for start/end, startsWith for progress)
-      const isSubagent =
-        toolName === SUBAGENT_TOOL_NAME || toolName.startsWith(`${SUBAGENT_TOOL_NAME}:`);
-      // Detect Agent/Task tool_use (the raw invocation from Claude with full prompt)
-      const isAgentTool = toolName === 'Agent' || toolName === 'Task';
-      if (status === 'running') {
-        let statusText = `Running: ${toolName}`;
-        if ((isSubagent || isAgentTool) && toolInput) {
-          const input = toolInput as Record<string, unknown>;
-          const agentType = (input.subagent_type ?? '') as string;
-          const desc = (input.description ?? input.prompt ?? '') as string;
-          const shortDesc = desc ? (desc.length > 60 ? desc.slice(0, 60) + '...' : desc) : '';
-          if (isAgentTool && agentType) {
-            statusText = `Subagent (${agentType})${shortDesc ? ': ' + shortDesc : ''}`;
-          } else if (toolName.startsWith(`${SUBAGENT_TOOL_NAME}:`)) {
-            const innerTool = toolName.replace(`${SUBAGENT_TOOL_NAME}:`, '');
-            // Prefer URI over description for status text
-            const uri = (input.uri ?? '') as string;
-            const detail = uri || shortDesc;
-            statusText = `Subagent → ${innerTool}${detail ? ': ' + detail : ''}`;
-          } else if (shortDesc) {
-            statusText = `Subagent: ${shortDesc}`;
-          }
-        }
-        handlers.setAgentActive(agentId, statusText, monitorId);
+        handlers.setAgentActive(agentId, runningStatusText(toolName, toolInput), monitorId);
+        if (toolName === SUBAGENT_TOOL_NAME) handlers.incrementSubagentCount(agentId);
       } else if (status === 'error') {
-        const errorMsg = message.message;
-        handlers.setAgentActive(
-          agentId,
-          `Error: ${toolName}${errorMsg ? ' — ' + errorMsg.slice(0, 80) : ''}`,
-          monitorId,
-        );
+        handlers.setAgentActive(agentId, errorStatusText(toolName, message.message), monitorId);
       } else if (status === 'complete') {
         handlers.setAgentActive(agentId, 'Thinking...', monitorId);
-      }
-      if (isSubagent && status === 'running' && toolName === SUBAGENT_TOOL_NAME) {
-        handlers.incrementSubagentCount(agentId);
-      } else if (isSubagent && status === 'complete' && toolName === SUBAGENT_TOOL_NAME) {
-        handlers.decrementSubagentCount(agentId);
-      }
-      // Skip successful results (except subagent completions which carry a summary)
-      if (status === 'complete') {
-        if (isSubagent) {
-          const summary = message.message;
-          if (summary) {
-            handlers.addCliEntry({
-              type: 'tool',
-              content: `[${toolName}] ${summary}`,
-              agentId,
-              monitorId,
-            });
-          }
+        if (toolName === SUBAGENT_TOOL_NAME) handlers.decrementSubagentCount(agentId);
+        // Skip successful results (except subagent completions which carry a summary)
+        const summary = message.message;
+        if (isSubagentTool(toolName) && summary) {
+          handlers.addCliEntry({
+            type: 'tool',
+            content: `[${toolName}] ${summary}`,
+            agentId,
+            monitorId,
+          });
         }
         break;
       }
-      let content: string;
-      if (status === 'running' && toolInput) {
-        let inputStr: string;
-        if (isAgentTool) {
-          // Agent tool_use: show subagent type + prompt from monitor agent
-          const input = toolInput as Record<string, unknown>;
-          const agentType = (input.subagent_type ?? '') as string;
-          const prompt = (input.prompt ?? input.description ?? '') as string;
-          inputStr = agentType ? `(${agentType}) ${prompt}` : prompt;
-          if (!inputStr) inputStr = JSON.stringify(toolInput);
-        } else if (isSubagent) {
-          // Subagent tool progress: prefer URI (enriched by server) over description
-          const input = toolInput as Record<string, unknown>;
-          if (input.uri) {
-            // Rich info from MCP buffer: show verb:(uri) format
-            const payload = input.payload as Record<string, unknown> | undefined;
-            const action = payload?.action;
-            inputStr = action ? `${input.uri} (${action})` : (input.uri as string);
-          } else {
-            inputStr = (input.description ?? input.prompt ?? '') as string;
-          }
-          if (!inputStr) inputStr = JSON.stringify(toolInput);
-        } else {
-          inputStr = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
-        }
-        // Use → separator for subagent progress tools (e.g., "subagent → read")
-        const displayName = isSubagent
-          ? toolName.replace(':', ' → ')
-          : isAgentTool
-            ? 'subagent'
-            : toolName;
-        content = `[${displayName}] ${inputStr}`;
-      } else {
-        const displayName = isSubagent
-          ? toolName.replace(':', ' → ')
-          : isAgentTool
-            ? 'subagent'
-            : toolName;
-        content = `[${displayName}] ${status}`;
-      }
       handlers.addCliEntry({
         type: status === 'error' ? 'error' : 'tool',
-        content,
+        content: toolEntryContent(toolName, status, toolInput),
         agentId,
         monitorId,
       });

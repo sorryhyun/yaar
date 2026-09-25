@@ -6,7 +6,7 @@
  * callers resolve a server-supplied id through the store, others address the DOM by the raw
  * id they were handed. See `resolveTargetKey` for which is which and why.
  */
-import { DEFAULT_MONITOR_ID } from '@yaar/shared';
+import { DEFAULT_MONITOR_ID, type AppMessageType } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { resolveWindowKey } from '../helpers';
 import { getDesktopState } from './store-access';
@@ -43,8 +43,17 @@ export function findIframeIn(el: HTMLElement): HTMLIFrameElement | null {
   return el.querySelector('iframe') as HTMLIFrameElement | null;
 }
 
-/** Post to an iframe at its correct target origin. No-op if the frame is already gone. */
-export function postToIframe(iframe: HTMLIFrameElement, message: unknown): void {
+/**
+ * Post to an iframe at its correct target origin. No-op if the frame is already gone.
+ *
+ * `type` is held to `APP_MSG`: a mistyped name is not an error anywhere else — the frame
+ * just never answers. Generic so object literals keep their payload fields without
+ * tripping the excess-property check.
+ */
+export function postToIframe<T extends { type: AppMessageType }>(
+  iframe: HTMLIFrameElement,
+  message: T,
+): void {
   iframe.contentWindow?.postMessage(message, getIframeTargetOrigin(iframe));
 }
 

@@ -11,26 +11,17 @@ import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { registerLocalToastAction } from '@/lib/localToastActions';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
-import { extractAppId, cascadeWindowBounds, defaultWindowSize } from '@yaar/shared';
-import { toWindowKey } from '@/store/helpers'; // Used for user-initiated window creation
-import { DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT } from '@/constants/layout';
+import { extractAppId } from '@yaar/shared';
+import { toWindowKey } from '@/store/helpers';
+import { launchAppWindow, recordOpened, type InstalledApp } from '@/store/iframe-bridge';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 /** App info from /api/apps endpoint */
-interface AppInfo {
-  id: string;
-  name: string;
+interface AppInfo extends InstalledApp {
   description?: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
   hasConfig: boolean;
-  run?: string;
-  variant?: 'standard' | 'widget' | 'panel';
-  dockEdge?: 'top' | 'bottom';
-  frameless?: boolean;
-  windowStyle?: Record<string, string | number>;
-  defaultWidth?: number;
-  defaultHeight?: number;
   /** From the app's protocol manifest — only `keybindings` is read here. */
   protocol?: { keybindings?: Record<string, string> };
 }
@@ -178,79 +169,11 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
             actions.push({ type: 'window.focus', windowId: app.id });
             store.applyActions(actions);
           } else {
-            // Request iframe token from server so verb SDK can resolve `self`
-            const openWindow = (iframeToken: string) => {
-              const content = { renderer: 'iframe' as const, data: app.run! };
-              const viewport = {
-                w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
-                h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
-              };
-              const fallback = defaultWindowSize(store.windowSize, viewport);
-              const w = app.defaultWidth ?? fallback.w;
-              const h = app.defaultHeight ?? fallback.h;
-              // Icon-launched windows used a hardcoded (100, 100) with no cascade, so
-              // every app opened from the desktop landed on the same spot and buried
-              // the last one. Same policy as the server's AI path now.
-              const openOnMonitor = Object.values(store.windows).filter(
-                (win) => win.monitorId === monitorId,
-              ).length;
-              const bounds = cascadeWindowBounds(openOnMonitor, w, h, viewport);
-              store.applyActions([
-                {
-                  type: 'window.create',
-                  windowId: app.id,
-                  title: app.name,
-                  bounds,
-                  content,
-                  appId: app.id,
-                  iframeToken,
-                  ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
-                  ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
-                  ...(app.frameless ? { frameless: true } : {}),
-                  ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
-                },
-              ]);
-              useDesktopStore.setState((s) => ({
-                pendingInteractions: [
-                  ...s.pendingInteractions,
-                  {
-                    type: 'window.create' as const,
-                    timestamp: Date.now(),
-                    windowId: app.id,
-                    windowTitle: app.name,
-                    monitorId,
-                    bounds,
-                    content,
-                    appId: app.id,
-                  },
-                ],
-              }));
-            };
-            // A window opened without a token can never call /api/verb — every
-            // request 403s until a reconnect snapshot repairs it. A failed mint
-            // must not produce a half-working window; it
-            // fails visibly and offers a retry.
+            // A failed launch opens nothing (see `launchAppWindow`), so it has to fail
+            // visibly here and offer a retry — on the monitor the icon was clicked on.
             const launch = () => {
-              apiFetch('/api/iframe-token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  windowId: app.id,
-                  sessionId: store.sessionId,
-                  appId: app.id,
-                  // The monitor this icon was clicked on. Everything the app then does
-                  // through /api/verb acts on it — including opening further windows.
-                  monitorId,
-                }),
-              })
-                .then(async (res) => {
-                  if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
-                  const { token } = await res.json();
-                  if (typeof token !== 'string' || !token) {
-                    throw new Error('iframe-token response carried no token');
-                  }
-                  openWindow(token);
-                })
+              launchAppWindow(app, { monitorId })
+                .then((opened) => recordOpened(opened))
                 .catch((err) => {
                   console.error(`Failed to open "${app.name}":`, err);
                   const eventId = `app-launch-retry-${app.id}-${Date.now()}`;

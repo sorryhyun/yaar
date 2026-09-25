@@ -5,6 +5,7 @@
  */
 import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import {
+  APP_MSG,
   IFRAME_IME_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
@@ -518,7 +519,7 @@ function IframeRenderer({
           // Push current notification state to the newly loaded iframe
           const notifs = useDesktopStore.getState().notifications;
           const items = Object.values(notifs);
-          iframe.contentWindow?.postMessage({ type: 'yaar:notifications-update', items }, '*');
+          iframe.contentWindow?.postMessage({ type: APP_MSG.notificationsUpdate, items }, '*');
         } catch (e) {
           // Cross-origin — can't inject, capture helper must be baked in
           console.warn(

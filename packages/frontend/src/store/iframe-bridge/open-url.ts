@@ -68,10 +68,10 @@ const BROWSER_APP_ID = 'browser';
 const PROBE_TIMEOUT_MS = 3_000;
 
 /**
- * Bounds for a new window on the active monitor at the user's default size, cascaded
- * past the ones already open.
+ * Bounds for a new window on `monitorId`, cascaded past the ones already open. Sized by
+ * the app's manifest where it declares a size, the user's default otherwise.
  */
-function nextBounds(monitorId: string) {
+function nextBounds(monitorId: string, size: { w?: number; h?: number } = {}) {
   const state = getDesktopState();
   const openOnMonitor = Object.values(state.windows).filter(
     (win) => win.monitorId === monitorId,
@@ -80,36 +80,38 @@ function nextBounds(monitorId: string) {
     w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
     h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
   };
-  const { w, h } = defaultWindowSize(state.windowSize, viewport);
-  return cascadeWindowBounds(openOnMonitor, w, h, viewport);
+  const fallback = defaultWindowSize(state.windowSize, viewport);
+  return cascadeWindowBounds(openOnMonitor, size.w ?? fallback.w, size.h ?? fallback.h, viewport);
+}
+
+/** A window the desktop opened on its own, in the shape `recordOpened` reports. */
+export interface OpenedWindow {
+  windowId: string;
+  title: string;
+  monitorId: string;
+  bounds: WindowBounds;
+  content: { renderer: 'iframe'; data: string };
+  appId?: string;
 }
 
 /**
  * Tell the agent about a window the desktop opened on its own. Without this the next
  * thing it reads of the desktop contains a window it cannot account for.
  */
-function recordOpened(args: {
-  windowId: string;
-  windowTitle: string;
-  monitorId: string;
-  bounds: WindowBounds;
-  content: { renderer: 'iframe'; data: string };
-  appId?: string;
-  details: string;
-}) {
+export function recordOpened(win: OpenedWindow, details?: string) {
   getDesktopStore().setState((s) => ({
     pendingInteractions: [
       ...s.pendingInteractions,
       {
         type: 'window.create' as const,
         timestamp: Date.now(),
-        windowId: args.windowId,
-        windowTitle: args.windowTitle,
-        monitorId: args.monitorId,
-        bounds: args.bounds,
-        content: args.content,
-        ...(args.appId ? { appId: args.appId } : {}),
-        details: args.details,
+        windowId: win.windowId,
+        windowTitle: win.title,
+        monitorId: win.monitorId,
+        bounds: win.bounds,
+        content: win.content,
+        ...(win.appId ? { appId: win.appId } : {}),
+        ...(details ? { details } : {}),
       },
     ],
   }));
@@ -138,10 +140,17 @@ async function isEmbeddable(href: string): Promise<boolean> {
   }
 }
 
-interface InstalledApp {
+/** An app as `/api/apps` lists it — the fields a launch reads. */
+export interface InstalledApp {
   id: string;
   name: string;
   run?: string;
+  variant?: 'standard' | 'widget' | 'panel';
+  dockEdge?: 'top' | 'bottom';
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 /** The installed apps. Looked up once — the app list does not move. */
@@ -192,69 +201,82 @@ async function linkHandlerFor(href: string): Promise<LinkHandler | null> {
   }
 }
 
-/** A window this module opened, in the shape `recordOpened` reports. */
-interface LaunchedWindow {
-  appId: string;
-  name: string;
-  monitorId: string;
-  bounds: WindowBounds;
-  content: { renderer: 'iframe'; data: string };
-}
-
 /**
- * Open an app's own window on the active monitor. Null when it could not be done, which
- * every caller treats as "this app did not take the link".
+ * Open an app's own window: mint its iframe token, then create it on `monitorId` (the
+ * active monitor by default) at the next cascade position. Rejects when the window could
+ * not be opened, and opens nothing in that case.
  *
  * Deliberately does *not* report the window to the agent: a launch may still be undone
- * (an app that declines the link is closed again), and a `window.create` interaction for
- * a window that no longer exists is worse than none. Callers record it once the window
- * has earned its place.
+ * (an app that declines a link is closed again), and a `window.create` interaction for
+ * a window that no longer exists is worse than none. Callers `recordOpened` it once the
+ * window has earned its place.
  */
-async function launchAppWindow(appId: string, runQuery?: string): Promise<LaunchedWindow | null> {
-  const app = await getApp(appId);
-  if (!app?.run) return null;
-
-  const store = getDesktopState();
-  const sessionId = store.sessionId;
-  if (!sessionId) return null;
-  const monitorId = store.activeMonitorId;
+export async function launchAppWindow(
+  app: InstalledApp,
+  opts: { monitorId?: string; runQuery?: string } = {},
+): Promise<OpenedWindow> {
+  if (!app.run) throw new Error(`app "${app.id}" has nothing to run`);
+  const { sessionId, activeMonitorId } = getDesktopState();
+  if (!sessionId) throw new Error('no session to mint an iframe token for');
+  const monitorId = opts.monitorId ?? activeMonitorId;
 
   // A `yaar://` content URI carries its query through to the served app (see
   // resolveContentUri) — which is how the Browser app receives `?url=`.
-  const runUrl = runQuery ? `${app.run}${app.run.includes('?') ? '&' : '?'}${runQuery}` : app.run;
+  const runUrl = opts.runQuery
+    ? `${app.run}${app.run.includes('?') ? '&' : '?'}${opts.runQuery}`
+    : app.run;
 
-  // A window opened without a token can never call /api/verb, and an app is nothing but
-  // verb calls — so a failed mint is a failed launch, not a blank window.
-  let iframeToken: string;
+  // A window opened without a token can never call /api/verb — every request 403s until
+  // a reconnect snapshot repairs it — and an app is nothing but verb calls. So a failed
+  // mint is a failed launch, not a half-working window.
+  const res = await apiFetch('/api/iframe-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // `monitorId` is the monitor the app opens on. Everything it then does through
+    // /api/verb acts on that monitor — including opening further windows.
+    body: JSON.stringify({ windowId: app.id, sessionId, appId: app.id, monitorId }),
+  });
+  if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
+  const { token } = await res.json();
+  if (typeof token !== 'string' || !token) {
+    throw new Error('iframe-token response carried no token');
+  }
+
+  const content = { renderer: 'iframe' as const, data: runUrl };
+  const bounds = nextBounds(monitorId, { w: app.defaultWidth, h: app.defaultHeight });
+  getDesktopState().applyActions([
+    {
+      type: 'window.create',
+      // Scoped, so the window lands on the monitor its token was minted for even if the
+      // user switched away while the mint was in flight.
+      windowId: toWindowKey(monitorId, app.id),
+      title: app.name,
+      bounds,
+      content,
+      appId: app.id,
+      iframeToken: token,
+      ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
+      ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
+      ...(app.frameless ? { frameless: true } : {}),
+      ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
+    },
+  ]);
+  return { windowId: app.id, title: app.name, monitorId, bounds, content, appId: app.id };
+}
+
+/**
+ * Open an installed app on the active monitor for a link. Null when it could not be
+ * done, which every caller treats as "this app did not take the link".
+ */
+async function launchForLink(appId: string, runQuery?: string): Promise<OpenedWindow | null> {
+  const app = await getApp(appId);
+  if (!app?.run) return null;
   try {
-    const res = await apiFetch('/api/iframe-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ windowId: appId, sessionId, appId, monitorId }),
-    });
-    if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
-    const { token } = await res.json();
-    if (typeof token !== 'string' || !token) throw new Error('iframe-token carried no token');
-    iframeToken = token;
+    return await launchAppWindow(app, { runQuery });
   } catch (err) {
     console.warn(`[open-url] could not open the ${appId} app:`, err);
     return null;
   }
-
-  const content = { renderer: 'iframe' as const, data: runUrl };
-  const bounds = nextBounds(monitorId);
-  getDesktopState().applyActions([
-    {
-      type: 'window.create',
-      windowId: appId,
-      title: app.name,
-      bounds,
-      content,
-      appId,
-      iframeToken,
-    },
-  ]);
-  return { appId, name: app.name, monitorId, bounds, content };
 }
 
 /**
@@ -305,10 +327,10 @@ async function openInHookedApp(
   // failing in the case it exists for — a link clicked in some other app, with the
   // handler closed. Opening it is what the rule asked for; the undo below is what makes
   // that safe.
-  let launched: LaunchedWindow | null = null;
+  let launched: OpenedWindow | null = null;
   if (!store.windows[key]) {
     if (!handler.launch) return false;
-    launched = await launchAppWindow(handler.appId);
+    launched = await launchForLink(handler.appId);
     if (!launched) return false;
     // A command posted before the iframe registers is lost — nothing queues it on this
     // path — so the launch is not complete until the app answers for itself.
@@ -328,15 +350,7 @@ async function openInHookedApp(
   }
 
   if (launched) {
-    recordOpened({
-      windowId: launched.appId,
-      windowTitle: launched.name,
-      monitorId: launched.monitorId,
-      bounds: launched.bounds,
-      content: launched.content,
-      appId: launched.appId,
-      details: `opened to show ${title}, which the user's link_open hook routes here`,
-    });
+    recordOpened(launched, `opened to show ${title}, which the user's link_open hook routes here`);
     return true;
   }
 
@@ -349,8 +363,10 @@ async function openInHookedApp(
 }
 
 /** Close a window this module opened for a link the app then did not take. */
-function undoLaunch(launched: LaunchedWindow): void {
-  getDesktopState().applyActions([{ type: 'window.close', windowId: launched.appId }]);
+function undoLaunch(launched: OpenedWindow): void {
+  getDesktopState().applyActions([
+    { type: 'window.close', windowId: toWindowKey(launched.monitorId, launched.windowId) },
+  ]);
 }
 
 /**
@@ -377,18 +393,10 @@ async function openInBrowserApp(href: string, title: string): Promise<boolean> {
 
   // `?url=` is the Browser app's launch parameter: it opens on that page rather than on
   // a blank one, so there is nothing to wait for and no command to send.
-  const launched = await launchAppWindow(BROWSER_APP_ID, `url=${encodeURIComponent(href)}`);
+  const launched = await launchForLink(BROWSER_APP_ID, `url=${encodeURIComponent(href)}`);
   if (!launched) return false;
 
-  recordOpened({
-    windowId: launched.appId,
-    windowTitle: launched.name,
-    monitorId: launched.monitorId,
-    bounds: launched.bounds,
-    content: launched.content,
-    appId: launched.appId,
-    details: `opened to show ${title}, which refuses to be framed`,
-  });
+  recordOpened(launched, `opened to show ${title}, which refuses to be framed`);
   return true;
 }
 
@@ -401,16 +409,10 @@ function openIframeWindow(href: string, title: string, sourceWindowId?: string):
   const bounds = nextBounds(monitorId);
 
   store.applyActions([{ type: 'window.create', windowId, title, bounds, content }]);
-  recordOpened({
-    windowId,
-    windowTitle: title,
-    monitorId,
-    bounds,
-    content,
-    details: sourceWindowId
-      ? `opened by a link in window ${sourceWindowId}`
-      : 'opened by a link in an app',
-  });
+  recordOpened(
+    { windowId, title, monitorId, bounds, content },
+    sourceWindowId ? `opened by a link in window ${sourceWindowId}` : 'opened by a link in an app',
+  );
 }
 
 /**

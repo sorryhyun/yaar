@@ -24,6 +24,8 @@ export {
   initIframeMessageHandlers,
 } from './app-events';
 export { dropFilesOnWindow, dropTextOnWindow } from './drop';
+export { launchAppWindow, recordOpened } from './open-url';
+export type { InstalledApp } from './open-url';
 export { initWindowsSdkHandler } from './windows-sdk';
 export { initNotificationBroadcaster } from './notifications';
 export { initDeviceBroadcaster } from './device';

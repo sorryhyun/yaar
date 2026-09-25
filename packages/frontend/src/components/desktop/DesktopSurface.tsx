@@ -11,6 +11,7 @@
  * - Composition of sub-components
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
+import { APP_MSG } from '@yaar/shared';
 import {
   useDesktopStore,
   selectHasMaximizedWindow,
@@ -203,7 +204,7 @@ export function DesktopSurface() {
 
   // Forward keyboard shortcuts from focused iframes (they can't bubble to document)
   useEffect(() => {
-    return iframeMessages.on('yaar:keydown', (ctx) => {
+    return iframeMessages.on(APP_MSG.keydown, (ctx) => {
       const { key, shiftKey, ctrlKey, altKey, metaKey } = ctx.data;
       // F5 / Ctrl+R from iframes — nothing to do (iframe can't refresh parent)
       if (key === 'F5' || (ctrlKey && key === 'r')) return;

@@ -2,6 +2,7 @@
  * Notification fan-out — pushes the notification list into every mounted iframe whenever it
  * changes, so apps can render desktop notifications without polling.
  */
+import { APP_MSG } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { getDesktopStore } from './store-access';
 import { postToIframe } from './target';
@@ -20,7 +21,7 @@ export function initNotificationBroadcaster() {
     // Broadcast, so this addresses every iframe at once rather than resolving one target.
     const iframes = document.querySelectorAll<HTMLIFrameElement>(`[${WINDOW_ID_DATA_ATTR}] iframe`);
     for (const iframe of iframes) {
-      postToIframe(iframe, { type: 'yaar:notifications-update', items });
+      postToIframe(iframe, { type: APP_MSG.notificationsUpdate, items });
     }
   });
 }

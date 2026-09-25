@@ -2,12 +2,12 @@
  * Verb subscription delivery — pushes change pings and stream frames into the iframe that
  * subscribed. The iframe SDK dispatches on `subscriptionId`.
  */
-import type { StreamFrame } from '@yaar/shared';
+import { APP_MSG, type StreamFrame } from '@yaar/shared';
 import { postToIframe, resolveTargetIframe } from './target';
 
 /**
  * Forward a verb subscription update to the target iframe via postMessage.
- * The iframe SDK listens for 'yaar:subscription-update' messages and
+ * The iframe SDK listens for `yaar:subscription-update` messages and
  * invokes the registered callback for the matching subscriptionId.
  */
 export function handleVerbSubscriptionUpdate(
@@ -19,7 +19,7 @@ export function handleVerbSubscriptionUpdate(
   if (!iframe) return;
 
   postToIframe(iframe, {
-    type: 'yaar:subscription-update',
+    type: APP_MSG.subscriptionUpdate,
     subscriptionId,
     uri,
   });
@@ -40,7 +40,7 @@ export function handleStreamFrame(
   if (!iframe) return;
 
   postToIframe(iframe, {
-    type: 'yaar:stream-frame',
+    type: APP_MSG.streamFrame,
     subscriptionId,
     frame,
   });

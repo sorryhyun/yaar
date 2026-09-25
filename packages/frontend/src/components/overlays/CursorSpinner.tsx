@@ -25,6 +25,7 @@
  * cursor the moment an agent starts instead of on the next mouse move.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { APP_MSG } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import styles from '@/styles/overlays/CursorSpinner.module.css';
@@ -98,7 +99,7 @@ export function CursorSpinner() {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseover', handleMouseOver);
     document.addEventListener('mouseleave', handleMouseLeave);
-    const offCursorMove = iframeMessages.on('yaar:cursor-move', (ctx) => {
+    const offCursorMove = iframeMessages.on(APP_MSG.cursorMove, (ctx) => {
       if (!ctx.source) return;
       const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
       moveTo(x, y);
