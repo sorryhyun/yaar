@@ -35,6 +35,7 @@ import { useDragWindow } from '@/hooks/useDragWindow';
 import { beginShellDrag } from '@/lib/selection';
 import { useResizeWindow } from '@/hooks/useResizeWindow';
 import { useWindowDrop } from '@/hooks/useWindowDrop';
+import { computeWindowStyle } from './windowStyle';
 import styles from '@/styles/window/WindowFrame.module.css';
 
 interface WindowFrameProps {
@@ -213,61 +214,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   );
 
   // Determine position/size (handle maximized state and variants)
-  let style: React.CSSProperties;
-  if (isCard) {
-    style = {
-      top: 0,
-      left: 0,
-      width: '100%',
-      // --palette-h is published by CommandPalette as it grows and shrinks.
-      height: isFullscreen ? '100%' : 'calc(100% - var(--palette-h, 0px))',
-      zIndex: zIndex + 100,
-    };
-  } else if (window.windowStyle) {
-    // Custom CSS positioning from app.json windowStyle
-    style = {
-      top: window.bounds.y,
-      left: window.bounds.x,
-      width: window.bounds.w,
-      height: window.bounds.h,
-      zIndex: isPanel ? 9000 : zIndex + 100,
-      ...window.windowStyle,
-    };
-  } else if (isPanel) {
-    const edge = window.dockEdge ?? 'bottom';
-    style = {
-      position: 'fixed',
-      left: 0,
-      width: '100%',
-      height: window.bounds.h,
-      zIndex: 9000,
-      ...(edge === 'top' ? { top: 0 } : { bottom: 0 }),
-    };
-  } else if (window.maximized) {
-    style = {
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      zIndex: zIndex + 100,
-    };
-  } else if (isWidget) {
-    style = {
-      top: window.bounds.y,
-      left: window.bounds.x,
-      width: window.bounds.w,
-      height: window.bounds.h,
-      zIndex, // No +100 offset — keeps widgets below standard windows
-    };
-  } else {
-    style = {
-      top: window.bounds.y,
-      left: window.bounds.x,
-      width: window.bounds.w,
-      height: window.bounds.h,
-      zIndex: zIndex + 100,
-    };
-  }
+  const style = computeWindowStyle({ window, zIndex, isCard, isFullscreen, isPanel, isWidget });
 
   return (
     <div

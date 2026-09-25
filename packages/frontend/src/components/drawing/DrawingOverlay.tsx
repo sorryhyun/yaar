@@ -39,12 +39,9 @@ export function DrawingOverlay() {
   const lastPointRef = useRef<Point | null>(null);
   const hasStrokesRef = useRef(false);
 
-  // Right-click drawing refs — shared between desktop-initiated and
-  // iframe-initiated drags (unified tracking).
-  const rightDrawingRef = useRef(false);
-  const rightStartRef = useRef<Point | null>(null);
-  const rightMovedRef = useRef(false);
-  const rightLastPointRef = useRef<Point | null>(null);
+  // The right-click drag in flight, or null — one drag whether it began on the desktop
+  // or inside an iframe, so either event source can continue or end it.
+  const rightDragRef = useRef<{ start: Point; last: Point; moved: boolean } | null>(null);
 
   hasStrokesRef.current = hasStrokes;
 
@@ -136,6 +133,35 @@ export function DrawingOverlay() {
     const canvas = canvasRef.current;
     if (canvas) canvas.style.pointerEvents = '';
   }, []);
+
+  const beginRightDrag = useCallback((pt: Point) => {
+    rightDragRef.current = { start: pt, last: pt, moved: false };
+  }, []);
+
+  // Nothing is drawn until the pointer leaves a DRAG_THRESHOLD box around the start, so
+  // a plain right-click never leaves a mark.
+  const continueRightDrag = useCallback(
+    (pt: Point) => {
+      const drag = rightDragRef.current;
+      if (!drag) return;
+      const dx = pt.x - drag.start.x;
+      const dy = pt.y - drag.start.y;
+      if (!drag.moved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+      drag.moved = true;
+      drawLine(drag.last, pt);
+      drag.last = pt;
+      setHasStrokes(true);
+    },
+    [drawLine],
+  );
+
+  const endRightDrag = useCallback(() => {
+    const drag = rightDragRef.current;
+    if (!drag) return;
+    rightDragRef.current = null;
+    releasePointerEvents();
+    if (drag.moved) saveStrokesSnapshot();
+  }, [releasePointerEvents, saveStrokesSnapshot]);
 
   // Exit pencil mode
   const exitPencilMode = useCallback(() => {
@@ -232,43 +258,11 @@ export function DrawingOverlay() {
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 2) return;
-      rightDrawingRef.current = true;
-      rightMovedRef.current = false;
-      rightStartRef.current = { x: e.clientX, y: e.clientY };
-      rightLastPointRef.current = { x: e.clientX, y: e.clientY };
+      beginRightDrag({ x: e.clientX, y: e.clientY });
       capturePointerEvents();
     };
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!rightDrawingRef.current || !rightStartRef.current) return;
-      const dx = e.clientX - rightStartRef.current.x;
-      const dy = e.clientY - rightStartRef.current.y;
-      if (!rightMovedRef.current && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
-        return;
-
-      rightMovedRef.current = true;
-
-      const currentPoint = { x: e.clientX, y: e.clientY };
-      if (rightLastPointRef.current) {
-        drawLine(rightLastPointRef.current, currentPoint);
-      }
-      rightLastPointRef.current = currentPoint;
-      setHasStrokes(true);
-    };
-
-    const onMouseUp = () => {
-      if (!rightDrawingRef.current) return;
-      const wasDragged = rightMovedRef.current;
-      rightDrawingRef.current = false;
-      rightStartRef.current = null;
-      rightMovedRef.current = false;
-      rightLastPointRef.current = null;
-      releasePointerEvents();
-
-      if (wasDragged) {
-        saveStrokesSnapshot();
-      }
-    };
+    const onMouseMove = (e: MouseEvent) => continueRightDrag({ x: e.clientX, y: e.clientY });
+    const onMouseUp = () => endRightDrag();
 
     // Always suppress the native context menu.
     const onContextMenu = (e: MouseEvent) => {
@@ -286,7 +280,7 @@ export function DrawingOverlay() {
       window.removeEventListener('mouseup', onMouseUp, { capture: true });
       window.removeEventListener('contextmenu', onContextMenu, { capture: true });
     };
-  }, [drawLine, saveStrokesSnapshot, capturePointerEvents, releasePointerEvents]);
+  }, [beginRightDrag, continueRightDrag, endRightDrag, capturePointerEvents]);
 
   // Iframe right-click drawing support — iframes forward pointer events via
   // postMessage (yaar:arrow-drag-start/move/end) with setPointerCapture, so
@@ -295,53 +289,25 @@ export function DrawingOverlay() {
   useEffect(() => {
     const offStart = iframeMessages.on(APP_MSG.arrowDragStart, (ctx) => {
       if (!ctx.source) return;
-      const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
-      rightDrawingRef.current = true;
-      rightMovedRef.current = false;
-      rightStartRef.current = { x, y };
-      rightLastPointRef.current = { x, y };
       // No capturePointerEvents — the iframe's setPointerCapture ensures
       // continuous event delivery; all drawing goes through this bridge.
+      beginRightDrag(ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0));
     });
 
     const offMove = iframeMessages.on(APP_MSG.arrowDragMove, (ctx) => {
-      if (!ctx.source || !rightDrawingRef.current) return;
-      const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
-      if (!rightStartRef.current) return;
-      const dx = x - rightStartRef.current.x;
-      const dy = y - rightStartRef.current.y;
-      if (!rightMovedRef.current && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
-        return;
-
-      rightMovedRef.current = true;
-      const currentPoint = { x, y };
-      if (rightLastPointRef.current) {
-        drawLine(rightLastPointRef.current, currentPoint);
-      }
-      rightLastPointRef.current = currentPoint;
-      setHasStrokes(true);
+      if (!ctx.source) return;
+      continueRightDrag(ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0));
     });
 
-    const offEnd = iframeMessages.on(APP_MSG.arrowDragEnd, (_ctx) => {
-      // If the native mouseup handler already cleaned up, ignore.
-      if (!rightDrawingRef.current) return;
-      const wasDragged = rightMovedRef.current;
-      rightDrawingRef.current = false;
-      rightStartRef.current = null;
-      rightMovedRef.current = false;
-      rightLastPointRef.current = null;
-
-      if (wasDragged) {
-        saveStrokesSnapshot();
-      }
-    });
+    // A no-op when the native mouseup handler already ended the drag.
+    const offEnd = iframeMessages.on(APP_MSG.arrowDragEnd, () => endRightDrag());
 
     return () => {
       offStart();
       offMove();
       offEnd();
     };
-  }, [drawLine, saveStrokesSnapshot]);
+  }, [beginRightDrag, continueRightDrag, endRightDrag]);
 
   return (
     <canvas ref={canvasRef} className={styles.overlay} data-active={pencilMode} data-no-pan="" />

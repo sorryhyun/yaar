@@ -28,19 +28,19 @@ import {
 } from '@/hooks/useAgentConnection';
 import { useFormFactorSync } from '@/hooks/useFormFactorSync';
 import { usePhoneBack } from '@/hooks/usePhoneBack';
+import { useMouseTracking } from '@/hooks/useMouseTracking';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import { runLocalToastAction } from '@/lib/localToastActions';
 import {
+  applyMonitorStep,
   editableHoldsText,
-  isCloseWindowShortcut,
+  handleShellShortcut,
   monitorStepDirection,
-  resolveCloseTopWindow,
-  resolveMonitorStep,
   shouldConfirmUnload,
 } from '@/lib/shellShortcuts';
-import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
+import { DRAGGING_CSS_CLASS, WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../window/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -67,17 +67,6 @@ function sameMembers(list: readonly string[], set: ReadonlySet<string>): boolean
   return list.length === set.size && list.every((id) => set.has(id));
 }
 
-/**
- * Shift+Left/Right: one step along the monitor strip, or a new monitor off its right end.
- * The server mints that one and switches this tab to it on its `MONITORS` answer.
- */
-function stepMonitor(delta: -1 | 1) {
-  const state = useDesktopStore.getState();
-  const target = resolveMonitorStep(state, delta);
-  if (target?.kind === 'new') state.createMonitor();
-  else if (target) state.switchMonitor(target.id);
-}
-
 export function DesktopSurface() {
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
@@ -86,7 +75,6 @@ export function DesktopSurface() {
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
   const cliMode = useDesktopStore((s) => s.cliMode);
-  const switchMonitor = useDesktopStore((s) => s.switchMonitor);
   const wallpaper = useDesktopStore((s) => s.wallpaper);
   const accentColor = useDesktopStore((s) => s.accentColor);
   const iconSize = useDesktopStore((s) => s.iconSize);
@@ -103,20 +91,16 @@ export function DesktopSurface() {
   const selectionRectEl = useRef<HTMLDivElement>(null);
   const selectionStart = useRef<{ x: number; y: number } | null>(null);
   const selectionActive = useRef(false);
-  const selectionListeners = useRef<{
-    move: (e: MouseEvent) => void;
-    up: (e: MouseEvent) => void;
-  } | null>(null);
-
-  // Clean up selection listeners on unmount
-  useEffect(() => {
-    return () => {
-      if (selectionListeners.current) {
-        document.removeEventListener('mousemove', selectionListeners.current.move);
-        document.removeEventListener('mouseup', selectionListeners.current.up);
-      }
-    };
-  }, []);
+  // The rubber band is a shell drag like a window move: it needs `yaar-dragging` so an app
+  // iframe it crosses cannot swallow its mousemove — or, released over one, its mouseup,
+  // which left the rectangle stuck on screen until the next click.
+  const trackMouse = useMouseTracking();
+  const stopSelectionTracking = useRef<(() => void) | null>(null);
+  // A band starts and ends on the desktop background (with the iframes out of the hit
+  // test, even one released over a window), so the browser follows its mouseup with a
+  // click there — which is "click empty desktop to deselect", and wiped out the selection
+  // the band had just made. Set by a band that drew, cleared by the next mousedown.
+  const swallowBandClick = useRef(false);
 
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
 
@@ -130,41 +114,14 @@ export function DesktopSurface() {
   // `iframe-scripts/contextmenu.ts` is capture-phase for the same reason.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const claim = () => {
+      if (handleShellShortcut(e, useDesktopStore.getState())) {
         e.preventDefault();
         e.stopImmediatePropagation();
-      };
-      // Block browser refresh shortcuts (F5, Ctrl+R)
-      if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
-        claim();
-        return;
-      }
-      if (e.key === 'Tab' && e.shiftKey) {
-        claim();
-        useDesktopStore.getState().toggleCliMode();
-        return;
-      }
-      if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
-        const idx = parseInt(e.key) - 1;
-        const mons = useDesktopStore.getState().monitors;
-        if (idx < mons.length) {
-          claim();
-          switchMonitor(mons[idx].id);
-        }
-      }
-      // Ctrl+W closes the topmost OS window. Claimed before we know whether there is one
-      // to close: unclaimed, Chrome takes it and closes the YAAR window itself, so an
-      // empty desktop is exactly when *not* claiming does the most damage.
-      if (isCloseWindowShortcut(e)) {
-        claim();
-        const state = useDesktopStore.getState();
-        const target = resolveCloseTopWindow(state);
-        if (target) state.userCloseWindow(target);
       }
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
-  }, [switchMonitor]);
+  }, []);
 
   // Shift+Left/Right steps along the monitor strip, making a new monitor off the right
   // end — the keyboard half of the phone's sideways pan. Unlike the combos above this one
@@ -178,7 +135,7 @@ export function DesktopSurface() {
       const delta = monitorStepDirection(e);
       if (delta === null || editableHoldsText(e.target)) return;
       e.preventDefault();
-      stepMonitor(delta);
+      applyMonitorStep(useDesktopStore.getState(), delta);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -206,33 +163,17 @@ export function DesktopSurface() {
   useEffect(() => {
     return iframeMessages.on(APP_MSG.keydown, (ctx) => {
       const { key, shiftKey, ctrlKey, altKey, metaKey } = ctx.data;
-      // F5 / Ctrl+R from iframes — nothing to do (iframe can't refresh parent)
-      if (key === 'F5' || (ctrlKey && key === 'r')) return;
-      if (key === 'Tab' && shiftKey) {
-        useDesktopStore.getState().toggleCliMode();
-        return;
-      }
-      if (ctrlKey && key >= '1' && key <= '9') {
-        const idx = parseInt(key) - 1;
-        const mons = useDesktopStore.getState().monitors;
-        if (idx < mons.length) switchMonitor(mons[idx].id);
-      }
-      // Forwarded only once the app has let the keystroke go by (see the contextmenu
-      // script), so here it is simply ours.
-      const delta = monitorStepDirection({ key, shiftKey, ctrlKey, altKey: !!altKey, metaKey });
-      if (delta !== null) {
-        stepMonitor(delta);
-        return;
-      }
+      const keyInfo = { key, shiftKey, ctrlKey, altKey: !!altKey, metaKey };
       // The iframe script already called preventDefault() on its side, so the browser
       // window is safe whatever we decide here.
-      if (isCloseWindowShortcut({ key, ctrlKey, shiftKey, altKey: !!altKey })) {
-        const state = useDesktopStore.getState();
-        const target = resolveCloseTopWindow(state);
-        if (target) state.userCloseWindow(target);
-      }
+      const state = useDesktopStore.getState();
+      if (handleShellShortcut(keyInfo, state)) return;
+      // Forwarded only once the app has let the keystroke go by (see the contextmenu
+      // script), so here it is simply ours.
+      const delta = monitorStepDirection(keyInfo);
+      if (delta !== null) applyMonitorStep(state, delta);
     });
-  }, [switchMonitor]);
+  }, []);
 
   // Apply accent color to :root CSS vars
   useEffect(() => {
@@ -262,6 +203,10 @@ export function DesktopSurface() {
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent) => {
+      if (swallowBandClick.current) {
+        swallowBandClick.current = false;
+        return;
+      }
       // Only handle clicks directly on the desktop
       if (e.target === e.currentTarget) {
         useDesktopStore.setState({ focusedWindowId: null });
@@ -319,12 +264,14 @@ export function DesktopSurface() {
 
   const handleDesktopMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      swallowBandClick.current = false;
       // Only start selection when clicking directly on the desktop background
       if (e.target !== e.currentTarget || e.button !== 0) return;
 
       // Prevent text selection during rubberband drag — and drop any live one,
       // since preventDefault would otherwise leave it stuck (see beginShellDrag).
       beginShellDrag(e);
+      document.documentElement.classList.add(DRAGGING_CSS_CLASS);
 
       const startX = e.clientX;
       const startY = e.clientY;
@@ -436,22 +383,18 @@ export function DesktopSurface() {
         cancelAnimationFrame(rafId);
         selectionStart.current = null;
         if (selectionRectEl.current) selectionRectEl.current.hidden = true;
+        swallowBandClick.current = selectionActive.current;
         selectionActive.current = false;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        selectionListeners.current = null;
+        document.documentElement.classList.remove(DRAGGING_CSS_CLASS);
+        stopSelectionTracking.current?.();
+        stopSelectionTracking.current = null;
       };
 
-      // Clean up any previous listeners (defensive)
-      if (selectionListeners.current) {
-        document.removeEventListener('mousemove', selectionListeners.current.move);
-        document.removeEventListener('mouseup', selectionListeners.current.up);
-      }
-      selectionListeners.current = { move: handleMouseMove, up: handleMouseUp };
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      // A mouseup lost outside the page leaves the previous band's listeners attached.
+      stopSelectionTracking.current?.();
+      stopSelectionTracking.current = trackMouse(handleMouseMove, handleMouseUp);
     },
-    [setSelectedWindows],
+    [setSelectedWindows, trackMouse],
   );
 
   const panelTopH = panelWindows.find((w) => w.dockEdge === 'top')?.bounds.h ?? 0;

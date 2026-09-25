@@ -12,70 +12,28 @@ one likely interaction bug, several duplicated code paths, and test gaps on a fe
 components.
 
 Batch A (shared/compiler lint coverage, dispatcher casts, window-key suffix helper, script
-injection table, dead exports, typed action factory, routing and helpers tests) and Batch B
+injection table, dead exports, typed action factory, routing and helpers tests), Batch B
 (one app-launch primitive, `device.ts` on the router, image-filter reuse, `APP_MSG` at send
-sites with `postToIframe` typed by `AppMessageType`, `TOOL_PROGRESS` formatting helpers) have
-landed and are removed from this report; item numbers are kept so references stay stable.
+sites with `postToIframe` typed by `AppMessageType`, `TOOL_PROGRESS` formatting helpers),
+Batch C (rubber band on `useMouseTracking`, `handleShellShortcut` / `applyMonitorStep`, one
+right-drag state machine in `DrawingOverlay`) and Batch D (`computeWindowStyle` + tests,
+`settingsSlice` tests) have landed and are removed from this report; item numbers are kept
+so references stay stable.
 
-**Baseline (after Batch B):** `bun run typecheck` clean · `bun run lint` clean · shared tests
-197 pass / 16 files · frontend tests 555 pass / 57 files · compiler tests 449 pass / 27 files.
+Batch C was verified live, over CDP with multi-step mouse and key input against a running
+desktop: a rubber band crossing an app window keeps `yaar-dragging` on and its `mouseup` in
+the shell; right-drag strokes draw from the desktop into a window and from inside an iframe
+(bridge path), and a sub-threshold right-click draws nothing; Shift+Tab, Ctrl+1..9,
+Shift+→ and Ctrl+W work both from the shell and from a focused app iframe. The live run also
+turned up a pre-existing bug the 1.3 fix would have made universal: the `click` that follows
+a band's `mouseup` lands on the desktop background and cleared the selection the band had
+just made (releasing over an iframe used to dodge it only because that click never reached
+the shell). The band now swallows that one click.
+
+**Baseline (after Batch D):** `bun run typecheck` clean · `make lint` clean · frontend tests
+593 pass / 61 files.
 
 Items marked **(verified)** were re-checked by hand after the agent audit.
-
----
-
-## Priority 1 — Do first
-
-### 1.3 Likely bug: rubber-band selection over app windows
-
-`packages/frontend/src/components/desktop/DesktopSurface.tsx:319-454`
-(`handleDesktopMouseDown`) attaches its own `document` `mousemove`/`mouseup` listeners and
-tracks them in a ref (105–118, 434–451). It never sets the `yaar-dragging` class on `<html>`.
-`beginShellDrag` (`lib/selection.ts:19`) only clears the selection and calls `preventDefault`.
-
-`html.yaar-dragging iframe { pointer-events: none }` is what keeps app iframes from
-swallowing pointer events mid-drag, and `hooks/useMouseTracking.ts` exists precisely to
-toggle it (plus multi-gesture-safe attach/detach and unmount cleanup). A rubber-band drag
-that crosses an open app window can plausibly lose `mousemove` — and if released over the
-iframe, `mouseup`, leaving the selection rectangle stuck until the next click.
-
-**Fix:** reuse `useMouseTracking()` for the rubber band. Removes the hand-rolled listener
-lifecycle and fixes the bug.
-**Verify:** real browser only (happy-dom routes no iframe events and runs no CSS) — drag a
-selection across an app window before and after.
-**Payoff:** medium-high · **Effort:** S–M · **Risk:** low-medium.
-
----
-
-## Priority 2 — Duplication worth removing
-
-### 2.4 Shell shortcut dispatch written twice
-
-`packages/frontend/src/components/desktop/DesktopSurface.tsx` — the document-capture handler
-(141–184) and the iframe-forwarded `yaar:keydown` handler (205–234) each re-implement:
-Shift+Tab → `toggleCliMode`, Ctrl+1–9 → `switchMonitor`, close-window →
-`resolveCloseTopWindow` + `userCloseWindow`, and `monitorStepDirection` → `stepMonitor`.
-
-The _decisions_ are already pure and tested in `lib/shellShortcuts.ts`; the _dispatch_ is not.
-
-**Fix:** add `handleShellShortcut(keyInfo, store)` to `lib/shellShortcuts.ts`, returning
-whether it handled the key; both handlers call it (the document one still calls
-`stopImmediatePropagation`, which the iframe path cannot).
-**Verify:** extend `shellShortcuts.test.ts` first; then manually test each shortcut from the
-desktop and from inside an app iframe.
-**Payoff:** medium-high · **Effort:** M · **Risk:** medium (shortcuts break silently).
-
-### 2.5 Right-click-drag state machine duplicated in DrawingOverlay
-
-`packages/frontend/src/components/drawing/DrawingOverlay.tsx:229-289` (native window
-capture listeners) and `295-344` (`yaar:arrow-drag-start/move/end` bridge) implement the same
-threshold-gated drag (`DRAG_THRESHOLD`, `rightMovedRef`, `drawLine`, `saveStrokesSnapshot`)
-against the same refs.
-
-**Fix:** `beginRightDrag(pt)` / `continueRightDrag(pt)` / `endRightDrag()` over the refs,
-called from both event sources (~50 lines removed).
-**Verify:** real browser — draw a stroke that crosses a window boundary.
-**Payoff:** medium · **Effort:** M · **Risk:** medium.
 
 ---
 
@@ -99,20 +57,24 @@ without it, and nothing in the server sets `replayed: true`. So `ctx.replayed` i
 false. Decide whether the flag is still wanted (then thread it server → relay) or remove it
 from the protocol. **Effort:** S–M · **Risk:** low.
 
+### 3.5 `loadSettings` does not validate `iconSize` (found in Batch D)
+
+`store/slices/settingsSlice.ts` clamps `theme`, `handedness` and `windowSize` from
+`localStorage` against their known values, but passes `iconSize` through unchecked. Harmless
+today — `resolveIconSize` falls back to `medium` on an unknown key — but inconsistent;
+`tests/store/settingsSlice-load.test.ts` pins the current behaviour. **Effort:** S ·
+**Risk:** low.
+
 ---
 
 ## Priority 4 — Test gaps
 
 **Frontend (no coverage at all, confirmed by hand):**
 
-- `components/window/WindowFrame.tsx` (496 lines) — the primary window chrome. Cheapest
-  entry point: extract the pure style-variant computation (216–270: card / panel /
-  maximized / widget / default) into `computeWindowStyle(...)` and unit-test the five modes.
 - `components/desktop/DesktopIcons.tsx` — the launch itself is now tested via
   `launchAppWindow`; the focus-existing / retry-toast wiring is not.
-- `components/drawing/DrawingOverlay.tsx` (349) — the math in `lib/gestures.ts` is tested;
-  the wiring is not.
-- `store/slices/settingsSlice.ts` (247).
+- `components/drawing/DrawingOverlay.tsx` — the math in `lib/gestures.ts` is tested and the
+  right-drag state machine is now one set of functions, but the wiring is only verified live.
 - `components/overlays/TerminalPane.tsx` (186).
 - The caching selectors in `store/selectors.ts` — pure functions, only covered indirectly via
   integration tests.
@@ -147,7 +109,7 @@ from the protocol. **Effort:** S–M · **Risk:** low.
 - `lib/gestures.ts`, `gesture-layer.ts`, `shade-pull.ts`, `palette-sheet.ts`, `phoneBack.ts` —
   already factored; remaining per-gesture code genuinely differs.
 - `WindowFrame.tsx` structure — already uses `useDragWindow` / `useResizeWindow` /
-  `useWindowDrop`; only the style computation is worth extracting.
+  `useWindowDrop`, and the style computation is now `computeWindowStyle`.
 - `CommandPalette`'s hand-rolled outside-press listener — documented as deliberate (paired
   with a `window blur` signal `useDismissable` does not know about).
 - Shared: `components.ts` / `component-types.ts` (`AssertPropsCovered` cross-check),
@@ -163,7 +125,5 @@ from the protocol. **Effort:** S–M · **Risk:** low.
 
 ## Suggested sequencing
 
-1. **Batch C (needs real-browser verification):** 1.3, 2.4, 2.5 — one at a time, each with a
-   manual check in a live desktop.
-2. **Batch D (tests):** `computeWindowStyle` extraction + test, `settingsSlice` tests.
-3. **Anytime:** 3.3, 3.4.
+1. **Anytime:** 3.3, 3.4, 3.5.
+2. Remaining test gaps (Priority 4) as the surrounding code is next touched.

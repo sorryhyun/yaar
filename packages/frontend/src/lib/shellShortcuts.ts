@@ -118,6 +118,58 @@ export function resolveMonitorStep(
 }
 
 /**
+ * Shift+Left/Right: one step along the monitor strip, or a new monitor off its right end.
+ * The server mints that one and switches this tab to it on its `MONITORS` answer.
+ */
+export function applyMonitorStep(
+  state: Pick<
+    DesktopStore,
+    'monitors' | 'activeMonitorId' | 'maxMonitors' | 'createMonitor' | 'switchMonitor'
+  >,
+  delta: -1 | 1,
+): void {
+  const target = resolveMonitorStep(state, delta);
+  if (target?.kind === 'new') state.createMonitor();
+  else if (target) state.switchMonitor(target.id);
+}
+
+type ShortcutKey = { key: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean };
+
+/**
+ * Run one of the shell's reserved combos (`RESERVED_KEYBINDINGS`), whether it was typed
+ * into the shell or forwarded out of an app iframe. Returns whether the shell claims the
+ * key; the document listener then stops it, which an iframe's forwarder did on its side.
+ *
+ * F5 / Ctrl+R are claimed and do nothing — blocking the refresh is the whole point. Ctrl+W
+ * is claimed before we know whether there is a window to close: unclaimed, Chrome takes it
+ * and closes the YAAR window itself, so an empty desktop is exactly when *not* claiming
+ * does the most damage. Ctrl+1..9 is claimed only when that monitor exists.
+ */
+export function handleShellShortcut(
+  e: ShortcutKey,
+  state: ShortcutState &
+    Pick<DesktopStore, 'monitors' | 'toggleCliMode' | 'switchMonitor' | 'userCloseWindow'>,
+): boolean {
+  if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) return true;
+  if (e.key === 'Tab' && e.shiftKey) {
+    state.toggleCliMode();
+    return true;
+  }
+  if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+    const monitor = state.monitors[parseInt(e.key) - 1];
+    if (!monitor) return false;
+    state.switchMonitor(monitor.id);
+    return true;
+  }
+  if (isCloseWindowShortcut(e)) {
+    const target = resolveCloseTopWindow(state);
+    if (target) state.userCloseWindow(target);
+    return true;
+  }
+  return false;
+}
+
+/**
  * Whether Shift+Arrow on `target` is text selection someone is doing. Shift+Arrow is
  * not a reserved combo: in a field with text in it, it extends the selection, and the
  * shell stepping monitors out from under that would be the surprise. An *empty* field

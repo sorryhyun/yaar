@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
+  applyMonitorStep,
   editableHoldsText,
+  handleShellShortcut,
   isCloseWindowShortcut,
   monitorStepDirection,
   resolveCloseTopWindow,
@@ -148,6 +150,96 @@ describe('resolveMonitorStep', () => {
     expect(resolveMonitorStep(full, 1)).toBeNull();
     const first = { monitors: monitors(['0', '1']), activeMonitorId: '0', maxMonitors: 4 };
     expect(resolveMonitorStep(first, -1)).toBeNull();
+  });
+});
+
+describe('applyMonitorStep', () => {
+  const monitors = (ids: string[]) =>
+    ids.map((id) => ({ id, label: `Monitor ${Number(id) + 1}`, createdAt: 0 }));
+  const store = (ids: string[], activeMonitorId: string, maxMonitors = 4) => ({
+    monitors: monitors(ids),
+    activeMonitorId,
+    maxMonitors,
+    createMonitor: mock(() => {}),
+    switchMonitor: mock((_id: string) => {}),
+  });
+
+  it('switches to the neighbour, creates off the right end, and does nothing at a wall', () => {
+    const mid = store(['0', '1', '2'], '1');
+    applyMonitorStep(mid, -1);
+    expect(mid.switchMonitor).toHaveBeenCalledWith('0');
+
+    const end = store(['0', '1'], '1');
+    applyMonitorStep(end, 1);
+    expect(end.createMonitor).toHaveBeenCalledTimes(1);
+    expect(end.switchMonitor).not.toHaveBeenCalled();
+
+    const wall = store(['0', '1'], '0');
+    applyMonitorStep(wall, -1);
+    expect(wall.createMonitor).not.toHaveBeenCalled();
+    expect(wall.switchMonitor).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleShellShortcut', () => {
+  const key = (
+    k: string,
+    mods: Partial<Record<'ctrlKey' | 'shiftKey' | 'altKey', boolean>> = {},
+  ) => ({
+    key: k,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    ...mods,
+  });
+  const store = (windows: WindowModel[] = [], monitorIds = ['0', '1']) => ({
+    ...state(windows),
+    monitors: monitorIds.map((id) => ({ id, label: id, createdAt: 0 })),
+    toggleCliMode: mock(() => {}),
+    switchMonitor: mock((_id: string) => {}),
+    userCloseWindow: mock((_id: string) => {}),
+  });
+
+  it('claims the refresh keys and does nothing with them', () => {
+    const s = store([win('a')]);
+    expect(handleShellShortcut(key('F5'), s)).toBe(true);
+    expect(handleShellShortcut(key('r', { ctrlKey: true }), s)).toBe(true);
+    expect(s.toggleCliMode).not.toHaveBeenCalled();
+    expect(s.userCloseWindow).not.toHaveBeenCalled();
+  });
+
+  it('toggles CLI mode on Shift+Tab', () => {
+    const s = store();
+    expect(handleShellShortcut(key('Tab', { shiftKey: true }), s)).toBe(true);
+    expect(s.toggleCliMode).toHaveBeenCalledTimes(1);
+    expect(handleShellShortcut(key('Tab'), s)).toBe(false);
+  });
+
+  it('switches monitor on Ctrl+digit, and lets the key go when that monitor does not exist', () => {
+    const s = store([], ['0', '1']);
+    expect(handleShellShortcut(key('2', { ctrlKey: true }), s)).toBe(true);
+    expect(s.switchMonitor).toHaveBeenCalledWith('1');
+    expect(handleShellShortcut(key('3', { ctrlKey: true }), s)).toBe(false);
+    expect(handleShellShortcut(key('2'), s)).toBe(false);
+    expect(s.switchMonitor).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the topmost window on Ctrl+W, and claims it on an empty desktop too', () => {
+    const s = store([win('a'), win('b')]);
+    expect(handleShellShortcut(key('w', { ctrlKey: true }), s)).toBe(true);
+    expect(s.userCloseWindow).toHaveBeenCalledWith('b');
+
+    const empty = store();
+    expect(handleShellShortcut(key('w', { ctrlKey: true }), empty)).toBe(true);
+    expect(empty.userCloseWindow).not.toHaveBeenCalled();
+  });
+
+  it('leaves Ctrl+Shift+W and unrelated keys alone', () => {
+    const s = store([win('a')]);
+    expect(handleShellShortcut(key('W', { ctrlKey: true, shiftKey: true }), s)).toBe(false);
+    expect(handleShellShortcut(key('ArrowRight', { shiftKey: true }), s)).toBe(false);
+    expect(handleShellShortcut(key('a'), s)).toBe(false);
+    expect(s.userCloseWindow).not.toHaveBeenCalled();
   });
 });
 
