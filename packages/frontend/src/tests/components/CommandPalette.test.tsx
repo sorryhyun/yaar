@@ -92,6 +92,7 @@ describe('CommandPalette bottom sheet', () => {
     act(() => {
       target.dispatchEvent(event);
     });
+    return event;
   }
 
   const handle = () => screen.getByLabelText('Open the input field');
@@ -120,13 +121,35 @@ describe('CommandPalette bottom sheet', () => {
     expect(screen.queryByTitle('Notes')).not.toBeInTheDocument();
   });
 
-  it('raises the sheet while the finger is still pulling', () => {
+  // Issue #122: the sheet used to go up on touchmove, and the effect that focuses the
+  // input on `paletteSheetOpen` put the keyboard up with it, on the first short nudge.
+  it('follows the finger up, and opens only when it lifts far enough', () => {
+    const { container } = render(<CommandPalette />);
+    const textarea = screen.getByRole('textbox');
+    const sheet = container.querySelector<HTMLElement>('[data-gesture-layer="palette-pull"]')!;
+    touch(handle(), 'touchstart', 200, 600);
+    touch(handle(), 'touchmove', 200, 500);
+    expect(sheet.style.getPropertyValue('--palette-pull')).toBe('100px');
+    expect(document.documentElement.getAttribute('data-palette-pull')).toBe('dragging');
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    expect(document.activeElement).not.toBe(textarea);
+
+    touch(handle(), 'touchend', 200, 500);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    expect(document.activeElement).toBe(textarea);
+    expect(document.documentElement.getAttribute('data-palette-pull')).toBeNull();
+    expect(sheet.style.getPropertyValue('--palette-pull')).toBe('');
+  });
+
+  it('lets a short pull on the handle fall back, and swallows the click after it', () => {
     render(<CommandPalette />);
     touch(handle(), 'touchstart', 200, 600);
-    touch(handle(), 'touchmove', 200, 520);
-    // Not waiting for touchend is most of the wait: the sheet's slide and the rest of
-    // the drag overlap instead of queueing.
-    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    touch(handle(), 'touchmove', 200, 575);
+    // The browser's click after a drag would otherwise reach the tap handler and open it.
+    const end = touch(handle(), 'touchend', 200, 575);
+    expect(end.defaultPrevented).toBe(true);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    expect(document.documentElement.getAttribute('data-palette-pull')).toBeNull();
   });
 
   it('asks for the keyboard from inside the gesture, not from an effect afterwards', () => {

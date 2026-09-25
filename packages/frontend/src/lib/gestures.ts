@@ -17,7 +17,8 @@
  * different moments. `dragAxis` runs while the finger is still down and decides whether
  * the shell is following it — early, because a peek that starts late looks like a
  * stutter. `shouldCommitDrag` runs when the finger lifts and decides where it lands.
- * Both the monitor pan and the shade pull ask them, in that order.
+ * The monitor pan, the shade pull and the palette pull ask them, in that order — the
+ * palette's landing through `shouldRaisePalette`, the same question with a higher bar.
  */
 
 /** How far in from the left/right screen edge a monitor swipe has to start. */
@@ -149,6 +150,31 @@ export function shouldCommitDrag(travel: number, elapsedMs: number): boolean {
   const distance = Math.abs(travel);
   if (distance >= SWIPE_MIN_PX) return true;
   return distance >= DRAG_INTENT_PX && elapsedMs > 0 && distance / elapsedMs >= FLICK_VELOCITY;
+}
+
+/**
+ * How far a pull up has to travel for the palette sheet to stay up when the finger lifts.
+ *
+ * Further than `SWIPE_MIN_PX`, the bar every other drag lands at: the pull-up is caught
+ * from anywhere nothing scrolls, so a scroll attempt on a list already at its bottom *is*
+ * a pull-up, and landing one raises the keyboard over whatever the user was reading. The
+ * sheet follows the finger the whole way, so a pull that means it sees where it is going.
+ */
+export const PALETTE_RAISE_PX = 80;
+
+/**
+ * The least travel a fast pull up needs to count as a flick. `shouldCommitDrag` lets a
+ * flick go at `DRAG_INTENT_PX`, which here is the nudge the end of a scroll gives.
+ */
+export const PALETTE_FLICK_MIN_PX = 32;
+
+/**
+ * Whether a pull up of `up` px (positive is upwards) raises the palette when it lets go:
+ * far enough, or a real flick. `shouldCommitDrag` with a higher bar — see `PALETTE_RAISE_PX`.
+ */
+export function shouldRaisePalette(up: number, elapsedMs: number): boolean {
+  if (up >= PALETTE_RAISE_PX) return true;
+  return up >= PALETTE_FLICK_MIN_PX && elapsedMs > 0 && up / elapsedMs >= FLICK_VELOCITY;
 }
 
 /** How long the shade takes to finish the pull once the finger lifts. */

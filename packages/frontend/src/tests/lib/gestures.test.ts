@@ -7,6 +7,8 @@ import { describe, it, expect } from 'bun:test';
 import {
   DRAG_INTENT_PX,
   FLICK_VELOCITY,
+  PALETTE_FLICK_MIN_PX,
+  PALETTE_RAISE_PX,
   RUBBER_BAND_DIVISOR,
   SHADE_CLEAR_PX,
   SHADE_CLEAR_RETREAT_PX,
@@ -19,6 +21,7 @@ import {
   shadeDim,
   shadeOverpull,
   shouldCommitDrag,
+  shouldRaisePalette,
   stepMonitorIndex,
   swipeDirection,
 } from '../../lib/gestures';
@@ -129,6 +132,30 @@ describe('shouldCommitDrag', () => {
 
   it('never reads a nudge as a flick, however quick', () => {
     expect(shouldCommitDrag(DRAG_INTENT_PX - 1, 1)).toBe(false);
+  });
+});
+
+describe('shouldRaisePalette', () => {
+  it('asks more of a pull up than the rest of the shell asks of a drag', () => {
+    // A scroll that hit the bottom of its list is a pull up too; landing one puts the
+    // keyboard over whatever was being read, so the bar sits above `SWIPE_MIN_PX`.
+    expect(PALETTE_RAISE_PX).toBeGreaterThan(SWIPE_MIN_PX);
+    expect(shouldRaisePalette(SWIPE_MIN_PX, 4000)).toBe(false);
+    expect(shouldRaisePalette(PALETTE_RAISE_PX, 4000)).toBe(true);
+  });
+
+  it('raises on a real flick, but not on the nudge the end of a scroll gives', () => {
+    expect(shouldRaisePalette(PALETTE_FLICK_MIN_PX, 1)).toBe(true);
+    expect(
+      shouldRaisePalette(PALETTE_FLICK_MIN_PX, PALETTE_FLICK_MIN_PX / FLICK_VELOCITY + 1),
+    ).toBe(false);
+    // Fast enough for `shouldCommitDrag`, and still not a raise.
+    expect(shouldCommitDrag(DRAG_INTENT_PX + 2, 1)).toBe(true);
+    expect(shouldRaisePalette(DRAG_INTENT_PX + 2, 1)).toBe(false);
+  });
+
+  it('never raises on a pull that ended up going down', () => {
+    expect(shouldRaisePalette(-PALETTE_RAISE_PX, 1)).toBe(false);
   });
 });
 

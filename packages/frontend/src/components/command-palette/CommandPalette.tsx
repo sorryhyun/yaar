@@ -7,10 +7,10 @@
  * together. The handle is shell DOM sitting at the very bottom, which is what lets
  * the gesture work without an overlay stealing touches from the app above it.
  *
- * The pull-up is a request for the keyboard as much as for the panel, and the two are
- * hurried along separately: the sheet goes up on touchmove, the moment the pull has said
- * "up", while the keyboard has to wait for touchend because that is the last moment a
- * phone will still open one — see `lib/palette-sheet`. A pull up from anywhere else on
+ * The pull-up is a request for the keyboard as much as for the panel. The sheet follows
+ * the finger up, as the shade follows it down, and only on touchend does it either open —
+ * keyboard included, because that is the last moment a phone will still open one — or
+ * fall back; see `lib/palette-sheet`. A pull up from anywhere else on
  * the screen raises it too (`PhoneGestures`): the bottom edge is also the system's, and a
  * pull that starts there keeps bringing up the phone's own navigation bar.
  */
@@ -30,9 +30,15 @@ import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
 import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { apiFetch, isRemoteMode } from '@/lib/api';
-import { swipeDirection } from '@/lib/gestures';
+import { dragAxis, swipeDirection } from '@/lib/gestures';
 import { isComposingKey } from '@/lib/ime';
-import { PALETTE_SHEET_ID, openPaletteSheetWithKeyboard } from '@/lib/palette-sheet';
+import {
+  PALETTE_SHEET_ID,
+  cancelPaletteRaise,
+  finishPaletteRaise,
+  openPaletteSheetWithKeyboard,
+  trackPaletteRaise,
+} from '@/lib/palette-sheet';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
 
 function statusClass(status: MessageStatus['status']): string {
@@ -350,45 +356,72 @@ export function CommandPalette() {
 
   // Pull-up / pull-down on the handle. The handle is the bottom edge of the screen when
   // the sheet is down and the top edge of the sheet when it is up, so one element carries
-  // both directions and neither needs an overlay over the app.
-  const handleDragStart = useRef<{ x: number; y: number } | null>(null);
+  // both directions and neither needs an overlay over the app. The pull up follows the
+  // finger and decides on the lift (`lib/palette-sheet`); the push down just decides.
+  const handleDrag = useRef<{
+    x: number;
+    y: number;
+    at: number;
+    axis: 'x' | 'y' | null;
+    /** Down when the touch landed, so an upward drag is a pull on the collapsed sheet. */
+    raising: boolean;
+  } | null>(null);
 
   const onHandleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
-    handleDragStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    handleDrag.current = touch
+      ? {
+          x: touch.clientX,
+          y: touch.clientY,
+          at: performance.now(),
+          axis: null,
+          raising: !useDesktopStore.getState().paletteSheetOpen,
+        }
+      : null;
   }, []);
 
-  const onHandleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      const start = handleDragStart.current;
-      const touch = e.touches[0];
-      if (!start || !touch) return;
-      if (swipeDirection(touch.clientX - start.x, touch.clientY - start.y) !== 'up') return;
-      // The sheet goes up the moment the pull has said "up", rather than when the finger
-      // lifts: the slide and the rest of the drag then overlap instead of queueing, which
-      // is most of the wait. The keyboard still has to wait for touchend — touchmove is
-      // not a gesture the browser will open a keyboard for.
-      setPaletteSheetOpen(true);
-    },
-    [setPaletteSheetOpen],
-  );
+  const onHandleTouchMove = useCallback((e: React.TouchEvent) => {
+    const drag = handleDrag.current;
+    const touch = e.touches[0];
+    if (!drag?.raising || !touch) return;
+    const dy = touch.clientY - drag.y;
+    drag.axis ??= dragAxis(touch.clientX - drag.x, dy);
+    // The sheet moves and nothing else: no store change until the lift, so nothing can
+    // focus the textarea — and raise the keyboard — while the finger is still deciding.
+    if (drag.axis === 'y') trackPaletteRaise(-dy);
+  }, []);
 
   const onHandleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      const start = handleDragStart.current;
-      handleDragStart.current = null;
+      const drag = handleDrag.current;
+      handleDrag.current = null;
       const touch = e.changedTouches[0];
-      if (!start || !touch) return;
-      const direction = swipeDirection(touch.clientX - start.x, touch.clientY - start.y);
+      if (!drag || !touch) return;
+      const dx = touch.clientX - drag.x;
+      const dy = touch.clientY - drag.y;
+      if (drag.raising && drag.axis === 'y') {
+        // The drag has already decided, either way. Without this the browser follows it
+        // with a click, which the tap handler would read as a request to open.
+        e.preventDefault();
+        finishPaletteRaise(-dy, performance.now() - drag.at);
+        return;
+      }
+      if (drag.axis === 'x') return;
+      // A flick the browser coalesced into a start and an end — nothing to have followed —
+      // or a push down on the raised sheet.
+      const direction = swipeDirection(dx, dy);
       if (direction !== 'up' && direction !== 'down') return;
-      // The drag has already decided. Without this the browser follows it with a click,
-      // which the tap handler would read as a second request and toggle straight back.
       e.preventDefault();
       if (direction === 'up') openPaletteSheetWithKeyboard();
       else setPaletteSheetOpen(false);
     },
     [setPaletteSheetOpen],
   );
+
+  const onHandleTouchCancel = useCallback(() => {
+    if (handleDrag.current?.raising) cancelPaletteRaise();
+    handleDrag.current = null;
+  }, []);
 
   const pencilButton = (
     <button
@@ -441,6 +474,8 @@ export function CommandPalette() {
         // The palette is the phone's system bar: it stays put while the monitors slide
         // past behind it, and a pull on its handle is its own gesture, not a pan.
         data-no-pan=""
+        // What a pull up moves while the finger is down — see `lib/palette-sheet`.
+        data-gesture-layer="palette-pull"
       >
         {isMobile && (
           <button
@@ -452,6 +487,7 @@ export function CommandPalette() {
             onTouchStart={onHandleTouchStart}
             onTouchMove={onHandleTouchMove}
             onTouchEnd={onHandleTouchEnd}
+            onTouchCancel={onHandleTouchCancel}
             aria-expanded={sheetOpen}
             aria-controls={PALETTE_SHEET_ID}
             aria-label={t(sheetOpen ? 'commandPalette.sheet.close' : 'commandPalette.sheet.open')}

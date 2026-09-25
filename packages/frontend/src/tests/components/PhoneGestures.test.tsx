@@ -110,6 +110,8 @@ const peekOffsetPx = () => getGestureVar('monitor-peek', '--monitor-peek-x');
 const panState = () => document.documentElement.getAttribute('data-monitor-peek');
 const pullState = () => document.documentElement.getAttribute('data-shade-pull');
 const pullPx = () => getGestureVar('shade-pull', '--shade-pull');
+const raiseState = () => document.documentElement.getAttribute('data-palette-pull');
+const raisePx = () => getGestureVar('palette-pull', '--palette-pull');
 
 const originalCreateMonitor = useDesktopStore.getState().createMonitor;
 
@@ -142,6 +144,8 @@ describe('PhoneGestures', () => {
     document.documentElement.removeAttribute('data-shade-pull');
     document.documentElement.removeAttribute('data-shade-clear');
     clearGestureVars('shade-pull');
+    document.documentElement.removeAttribute('data-palette-pull');
+    clearGestureVars('palette-pull');
   });
 
   it('renders nothing at all on a desktop', () => {
@@ -663,27 +667,74 @@ describe('PhoneGestures', () => {
     const { sheet, input } = paletteSheet();
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 200, 500);
-    touch(document.body, 'touchmove', 203, 420);
-    // Up while the finger is still pulling, as from the handle.
-    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    touch(document.body, 'touchmove', 203, 400);
+    // The sheet is under the finger, and that is all: nothing is open yet, so nothing has
+    // focused the input and put the keyboard up mid-drag (issue #122).
+    expect(raiseState()).toBe('dragging');
+    expect(raisePx()).toBe('100px');
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
     expect(document.activeElement).not.toBe(input);
 
-    touch(document.body, 'touchend', 203, 420);
+    slowly();
+    touch(document.body, 'touchend', 203, 400);
     expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
     // From inside the gesture, which is the only focus() a phone opens a keyboard for.
     expect(document.activeElement).toBe(input);
+    // Handed back to CSS, which carries it the rest of the way.
+    expect(raiseState()).toBeNull();
+    expect(raisePx()).toBe('');
     // And not the shade, which a vertical drag also belongs to.
     expect(useDesktopStore.getState().notificationShadeOpen).toBe(false);
     sheet.remove();
   });
 
-  it('puts the palette back down when the pull is taken back before the lift', () => {
+  it('lets a short pull up fall back without raising anything', () => {
+    const { sheet, input } = paletteSheet();
     render(<PhoneGestures />);
     touch(document.body, 'touchstart', 200, 500);
-    touch(document.body, 'touchmove', 203, 420);
-    touch(document.body, 'touchmove', 203, 490);
-    touch(document.body, 'touchend', 203, 490);
+    touch(document.body, 'touchmove', 203, 460);
+    expect(raisePx()).toBe('40px');
+    // Twice: 40px in 80ms is exactly flick speed, and this one is meant to be a slow pull.
+    slowly();
+    slowly();
+    touch(document.body, 'touchend', 203, 460);
     expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    expect(document.activeElement).not.toBe(input);
+    expect(raiseState()).toBeNull();
+    sheet.remove();
+  });
+
+  it('raises on a short pull that was a real flick', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchmove', 203, 460);
+    quickly();
+    touch(document.body, 'touchend', 203, 460);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+  });
+
+  it('follows a pull that is taken back, and leaves the palette down', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchmove', 203, 400);
+    touch(document.body, 'touchmove', 203, 490);
+    expect(raisePx()).toBe('10px');
+    touch(document.body, 'touchmove', 203, 520);
+    // Never below where it rests.
+    expect(raisePx()).toBe('0px');
+    slowly();
+    touch(document.body, 'touchend', 203, 520);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    expect(raiseState()).toBeNull();
+  });
+
+  it('lets the sheet fall back when the system takes the touch', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 200, 500);
+    touch(document.body, 'touchmove', 203, 380);
+    touch(document.body, 'touchcancel', 203, 380);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
+    expect(raiseState()).toBeNull();
   });
 
   it('raises it on a pull up the browser coalesced into a start and an end', () => {
@@ -707,7 +758,9 @@ describe('PhoneGestures', () => {
     const list = scroller(300);
     render(<PhoneGestures />);
     touch(list, 'touchstart', 200, 500);
-    touch(list, 'touchmove', 203, 420);
+    touch(list, 'touchmove', 203, 400);
+    expect(raiseState()).toBe('dragging');
+    touch(list, 'touchend', 203, 400);
     expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
     list.remove();
   });
@@ -761,11 +814,15 @@ describe('PhoneGestures', () => {
         window.dispatchEvent(ev);
       });
     frame('start', -12);
-    frame('move', -80);
-    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
+    frame('move', -100);
+    // Following the finger, as from the shell — and nothing open, so no keyboard yet.
+    expect(raisePx()).toBe('100px');
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(false);
     expect(pullState()).toBeNull();
-    frame('end', -80);
+    frame('end', -100);
+    expect(useDesktopStore.getState().paletteSheetOpen).toBe(true);
     expect(document.activeElement).toBe(input);
+    expect(raiseState()).toBeNull();
     card.remove();
     sheet.remove();
   });

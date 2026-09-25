@@ -1,7 +1,7 @@
 /**
  * Custom properties a gesture drives per frame, written on the elements that read them.
  *
- * The monitor pan and the shade pull move their surfaces by writing a custom property
+ * The monitor pan, the shade pull and the palette pull move their surfaces by writing a custom property
  * every touchmove and letting CSS place the element. They used to write it on `<html>`,
  * which is one line of code and one style recalc of the *whole document* per frame: a
  * custom property inherits, so every node under the root had its style recomputed for a
@@ -21,11 +21,12 @@
  * already where the finger is.
  */
 
-export type GestureLayer = 'monitor-peek' | 'shade-pull';
+export type GestureLayer = 'monitor-peek' | 'shade-pull' | 'palette-pull';
 
 const current: Record<GestureLayer, Map<string, string>> = {
   'monitor-peek': new Map(),
   'shade-pull': new Map(),
+  'palette-pull': new Map(),
 };
 
 function layerElements(layer: GestureLayer): NodeListOf<HTMLElement> {

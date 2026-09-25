@@ -444,10 +444,6 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   cursor: pointer;
-  /* The pull decides on touchmove now, so the browser must not claim the drag for a
-     scroll or an overscroll bounce and cut the stream off partway. */
-  touch-action: none;
-  -webkit-tap-highlight-color: transparent;
   /* The handle is the one thing a finger can grab down here, so the browser must not
      also read a drag on it as the start of a page scroll or a pull-to-refresh. */
   touch-action: none;
@@ -492,6 +488,25 @@
 :global(html[data-form-factor='mobile']) .container[data-collapsed] {
   padding-bottom: 0;
   transform: translateY(calc(100% - var(--sheet-handle-h)));
+}
+
+/* Registered non-inheriting, like the shade's: written per frame onto the container by
+   `lib/gesture-layer`, and nothing under it reads it. */
+@property --palette-pull {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* ============ Under the finger ============
+   A pull up moves the collapsed sheet by `--palette-pull` rather than raising it: the store
+   says "open" only once the finger lifts far enough (see `lib/palette-sheet.ts`). Floored
+   at 0 — all the way up — so a long pull never lifts it off the bottom edge. No transition
+   while dragging, or the sheet would trail the finger; once the phase is gone the
+   container's own transition carries it from here to wherever the release sent it. */
+:global(html[data-palette-pull]) .container[data-collapsed] {
+  transition: none;
+  transform: translateY(max(0px, calc(100% - var(--sheet-handle-h) - var(--palette-pull, 0px))));
 }
 
 :global(html[data-form-factor='mobile']) .container[data-collapsed] .sheetHandle {
