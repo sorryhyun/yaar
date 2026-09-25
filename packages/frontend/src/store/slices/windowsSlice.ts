@@ -9,7 +9,7 @@ import type { SliceCreator, DesktopStore } from '../types';
 import type { WindowModel } from '@/types/state';
 import type { WindowAction, WindowCreateAction, WindowBounds } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
-import { emptyContentByRenderer, toWindowKey } from '../helpers';
+import { emptyContentByRenderer, findWindowKeyBySuffix, toWindowKey } from '../helpers';
 import { notifyIframeClose } from '../iframe-bridge';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
@@ -122,11 +122,7 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
   const resolveKey = (windowId: string): string => {
     if (state.windows[windowId]) return windowId;
     // Backward compat: scan for suffix match (handles rare cases where raw ID arrives)
-    const suffix = `/${windowId}`;
-    for (const key of Object.keys(state.windows)) {
-      if (key.endsWith(suffix)) return key;
-    }
-    return windowId;
+    return findWindowKeyBySuffix(state.windows, windowId) ?? windowId;
   };
 
   switch (action.type) {

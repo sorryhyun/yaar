@@ -35,6 +35,7 @@ const fakeEl = (over: Partial<FakeEl> = {}): FakeEl => ({
   scrollWidth: 100,
   clientWidth: 100,
   closest(sel) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- walking up from the receiver
     for (let n: FakeEl | null = this; n; n = n.parentElement) {
       if (n.tag && sel.includes(n.tag)) return n;
     }

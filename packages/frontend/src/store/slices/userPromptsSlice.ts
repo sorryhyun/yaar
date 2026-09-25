@@ -31,11 +31,12 @@ export const applyUserPromptAction = createApplyAction<
     allowDismiss?: boolean;
     monitorId?: string;
     timestamp: number;
-  }
+  },
+  UserPromptShowAction
 >(
   'userPrompts',
   'user.prompt.show',
-  (action: UserPromptShowAction) => ({
+  (action) => ({
     id: action.id,
     title: action.title,
     message: action.message,

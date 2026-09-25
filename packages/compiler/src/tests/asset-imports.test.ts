@@ -118,7 +118,7 @@ describe('imported binary assets', () => {
   test('every inlined extension has an ambient module declaration, and vice versa', () => {
     const dts = readFileSync(BUNDLED_TYPES_DTS, 'utf-8');
     const declared = new Set(
-      [...dts.matchAll(/^declare module '\*(\.[a-z0-9]+)' \{\n  const src: string;/gm)].map(
+      [...dts.matchAll(/^declare module '\*(\.[a-z0-9]+)' \{\n {2}const src: string;/gm)].map(
         (match) => match[1],
       ),
     );
@@ -128,7 +128,7 @@ describe('imported binary assets', () => {
   test('every text-inlined extension has an ambient module declaration, and vice versa', () => {
     const dts = readFileSync(BUNDLED_TYPES_DTS, 'utf-8');
     const declared = new Set(
-      [...dts.matchAll(/^declare module '\*(\.[a-z0-9]+)' \{\n  const text: string;/gm)].map(
+      [...dts.matchAll(/^declare module '\*(\.[a-z0-9]+)' \{\n {2}const text: string;/gm)].map(
         (match) => match[1],
       ),
     );

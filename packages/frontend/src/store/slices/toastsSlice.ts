@@ -28,11 +28,12 @@ export const applyToastAction = createApplyAction<
     timestamp: number;
     action?: { label: string; eventId: string };
     duration?: number;
-  }
+  },
+  ToastShowAction
 >(
   'toasts',
   'toast.show',
-  (action: ToastShowAction) => ({
+  (action) => ({
     id: action.id,
     message: action.message,
     variant: action.variant ?? 'info',

@@ -7,10 +7,8 @@
  * functions already return parsed data. The typed helpers just pass through.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const y = (window as any).yaar;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function asText(data: any): string {
   return typeof data === 'string' ? data : data != null ? JSON.stringify(data) : '';
 }

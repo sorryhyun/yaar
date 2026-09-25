@@ -134,10 +134,12 @@
       "eslint --fix"
     ],
     "packages/shared/src/**/*.{ts,js}": [
-      "prettier --write"
+      "prettier --write",
+      "eslint --fix"
     ],
     "packages/compiler/src/**/*.{ts,js}": [
-      "prettier --write"
+      "prettier --write",
+      "eslint --fix"
     ],
     "packages/lib/src/**/*.{ts,js}": [
       "prettier --write",

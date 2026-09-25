@@ -18,6 +18,7 @@
     "test": "bun test --isolate src/tests",
     "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
     "dev": "tsc --watch"
   },
   "dependencies": {
@@ -25,11 +26,14 @@
   },
   "devDependencies": {
     "@e965/xlsx": "catalog:",
+    "@eslint/js": "catalog:",
     "@types/d3": "catalog:",
     "@types/lodash-es": "catalog:",
     "@types/matter-js": "catalog:",
     "@types/prismjs": "catalog:",
     "@types/three": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
     "animejs": "catalog:",
     "bun-types": "catalog:",
     "cannon-es": "catalog:",
@@ -39,6 +43,8 @@
     "diff": "catalog:",
     "diff2html": "catalog:",
     "dompurify": "catalog:",
+    "eslint": "catalog:",
+    "globals": "catalog:",
     "lodash-es": "catalog:",
     "lucide": "catalog:",
     "mammoth": "catalog:",
@@ -53,6 +59,7 @@
     "three": "catalog:",
     "tone": "catalog:",
     "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
     "uuid": "catalog:",
     "zod": "catalog:"
   }

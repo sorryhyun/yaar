@@ -18,7 +18,6 @@ function normalizeEase(ease: string): string {
   return ease;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function animate(targets: any, params: any): ReturnType<typeof _animate> {
   if (params?.ease && typeof params.ease === 'string') {
     return _animate(targets, { ...params, ease: normalizeEase(params.ease) });

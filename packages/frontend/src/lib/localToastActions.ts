@@ -32,8 +32,3 @@ export function runLocalToastAction(eventId: string): boolean {
   handler();
   return true;
 }
-
-/** Test helper — drops every registered handler. */
-export function clearLocalToastActions(): void {
-  handlers.clear();
-}

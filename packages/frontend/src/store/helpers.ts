@@ -22,6 +22,24 @@ export function toWindowKey(monitorId: string, rawId: string): string {
 }
 
 /**
+ * Scan all window store keys for one ending in `/rawId` (cross-monitor lookup by
+ * raw, unscoped id). Returns the first match in `Object.keys(windows)` order, or
+ * `undefined` if none exists. Shared by the three call sites that each used to
+ * scan for this suffix themselves — they differ only in what they do when nothing
+ * is found, so that fallback stays with each caller.
+ */
+export function findWindowKeyBySuffix<T>(
+  windows: Record<string, T>,
+  rawId: string,
+): string | undefined {
+  const suffix = `/${rawId}`;
+  for (const key of Object.keys(windows)) {
+    if (key.endsWith(suffix)) return key;
+  }
+  return undefined;
+}
+
+/**
  * Resolve a raw windowId to its scoped store key by searching all windows.
  * Returns the raw ID as-is if it already exists as a key, otherwise scans
  * for a key ending with `/rawId`. Falls back to scoping with the given
@@ -40,10 +58,8 @@ export function resolveWindowKey(
   if (windows[rawId]) return rawId;
 
   // 2. Scan all keys for a suffix match (cross-monitor lookup)
-  const suffix = `/${rawId}`;
-  for (const key of Object.keys(windows)) {
-    if (key.endsWith(suffix)) return key;
-  }
+  const found = findWindowKeyBySuffix(windows, rawId);
+  if (found) return found;
 
   // 3. Fallback: assume the given monitor
   return toWindowKey(fallbackMonitorId, rawId);
@@ -69,10 +85,8 @@ export function monitorOfWindowId(
   const own = windows[windowId];
   if (own?.monitorId) return own.monitorId;
 
-  const suffix = `/${windowId}`;
-  for (const [key, win] of Object.entries(windows)) {
-    if (key.endsWith(suffix)) return win.monitorId ?? key.slice(0, key.indexOf('/'));
-  }
+  const key = findWindowKeyBySuffix(windows, windowId);
+  if (key) return windows[key]?.monitorId ?? key.slice(0, key.indexOf('/'));
   return undefined;
 }
 

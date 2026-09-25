@@ -354,7 +354,11 @@ export function defineApp(definition) {
   // an app whose mount later fails.
   setAppId(definition.id);
 
+  // `let`, not a later `const`: onClose below closes over both and can run before the
+  // assignments at the bottom (a view whose mount throws), where a `const` would be in TDZ.
+  // eslint-disable-next-line prefer-const
   let cleanup;
+  // eslint-disable-next-line prefer-const
   let removeKeybindings;
   const registration = toRegistration(definition);
   // Composed rather than assigned: a `{ mount }` view returning a teardown means

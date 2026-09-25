@@ -30,11 +30,12 @@ export const applyDialogAction = createApplyAction<
     timestamp: number;
     permissionOptions?: PermissionOptions;
     capabilities?: CapabilityLine[];
-  }
+  },
+  DialogConfirmAction
 >(
   'dialogs',
   'dialog.confirm',
-  (action: DialogConfirmAction) => ({
+  (action) => ({
     id: action.id,
     title: action.title,
     message: action.message,

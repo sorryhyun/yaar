@@ -12,7 +12,6 @@
  *   const content = await extract();
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function browserHeaders(): Record<string, string> {
   const t = (window as any).__YAAR_TOKEN__ || '';
   const h: Record<string, string> = { 'Content-Type': 'application/json' };

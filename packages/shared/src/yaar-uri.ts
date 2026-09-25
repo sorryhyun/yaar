@@ -84,10 +84,6 @@ export function buildYaarUri(authority: YaarAuthority, path: string): string {
   return `yaar://${authority}/${path}`;
 }
 
-export function isYaarUri(uri: string): boolean {
-  return YAAR_RE.test(uri);
-}
-
 /**
  * Split a path at its first '/' into a [head, tail] pair.
  *

@@ -8,12 +8,16 @@ Both packages are in better shape than their file sizes suggest. The largest fil
 (`PhoneGestures.tsx`, `store/desktop.ts`, `slices/windowsSlice.ts`, `iframe-bridge/open-url.ts`)
 have already been deliberately factored, and their branches are documented against specific
 past bugs — splitting them for size alone is not recommended. The real headroom is narrower:
-one process gap (shared is unlinted), one type-safety leak against the shared contract, one
-likely interaction bug, several duplicated code paths, dead exports, and test gaps on a few
-central components.
+one likely interaction bug, several duplicated code paths, and test gaps on a few central
+components.
 
-**Baseline (measured):** `bun run typecheck` clean · `make lint` clean (0 warnings) · shared
-tests 191 pass / 15 files / 38 ms · frontend tests 502 pass / 52 files / 3.3 s.
+Batch A (shared/compiler lint coverage, dispatcher casts, window-key suffix helper, script
+injection table, dead exports, typed action factory, routing and helpers tests) has landed and
+is removed from this report; item numbers are kept so references stay stable.
+
+**Baseline (after Batch A):** `bun run typecheck` clean · `bun run lint` clean (0 warnings,
+now incl. shared and compiler) · shared tests 197 pass / 16 files · frontend tests 530 pass /
+54 files · compiler tests 449 pass / 27 files.
 
 Items marked **(verified)** were re-checked by hand after the agent audit.
 
@@ -21,38 +25,13 @@ Items marked **(verified)** were re-checked by hand after the agent audit.
 
 ## Priority 1 — Do first
 
-### 1.1 `packages/shared` is never linted (verified)
+### 1.2a `TOOL_PROGRESS` case is doing two jobs
 
-- `packages/shared/package.json` has no `lint` script, and there is no
-  `packages/shared/eslint.config.js`. Only frontend, server, and lib have configs.
-- The root `bun run lint` (`--filter '*' lint`) and CI therefore skip shared entirely —
-  the OS Action / WebSocket event contract both frontend and server depend on gets
-  TypeScript strict checking but zero ESLint coverage.
-- `packages/compiler` has no ESLint config either.
-
-**Fix:** copy `packages/lib/eslint.config.js` (the closest non-React config), add
-`"lint": "eslint src"` to shared (and compiler). Fix whatever it surfaces in the same PR.
-**Payoff:** high · **Effort:** S · **Risk:** none (process only).
-
-### 1.2 Server event dispatcher casts away its own type safety (verified)
-
-`packages/frontend/src/lib/transport/server-event-dispatcher.ts` — 13 occurrences of
-`(message as { field?: T }).field` inside `case ServerEventType.X:` branches
-(lines 118, 187, 195, 196, 208–211, 218, 237, 275, 292, 353).
-
-`dispatchServerEvent(message: ServerEvent, …)` switches on `message.type`, so each branch
-already has `message` narrowed to the concrete interface from
-`packages/shared/src/events/server.ts` (e.g. `ToolProgressEvent` types `toolName`, `status`,
-`message`, `toolInput`, `monitorId` directly). The casts mean a field rename in shared still
-compiles here and silently yields `undefined` — the exact drift the file's `never`
-exhaustiveness check (line ~460) guards against for missing _cases_ but not missing _fields_.
-
-**Fix:** delete the casts; use `message.field`. Keep `extractAgentId`'s cast at line 97 —
-it runs before narrowing.
-**Follow-up (M):** the `TOOL_PROGRESS` case (206–351, ~145 lines) mixes five status branches
-with display-string formatting. Extract the formatting (≈254–343) into named pure helpers
-and test them; preserve the finalize-before-append ordering documented at 217–248.
-**Payoff:** high · **Effort:** S · **Risk:** low (type-level).
+`packages/frontend/src/lib/transport/server-event-dispatcher.ts` — the `TOOL_PROGRESS` case
+(~145 lines) mixes five status branches with display-string formatting. Extract the formatting
+into named pure helpers and test them; preserve the finalize-before-append ordering documented
+in that case.
+**Effort:** M · **Risk:** low.
 
 ### 1.3 Likely bug: rubber-band selection over app windows
 
@@ -93,34 +72,6 @@ on failure; error messages differ (`'iframe-token response carried no token'` vs
 **Fix:** export one launch primitive from `open-url.ts`; DesktopIcons keeps only its
 focus-existing and toast behavior on top.
 **Payoff:** high · **Effort:** M · **Risk:** low (async path, testable with mocked `apiFetch`).
-
-### 2.2 Window-key suffix scan written three times (verified)
-
-| Location | Fallback when not found |
-|---|---|
-| `store/helpers.ts:34` `resolveWindowKey` | `toWindowKey(fallbackMonitorId, rawId)` |
-| `store/helpers.ts:62` `monitorOfWindowId` | `undefined` (own `Object.entries` loop) |
-| `store/slices/windowsSlice.ts:122` local `resolveKey` | the raw id unchanged |
-
-All three perform "exact match, else find the key ending in `/${rawId}`".
-
-**Fix:** a single `findWindowKeyBySuffix(windows, rawId): string | undefined` in
-`helpers.ts`; each caller keeps its own fallback.
-**Verify:** `window-drop.test.ts`, `window-change-marker.test.ts`, `desktop.test.ts`
-(`resetDesktop` scoping relies on `monitorOfWindowId`).
-**Payoff:** medium · **Effort:** S · **Risk:** low.
-
-### 2.3 Eleven copy-pasted script-injection blocks (verified)
-
-`packages/frontend/src/components/window/renderers/IframeRenderer.tsx:483-567` — 11 blocks of
-`if (doc && !doc.querySelector('script[data-yaar-X]')) { create; setAttribute; textContent; appendChild }`
-(token, ime-guard, capture, verb, storage, fetch-proxy, app-protocol, contextmenu,
-notifications, device, windows).
-
-**Fix:** `injectScriptOnce(doc, marker, source)` + an ordered `[marker, source][]` table.
-The existing "verb SDK must come before storage/windows" comment becomes table order.
-Leave CSP detection, navigated-away detection, and origin isolation untouched.
-**Payoff:** medium (readability) · **Effort:** S · **Risk:** low. The helper becomes unit-testable.
 
 ### 2.4 Shell shortcut dispatch written twice
 
@@ -172,22 +123,6 @@ that `lib/uploadImage.ts` `filterImageFiles` already provides. Call the helper.
 
 ## Priority 3 — Cheap cleanup
 
-### 3.1 Dead exports (verified zero importers across `packages/`, `apps/`, `scripts/`)
-
-| Export | Location |
-|---|---|
-| `isYaarUri` | `packages/shared/src/yaar-uri.ts:87` |
-| `AppMessageType` | `packages/shared/src/app-protocol.ts:311` |
-| `ControlEventType` | `packages/shared/src/events/routing.ts:152` |
-| `MonitorId` | `packages/shared/src/session.ts:9` |
-| `clearLocalToastActions` | `packages/frontend/src/lib/localToastActions.ts:37` |
-| `ComponentActionProvider` | `packages/frontend/src/contexts/ComponentActionContext.tsx:21` (superseded by `QueueAwareComponentActionProvider`) |
-| `WsManager` interface | `packages/frontend/src/lib/transport/transport-manager.ts:3` (callers use `ReturnType<typeof createWsManager>`) |
-
-Not dead, despite naive grep: per-member interfaces of `OSAction`/`ClientEvent`/`ServerEvent`
-unions and slice `XSliceState`/`XSliceActions` halves (consumed structurally). The slice
-halves could be un-exported to shrink surface, but that is optional.
-
 ### 3.2 Raw `'yaar:*'` postMessage literals on the send side
 
 43 raw `'yaar:…'` literals in non-test frontend code (e.g. `DrawingOverlay.tsx`,
@@ -200,13 +135,9 @@ The **send** side (`postToIframe` / `postMessage` object literals) is not — a 
 silent no-op, the same drift the router's comment (`iframeMessageRouter.ts:58`) records
 having happened once before.
 
-**Fix:** use `APP_MSG.x` at every send site. Optionally type `postToIframe`'s `type` field.
-
-### 3.3 Untyped action factory
-
-`packages/frontend/src/store/slices/apply-action-factory.ts:14` —
-`buildItem: (action: any) => TItem` plus two `as unknown as { id: string }` casts. Make it
-generic over `TAction extends OSAction` so call sites are type-checked.
+**Fix:** use `APP_MSG.x` at every send site. Optionally type `postToIframe`'s `type` field
+with `AppMessageType` (`packages/shared/src/app-protocol.ts`), which has no importers yet and
+was kept for this.
 
 ---
 
@@ -222,15 +153,11 @@ generic over `TAction extends OSAction` so call sites are type-checked.
   the wiring is not.
 - `store/slices/settingsSlice.ts` (247).
 - `components/overlays/TerminalPane.tsx` (186).
-- `store/helpers.ts` (`resolveWindowKey`, `monitorOfWindowId`) and the caching selectors in
-  `store/selectors.ts` — pure functions, only covered indirectly via integration tests.
+- The caching selectors in `store/selectors.ts` — pure functions, only covered indirectly via
+  integration tests.
 
 **Shared (no package-local tests):**
 
-- `events/routing.ts` — the module comment calls a missing entry "a deadlock waiting to
-  happen", yet only server loopback integration tests cover it. Add
-  `tests/events-routing.test.ts` asserting `ANSWER_EVENT_TYPES ∩ CONTROL_EVENT_TYPES = ∅`
-  and round-tripping `isAnswerEvent` / `isControlEvent`.
 - `events/client.ts`, `events/server.ts` (~820 lines, the WS contract), `bridge.ts`
   (covered from server tests), `component-types.ts`, `iframe-scripts/verb-sdk.ts`,
   `design/app-css.ts`, `design/shell-css.ts`.
@@ -276,9 +203,7 @@ generic over `TAction extends OSAction` so call sites are type-checked.
 
 ## Suggested sequencing
 
-1. **Batch A (low risk, mechanical, covered by existing tests):** 1.1, 1.2, 2.2, 2.3, 3.1, 3.3,
-   plus the `events-routing` and `helpers` unit tests.
-2. **Batch B (small, isolated):** 2.1, 2.6, 2.7, 3.2.
-3. **Batch C (needs real-browser verification):** 1.3, 2.4, 2.5 — one at a time, each with a
+1. **Batch B (small, isolated):** 2.1, 2.6, 2.7, 3.2, 1.2a.
+2. **Batch C (needs real-browser verification):** 1.3, 2.4, 2.5 — one at a time, each with a
    manual check in a live desktop.
-4. **Batch D (tests):** `computeWindowStyle` extraction + test, `settingsSlice` tests.
+3. **Batch D (tests):** `computeWindowStyle` extraction + test, `settingsSlice` tests.

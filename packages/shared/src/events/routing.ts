@@ -148,9 +148,6 @@ export const CONTROL_EVENT_TYPES = [
   ClientEventType.CLIENT_PRESENCE, // → a session-level flag; see above
 ] as const;
 
-/** A client frame that controls the session and carries no queue ordering. */
-export type ControlEventType = (typeof CONTROL_EVENT_TYPES)[number];
-
 const CONTROL_EVENTS: ReadonlySet<string> = new Set<string>(CONTROL_EVENT_TYPES);
 
 /** Does this frame control the session rather than queue behind it? See CONTROL_EVENT_TYPES. */

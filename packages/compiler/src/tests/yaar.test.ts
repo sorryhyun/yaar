@@ -31,8 +31,6 @@ interface FakeEl {
   listeners: Record<string, ((e: unknown) => void)[]>;
 }
 
-type ToastEl = FakeEl;
-
 const toasts: FakeEl[] = [];
 const errors: string[] = [];
 const docListeners: Record<string, ((e: unknown) => void)[]> = {};

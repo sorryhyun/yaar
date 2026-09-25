@@ -18,20 +18,6 @@ type SendComponentAction = (
 
 const ComponentActionContext = createContext<SendComponentAction | null>(null);
 
-export function ComponentActionProvider({
-  children,
-  sendComponentAction,
-}: {
-  children: React.ReactNode;
-  sendComponentAction: SendComponentAction;
-}) {
-  return (
-    <ComponentActionContext.Provider value={sendComponentAction}>
-      {children}
-    </ComponentActionContext.Provider>
-  );
-}
-
 /**
  * Queue-aware wrapper that checks window lock state before sending.
  * If window is locked, queues the action for later execution.

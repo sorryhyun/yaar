@@ -17,8 +17,29 @@ import {
   IFRAME_VERB_SDK_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
+import { injectScriptOnce } from '@/lib/injectScriptOnce';
 import { useDesktopStore } from '@/store';
 import styles from '@/styles/window/renderers.module.css';
+
+/**
+ * The SDK scripts injected into a same-origin app frame, in the order they must
+ * run. All append to `doc.head` (see `injectScriptOnce`) — the two comments
+ * inline are ordering constraints, not just documentation.
+ */
+const IFRAME_INJECTED_SCRIPTS: [marker: string, source: string][] = [
+  // First — the guard must be listening before any app code registers handlers
+  ['data-yaar-ime-guard', IFRAME_IME_GUARD_SCRIPT],
+  ['data-yaar-capture', IFRAME_CAPTURE_HELPER_SCRIPT],
+  // Verb SDK must come before storage/windows SDKs (they depend on it)
+  ['data-yaar-verb', IFRAME_VERB_SDK_SCRIPT],
+  ['data-yaar-storage', IFRAME_STORAGE_SDK_SCRIPT],
+  ['data-yaar-fetch-proxy', IFRAME_FETCH_PROXY_SCRIPT],
+  ['data-yaar-app-protocol', IFRAME_APP_PROTOCOL_SCRIPT],
+  ['data-yaar-contextmenu', IFRAME_CONTEXTMENU_SCRIPT],
+  ['data-yaar-notifications', IFRAME_NOTIFICATIONS_SDK_SCRIPT],
+  ['data-yaar-device', IFRAME_DEVICE_SDK_SCRIPT],
+  ['data-yaar-windows', IFRAME_WINDOWS_SDK_SCRIPT],
+];
 
 interface IframeRendererProps {
   data: string | { url: string; sandbox?: string };
@@ -491,67 +512,8 @@ function IframeRenderer({
             tokenScript.textContent = `window.__YAAR_TOKEN__=${JSON.stringify(iframeToken)};`;
             doc.head.appendChild(tokenScript);
           }
-          // First — the guard must be listening before any app code registers handlers
-          if (doc && !doc.querySelector('script[data-yaar-ime-guard]')) {
-            const imeScript = doc.createElement('script');
-            imeScript.setAttribute('data-yaar-ime-guard', '1');
-            imeScript.textContent = IFRAME_IME_GUARD_SCRIPT;
-            doc.head.appendChild(imeScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-capture]')) {
-            const script = doc.createElement('script');
-            script.setAttribute('data-yaar-capture', '1');
-            script.textContent = IFRAME_CAPTURE_HELPER_SCRIPT;
-            doc.head.appendChild(script);
-          }
-          // Verb SDK must come before storage/windows SDKs (they depend on it)
-          if (doc && !doc.querySelector('script[data-yaar-verb]')) {
-            const verbScript = doc.createElement('script');
-            verbScript.setAttribute('data-yaar-verb', '1');
-            verbScript.textContent = IFRAME_VERB_SDK_SCRIPT;
-            doc.head.appendChild(verbScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-storage]')) {
-            const storageScript = doc.createElement('script');
-            storageScript.setAttribute('data-yaar-storage', '1');
-            storageScript.textContent = IFRAME_STORAGE_SDK_SCRIPT;
-            doc.head.appendChild(storageScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-fetch-proxy]')) {
-            const fetchProxyScript = doc.createElement('script');
-            fetchProxyScript.setAttribute('data-yaar-fetch-proxy', '1');
-            fetchProxyScript.textContent = IFRAME_FETCH_PROXY_SCRIPT;
-            doc.head.appendChild(fetchProxyScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-app-protocol]')) {
-            const appProtocolScript = doc.createElement('script');
-            appProtocolScript.setAttribute('data-yaar-app-protocol', '1');
-            appProtocolScript.textContent = IFRAME_APP_PROTOCOL_SCRIPT;
-            doc.head.appendChild(appProtocolScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-contextmenu]')) {
-            const contextMenuScript = doc.createElement('script');
-            contextMenuScript.setAttribute('data-yaar-contextmenu', '1');
-            contextMenuScript.textContent = IFRAME_CONTEXTMENU_SCRIPT;
-            doc.head.appendChild(contextMenuScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-notifications]')) {
-            const notifScript = doc.createElement('script');
-            notifScript.setAttribute('data-yaar-notifications', '1');
-            notifScript.textContent = IFRAME_NOTIFICATIONS_SDK_SCRIPT;
-            doc.head.appendChild(notifScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-device]')) {
-            const deviceScript = doc.createElement('script');
-            deviceScript.setAttribute('data-yaar-device', '1');
-            deviceScript.textContent = IFRAME_DEVICE_SDK_SCRIPT;
-            doc.head.appendChild(deviceScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-windows]')) {
-            const windowsScript = doc.createElement('script');
-            windowsScript.setAttribute('data-yaar-windows', '1');
-            windowsScript.textContent = IFRAME_WINDOWS_SDK_SCRIPT;
-            doc.head.appendChild(windowsScript);
+          for (const [marker, source] of IFRAME_INJECTED_SCRIPTS) {
+            injectScriptOnce(doc, marker, source);
           }
           // Push current notification state to the newly loaded iframe
           const notifs = useDesktopStore.getState().notifications;

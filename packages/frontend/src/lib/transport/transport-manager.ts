@@ -1,20 +1,5 @@
 import type { ClientEvent } from '@/types';
 
-export interface WsManager {
-  ws: WebSocket | null;
-  attached: boolean;
-  stopped: boolean;
-  reconnectAttempts: number;
-  reconnectTimeout: number | null;
-  /** Wall-clock ms at which the pending reconnect fires, for a countdown in the UI. */
-  nextRetryAt: number | null;
-  listeners: Set<() => void>;
-  getSnapshot: () => boolean;
-  subscribe: (listener: () => void) => () => void;
-  notify: () => void;
-  getSocket: () => WebSocket | null;
-}
-
 /** First retry lands quickly; the delay then doubles up to the ceiling. */
 export const RECONNECT_BASE_DELAY = 1000;
 /**

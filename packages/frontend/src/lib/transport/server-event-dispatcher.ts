@@ -1,12 +1,10 @@
 import type {
   ServerEvent,
   OSAction,
-  AppProtocolRequestEvent,
   AppProtocolRequest,
   RecoveryMode,
   ActiveAgentSnapshot,
   StreamFrame,
-  StreamFrameEvent,
   CliEntry,
 } from '@/types';
 import { NO_AGENT_ACK, ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
@@ -115,7 +113,7 @@ function scopeToMonitor(monitorId: string): (action: OSAction) => OSAction {
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
   switch (message.type) {
     case ServerEventType.ACTIONS: {
-      const monitorId = (message as { monitorId?: string }).monitorId;
+      const monitorId = message.monitorId;
       // The server stamps a scoped handle ("0/notes") on windowId, and that handle is what
       // keys the window in this store. When one arrives unscoped anyway, the event's own
       // monitorId is carried onto the action so `applyWindowAction` keys the window by the
@@ -184,7 +182,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       break;
     case ServerEventType.AGENT_THINKING: {
       const agentId = extractAgentId(message);
-      const monitorId = (message as { monitorId?: string }).monitorId;
+      const monitorId = message.monitorId;
       handlers.setAgentActive(agentId, message.content ? 'Reasoning...' : 'Thinking...', monitorId);
       handlers.updateCliStreaming(agentId, message.content ?? '', 'thinking', monitorId);
       handlers.clearAllMessageStatuses();
@@ -192,8 +190,8 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     }
     case ServerEventType.AGENT_RESPONSE: {
       const agentId = extractAgentId(message);
-      const isComplete = (message as { isComplete?: boolean }).isComplete;
-      const monitorId = (message as { monitorId?: string }).monitorId;
+      const isComplete = message.isComplete;
+      const monitorId = message.monitorId;
       if (isComplete) {
         handlers.clearAgent(agentId);
         handlers.finalizeCliStreaming(agentId);
@@ -205,17 +203,17 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     }
     case ServerEventType.TOOL_PROGRESS: {
       const agentId = extractAgentId(message);
-      const toolName = (message as { toolName?: string }).toolName || 'tool';
-      const status = (message as { status?: string }).status;
-      const toolInput = (message as { toolInput?: unknown }).toolInput;
-      const monitorId = (message as { monitorId?: string }).monitorId;
+      const toolName = message.toolName || 'tool';
+      const status = message.status;
+      const toolInput = message.toolInput;
+      const monitorId = message.monitorId;
 
       // The parameter-generation phase: the model has named a tool but is still
       // writing its arguments. Render them raw as they arrive, so a large input
       // shows progress instead of a stall; the `running` branch below throws this
       // scaffolding away and replaces it with the summarized entry.
       if (status === 'pending') {
-        const fragment = (message as { message?: string }).message;
+        const fragment = message.message;
         if (fragment === undefined) {
           // The announcement. Flush the preceding text/thinking block first, for
           // the same chronological reason as the `running` case.
@@ -234,7 +232,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       // sits below it and is dropped on the next finalize rather than filling
       // history with a build log.
       if (status === 'output') {
-        const fragment = (message as { message?: string }).message;
+        const fragment = message.message;
         if (fragment) handlers.appendCliStreaming(agentId, fragment, 'tool', monitorId);
         break;
       }
@@ -272,7 +270,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         }
         handlers.setAgentActive(agentId, statusText, monitorId);
       } else if (status === 'error') {
-        const errorMsg = (message as { message?: string }).message;
+        const errorMsg = message.message;
         handlers.setAgentActive(
           agentId,
           `Error: ${toolName}${errorMsg ? ' — ' + errorMsg.slice(0, 80) : ''}`,
@@ -289,7 +287,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       // Skip successful results (except subagent completions which carry a summary)
       if (status === 'complete') {
         if (isSubagent) {
-          const summary = (message as { message?: string }).message;
+          const summary = message.message;
           if (summary) {
             handlers.addCliEntry({
               type: 'tool',
@@ -350,7 +348,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       break;
     }
     case ServerEventType.ERROR: {
-      const monitorId = (message as { monitorId?: string }).monitorId;
+      const monitorId = message.monitorId;
       // Not a transport event. ERROR names a *message* or an *agent* — a dropped task, an
       // app agent that threw, a full queue — and carries agentId/monitorId/messageId to
       // say which. Putting it into connectionStatus made one app agent's failure render
@@ -409,32 +407,28 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       break;
     }
     case ServerEventType.APP_PROTOCOL_REQUEST: {
-      const m = message as AppProtocolRequestEvent;
-      handlers.handleAppProtocolRequest(m.requestId, m.windowId, m.request, m.timeoutMs);
+      handlers.handleAppProtocolRequest(
+        message.requestId,
+        message.windowId,
+        message.request,
+        message.timeoutMs,
+      );
       break;
     }
     case ServerEventType.VERB_SUBSCRIPTION_UPDATE: {
-      const m = message as { windowId: string; subscriptionId: string; uri: string };
-      handlers.handleVerbSubscriptionUpdate(m.windowId, m.subscriptionId, m.uri);
+      handlers.handleVerbSubscriptionUpdate(message.windowId, message.subscriptionId, message.uri);
       break;
     }
     case ServerEventType.STREAM_FRAME: {
-      const m = message as StreamFrameEvent;
-      handlers.handleStreamFrame(m.windowId, m.subscriptionId, m.frame);
+      handlers.handleStreamFrame(message.windowId, message.subscriptionId, message.frame);
       break;
     }
     case ServerEventType.CLI_RESTORE: {
-      const { entries } = message as { entries: Parameters<typeof handlers.restoreCliHistory>[0] };
-      handlers.restoreCliHistory(entries);
+      handlers.restoreCliHistory(message.entries);
       break;
     }
     case ServerEventType.MONITORS: {
-      const m = message as {
-        monitors: { id: string; label: string }[];
-        focus?: string;
-        maxMonitors?: number;
-      };
-      handlers.setMonitors(m.monitors, m.focus, m.maxMonitors);
+      handlers.setMonitors(message.monitors, message.focus, message.maxMonitors);
       break;
     }
     // The two acks. Either one means the server has taken responsibility for the message,

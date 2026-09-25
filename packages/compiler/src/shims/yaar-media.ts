@@ -29,7 +29,6 @@
  *   const bytes = await yaar.read(job.uri);          // it's in shared/media/
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const y = (window as any).yaar;
 
 const URI = 'yaar://system/ytdlp';

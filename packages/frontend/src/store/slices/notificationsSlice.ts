@@ -21,11 +21,12 @@ export type NotificationsSlice = NotificationsSliceState & NotificationsSliceAct
  */
 export const applyNotificationAction = createApplyAction<
   NotificationsSliceState,
-  { id: string; title: string; body: string; icon?: string; duration?: number; timestamp: number }
+  { id: string; title: string; body: string; icon?: string; duration?: number; timestamp: number },
+  NotificationShowAction
 >(
   'notifications',
   'notification.show',
-  (action: NotificationShowAction) => ({
+  (action) => ({
     id: action.id,
     title: action.title,
     body: action.body,

@@ -5,9 +5,6 @@
 /** Unique session identifier. */
 export type SessionId = string;
 
-/** Monitor identifier (e.g., '0'). */
-export type MonitorId = string;
-
 /** Default monitor ID. */
 export const DEFAULT_MONITOR_ID = '0';
 

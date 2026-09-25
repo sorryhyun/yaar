@@ -7,6 +7,7 @@ Transforms TypeScript apps into self-contained HTML files using Bun's bundler. R
 ```bash
 bun run build            # Build (tsc)
 bun run typecheck        # Type check only
+bun run lint             # ESLint (shims get browser globals and no ts-nocheck ban)
 bun run dev              # Watch mode
 ```
 
