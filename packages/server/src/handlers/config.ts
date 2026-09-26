@@ -5,7 +5,9 @@
  * as ResourceHandler registrations on the registry.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { ok, okJsonResource, okLinks, error, type VerbResult } from '../lib/verb-result.js';
+import { assertUri } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
 import { handleSetSettings, handleGetSettings } from '../features/config/settings.js';
@@ -30,7 +32,6 @@ import {
   addAllowedDomain,
   setAllowAllDomains,
 } from '../features/config/domains.js';
-import { ok, okJsonResource, okLinks, error, assertUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 export function registerConfigHandlers(registry: ResourceRegistry): void {

@@ -9,6 +9,7 @@
 import { rm, readFile, readdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { isProcessAlive } from '@yaar/lib/process';
 
 interface PidRecord {
   pid: number;
@@ -45,15 +46,6 @@ export async function removePidFile(pidFile = PID_FILE): Promise<void> {
     await rm(pidFile, { force: true });
   } catch {
     /* non-critical */
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0); // signal 0 = existence check, no actual signal sent
-    return true;
-  } catch {
-    return false;
   }
 }
 

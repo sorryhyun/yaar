@@ -1,6 +1,7 @@
 import { mkdir, appendFile } from 'fs/promises';
 import { join } from 'path';
 import type { OSAction, UserInteraction } from '@yaar/shared';
+import { createDebouncedJsonFile, type DebouncedJsonFile } from '@yaar/lib/json-file';
 import { formatCompactInteraction } from '../lib/format-interaction.js';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
@@ -140,8 +141,6 @@ export class SessionLogger {
   // Write buffer: accumulates JSONL lines per file, flushed on a debounced timer
   private writeBuffer = new Map<string, string[]>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private metadataTimer: ReturnType<typeof setTimeout> | null = null;
-  private metadataDirty = false;
   // Files whose last append failed and whose lines were put back for one retry.
   private retriedFiles = new Set<string>();
 
@@ -151,8 +150,18 @@ export class SessionLogger {
   private pendingBlobs = new Map<string, string>();
   private knownBlobs = new Set<string>();
 
+  private readonly metadataWriter: DebouncedJsonFile;
+
   constructor(sessionInfo: SessionInfo) {
     this.sessionInfo = sessionInfo;
+    this.metadataWriter = createDebouncedJsonFile(
+      join(sessionInfo.directory, 'metadata.json'),
+      () => this.sessionInfo.metadata,
+      {
+        delayMs: METADATA_FLUSH_MS,
+        onError: (err) => log.error('metadata save failed', { err }),
+      },
+    );
   }
 
   /**
@@ -256,68 +265,61 @@ export class SessionLogger {
   }
 
   /**
-   * Flush all buffered log lines to disk.
+   * Flush all buffered log lines, pending blobs, and any pending metadata save to disk.
    */
   async flush(): Promise<void> {
-    if (this.writeBuffer.size === 0 && this.pendingBlobs.size === 0 && !this.metadataDirty) return;
-
-    // Snapshot and clear the buffer
-    const entries = [...this.writeBuffer.entries()];
-    this.writeBuffer.clear();
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-
-    // Blobs first, lines second. A line carrying a `contentRef` is a promise that the
-    // bytes are resolvable; writing it before its blob would make a reader tailing the
-    // log — or a crash landing between the two writes — see a reference to nothing.
-    // The reverse order only ever leaves an unreferenced blob, which is inert.
-    if (this.pendingBlobs.size > 0) {
-      const blobs = new Map(this.pendingBlobs);
-      this.pendingBlobs.clear();
-      try {
-        await writeBlobs(this.sessionInfo.directory, blobs, this.knownBlobs);
-      } catch (err) {
-        log.error('blob write failed', { err, count: blobs.size });
+    if (this.writeBuffer.size > 0 || this.pendingBlobs.size > 0) {
+      // Snapshot and clear the buffer
+      const entries = [...this.writeBuffer.entries()];
+      this.writeBuffer.clear();
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
       }
-    }
 
-    // Write each file's accumulated lines in a single appendFile call. A failed batch goes
-    // back ahead of anything logged since and gets one retry on the next flush; failing
-    // twice in a row drops it — loudly, since a persistent disk error would otherwise grow
-    // the buffer without bound.
-    const writes = entries.map(async ([filePath, lines]) => {
-      try {
-        await appendFile(filePath, lines.join(''));
-        this.retriedFiles.delete(filePath);
-      } catch (err) {
-        if (this.retriedFiles.has(filePath)) {
-          this.retriedFiles.delete(filePath);
-          log.error('log write failed twice — dropping lines', {
-            filePath,
-            count: lines.length,
-            err,
-          });
-          return;
+      // Blobs first, lines second. A line carrying a `contentRef` is a promise that the
+      // bytes are resolvable; writing it before its blob would make a reader tailing the
+      // log — or a crash landing between the two writes — see a reference to nothing.
+      // The reverse order only ever leaves an unreferenced blob, which is inert.
+      if (this.pendingBlobs.size > 0) {
+        const blobs = new Map(this.pendingBlobs);
+        this.pendingBlobs.clear();
+        try {
+          await writeBlobs(this.sessionInfo.directory, blobs, this.knownBlobs);
+        } catch (err) {
+          log.error('blob write failed', { err, count: blobs.size });
         }
-        log.warn('log write failed — will retry once', { filePath, count: lines.length, err });
-        this.retriedFiles.add(filePath);
-        this.writeBuffer.set(filePath, [...lines, ...(this.writeBuffer.get(filePath) ?? [])]);
-        this.scheduleFlush();
       }
-    });
-    await Promise.all(writes);
 
-    // Also flush metadata if dirty
-    if (this.metadataDirty) {
-      this.metadataDirty = false;
-      if (this.metadataTimer) {
-        clearTimeout(this.metadataTimer);
-        this.metadataTimer = null;
-      }
-      await this.saveMetadataToDisk();
+      // Write each file's accumulated lines in a single appendFile call. A failed batch goes
+      // back ahead of anything logged since and gets one retry on the next flush; failing
+      // twice in a row drops it — loudly, since a persistent disk error would otherwise grow
+      // the buffer without bound.
+      const writes = entries.map(async ([filePath, lines]) => {
+        try {
+          await appendFile(filePath, lines.join(''));
+          this.retriedFiles.delete(filePath);
+        } catch (err) {
+          if (this.retriedFiles.has(filePath)) {
+            this.retriedFiles.delete(filePath);
+            log.error('log write failed twice — dropping lines', {
+              filePath,
+              count: lines.length,
+              err,
+            });
+            return;
+          }
+          log.warn('log write failed — will retry once', { filePath, count: lines.length, err });
+          this.retriedFiles.add(filePath);
+          this.writeBuffer.set(filePath, [...lines, ...(this.writeBuffer.get(filePath) ?? [])]);
+          this.scheduleFlush();
+        }
+      });
+      await Promise.all(writes);
     }
+
+    // Cheap when nothing is pending — just waits out whatever is already in flight.
+    await this.metadataWriter.flush();
   }
 
   /**
@@ -328,11 +330,6 @@ export class SessionLogger {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    if (this.metadataTimer) {
-      clearTimeout(this.metadataTimer);
-      this.metadataTimer = null;
-    }
-    this.metadataDirty = true; // force metadata write
     await this.flush();
   }
 
@@ -505,7 +502,7 @@ export class SessionLogger {
    */
   async updateLastActivity(): Promise<void> {
     this.sessionInfo.metadata.lastActivity = new Date().toISOString();
-    this.metadataDirty = true;
+    this.metadataWriter.schedule();
     await this.flush();
   }
 
@@ -513,24 +510,6 @@ export class SessionLogger {
    * Schedule a debounced metadata save.
    */
   private scheduleMetadataSave(): void {
-    this.metadataDirty = true;
-    if (this.metadataTimer) return;
-    this.metadataTimer = setTimeout(() => {
-      this.metadataTimer = null;
-      this.metadataDirty = false;
-      this.saveMetadataToDisk().catch((err) => {
-        log.error('metadata save failed', { err });
-      });
-    }, METADATA_FLUSH_MS);
-  }
-
-  /**
-   * Write metadata to disk immediately.
-   */
-  private async saveMetadataToDisk(): Promise<void> {
-    await Bun.write(
-      join(this.sessionInfo.directory, 'metadata.json'),
-      JSON.stringify(this.sessionInfo.metadata, null, 2),
-    );
+    this.metadataWriter.schedule();
   }
 }

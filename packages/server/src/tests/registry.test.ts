@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'bun:test';
-import { ResourceRegistry, setAccessPrincipalResolver } from '../handlers/uri-registry.js';
+import {
+  ResourceRegistry,
+  isSessionPattern,
+  setAccessPrincipalResolver,
+} from '../handlers/uri-registry.js';
 import type { ResourceHandler } from '../handlers/uri-registry.js';
 import {
   getAccessPrincipal,
@@ -328,6 +332,39 @@ describe('ResourceRegistry', () => {
       const r = await as({ role: 'monitor' }, () => reg.execute('read', 'yaar://config/settings'));
       expect(r.isError).toBeUndefined();
       expect(text(r)).toBe('read-ok');
+    });
+
+    // The flag used to be opt-in per registration, and yaar://session/agents shipped
+    // without it. Under the prefix it is now derived, so an untagged handler is gated.
+    describe('derived for the yaar://session namespace', () => {
+      const untagged: Array<[pattern: string, uri: string]> = [
+        ['yaar://session', 'yaar://session'],
+        ['yaar://session/context', 'yaar://session/context'],
+        ['yaar://session/monitors/*', 'yaar://session/monitors/0'],
+      ];
+
+      for (const [pattern, uri] of untagged) {
+        it(`gates an untagged handler at ${pattern}`, async () => {
+          const reg = new ResourceRegistry();
+          reg.register(
+            pattern,
+            pattern.endsWith('/*') ? wildcardHandler() : mockHandler({ description: 'untagged' }),
+          );
+          const denied = await as({ role: 'monitor' }, () => reg.execute('read', uri));
+          expect(denied.isError).toBe(true);
+          expect(text(denied)).toContain('Access denied');
+
+          const allowed = await as({ role: 'session' }, () => reg.execute('read', uri));
+          expect(allowed.isError).toBeUndefined();
+        });
+      }
+
+      it('stops at the namespace boundary — a lookalike prefix is not the session', () => {
+        expect(isSessionPattern('yaar://session')).toBe(true);
+        expect(isSessionPattern('yaar://session/agents/*')).toBe(true);
+        expect(isSessionPattern('yaar://sessions')).toBe(false);
+        expect(isSessionPattern('yaar://config/session')).toBe(false);
+      });
     });
   });
 });

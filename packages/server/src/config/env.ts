@@ -20,6 +20,19 @@ export function getEnvInt(key: string, defaultValue: number): number {
   return Number.isFinite(parsed) ? parsed : defaultValue;
 }
 
+/**
+ * A tri-state boolean env var: `1` forces on, `0` forces off, anything else (including
+ * unset) falls back to `defaultValue` — which is itself often platform-dependent (Android
+ * vs. not). Explicit beats derived either way, so a forced `0` still wins on a platform
+ * whose default would have been on, and a forced `1` still wins where it would have been off.
+ */
+export function envFlag(key: string, defaultValue: boolean): boolean {
+  const flag = process.env[key];
+  if (flag === '1') return true;
+  if (flag === '0') return false;
+  return defaultValue;
+}
+
 // __YAAR_BUNDLED is injected at compile time via bun build --define
 declare const __YAAR_BUNDLED: boolean | undefined;
 export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BUNDLED;

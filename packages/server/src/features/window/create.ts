@@ -13,8 +13,8 @@ import {
   defaultWindowSize,
 } from '@yaar/shared';
 import { componentLayoutSchema } from '@yaar/shared/schemas';
-import type { VerbResult } from '../../handlers/uri-registry.js';
-import { okJson, error, validateRelativePath, getActiveSessionId } from '../../handlers/utils.js';
+import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
+import { validateRelativePath, getActiveSessionId } from '../../handlers/utils.js';
 import { clientAwayNote } from '../../session/client-presence.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/agent-context.js';

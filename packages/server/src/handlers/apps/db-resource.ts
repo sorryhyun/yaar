@@ -9,12 +9,17 @@
  * See docs/reference/app_db_reference.md. On disk: storage/apps/{appId}/data.db
  */
 
-import type { VerbResult } from '../uri-registry.js';
+import { okJson, okLinks, error, type VerbResult } from '../../lib/verb-result.js';
 import type { ResolvedUri } from '../uri-resolve.js';
-import { okJson, okLinks, error } from '../utils.js';
+import { defineActions, summarizeActions } from '../define-actions.js';
 import { errMessage } from '@yaar/lib/errors';
 import { subscriptionRegistry } from '../../http/subscriptions.js';
-import { getAppDatabase, type DbFilter, type DbFindOptions } from '../../db/index.js';
+import {
+  getAppDatabase,
+  type AppDatabase,
+  type DbFilter,
+  type DbFindOptions,
+} from '../../db/index.js';
 import { parseAppDbPath } from './paths.js';
 
 /** Extract find options ({ sort, limit, offset }) from an invoke payload. */
@@ -28,6 +33,105 @@ function findOptionsFrom(payload: Record<string, unknown>): DbFindOptions {
   return options;
 }
 
+interface CollectionCtx {
+  db: AppDatabase;
+  collection: string;
+  /** The URI invoked, which is what subscribers to this collection are notified on. */
+  uri: string;
+  payload: Record<string, unknown>;
+}
+
+function filterOf(payload: Record<string, unknown>): DbFilter | undefined {
+  return (payload.filter ?? undefined) as DbFilter | undefined;
+}
+
+/** Actions on `/db/{collection}`. */
+const collectionActions = defineActions<CollectionCtx>(
+  {
+    insert: {
+      description: 'Insert "doc"; returns its _id.',
+      run: ({ db, collection, uri, payload }) => {
+        if (!payload.doc || typeof payload.doc !== 'object') {
+          return error('"doc" (object) is required for insert.');
+        }
+        const _id = db.insert(collection, payload.doc as Record<string, unknown>);
+        subscriptionRegistry.notifyChange(uri);
+        return okJson({ _id });
+      },
+    },
+    insertMany: {
+      description: 'Insert every document in "docs"; returns their ids.',
+      run: ({ db, collection, uri, payload }) => {
+        if (!Array.isArray(payload.docs)) {
+          return error('"docs" (array of objects) is required for insertMany.');
+        }
+        const ids = db.insertMany(collection, payload.docs as Record<string, unknown>[]);
+        subscriptionRegistry.notifyChange(uri);
+        return okJson({ ids });
+      },
+    },
+    find: {
+      description: 'Documents matching "filter", with optional sort/limit/offset.',
+      run: ({ db, collection, payload }) =>
+        okJson(db.find(collection, filterOf(payload), findOptionsFrom(payload))),
+    },
+    search: {
+      description: 'Full-text search for "query".',
+      run: ({ db, collection, payload }) => {
+        if (typeof payload.query !== 'string') {
+          return error('"query" (string) is required for search.');
+        }
+        const limit = typeof payload.limit === 'number' ? payload.limit : undefined;
+        return okJson(db.search(collection, payload.query, limit));
+      },
+    },
+    count: {
+      description: 'How many documents match "filter".',
+      run: ({ db, collection, payload }) =>
+        okJson({ count: db.count(collection, filterOf(payload)) }),
+    },
+    removeWhere: {
+      description: 'Delete every document matching a non-empty "filter".',
+      run: ({ db, collection, uri, payload }) => {
+        const filter = filterOf(payload);
+        if (!filter || Object.keys(filter).length === 0) {
+          return error(
+            'removeWhere requires a non-empty "filter". To delete everything, drop the collection.',
+          );
+        }
+        const deleted = db.removeWhere(collection, filter);
+        if (deleted > 0) subscriptionRegistry.notifyChange(uri);
+        return okJson({ deleted });
+      },
+    },
+  },
+  {
+    unknown: (action, names) =>
+      error(`Unknown db action "${action}". Supported: ${names.join(', ')}.`),
+  },
+);
+
+/** Actions on `/db/{collection}/{docId}`. */
+const documentActions = defineActions<CollectionCtx & { docId: string }>(
+  {
+    update: {
+      description: 'Shallow-merge "patch" into the document.',
+      run: ({ db, collection, docId, uri, payload }) => {
+        if (!payload.patch || typeof payload.patch !== 'object') {
+          return error('"patch" (object) is required for update.');
+        }
+        const updated = db.update(collection, docId, payload.patch as Record<string, unknown>);
+        if (!updated) return error(`Document "${docId}" not found in collection "${collection}".`);
+        subscriptionRegistry.notifyChange(uri);
+        return okJson({ updated: true });
+      },
+    },
+  },
+  {
+    unknown: () => error('Document URIs support only { action: "update", patch: {...} }.'),
+  },
+);
+
 export const DB_DESCRIBE = {
   description:
     'App-scoped SQLite database. Documents are stored in named collections and queried ' +
@@ -39,12 +143,13 @@ export const DB_DESCRIBE = {
     type: 'object',
     required: ['action'],
     properties: {
+      // One schema for both URI shapes, so the enum is the union of the two tables.
       action: {
         type: 'string',
-        enum: ['insert', 'insertMany', 'find', 'search', 'count', 'removeWhere', 'update'],
+        enum: [...collectionActions.names, ...documentActions.names],
         description:
-          'Collection actions: insert/insertMany/find/search/count/removeWhere. ' +
-          'Document actions (URI ends with /{docId}): update.',
+          `Collection actions: ${summarizeActions(collectionActions)}. ` +
+          `Document actions (URI ends with /{docId}): ${summarizeActions(documentActions)}.`,
       },
       doc: { type: 'object', description: 'Document to insert (for insert)' },
       docs: { type: 'array', description: 'Documents to insert (for insertMany)' },
@@ -104,17 +209,15 @@ export async function handleDbVerb(
         subscriptionRegistry.notifyChange(resolved.sourceUri);
         return okJson({ deleted: true });
       }
-      // invoke
-      if (payload?.action !== 'update') {
-        return error('Document URIs support only { action: "update", patch: {...} }.');
-      }
-      if (!payload.patch || typeof payload.patch !== 'object') {
-        return error('"patch" (object) is required for update.');
-      }
-      const updated = db.update(collection, docId, payload.patch as Record<string, unknown>);
-      if (!updated) return error(`Document "${docId}" not found in collection "${collection}".`);
-      subscriptionRegistry.notifyChange(resolved.sourceUri);
-      return okJson({ updated: true });
+      // Awaited, here and below, so a throw inside an action (a bad collection name) lands
+      // in the catch rather than escaping as a rejection.
+      return await documentActions.dispatch(String(payload?.action ?? ''), {
+        db,
+        collection,
+        docId,
+        uri: resolved.sourceUri,
+        payload: payload ?? {},
+      });
     }
 
     // ── /db/{collection} — collection-level verbs ──
@@ -130,51 +233,12 @@ export async function handleDbVerb(
     // invoke
     const action = payload?.action;
     if (!action) return error('Payload must include "action".');
-    const filter = (payload?.filter ?? undefined) as DbFilter | undefined;
-
-    switch (action) {
-      case 'insert': {
-        if (!payload?.doc || typeof payload.doc !== 'object') {
-          return error('"doc" (object) is required for insert.');
-        }
-        const _id = db.insert(collection, payload.doc as Record<string, unknown>);
-        subscriptionRegistry.notifyChange(resolved.sourceUri);
-        return okJson({ _id });
-      }
-      case 'insertMany': {
-        if (!Array.isArray(payload?.docs)) {
-          return error('"docs" (array of objects) is required for insertMany.');
-        }
-        const ids = db.insertMany(collection, payload.docs as Record<string, unknown>[]);
-        subscriptionRegistry.notifyChange(resolved.sourceUri);
-        return okJson({ ids });
-      }
-      case 'find':
-        return okJson(db.find(collection, filter, findOptionsFrom(payload!)));
-      case 'search': {
-        if (typeof payload?.query !== 'string') {
-          return error('"query" (string) is required for search.');
-        }
-        const limit = typeof payload.limit === 'number' ? payload.limit : undefined;
-        return okJson(db.search(collection, payload.query, limit));
-      }
-      case 'count':
-        return okJson({ count: db.count(collection, filter) });
-      case 'removeWhere': {
-        if (!filter || Object.keys(filter).length === 0) {
-          return error(
-            'removeWhere requires a non-empty "filter". To delete everything, drop the collection.',
-          );
-        }
-        const deleted = db.removeWhere(collection, filter);
-        if (deleted > 0) subscriptionRegistry.notifyChange(resolved.sourceUri);
-        return okJson({ deleted });
-      }
-      default:
-        return error(
-          `Unknown db action "${String(action)}". Supported: insert, insertMany, find, search, count, removeWhere.`,
-        );
-    }
+    return await collectionActions.dispatch(String(action), {
+      db,
+      collection,
+      uri: resolved.sourceUri,
+      payload: payload!,
+    });
   } catch (err) {
     return error(errMessage(err));
   }

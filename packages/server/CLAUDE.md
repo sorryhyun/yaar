@@ -157,6 +157,9 @@ src/
 │                         #   archive-ops.ts (extract / compress)
 └── lib/                  # Utilities that need server internals (the generic half is @yaar/lib, see below)
     ├── browser/              # CDP browser automation — Chrome discovery, sessions, pool, downloads
+    ├── verb-result.ts        # VerbResult + content blocks + the pure builders (ok, okJson, error, okLinks, prependNote, …)
+    ├── read-options.ts       # ReadOptions, hasLineFilter, applyReadOptions (lines/pattern/chars), applyEdit
+    ├── state-path.ts         # Walk/split/search a window-state value by path segments (used by read-options + app-protocol)
     ├── schema-refs.ts        # resolveRef/selfContained — following a protocol schema's `$defs` pointers
     ├── command-signature.ts  # Rendered call signatures for protocol commands
     ├── protocol-index.ts     # First-sentence summarization for command indexes

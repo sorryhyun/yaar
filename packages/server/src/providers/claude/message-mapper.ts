@@ -10,6 +10,7 @@ import type { StreamMessage, TokenUsage } from '../types.js';
 import { consumeLastCall } from '../../mcp/tool-call-buffer.js';
 import { assistantNotice, describeResultError, rateLimitNotice, systemNotice } from './errors.js';
 import { toNoticeMessage } from '../notice.js';
+import { formatMcpResult } from '../mcp-content.js';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('claude:mapper');
@@ -508,42 +509,13 @@ function extractToolResult(message: unknown, blocks?: ToolBlockBuffer): StreamMe
         type: string;
         tool_use_id?: string;
         content?: unknown;
+        is_error?: boolean;
       };
 
-      let resultText = '';
-      if (typeof toolResult.content === 'string') {
-        resultText = toolResult.content;
-      } else if (Array.isArray(toolResult.content)) {
-        resultText = toolResult.content
-          .filter(
-            (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
-          )
-          .map((item) => {
-            if (item.type === 'text' && typeof item.text === 'string') return item.text;
-            if (
-              item.type === 'resource' &&
-              typeof item.resource === 'object' &&
-              item.resource !== null
-            ) {
-              const res = item.resource as { text?: string; uri?: string };
-              return res.text ?? `[resource: ${res.uri}]`;
-            }
-            if (item.type === 'resource_link') {
-              const link = item as { uri?: string; name?: string };
-              return `[${link.name ?? 'link'}](${link.uri})`;
-            }
-            // Binary blocks carry no text, and a screenshot result is *nothing but*
-            // binary. Mark them the way the Codex mapper does rather than dropping
-            // them to '': the model still receives the real image, this channel is
-            // the transcript/UI one, and an empty string here used to erase the
-            // whole result (see below).
-            if (item.type === 'image') return '[image omitted]';
-            if (item.type === 'audio') return '[audio omitted]';
-            return '';
-          })
-          .filter(Boolean)
-          .join('');
-      }
+      const resultText = formatMcpResult({
+        content: toolResult.content,
+        isError: toolResult.is_error,
+      });
 
       // Emitted whether or not the blocks yielded readable text. This used to be
       // guarded on `resultText`, so an image-only result — `previewScreenshot`,

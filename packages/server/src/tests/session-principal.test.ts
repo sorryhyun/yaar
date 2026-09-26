@@ -153,3 +153,29 @@ describe('yaar://session/agents is tagged like the rest of the namespace', () =>
     expect(listAgents()).rejects.toThrow('No active session');
   });
 });
+
+describe('the gate is derived from the yaar://session prefix, not declared', () => {
+  // No registration in handlers/session.ts or handlers/agents.ts carries an `access` tag
+  // any more; `ResourceRegistry.register` applies it from the pattern. This pins that
+  // every real registration in the namespace still comes out gated.
+  const SESSION_URIS = [
+    'yaar://session',
+    'yaar://session/browser',
+    'yaar://session/monitors',
+    'yaar://session/monitors/0',
+    'yaar://session/context',
+    'yaar://session/agents',
+    'yaar://session/agents/monitor',
+  ];
+
+  it('refuses an app agent on every registration under the prefix', async () => {
+    for (const uri of SESSION_URIS) {
+      const result = await runWithAgentContext(
+        { agentId: 'app-0-notes', sessionId: SESSION, role: 'app' },
+        () => initRegistry().execute('describe', uri),
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toContain('Access denied');
+    }
+  });
+});

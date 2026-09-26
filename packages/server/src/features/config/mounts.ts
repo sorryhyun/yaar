@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error } from '../../lib/verb-result.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { addMount, removeMount, loadMounts } from '../../storage/mounts.js';
 

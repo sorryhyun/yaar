@@ -2,11 +2,10 @@
  * Shared helpers for window feature logic.
  */
 
-import type { VerbResult } from '../../handlers/uri-registry.js';
+import { error, type VerbResult } from '../../lib/verb-result.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getAppMeta } from '../apps/discovery.js';
-import { error } from '../../handlers/utils.js';
 import { storageUriForPath } from '../../http/access.js';
 import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import type { WindowVariant } from '@yaar/shared';

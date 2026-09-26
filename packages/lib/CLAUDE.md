@@ -44,8 +44,11 @@ direction is one-way forever.
 | `errors.ts` | `errMessage(unknown)` |
 | `ids.ts` | `genId` / `genStamp` |
 | `image.ts` | Data-URL parsing, and `toWebPForModel()` — the re-encode applied on the way into a model context |
+| `json-file.ts` | `createDebouncedJsonFile()` — debounced, atomic (tmp + rename), serialized JSON writer, with `flush()` |
 | `open-url.ts` | Open a URL in the user's browser |
+| `paths.ts` | `containedPath`/`isContained`/`isPathWithin`/`containedRealPath` — path containment, the `isAbsolute(rel)` form (a substring `includes('..')` check wrongly rejects a name like `a..b`) |
 | `pick-directory.ts` | Native directory picker |
+| `process.ts` | `isProcessAlive` (EPERM means alive), `readProcessStartTime` (Linux procfs, for a PID-reuse guard) |
 | `ssrf.ts` | URL validation and `safeFetch` with redirect following |
 
 `ssrf.ts` and `freedpi/` import each other on purpose: the guard that keeps the bypass from

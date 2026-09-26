@@ -3,9 +3,8 @@
  */
 
 import type { OSAction } from '@yaar/shared';
-import type { VerbResult } from '../../handlers/uri-registry.js';
+import { ok, error, type VerbResult } from '../../lib/verb-result.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import { formatWindowRef, requireWindowExists, emitActionChecked } from './helpers.js';

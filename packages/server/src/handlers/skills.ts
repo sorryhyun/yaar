@@ -11,9 +11,10 @@
  * vitest's module graph).
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { okResource, okLinks, error, type VerbResult } from '../lib/verb-result.js';
+import { extractIdFromUri } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { okResource, okLinks, error, extractIdFromUri } from './utils.js';
 // Names only — importing topics.js here would pull its `.md` text imports into the
 // static module graph. topics.ts asserts this list matches what it actually serves.
 import { TOPIC_NAMES } from '../features/skills/topic-names.js';

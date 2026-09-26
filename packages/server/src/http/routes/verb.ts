@@ -13,9 +13,11 @@
 import { expandBraceUri } from '@yaar/shared';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
-import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
+import { NoActiveSessionError } from '../../handlers/utils.js';
+import { isEmptyLinkList, type VerbResult } from '../../lib/verb-result.js';
+import type { InvokePayload, Verb } from '../../handlers/uri-registry.js';
+import type { ReadOptions } from '../../lib/read-options.js';
 import { invokeSources, resolveInvokeSources } from '../../handlers/storage-copy.js';
-import type { InvokePayload, ReadOptions, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   namesSelf,
   requireApp,

@@ -13,11 +13,12 @@
  * the resource modules are already shaped as independent handlers.
  */
 
-import type { ReadOptions, ResourceRegistry, VerbResult } from '../uri-registry.js';
+import type { ReadOptions } from '../../lib/read-options.js';
+import type { ResourceRegistry } from '../uri-registry.js';
+import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
 import type { ResolvedUri } from '../uri-resolve.js';
-import { okJson, error } from '../utils.js';
 import { parseAppDbPath } from './paths.js';
-import { COMPRESS_ACTION, COPY_ACTION, EXTRACT_ACTION, FROM_SCHEMA } from '../storage-copy.js';
+import { FROM_SCHEMA } from '../storage-copy.js';
 import { DB_DESCRIBE, handleDbVerb } from './db-resource.js';
 import {
   describePersonas,
@@ -32,6 +33,7 @@ import {
   listStorage,
   invokeStorage,
   deleteStorage,
+  appStorageActions,
 } from './storage-resource.js';
 import {
   describeAppProtocol,
@@ -139,24 +141,17 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       type: 'object',
       required: ['action'],
       properties: {
-        // The app-level actions are derived from the table that dispatches them
-        // (`appActions`); the storage sub-path's own actions are appended because this
-        // one registration is the composite door onto both — the registry has no middle
-        // wildcard, so `yaar://apps/{id}/storage/…` cannot register its own schema.
+        // Both lists are derived from the tables that dispatch them (`appActions`,
+        // `appStorageActions`); they are concatenated because this one registration is
+        // the composite door onto both — the registry has no middle wildcard, so
+        // `yaar://apps/{id}/storage/…` cannot register its own schema.
         action: {
           type: 'string',
-          enum: [
-            ...appActions.names,
-            'write',
-            COPY_ACTION,
-            'grep',
-            EXTRACT_ACTION,
-            COMPRESS_ACTION,
-          ],
+          enum: [...appActions.names, ...appStorageActions.names],
           description:
             `On the app itself: ${appActions.names.join(', ')}. ` +
-            'On a /storage/ sub-path: write, copy, grep, extract, compress. On a /db/ sub-path see ' +
-            'describe(yaar://apps/{id}/db/{collection}).',
+            `On a /storage/ sub-path: ${appStorageActions.names.join(', ')}. On a /db/ sub-path ` +
+            'see describe(yaar://apps/{id}/db/{collection}).',
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
         content: { type: 'string', description: 'File content (for storage write)' },

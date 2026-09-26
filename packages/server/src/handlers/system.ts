@@ -16,9 +16,9 @@
  * split and behind `install` returning before the work finishes.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { ok, okJson, okLinks, error, type VerbResult } from '../lib/verb-result.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, okJson, okLinks, error } from './utils.js';
 import {
   checkForUpdate,
   getUpdateStatus,

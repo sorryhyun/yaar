@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error } from '../../lib/verb-result.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { genId } from '@yaar/lib/ids';
 import { getSessionId } from '../../agents/agent-context.js';

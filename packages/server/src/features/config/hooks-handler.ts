@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error } from '../../lib/verb-result.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import type { HookAction } from './hooks.js';
 import { addHook, loadHooks, removeHook } from './hooks.js';

@@ -4,11 +4,12 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, unlink, rename, rm, stat, realpath } from 'fs/promises';
+import { mkdir, readdir, unlink, rename, rm, stat } from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { join, normalize, relative, dirname, extname } from 'path';
+import { join, relative, dirname, extname } from 'path';
 import { pdfToImages, pdfToText, getPdfPageCount } from '../features/pdf.js';
 import { toWebPForModel } from '@yaar/lib/image';
+import { containedPath, containedRealPath } from '@yaar/lib/paths';
 import {
   STORAGE_DIR,
   getConfigDir,
@@ -54,22 +55,8 @@ export async function resolvePathAsync(filePath: string): Promise<ResolvedPath |
   const mountResult = resolveMountPath(cleanedPath);
   if (mountResult) return mountResult;
 
-  const resolved = resolveInStorageDir(cleanedPath);
-  if (!resolved) return null;
-  const normalizedPath = resolved.absolutePath;
-
-  try {
-    const realPath = await realpath(normalizedPath);
-    const realBase = await realpath(STORAGE_DIR);
-    const realRel = relative(realBase, realPath);
-    if (realRel.startsWith('..') || realRel.includes('..')) {
-      return null;
-    }
-    return { absolutePath: realPath, readOnly: false };
-  } catch {
-    // File doesn't exist yet — fall back to sync check
-    return { absolutePath: normalizedPath, readOnly: false };
-  }
+  const realPath = await containedRealPath(STORAGE_DIR, cleanedPath);
+  return realPath ? { absolutePath: realPath, readOnly: false } : null;
 }
 
 /** Backslashes from Windows paths / URL-decoded %5C. */
@@ -79,12 +66,8 @@ function normalizeSeparators(filePath: string): string {
 
 /** The non-mount default: under STORAGE_DIR, and null when the path climbs out of it. */
 function resolveInStorageDir(cleanedPath: string): ResolvedPath | null {
-  const normalizedPath = normalize(join(STORAGE_DIR, cleanedPath));
-  const relativePath = relative(STORAGE_DIR, normalizedPath);
-  if (relativePath.startsWith('..') || relativePath.includes('..')) {
-    return null;
-  }
-  return { absolutePath: normalizedPath, readOnly: false };
+  const absolutePath = containedPath(STORAGE_DIR, cleanedPath);
+  return absolutePath ? { absolutePath, readOnly: false } : null;
 }
 
 /**
@@ -832,12 +815,10 @@ export async function storageGrep(
  * read + parse on every access.
  */
 export async function configStatMtime(filePath: string): Promise<number | null> {
-  const configDir = getConfigDir();
-  const normalizedPath = normalize(join(configDir, filePath));
-  const rel = relative(configDir, normalizedPath);
-  if (rel.startsWith('..') || rel.includes('..')) return null;
+  const resolved = containedPath(getConfigDir(), filePath);
+  if (!resolved) return null;
   try {
-    return (await stat(normalizedPath)).mtimeMs;
+    return (await stat(resolved)).mtimeMs;
   } catch {
     return null;
   }
@@ -847,15 +828,13 @@ export async function configStatMtime(filePath: string): Promise<number | null> 
  * Read a file from the config directory.
  */
 export async function configRead(filePath: string): Promise<StorageReadResult> {
-  const configDir = getConfigDir();
-  const normalizedPath = normalize(join(configDir, filePath));
-  const rel = relative(configDir, normalizedPath);
-  if (rel.startsWith('..') || rel.includes('..')) {
+  const resolved = containedPath(getConfigDir(), filePath);
+  if (!resolved) {
     return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
   }
 
   try {
-    const content = await Bun.file(normalizedPath).text();
+    const content = await Bun.file(resolved).text();
     return { success: true, content };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
@@ -870,16 +849,14 @@ export async function configWrite(
   filePath: string,
   content: string
 ): Promise<StorageWriteResult> {
-  const configDir = getConfigDir();
-  const normalizedPath = normalize(join(configDir, filePath));
-  const rel = relative(configDir, normalizedPath);
-  if (rel.startsWith('..') || rel.includes('..')) {
+  const resolved = containedPath(getConfigDir(), filePath);
+  if (!resolved) {
     return { success: false, path: filePath, error: 'Invalid path: path traversal detected' };
   }
 
   try {
-    await mkdir(dirname(normalizedPath), { recursive: true });
-    await Bun.write(normalizedPath, content);
+    await mkdir(dirname(resolved), { recursive: true });
+    await Bun.write(resolved, content);
     return { success: true, path: filePath };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';

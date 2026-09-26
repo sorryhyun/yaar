@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error } from '../../lib/verb-result.js';
 import type { Settings } from '../../storage/settings.js';
 import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
 import type { DesktopUpdateSettingsAction } from '@yaar/shared';

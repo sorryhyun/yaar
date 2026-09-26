@@ -9,6 +9,8 @@
 import type { ResolvedUri } from './uri-resolve.js';
 import { resolveUri } from './uri-resolve.js';
 import type { AccessPrincipal } from '../agents/agent-context.js';
+import { error, ok, prependNote, type VerbResult } from '../lib/verb-result.js';
+import { hasLineFilter, type ReadOptions } from '../lib/read-options.js';
 
 /**
  * Injected resolver for the current caller's principal. Decoupled from
@@ -26,185 +28,11 @@ export function setAccessPrincipalResolver(fn: () => AccessPrincipal): void {
 
 export type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
 
-export interface EmbeddedResourceBlock {
-  type: 'resource';
-  resource:
-    | { uri: string; text: string; mimeType?: string }
-    | { uri: string; blob: string; mimeType?: string };
-}
-
-export interface ResourceLinkBlock {
-  type: 'resource_link';
-  uri: string;
-  name: string;
-  description?: string;
-  mimeType?: string;
-  /** Optional resource-specific hint (e.g. app `kind: 'system' | 'app'`). */
-  kind?: string;
-}
-
-/** One block of a `VerbResult`'s content — the canonical MCP content-block union. */
-export type ContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'image'; data: string; mimeType: string }
-  | EmbeddedResourceBlock
-  | ResourceLinkBlock;
-
-/** Check if a value is an array of MCP content blocks. */
-export function isContentBlocks(value: unknown): value is ContentBlock[] {
-  if (!Array.isArray(value) || value.length === 0) return false;
-  return value.every(
-    (item) =>
-      item &&
-      typeof item === 'object' &&
-      (((item as Record<string, unknown>).type === 'text' &&
-        typeof (item as Record<string, unknown>).text === 'string') ||
-        ((item as Record<string, unknown>).type === 'image' &&
-          typeof (item as Record<string, unknown>).data === 'string') ||
-        ((item as Record<string, unknown>).type === 'resource' &&
-          typeof (item as Record<string, unknown>).resource === 'object') ||
-        ((item as Record<string, unknown>).type === 'resource_link' &&
-          typeof (item as Record<string, unknown>).uri === 'string')),
-  );
-}
-
-export interface VerbResult {
-  content: ContentBlock[];
-  isError?: boolean;
-  /**
-   * This failure is "the resource is not there", not "the call went wrong". Absence is
-   * a routine answer — an app reading an optional config file on a first run — so the
-   * doors that count failures can leave it out of the tally instead of reporting a
-   * clean first launch as dozens of errors. Set only alongside `isError: true`; see
-   * `notFoundError` in handlers/utils.ts.
-   */
-  notFound?: boolean;
-  /** An `okLinks([])` result — a listing with no children. See `isEmptyLinkList`. */
-  emptyList?: boolean;
-  /**
-   * The read's `lines`/`pattern` filter was applied to this result. A read that asked for
-   * one and comes back without this flag had it ignored, and `ResourceRegistry.execute`
-   * says so — see {@link hasLineFilter}. Stripped there; never leaves the registry.
-   */
-  readFiltered?: boolean;
-  /**
-   * Notes `prependNote` added to a result carrying `structuredContent`, newest first. Their
-   * text blocks never reach a model beside that object, so `foldNotes` moves them into it at
-   * the MCP boundary. Never set without `structuredContent`.
-   */
-  notes?: string[];
-  /**
-   * Optional lossless, typed copy of the result, for `POST /api/verb` (app→app SDK calls)
-   * and `resolveAppWindow`. Rides through to the MCP `CallToolResult` via the tool
-   * handler's `{...result}` spread — and there it **replaces the text blocks for the
-   * model**: the Claude CLI and Codex both hand the model the serialized
-   * `structuredContent` and drop every text block beside it (the CLI keeps non-text blocks).
-   * Anything a model must read, a note or truncation included, belongs inside this object
-   * when it is set. See `okJson` in handlers/utils.ts.
-   *
-   * Object-only, matching the MCP `structuredContent` contract (and the SDK's
-   * `{[x:string]:unknown}` type). Bare-array returns keep their text-only shape and
-   * still round-trip through `toEnvelope`'s `tryParseJson`.
-   */
-  structuredContent?: Record<string, unknown>;
-}
-
-/**
- * Prepend a note to a VerbResult, as a `(…)` text block.
- *
- * On a result carrying `structuredContent` the text block never reaches a model (see
- * `okJson` in handlers/utils.ts), so the note is also recorded in `notes` for
- * {@link foldNotes} to carry into the object at the MCP boundary. It is not folded here:
- * this result may be headed for `POST /api/verb`, whose `data` is the app's own object and
- * must not grow our keys.
- */
-export function prependNote(result: VerbResult, note: string): VerbResult {
-  return {
-    ...result,
-    content: [{ type: 'text', text: `(${note})` }, ...result.content],
-    ...(result.structuredContent ? { notes: [note, ...(result.notes ?? [])] } : {}),
-  };
-}
-
-/**
- * Carry a result's `notes` into its `structuredContent` as `_notes`, first, where a model
- * reads them. Call once, where a result leaves for a model — the MCP tool boundary — and
- * never on a path to `POST /api/verb`.
- */
-export function foldNotes(result: VerbResult): VerbResult {
-  const { notes, ...rest } = result;
-  if (!notes?.length || !rest.structuredContent) return rest;
-  const { _notes: earlier, ...data } = rest.structuredContent;
-  return {
-    ...rest,
-    structuredContent: { _notes: [...notes, ...(Array.isArray(earlier) ? earlier : [])], ...data },
-  };
-}
-
 export interface DescribeResult {
   uri: string;
   description: string;
   verbs: Verb[];
   invokeSchema?: Record<string, unknown>;
-}
-
-/** Optional filtering params for the read verb (ripgrep-style). */
-export interface ReadOptions {
-  /** Line range to read, e.g. "10-20" or "50" (1-based, inclusive). */
-  lines?: string;
-  /** Regex pattern to filter matching lines. */
-  pattern?: string;
-  /** Number of context lines around pattern matches (default: 0). */
-  context?: number;
-  /**
-   * Character range to read, e.g. "0-50000" or "150000-" (0-based offset, end exclusive —
-   * `String.slice`). The only filter that can page a file that is one huge line: `lines`
-   * and `pattern` both hand back whole lines. Exclusive with `lines`/`pattern`.
-   */
-  chars?: string;
-  /**
-   * PDF only: extract the text layer. `true` (or "all") reads the whole document; a range
-   * string like "1-3" scopes it. Cheapest way to read a text-based PDF.
-   */
-  pdfText?: boolean | string;
-  /**
-   * PDF page range to rasterize to images, e.g. "1-3", "5", "2-" (1-based, inclusive) — for
-   * scanned/visual PDFs or when layout matters. Omit both pdfText and pdfPages to get document
-   * metadata plus a hint to open the PDF in a viewer window — reading a PDF should not ingest
-   * its content unless the agent explicitly asks.
-   */
-  pdfPages?: string;
-  /**
-   * Images only: return the stored bytes as-is instead of the WebP re-encode a read
-   * normally applies before the image enters the context. For when the pixels are the
-   * subject rather than the content.
-   */
-  rawImage?: boolean;
-  /**
-   * Answer an absent resource with `null` instead of an error.
-   *
-   * The caller is declaring that absence is an expected state — `appStorage.readJsonOr`
-   * is exactly this declaration, and without a way to send it every optional config file
-   * an app reads manufactured a failure underneath the fallback that handled it.
-   *
-   * A resource whose stored content is literally `null` is indistinguishable from an
-   * absent one through this option. Callers that must tell them apart should `list` the
-   * parent instead.
-   */
-  missingOk?: boolean;
-}
-
-/**
- * True when a read asked for line filtering — `context` alone filters nothing.
- *
- * The read tool offers `lines`/`pattern` on every URI, but only some resources hold text a
- * line filter means anything on. A handler that applies it marks the result `readFiltered`;
- * one that cannot leaves the flag off, and `ResourceRegistry.execute` notes that the filter
- * was ignored. It used to be dropped in silence: a pattern read of an 80 KB window state
- * came back whole, indistinguishable from a read where every line matched.
- */
-export function hasLineFilter(options?: ReadOptions): boolean {
-  return Boolean(options?.lines || options?.pattern || options?.chars);
 }
 
 /**
@@ -235,6 +63,9 @@ export interface ResourceHandler {
    * token-backed bundled system app; every other caller receives a 403-style
    * error. Enforced centrally in ResourceRegistry.execute(), which is the
    * authority — it sits behind both doors (MCP and `POST /api/verb`).
+   *
+   * Never needed under `yaar://session`: `register` applies it to every pattern
+   * there whether or not the handler asks (see {@link isSessionPattern}).
    */
   access?: 'session-principal';
 
@@ -262,6 +93,25 @@ interface Registration {
   handler: ResourceHandler;
   /** 'exact' | 'prefix' | 'wildcard' — determined at registration time. */
   matchType: 'exact' | 'prefix' | 'wildcard';
+  /** The access `execute` enforces: the handler's own, or the one its prefix imposes. */
+  access: ResourceHandler['access'];
+}
+
+/**
+ * Is this pattern in the session principal's private namespace?
+ *
+ * Every such pattern is `session-principal`, derived rather than declared. It used to be
+ * a flag each registration set by hand, and `yaar://session/agents` shipped without it:
+ * the HTTP door's own `isSessionUri` refusal (http/access.ts) still stopped apps, so
+ * nothing looked wrong, but a monitor or app *agent* never passes that door and reached
+ * the agent roster and its interrupt/relay/delete. The HTTP check stays as defence in
+ * depth; this is the one that covers every caller.
+ *
+ * There is no weaker access a handler here could ask for — `access` has one value — so
+ * deriving it cannot override a deliberate choice; it can only fill in a forgotten one.
+ */
+export function isSessionPattern(pattern: string): boolean {
+  return pattern === 'yaar://session' || pattern.startsWith('yaar://session/');
 }
 
 export class ResourceRegistry {
@@ -295,7 +145,8 @@ export class ResourceRegistry {
           'describe answers for ids that name no resource.',
       );
     }
-    this.registrations.push({ pattern, handler, matchType });
+    const access = isSessionPattern(pattern) ? 'session-principal' : handler.access;
+    this.registrations.push({ pattern, handler, matchType, access });
   }
 
   /**
@@ -303,13 +154,17 @@ export class ResourceRegistry {
    * Priority: exact > longest prefix > wildcard.
    */
   findHandler(uri: string): ResourceHandler | null {
+    return this.findRegistration(uri)?.handler ?? null;
+  }
+
+  private findRegistration(uri: string): Registration | null {
     let bestMatch: Registration | null = null;
     let bestScore = -1;
 
     for (const reg of this.registrations) {
       switch (reg.matchType) {
         case 'exact':
-          if (uri === reg.pattern) return reg.handler; // exact always wins
+          if (uri === reg.pattern) return reg; // exact always wins
           break;
 
         case 'prefix': {
@@ -339,7 +194,7 @@ export class ResourceRegistry {
       }
     }
 
-    return bestMatch?.handler ?? null;
+    return bestMatch;
   }
 
   /**
@@ -358,26 +213,18 @@ export class ResourceRegistry {
   ): Promise<VerbResult> {
     if (Array.isArray(payload)) {
       if (verb !== 'invoke') {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `An array payload is only meaningful for invoke — "${verb}" takes one payload or none.`,
-            },
-          ],
-          isError: true,
-        };
+        return error(
+          `An array payload is only meaningful for invoke — "${verb}" takes one payload or none.`,
+        );
       }
       return this.executeBatch(uri, payload);
     }
 
-    const handler = this.findHandler(uri);
-    if (!handler) {
-      return {
-        content: [{ type: 'text', text: `No handler registered for URI: ${uri}` }],
-        isError: true,
-      };
+    const registration = this.findRegistration(uri);
+    if (!registration) {
+      return error(`No handler registered for URI: ${uri}`);
     }
+    const { handler } = registration;
 
     // Central access control, and the *authoritative* one: both doors into the verb
     // layer (MCP tools and `POST /api/verb`) end here, so this is the only gate that
@@ -393,18 +240,11 @@ export class ResourceRegistry {
     // Everyone else — monitor/app agents, ordinary apps via /api/verb, contexts with no
     // principal at all — is denied.
     const { role, systemApp } = resolveAccessPrincipal();
-    if (handler.access === 'session-principal' && role !== 'session' && systemApp !== true) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text:
-              `Access denied (403): ${uri} is restricted to the session agent ` +
-              "(the user's deputy) and bundled system apps.",
-          },
-        ],
-        isError: true,
-      };
+    if (registration.access === 'session-principal' && role !== 'session' && systemApp !== true) {
+      return error(
+        `Access denied (403): ${uri} is restricted to the session agent ` +
+          "(the user's deputy) and bundled system apps.",
+      );
     }
 
     // Trailing-slash normalization: if the URI ends with "/" and matched a wildcard/prefix
@@ -423,10 +263,7 @@ export class ResourceRegistry {
       if (handler.describe) {
         const resolved = resolveUri(uri);
         if (!resolved) {
-          return {
-            content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }],
-            isError: true,
-          };
+          return error(`Could not resolve URI: ${uri}`);
         }
         return handler.describe(resolved);
       }
@@ -435,16 +272,10 @@ export class ResourceRegistry {
       if (handler.exists) {
         const resolved = resolveUri(uri);
         if (!resolved) {
-          return {
-            content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }],
-            isError: true,
-          };
+          return error(`Could not resolve URI: ${uri}`);
         }
         if (!(await handler.exists(resolved))) {
-          return {
-            content: [{ type: 'text', text: `No resource at ${uri}.` }],
-            isError: true,
-          };
+          return error(`No resource at ${uri}.`);
         }
       }
       const result: DescribeResult = {
@@ -455,7 +286,7 @@ export class ResourceRegistry {
       if (handler.invokeSchema) {
         result.invokeSchema = handler.invokeSchema;
       }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return ok(JSON.stringify(result, null, 2));
     }
 
     if (!handler.verbs.includes(verb)) {
@@ -466,11 +297,7 @@ export class ResourceRegistry {
       // Cross-verb fallback: read↔list
       if (verb === 'read' && handler.verbs.includes('list') && handler.list) {
         const resolved = resolveUri(uri);
-        if (!resolved)
-          return {
-            content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }],
-            isError: true,
-          };
+        if (!resolved) return error(`Could not resolve URI: ${uri}`);
         const result = await handler.list.call(handler, resolved);
         return prependNote(
           result,
@@ -478,43 +305,21 @@ export class ResourceRegistry {
         );
       }
       if (verb === 'list' && handler.verbs.includes('read')) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `"${uri}" is not a folder/collection — use "read" to get its contents.`,
-            },
-          ],
-          isError: true,
-        };
+        return error(`"${uri}" is not a folder/collection — use "read" to get its contents.`);
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Verb "${verb}" not supported for URI: ${uri}. Supported: ${handler.verbs.join(', ')}.`,
-          },
-        ],
-        isError: true,
-      };
+      return error(
+        `Verb "${verb}" not supported for URI: ${uri}. Supported: ${handler.verbs.join(', ')}.`,
+      );
     }
 
     const resolved = resolveUri(uri);
     if (!resolved) {
-      return { content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }], isError: true };
+      return error(`Could not resolve URI: ${uri}`);
     }
 
     const method = handler[verb];
     if (!method) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Handler declares "${verb}" but has no implementation for URI: ${uri}`,
-          },
-        ],
-        isError: true,
-      };
+      return error(`Handler declares "${verb}" but has no implementation for URI: ${uri}`);
     }
 
     if (verb === 'invoke') {
@@ -562,37 +367,19 @@ export class ResourceRegistry {
     payloads: Record<string, unknown>[],
   ): Promise<VerbResult> {
     if (payloads.length === 0) {
-      return {
-        content: [
-          { type: 'text', text: `Empty payload array for invoke("${uri}") — nothing to do.` },
-        ],
-        isError: true,
-      };
+      return error(`Empty payload array for invoke("${uri}") — nothing to do.`);
     }
     if (payloads.length > MAX_BATCH_PAYLOADS) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text:
-              `${payloads.length} payloads for invoke("${uri}") exceeds the batch limit of ` +
-              `${MAX_BATCH_PAYLOADS}. Split it — each element is a real call, and a batch this ` +
-              'long cannot report a partial failure usefully.',
-          },
-        ],
-        isError: true,
-      };
+      return error(
+        `${payloads.length} payloads for invoke("${uri}") exceeds the batch limit of ` +
+          `${MAX_BATCH_PAYLOADS}. Split it — each element is a real call, and a batch this ` +
+          'long cannot report a partial failure usefully.',
+      );
     }
     if (payloads.some((p) => !p || typeof p !== 'object' || Array.isArray(p))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Every element of a batch payload must be an object — invoke("${uri}") got one that is not.`,
-          },
-        ],
-        isError: true,
-      };
+      return error(
+        `Every element of a batch payload must be an object — invoke("${uri}") got one that is not.`,
+      );
     }
 
     const content: VerbResult['content'] = [];

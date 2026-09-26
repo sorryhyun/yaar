@@ -20,7 +20,7 @@ import {
 } from '../features/http/cookie-jar.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import { initRegistry } from '../handlers/index.js';
-import type { VerbResult } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 import type { SessionId } from '../session/types.js';
 
 const URL_UNDER_TEST = 'https://example.com/account';

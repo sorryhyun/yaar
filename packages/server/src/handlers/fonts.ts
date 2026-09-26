@@ -18,8 +18,8 @@
  */
 
 import type { FontCatalog } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
-import { okJson, okLinks, error } from './utils.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { okJson, okLinks, error, type VerbResult } from '../lib/verb-result.js';
 import {
   FontRequestError,
   listFaces,

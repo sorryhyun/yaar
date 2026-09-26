@@ -6,7 +6,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { ok } from '../../handlers/utils.js';
+import { ok } from '../../lib/verb-result.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { errMessage } from '@yaar/lib/errors';
 import type { WindowStateRegistry } from '../../session/window-state.js';

@@ -41,8 +41,7 @@
  * Reading one and driving the other is the mistake this note exists to prevent.
  */
 
-import type { VerbResult } from '../uri-registry.js';
-import { okJson, okLinks, error, prependNote } from '../utils.js';
+import { okJson, okLinks, error, prependNote, type VerbResult } from '../../lib/verb-result.js';
 import { listApps } from '../../features/apps/discovery.js';
 import { parseAppProtocolPath } from './paths.js';
 import {

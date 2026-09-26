@@ -23,8 +23,14 @@
  * secret — so a coding agent that learned the name from a clone's index can follow it here.
  */
 
-import type { VerbResult } from '../uri-registry.js';
-import { okJson, okLinks, okResource, error, prependNote } from '../utils.js';
+import {
+  okJson,
+  okLinks,
+  okResource,
+  error,
+  prependNote,
+  type VerbResult,
+} from '../../lib/verb-result.js';
 import { listApps } from '../../features/apps/discovery.js';
 import { loadAppDocs, runtimeDocs, type AppDocTopic } from '../../features/apps/docs.js';
 import { parseAppDocsPath } from './paths.js';

@@ -16,8 +16,8 @@
  * hosts only, downloads land in `shared/media/`) lives in features/ytdlp/jobs.ts.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
-import { okJson, error } from './utils.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { okJson, error, type VerbResult } from '../lib/verb-result.js';
 import { defineActions } from './define-actions.js';
 import {
   cancelDownload,

@@ -19,6 +19,7 @@
  */
 
 import { CdpBrowserProvider } from './cdp-provider.js';
+import { fetchBrowserWsUrl } from './cdp.js';
 import { CHROME_DEBUG_PORT } from '../../config.js';
 
 export class LocalUserBrowser extends CdpBrowserProvider {
@@ -43,10 +44,7 @@ export class LocalUserBrowser extends CdpBrowserProvider {
   /** Reachable iff the user's Chrome is exposing a DevTools endpoint. */
   async isAvailable(): Promise<boolean> {
     try {
-      const resp = await fetch(`http://127.0.0.1:${this.debugPort}/json/version`, {
-        signal: AbortSignal.timeout(2000),
-      });
-      return resp.ok;
+      return (await fetchBrowserWsUrl(this.debugPort, 2000)) !== null;
     } catch {
       return false;
     }
@@ -57,10 +55,7 @@ export class LocalUserBrowser extends CdpBrowserProvider {
     // Verify the endpoint is reachable before handing out the port.
     let ok = false;
     try {
-      const resp = await fetch(`http://127.0.0.1:${this.debugPort}/json/version`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      ok = resp.ok;
+      ok = (await fetchBrowserWsUrl(this.debugPort, 3000)) !== null;
     } catch {
       ok = false;
     }

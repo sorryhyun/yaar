@@ -7,8 +7,7 @@
  * handlers that call it, authorizes nothing itself.
  */
 
-import type { VerbResult } from './uri-registry.js';
-import { error, okJson } from './utils.js';
+import { error, okJson, type VerbResult } from '../lib/verb-result.js';
 import { storagePathForUri } from './storage-bytes.js';
 import {
   COMPRESS_ACTION,
@@ -20,16 +19,14 @@ import { storageCompress, storageExtract } from '../storage/archive-ops.js';
 
 /**
  * Run an `extract` or `compress` payload against `targetPath` (a path under `STORAGE_DIR`).
- * Null when the payload names neither action, so the caller's own dispatch carries on.
+ * The caller's action table has already picked which, so it is passed rather than re-read.
  */
 export async function invokeArchiveAction(
+  action: typeof EXTRACT_ACTION | typeof COMPRESS_ACTION,
   payload: Record<string, unknown>,
   targetPath: string,
   targetUri: string,
-): Promise<VerbResult | null> {
-  const action = payload.action;
-  if (action !== EXTRACT_ACTION && action !== COMPRESS_ACTION) return null;
-
+): Promise<VerbResult> {
   const sources = payloadSources(payload);
   if (sources === null) return error(sourcesRequired(action));
   const sourcePaths: string[] = [];

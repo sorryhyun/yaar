@@ -21,7 +21,7 @@
  * uniform `(payload) => …` signature.
  */
 
-import type { VerbResult } from './uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 
 /** A JSON-Schema fragment for a string field constrained to the table's keys. */
 export interface ActionEnumSchema {
@@ -103,6 +103,21 @@ export function defineActions<Ctx>(
       return runnerOf(entry)(ctx);
     },
   };
+}
+
+/**
+ * `name: description` for every documented action, for prose that has to list them
+ * (an enum's `description`, a `describe` paragraph). Undocumented actions are skipped
+ * rather than listed bare, so this is only a complete list for a fully documented table.
+ */
+export function summarizeActions(
+  table: Pick<ActionTable<never>, 'names' | 'docs'>,
+  separator = '; ',
+): string {
+  return table.names
+    .filter((name) => Object.hasOwn(table.docs, name))
+    .map((name) => `${name}: ${table.docs[name]}`)
+    .join(separator);
 }
 
 /** The default refusal: says what was asked for, then what exists. */

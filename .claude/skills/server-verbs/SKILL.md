@@ -19,6 +19,12 @@ The active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`) are `system`, `ver
 `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import
 domain logic from `features/`) via `yaar://` URIs.
 
+`VerbResult` and its pure builders (`ok`, `okJson`, `error`, `notFoundError`, `okLinks`,
+`prependNote`, …) live in the leaf `lib/verb-result.ts`; `ReadOptions`, `hasLineFilter`,
+`applyReadOptions` and `applyEdit` in the leaf `lib/read-options.ts`. `handlers/utils.ts` is
+session access and handler-only checks (`getActiveSession*`, `getActivePool`, `assertUri`, …) —
+import a builder from there and you pull the session hub in with it.
+
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching via `yaar://` URIs |
@@ -87,8 +93,10 @@ Only one of the two axes exists at each door: brace expansion is the MCP `exec` 
 ### Access tiers
 
 Every agent carries a principal `role` (`session` / `monitor` / `app`) on its `AgentContext`. A
-handler may declare `access: 'session-principal'`, and `ResourceRegistry.execute()` then applies
-**one** definition:
+handler may declare `access: 'session-principal'` — and every pattern under `yaar://session` gets
+it whether declared or not, because `ResourceRegistry.register()` derives it from the prefix
+(`isSessionPattern`; it was once forgotten on `yaar://session/agents`). `ResourceRegistry.execute()`
+then applies **one** definition:
 
 > A caller satisfies `access: 'session-principal'` iff its role is `session` **or** it is a
 > token-backed bundled system app (`AgentContext.systemApp`).

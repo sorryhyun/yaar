@@ -49,6 +49,7 @@ import { getHeadlessBrowser } from '../../lib/browser/index.js';
 import { isYaarOriginUrl } from '../browser/guards.js';
 import type { BrowserSession } from '../../lib/browser/index.js';
 import { IS_REMOTE } from '../../config.js';
+import { envFlag } from '../../config/env.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { createLogger } from '../../observability/log.js';
 
@@ -75,10 +76,7 @@ let stopped = false;
  * it either way.
  */
 export function wantsCompanionTab(): boolean {
-  const flag = process.env.YAAR_COMPANION_TAB;
-  if (flag === '1') return true;
-  if (flag === '0') return false;
-  return process.platform === 'android';
+  return envFlag('YAAR_COMPANION_TAB', process.platform === 'android');
 }
 
 /**

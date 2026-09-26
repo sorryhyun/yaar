@@ -8,9 +8,10 @@
  *   invoke yaar://mcp                    → manage servers (add/remove/reload/refresh)
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { ok, okJson, error, type VerbResult } from '../lib/verb-result.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, okJson, error } from './utils.js';
+import { defineActions, summarizeActions } from './define-actions.js';
 import { getMcpClientManager } from '../mcp/external/index.js';
 import type { McpServerConfig } from '../mcp/external/types.js';
 import { storageWrite } from '../storage/index.js';
@@ -83,21 +84,60 @@ function parseMcpUri(uri: string): { serverName: string; toolName?: string } | n
   return { serverName: match[1], toolName: match[2] };
 }
 
+interface ServerActionCtx {
+  manager: Awaited<ReturnType<typeof getMcpClientManager>>;
+  name: string | undefined;
+  payload: Record<string, unknown>;
+}
+
+const serverActions = defineActions<ServerActionCtx>({
+  add: {
+    description: 'register a new server',
+    run: async ({ manager, name, payload }) => {
+      if (!name) return error('Missing "name" for add action');
+      const config = payload.config as McpServerConfig | undefined;
+      if (!config?.type) return error('Missing "config" with "type" field for add action');
+      await manager.addServer(name, config);
+      return ok(`Server "${name}" added.`);
+    },
+  },
+  remove: {
+    description: 'unregister a server',
+    run: async ({ manager, name }) => {
+      if (!name) return error('Missing "name" for remove action');
+      await manager.removeServer(name);
+      return ok(`Server "${name}" removed.`);
+    },
+  },
+  reload: {
+    description: 're-read config file',
+    run: async ({ manager }) => {
+      await manager.loadConfig();
+      const servers = manager.getConfiguredServers();
+      return ok(`Config reloaded. ${servers.length} server(s) configured.`);
+    },
+  },
+  refresh: {
+    description: 'force-refresh tool cache for a server',
+    run: async ({ manager, name }) => {
+      if (!name) return error('Missing "name" for refresh action');
+      const tools = await manager.listTools(name, true);
+      return ok(`Refreshed "${name}": ${tools.length} tool(s).`);
+    },
+  },
+});
+
 export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
   // ── yaar://mcp — list all servers, manage config ──
   registry.register('yaar://mcp', {
     description:
-      'External MCP server gateway. List configured servers or manage them (add/remove/reload/refresh).',
+      'External MCP server gateway. List configured servers or manage them ' +
+      `(${serverActions.names.join('/')}).`,
     verbs: ['describe', 'list', 'invoke'],
     invokeSchema: {
       type: 'object',
       properties: {
-        action: {
-          type: 'string',
-          enum: ['add', 'remove', 'reload', 'refresh'],
-          description:
-            'add: register a new server, remove: unregister a server, reload: re-read config file, refresh: force-refresh tool cache for a server',
-        },
+        action: { ...serverActions.schema, description: summarizeActions(serverActions, ', ') },
         name: { type: 'string', description: 'Server name (required for add/remove/refresh)' },
         config: {
           type: 'object',
@@ -128,41 +168,13 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
       return okJson({ servers });
     },
 
-    async invoke(
-      _resolved: ResolvedUri,
-      payload?: Record<string, unknown>,
-    ): Promise<ReturnType<typeof ok>> {
+    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
       if (!payload?.action) return error('Missing "action" field');
       const action = payload.action as string;
       const name = payload.name as string | undefined;
       const manager = await getMcpClientManager();
 
-      switch (action) {
-        case 'add': {
-          if (!name) return error('Missing "name" for add action');
-          const config = payload.config as McpServerConfig | undefined;
-          if (!config?.type) return error('Missing "config" with "type" field for add action');
-          await manager.addServer(name, config);
-          return ok(`Server "${name}" added.`);
-        }
-        case 'remove': {
-          if (!name) return error('Missing "name" for remove action');
-          await manager.removeServer(name);
-          return ok(`Server "${name}" removed.`);
-        }
-        case 'reload': {
-          await manager.loadConfig();
-          const servers = manager.getConfiguredServers();
-          return ok(`Config reloaded. ${servers.length} server(s) configured.`);
-        }
-        case 'refresh': {
-          if (!name) return error('Missing "name" for refresh action');
-          const tools = await manager.listTools(name, true);
-          return ok(`Refreshed "${name}": ${tools.length} tool(s).`);
-        }
-        default:
-          return error(`Unknown action "${action}". Use: add, remove, reload, refresh.`);
-      }
+      return serverActions.dispatch(action, { manager, name, payload });
     },
   });
 

@@ -50,8 +50,12 @@ mock.module('../features/config/domains.js', () => ({
 // Patch the single method the guards actually call, and put it back afterwards.
 
 const { actionEmitter } = await import('../session/action-emitter.js');
-const { enforceBrowserGuards, isMutatingAction, isYaarOriginUrl, isBrowserAction } =
-  await import('../features/browser/guards.js');
+const { enforceBrowserGuards, isYaarOriginUrl } = await import('../features/browser/guards.js');
+const { isMutatingAction, isBrowserAction } = await import('../features/browser/actions.js');
+
+/** The guard as both doors call it: `mutates` read off the action table. */
+const guard = (opts: Omit<Parameters<typeof enforceBrowserGuards>[0], 'mutates'>) =>
+  enforceBrowserGuards({ ...opts, mutates: isMutatingAction(opts.action) });
 
 let dialogConfirms = true;
 const mockDialog = mock(async () => dialogConfirms);
@@ -113,7 +117,7 @@ describe('browser guards', () => {
   });
 
   it('allows read-only actions everywhere, even on YAAR itself', async () => {
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'extract',
       session: sessionAt('http://localhost:8000/'),
@@ -123,7 +127,7 @@ describe('browser guards', () => {
   });
 
   it('does not guard when there is no session yet (create/open)', async () => {
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'open',
       session: undefined,
@@ -133,7 +137,7 @@ describe('browser guards', () => {
   });
 
   it('refuses raw-DOM mutation of YAAR own tab (self-target)', async () => {
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'click',
       session: sessionAt('http://localhost:8000/desktop'),
@@ -146,7 +150,7 @@ describe('browser guards', () => {
   });
 
   it('allows self-target mutation when allowSelfTarget is set (session-agent door)', async () => {
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'click',
       session: sessionAt('http://localhost:8000/desktop'),
@@ -159,7 +163,7 @@ describe('browser guards', () => {
   });
 
   it('headless provider needs no tab-control consent for sibling tabs', async () => {
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: headless,
       action: 'click',
       session: sessionAt('https://example.com/page'),
@@ -171,7 +175,7 @@ describe('browser guards', () => {
 
   it('local provider prompts for consent on a disallowed user tab, and records the grant', async () => {
     dialogConfirms = true;
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'type',
       session: sessionAt('https://bank.com/login'),
@@ -184,7 +188,7 @@ describe('browser guards', () => {
 
   it('local provider blocks when the user denies tab control', async () => {
     dialogConfirms = false;
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'type',
       session: sessionAt('https://bank.com/login'),
@@ -197,7 +201,7 @@ describe('browser guards', () => {
 
   it('local provider skips consent for an already-allowed domain', async () => {
     allowedDomains.add('example.com');
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'click',
       session: sessionAt('https://example.com/'),
@@ -208,7 +212,7 @@ describe('browser guards', () => {
   });
 
   it('local provider blocks with guidance when no session is available for a dialog', async () => {
-    const r = await enforceBrowserGuards({
+    const r = await guard({
       provider: local,
       action: 'click',
       session: sessionAt('https://example.com/'),

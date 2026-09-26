@@ -19,11 +19,11 @@ import type {
 } from './types.js';
 import { describeTurnError, notificationNotice, NOTICE_METHODS } from './errors.js';
 import { toNoticeMessage } from '../notice.js';
+import { formatMcpResult } from '../mcp-content.js';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('codex:mapper');
 
-type McpToolCallItem = Extract<ThreadItem, { type: 'mcpToolCall' }>;
 type CommandExecutionItem = Extract<ThreadItem, { type: 'commandExecution' }>;
 type WebSearchItem = Extract<ThreadItem, { type: 'webSearch' }>;
 type CollabAgentToolCallItem = Extract<ThreadItem, { type: 'collabAgentToolCall' }>;
@@ -80,7 +80,15 @@ function mapItemCompleted(p: ItemCompletedNotification): StreamMessage | null {
       return {
         type: 'tool_result',
         toolName: mcpToolName(item.server, item.tool),
-        content: item.error ? `Error: ${item.error.message}` : formatMcpResult(item),
+        content: item.error
+          ? `Error: ${item.error.message}`
+          : formatMcpResult({
+              content: item.result?.content,
+              structuredContent: item.result?.structuredContent,
+              // Not in the generated result type, so read defensively — an MCP
+              // result can carry its own `isError` flag distinct from `item.error`.
+              isError: isErrorResult(item.result),
+            }),
       };
     case 'commandExecution':
       return {
@@ -276,77 +284,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       return null;
     }
   }
-}
-
-/**
- * Format a single MCP content block as text.
- *
- * The `StreamMessage` content channel is a string, so non-text blocks must
- * degrade — but that degradation is deliberate here, never a raw `JSON.stringify`
- * dump. Binary-carrying blocks (`image`, `audio`, blob `resource`s) become a short
- * marker instead of their base64 payload; `resource`/`resource_link` surface their
- * text or URI. Only genuinely-unknown shapes fall back to stringification.
- * Returns null for blocks that contribute nothing.
- */
-function formatContentBlock(block: unknown): string | null {
-  if (typeof block === 'string') return block;
-  if (!block || typeof block !== 'object') return JSON.stringify(block);
-
-  const b = block as Record<string, unknown>;
-  const type = typeof b.type === 'string' ? (b.type as string) : undefined;
-
-  // Plain text (either an explicit text block or a bare { text } shape).
-  if (typeof b.text === 'string' && (type === undefined || type === 'text')) {
-    return b.text;
-  }
-
-  switch (type) {
-    // Don't dump base64 payloads into the model's text context.
-    case 'image':
-      return '[image omitted]';
-    case 'audio':
-      return '[audio omitted]';
-    case 'resource': {
-      const res = (b.resource ?? {}) as { text?: unknown; uri?: unknown };
-      if (typeof res.text === 'string') return res.text;
-      if (typeof res.uri === 'string') return `[resource: ${res.uri}]`;
-      return '[resource omitted]';
-    }
-    case 'resource_link': {
-      const uri = typeof b.uri === 'string' ? b.uri : '';
-      const name = typeof b.name === 'string' ? b.name : 'link';
-      return `[${name}](${uri})`;
-    }
-    default:
-      return JSON.stringify(block);
-  }
-}
-
-function formatMcpResult(item: McpToolCallItem): string {
-  if (!item.result) {
-    return 'Tool completed';
-  }
-
-  // content is Array<JsonValue> in the generated type
-  const content = item.result.content;
-  if (Array.isArray(content) && content.length > 0) {
-    const contentParts = content.map(formatContentBlock).filter(Boolean);
-
-    if (contentParts.length > 0) {
-      const body = contentParts.join('\n');
-      // Codex surfaces most tool failures as `item.error`, but an MCP result can
-      // also carry its own `isError` flag (not in the generated result type, so
-      // read defensively). Mark it so the model doesn't read a failure as success.
-      return isErrorResult(item.result) ? `Error: ${body}` : body;
-    }
-  }
-
-  // Fall back to structured content
-  if (item.result.structuredContent != null) {
-    return JSON.stringify(item.result.structuredContent, null, 2);
-  }
-
-  return 'Tool completed';
 }
 
 /** Read the MCP-level `isError` flag off a result (absent from the generated type). */

@@ -27,7 +27,13 @@ mock.module('../features/config/domains.js', () => ({
   isDomainAllowed: () => Promise.resolve(true),
 }));
 
-const { handleCreate, handleOpen } = await import('../features/browser/actions.js');
+const { runBrowserAction } = await import('../features/browser/actions.js');
+
+// Through the dispatcher, the only way in: the per-action handlers are module-private.
+const handleCreate = (pool: any, bid: string, body: Record<string, unknown>) =>
+  runBrowserAction(pool, 'create', bid, body);
+const handleOpen = (pool: any, bid: string, body: Record<string, unknown>) =>
+  runBrowserAction(pool, 'open', bid, body);
 
 /** The slice of BrowserProvider these two actions touch. */
 function stubPool(bid: string) {

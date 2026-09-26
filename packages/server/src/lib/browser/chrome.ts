@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { basename, dirname, join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
+import { fetchBrowserWsUrl } from './cdp.js';
 import { getFreeDpiProxyUrl } from '@yaar/lib/freedpi';
 import type { Subprocess } from 'bun';
 
@@ -52,11 +53,8 @@ async function pollDevToolsEndpoint(port: number, timeoutMs: number): Promise<st
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const resp = await fetch(`http://127.0.0.1:${port}/json/version`, {
-        signal: AbortSignal.timeout(1000),
-      });
-      const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
-      if (info.webSocketDebuggerUrl) return info.webSocketDebuggerUrl;
+      const wsUrl = await fetchBrowserWsUrl(port, 1000);
+      if (wsUrl) return wsUrl;
     } catch {
       // Not ready yet
     }
@@ -318,12 +316,9 @@ export async function cleanupChrome(instance: ChromeInstance): Promise<void> {
   // Send Browser.close via CDP to ensure the actual Chrome child shuts down.
   if (instance.port > 0) {
     try {
-      const resp = await fetch(`http://127.0.0.1:${instance.port}/json/version`, {
-        signal: AbortSignal.timeout(2000),
-      });
-      const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
-      if (info.webSocketDebuggerUrl) {
-        const ws = new WebSocket(info.webSocketDebuggerUrl);
+      const wsUrl = await fetchBrowserWsUrl(instance.port, 2000);
+      if (wsUrl) {
+        const ws = new WebSocket(wsUrl);
         await new Promise<void>((resolve) => {
           ws.onopen = () => {
             ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));

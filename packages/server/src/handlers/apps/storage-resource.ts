@@ -8,8 +8,7 @@
  * On disk: storage/apps/{appId}/{path}
  */
 
-import { hasLineFilter, type ReadOptions, type VerbResult } from '../uri-registry.js';
-import type { ResolvedUri } from '../uri-resolve.js';
+import { hasLineFilter, applyReadOptions, type ReadOptions } from '../../lib/read-options.js';
 import {
   ok,
   okJson,
@@ -19,10 +18,11 @@ import {
   okWithImages,
   error,
   notFoundError,
-  mimeFromPath,
-  applyReadOptions,
   prependNote,
-} from '../utils.js';
+  type VerbResult,
+} from '../../lib/verb-result.js';
+import { mimeFromPath } from '../utils.js';
+import type { ResolvedUri } from '../uri-resolve.js';
 import {
   storageRead,
   storageWrite,
@@ -33,7 +33,15 @@ import {
 import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
 import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
-import { COPY_FROM_REQUIRED, copyFrom, isCopyPayload } from '../storage-copy.js';
+import {
+  COMPRESS_ACTION,
+  COPY_ACTION,
+  COPY_FROM_REQUIRED,
+  EXTRACT_ACTION,
+  copyFrom,
+} from '../storage-copy.js';
+import { defineActions } from '../define-actions.js';
+import { STORAGE_ACTION_DOCS } from '../storage-actions.js';
 import { invokeArchiveAction } from '../storage-archive.js';
 import { describeStoragePath } from '../storage-describe.js';
 
@@ -91,10 +99,9 @@ export async function describeStorage(uri: string): Promise<VerbResult | null> {
       uri,
       kind: 'directory',
       description:
-        'App-scoped file storage. Invoke with action "write" (add "encoding": "base64" for ' +
-        'binary), "copy" (with "from": a yaar:// storage URI — moves bytes server-side), "grep", ' +
-        '"extract" (target a new folder, "from" an archive) or "compress" (target the archive ' +
-        'to create, "from" the files or folders). An archive reads as a read-only folder.',
+        'App-scoped file storage. An archive reads as a read-only folder. Invoke a path ' +
+        'under it with one of these actions.',
+      invokeActions: appStorageActions.docs,
       // A namespace root that nothing has written to yet lists as empty, not missing.
       entries: listed.entries?.length ?? 0,
       verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
@@ -171,7 +178,98 @@ export async function listStorage(resolved: ResolvedUri): Promise<VerbResult | n
   });
 }
 
-/** Write / grep a storage path. Null when not a storage URI. */
+interface AppStorageCtx {
+  appId: string;
+  /** The URI invoked — what subscribers are notified on. */
+  uri: string;
+  /** Path relative to the app's storage root; `''` for the root itself. */
+  path: string;
+  /** The same path under `STORAGE_DIR` (`apps/{appId}/…`). */
+  prefixedPath: string;
+  payload: Record<string, unknown>;
+}
+
+/** Every action but `grep` writes a file, so needs a path to write. */
+function onFile(run: (ctx: AppStorageCtx) => Promise<VerbResult>) {
+  return (ctx: AppStorageCtx) =>
+    ctx.path ? run(ctx) : Promise.resolve(error('Provide a file path under /storage/.'));
+}
+
+/** Notify subscribers of `uri` when `result` succeeded, and pass it through. */
+function notified(uri: string, result: VerbResult): VerbResult {
+  if (!result.isError) subscriptionRegistry.notifyChange(uri);
+  return result;
+}
+
+/**
+ * The actions on `yaar://apps/{id}/storage/…`, and the one list of them: the composite
+ * `yaar://apps/*` schema enum (register.ts) and the root's `describe` prose both come off
+ * this table, so neither can offer an action with no case here.
+ */
+export const appStorageActions = defineActions<AppStorageCtx>(
+  {
+    write: {
+      description: STORAGE_ACTION_DOCS.write,
+      run: onFile(async ({ appId, path, uri, prefixedPath, payload }) => {
+        const decoded = decodeWriteContent(payload);
+        if ('error' in decoded) return error(decoded.error);
+        const result = await storageWrite(prefixedPath, decoded.content);
+        if (!result.success) return error(result.error!);
+        return notified(uri, ok(`Written to yaar://apps/${appId}/storage/${path}`));
+      }),
+    },
+    // `copy` is how a file crosses between this app's storage and the shared tree
+    // without its bytes passing through whoever asked for the move. The source is
+    // authorized at the door, against this same field — handlers/storage-copy.ts.
+    [COPY_ACTION]: {
+      description: STORAGE_ACTION_DOCS.copy,
+      run: onFile(async ({ uri, prefixedPath, payload }) => {
+        const from = copyFrom(payload);
+        if (from === null) return error(COPY_FROM_REQUIRED);
+        const copied = await copyStorageBytes(from, prefixedPath);
+        if ('error' in copied) return error(copied.error);
+        return notified(uri, ok(`Copied ${from} → ${uri} (${copied.bytes} bytes)`));
+      }),
+    },
+    grep: {
+      description: STORAGE_ACTION_DOCS.grep,
+      run: async ({ prefixedPath, payload }) => {
+        if (typeof payload.pattern !== 'string')
+          return error('"pattern" (string) is required for grep.');
+        const result = await storageGrep(
+          prefixedPath,
+          payload.pattern,
+          payload.glob as string | undefined,
+        );
+        if (!result.success) return error(result.error!);
+        return okJson({
+          matches: result.matches,
+          truncated: result.truncated,
+          scannedFiles: result.scannedFiles,
+        });
+      },
+    },
+    // `extract` / `compress` take copy's shape, and its gate: this URI is written, `from` is read.
+    [EXTRACT_ACTION]: {
+      description: STORAGE_ACTION_DOCS.extract,
+      run: onFile(async ({ uri, prefixedPath, payload }) =>
+        notified(uri, await invokeArchiveAction(EXTRACT_ACTION, payload, prefixedPath, uri)),
+      ),
+    },
+    [COMPRESS_ACTION]: {
+      description: STORAGE_ACTION_DOCS.compress,
+      run: onFile(async ({ uri, prefixedPath, payload }) =>
+        notified(uri, await invokeArchiveAction(COMPRESS_ACTION, payload, prefixedPath, uri)),
+      ),
+    },
+  },
+  {
+    unknown: (action, names) =>
+      error(`Unknown storage action "${action}". Supported: ${names.join(', ')}.`),
+  },
+);
+
+/** Invoke an action on a storage path. Null when not a storage URI. */
 export async function invokeStorage(
   resolved: ResolvedUri,
   payload?: Record<string, unknown>,
@@ -181,54 +279,13 @@ export async function invokeStorage(
 
   if (!payload?.action) return error('Payload must include "action".');
 
-  if (payload.action === 'grep') {
-    if (typeof payload.pattern !== 'string')
-      return error('"pattern" (string) is required for grep.');
-    const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
-    const result = await storageGrep(
-      prefixedPath,
-      payload.pattern,
-      payload.glob as string | undefined,
-    );
-    if (!result.success) return error(result.error!);
-    return okJson({
-      matches: result.matches,
-      truncated: result.truncated,
-      scannedFiles: result.scannedFiles,
-    });
-  }
-
-  if (!storagePath.path) return error('Provide a file path under /storage/.');
-
-  const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
-
-  // `copy` is how a file crosses between this app's storage and the shared tree
-  // without its bytes passing through whoever asked for the move. The source is
-  // authorized at the door, against this same field — handlers/storage-copy.ts.
-  if (isCopyPayload(payload)) {
-    const from = copyFrom(payload);
-    if (from === null) return error(COPY_FROM_REQUIRED);
-    const copied = await copyStorageBytes(from, prefixedPath);
-    if ('error' in copied) return error(copied.error);
-    subscriptionRegistry.notifyChange(resolved.sourceUri);
-    return ok(`Copied ${from} → ${resolved.sourceUri} (${copied.bytes} bytes)`);
-  }
-
-  // `extract` / `compress` take copy's shape, and its gate: this URI is written, `from` is read.
-  const archived = await invokeArchiveAction(payload, prefixedPath, resolved.sourceUri);
-  if (archived) {
-    if (!archived.isError) subscriptionRegistry.notifyChange(resolved.sourceUri);
-    return archived;
-  }
-
-  if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);
-
-  const decoded = decodeWriteContent(payload);
-  if ('error' in decoded) return error(decoded.error);
-  const result = await storageWrite(prefixedPath, decoded.content);
-  if (!result.success) return error(result.error!);
-  subscriptionRegistry.notifyChange(resolved.sourceUri);
-  return ok(`Written to yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
+  return appStorageActions.dispatch(String(payload.action), {
+    appId: storagePath.appId,
+    uri: resolved.sourceUri,
+    path: storagePath.path,
+    prefixedPath: appStoragePath(storagePath.appId, storagePath.path),
+    payload,
+  });
 }
 
 /**

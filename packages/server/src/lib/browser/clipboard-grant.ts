@@ -40,7 +40,7 @@
  * `Preferences` broke the CDP path too.
  */
 
-import { CDPClient } from './cdp.js';
+import { CDPClient, fetchBrowserWsUrl } from './cdp.js';
 import { localTlsDesktopOrigin } from '../../http/local-tls.js';
 import { CHROME_DEBUG_PORT, isClipboardGrantEnabled, DESKTOP_ORIGIN_HOST } from '../../config.js';
 
@@ -82,12 +82,7 @@ function desktopOrigin(port: number): string {
 
 async function browserWebSocketUrl(debugPort: number): Promise<string | null> {
   try {
-    const resp = await fetch(`http://127.0.0.1:${debugPort}/json/version`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!resp.ok) return null;
-    const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
-    return info.webSocketDebuggerUrl ?? null;
+    return await fetchBrowserWsUrl(debugPort, 2000);
   } catch {
     return null;
   }

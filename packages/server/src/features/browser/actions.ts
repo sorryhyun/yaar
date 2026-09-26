@@ -1,22 +1,19 @@
 /**
- * Browser action implementations extracted from the browser handler.
+ * Browser actions — what `POST /api/browser` and `yaar://session/browser` both run.
  *
- * Each function corresponds to one `action` value in the
- * `POST /api/browser` dispatch table.
+ * Each `handle*` implements one `action` value and is reachable only through
+ * `BROWSER_ACTION_TABLE` at the bottom of this file, which also classifies it as mutating
+ * or not. They are module-private so that no door can run an action around the table —
+ * and so around the guards that read it.
  */
 
 import type { BrowserProvider } from '../../lib/browser/index.js';
-import type { VerbResult } from '../../handlers/uri-registry.js';
-import { ok, okJson, okWithImages, error, getActiveSessionId } from '../../handlers/utils.js';
+import { ok, okJson, okWithImages, error, type VerbResult } from '../../lib/verb-result.js';
+import { getActiveSessionId } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
-import {
-  isYaarOriginUrl,
-  enforceBrowserGuards,
-  isMutatingAction,
-  isBrowserAction,
-} from './guards.js';
+import { isYaarOriginUrl, enforceBrowserGuards } from './guards.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import { ServerEventType, type BrowserTabSummary, type OSAction } from '@yaar/shared';
 import { handleCreate as handleWindowCreate } from '../window/create.js';
@@ -95,7 +92,7 @@ function emitBrowserWindowAction(action: OSAction, sessionId?: string): void {
   });
 }
 
-export async function handleCreate(
+async function handleCreate(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -122,7 +119,7 @@ export async function handleCreate(
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}] Created (about:blank)`);
 }
 
-export async function handleListTabs(pool: BrowserProvider): Promise<VerbResult> {
+async function handleListTabs(pool: BrowserProvider): Promise<VerbResult> {
   const browsers = pool.getAllSessions();
   if (browsers.size === 0) return okJson([]);
   const items: BrowserTabSummary[] = [...browsers.entries()].map(([bid, s]) => ({
@@ -138,10 +135,7 @@ export async function handleListTabs(pool: BrowserProvider): Promise<VerbResult>
   return okJson(items);
 }
 
-export async function handleCloseTab(
-  pool: BrowserProvider,
-  browserId: string,
-): Promise<VerbResult> {
+async function handleCloseTab(pool: BrowserProvider, browserId: string): Promise<VerbResult> {
   const session = pool.getSession(browserId);
   if (!session) return error(`No browser with ID ${browserId}.`);
   if (session.windowId) {
@@ -153,7 +147,7 @@ export async function handleCloseTab(
   return ok(`Browser ${browserId} closed.`);
 }
 
-export async function handleOpen(
+async function handleOpen(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -214,7 +208,7 @@ export async function handleOpen(
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}]\n${formatPageState(state)}`);
 }
 
-export async function handleClick(
+async function handleClick(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -241,7 +235,7 @@ export async function handleClick(
   return ok(formatPageState(state));
 }
 
-export async function handleType(
+async function handleType(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -253,7 +247,7 @@ export async function handleType(
   return ok(`Typed into ${p.selector}\n\n${formatPageState(state)}`);
 }
 
-export async function handlePress(
+async function handlePress(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -264,7 +258,7 @@ export async function handlePress(
   return ok(formatPageState(state));
 }
 
-export async function handleScroll(
+async function handleScroll(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -278,7 +272,7 @@ export async function handleScroll(
   return ok(formatPageState(state));
 }
 
-export async function handleScrollToBottom(
+async function handleScrollToBottom(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -291,7 +285,7 @@ export async function handleScrollToBottom(
   return okJson(result);
 }
 
-export async function handleNavigate(
+async function handleNavigate(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -332,7 +326,7 @@ export async function handleNavigate(
   return ok(formatPageState(state));
 }
 
-export async function handleHover(
+async function handleHover(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -345,7 +339,7 @@ export async function handleHover(
   return ok(formatPageState(state));
 }
 
-export async function handleWaitFor(
+async function handleWaitFor(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -359,7 +353,7 @@ export async function handleWaitFor(
   return ok(formatPageState(state));
 }
 
-export async function handleScreenshot(
+async function handleScreenshot(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -382,7 +376,7 @@ export async function handleScreenshot(
   return okWithImages(label, [{ data: buffer.toString('base64'), mimeType: 'image/webp' }]);
 }
 
-export async function handleExtract(
+async function handleExtract(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -423,7 +417,7 @@ export async function handleExtract(
   return ok(result.trim());
 }
 
-export async function handleExtractImages(
+async function handleExtractImages(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -489,7 +483,7 @@ export async function handleExtractImages(
   };
 }
 
-export async function handleGetCookies(
+async function handleGetCookies(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -500,7 +494,7 @@ export async function handleGetCookies(
   return okJson(cookies);
 }
 
-export async function handleSetCookie(
+async function handleSetCookie(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -522,7 +516,7 @@ export async function handleSetCookie(
   return success ? ok('Cookie set.') : error('Failed to set cookie.');
 }
 
-export async function handleDeleteCookies(
+async function handleDeleteCookies(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -538,7 +532,7 @@ export async function handleDeleteCookies(
   return ok(`Cookie "${p.name}" deleted.`);
 }
 
-export async function handleEvaluate(
+async function handleEvaluate(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -553,7 +547,7 @@ export async function handleEvaluate(
   return okJson((result as object) ?? null);
 }
 
-export async function handleHtml(
+async function handleHtml(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -567,16 +561,13 @@ export async function handleHtml(
   return ok(await session.getHtml(selector, opts));
 }
 
-export async function handleAnnotate(
-  pool: BrowserProvider,
-  browserId: string,
-): Promise<VerbResult> {
+async function handleAnnotate(pool: BrowserProvider, browserId: string): Promise<VerbResult> {
   const session = resolveSession(pool, browserId);
   const result = await session.annotateElements();
   return okJson(result);
 }
 
-export async function handleRemoveAnnotations(
+async function handleRemoveAnnotations(
   pool: BrowserProvider,
   browserId: string,
 ): Promise<VerbResult> {
@@ -623,10 +614,7 @@ export function compileBlockPatterns(rules: {
  * would leave that tab open with nothing blocked until someone noticed it.
  * `browserId` is accepted and ignored so the verb reads like its siblings.
  */
-export async function handleSetRequestBlocking(
-  pool: BrowserProvider,
-  p: Payload,
-): Promise<VerbResult> {
+async function handleSetRequestBlocking(pool: BrowserProvider, p: Payload): Promise<VerbResult> {
   const enabled = p.enabled !== false;
   const rules = (p.rules ?? {}) as {
     hosts?: string[];
@@ -638,7 +626,7 @@ export async function handleSetRequestBlocking(
   return okJson({ enabled: shield.blockedUrls.length > 0, ruleCount: shield.blockedUrls.length });
 }
 
-export async function handleGetRequestBlockStats(
+async function handleGetRequestBlockStats(
   pool: BrowserProvider,
   browserId: string,
 ): Promise<VerbResult> {
@@ -654,7 +642,7 @@ export async function handleGetRequestBlockStats(
  * Truncates URLs by default because the reader is usually a model; a caller that
  * means to re-fetch one passes `maxUrlLength: 0`.
  */
-export async function handleGetNetworkLog(
+async function handleGetNetworkLog(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -683,7 +671,7 @@ export async function handleGetNetworkLog(
  * (provider-wide, like the blocklist). The only place a `window.open` override
  * wins the race against a popunder that binds on load. Empty string clears.
  */
-export async function handleSetInitScript(pool: BrowserProvider, p: Payload): Promise<VerbResult> {
+async function handleSetInitScript(pool: BrowserProvider, p: Payload): Promise<VerbResult> {
   if (typeof p.script !== 'string') return error('"script" is required for set_init_script.');
   const shield = await pool.setShield({ initScript: p.script });
   return okJson({ installed: shield.initScript.length > 0 });
@@ -793,7 +781,7 @@ async function storeCapture(
  * the tab is already on this page, which is a decision the user already made, and the
  * allowlist governs YAAR's own HTTP client rather than the browser it drives.
  */
-export async function handleDownload(
+async function handleDownload(
   pool: BrowserProvider,
   browserId: string,
   p: Payload,
@@ -832,10 +820,7 @@ export async function handleDownload(
  * download capture — a different answer from "nothing was downloaded", and one a caller
  * needs in order to say something true to the user.
  */
-export async function handleListDownloads(
-  pool: BrowserProvider,
-  browserId: string,
-): Promise<VerbResult> {
+async function handleListDownloads(pool: BrowserProvider, browserId: string): Promise<VerbResult> {
   const session = resolveSession(pool, browserId);
   return okJson({
     available: session.downloadsAvailable,
@@ -849,12 +834,85 @@ export async function handleListDownloads(
   });
 }
 
+type BrowserRunner = (
+  pool: BrowserProvider,
+  browserId: string,
+  body: Payload,
+) => Promise<VerbResult>;
+
 /**
- * Shared action dispatcher — the single switch table that both browser doors
- * use. The caller passes the provider instance (headless for `/api/browser`,
- * the user's real Chrome for `yaar://session/browser`) plus the parsed action
- * payload. Consent / self-target guards and the "driving" indicator are applied
- * by the caller around this switch (see `runGuardedBrowserAction`).
+ * Every browser action: whether it changes page/tab/browser state via raw CDP, and the code
+ * that runs it. This table is the one list — `runBrowserAction` dispatches through it, the
+ * guards read `mutates` off it, and `yaar://session/browser` advertises its keys — so an
+ * action cannot run without being classified, nor be classified without running. A
+ * hand-kept mutating set beside two other hand-kept lists is how `scroll_to_bottom` once
+ * ran unguarded.
+ *
+ * `evaluate` is mutating: arbitrary JS can change the DOM, storage, or navigate.
+ * `create` is not — it opens a fresh tab, and the guards have no session to check yet.
+ */
+const BROWSER_ACTION_TABLE = {
+  create: { mutates: false, run: handleCreate },
+  open: { mutates: true, run: handleOpen },
+  navigate: { mutates: true, run: handleNavigate },
+  click: { mutates: true, run: handleClick },
+  type: { mutates: true, run: handleType },
+  press: { mutates: true, run: handlePress },
+  scroll: { mutates: true, run: handleScroll },
+  // Scrolls step by step until the page stops growing, firing lazy-load handlers on the way:
+  // `scroll` repeated, so gated as `scroll` is.
+  scroll_to_bottom: { mutates: true, run: handleScrollToBottom },
+  hover: { mutates: true, run: handleHover },
+  wait_for: { mutates: false, run: handleWaitFor },
+  screenshot: { mutates: false, run: handleScreenshot },
+  extract: { mutates: false, run: handleExtract },
+  extract_images: { mutates: false, run: handleExtractImages },
+  evaluate: { mutates: true, run: handleEvaluate },
+  html: { mutates: false, run: handleHtml },
+  annotate: { mutates: false, run: handleAnnotate },
+  remove_annotations: { mutates: false, run: handleRemoveAnnotations },
+  get_cookies: { mutates: false, run: handleGetCookies },
+  set_cookie: { mutates: true, run: handleSetCookie },
+  delete_cookies: { mutates: true, run: handleDeleteCookies },
+  list_tabs: { mutates: false, run: handleListTabs },
+  close_tab: { mutates: true, run: handleCloseTab },
+  // Provider-wide: an init script and a URL blocklist change what every tab sees.
+  set_request_blocking: {
+    mutates: true,
+    run: (pool, _browserId, body) => handleSetRequestBlocking(pool, body),
+  },
+  get_request_block_stats: { mutates: false, run: handleGetRequestBlockStats },
+  get_network_log: { mutates: false, run: handleGetNetworkLog },
+  set_init_script: {
+    mutates: true,
+    run: (pool, _browserId, body) => handleSetInitScript(pool, body),
+  },
+  // `download` clicks a link it injected, with the tab's cookies attached, and lands the
+  // bytes in the shared commons. It is `evaluate` with a filesystem on the end of it, so
+  // it is gated exactly as `evaluate` is — most of all on the user's real Chrome, where
+  // the credentials it would spend are the user's own.
+  download: { mutates: true, run: handleDownload },
+  list_downloads: { mutates: false, run: handleListDownloads },
+} as const satisfies Record<string, { mutates: boolean; run: BrowserRunner }>;
+
+export type BrowserAction = keyof typeof BROWSER_ACTION_TABLE;
+
+export const BROWSER_ACTIONS = Object.keys(BROWSER_ACTION_TABLE) as BrowserAction[];
+
+export function isBrowserAction(action: string): action is BrowserAction {
+  return Object.hasOwn(BROWSER_ACTION_TABLE, action);
+}
+
+export function isMutatingAction(action: string): boolean {
+  return isBrowserAction(action) && BROWSER_ACTION_TABLE[action].mutates;
+}
+
+/**
+ * Shared action dispatcher — what both browser doors run. The caller passes the provider
+ * instance (headless for `/api/browser`, the user's real Chrome for
+ * `yaar://session/browser`) plus the parsed action payload. Consent / self-target guards
+ * and the "driving" indicator are applied by the caller around this (see
+ * `runGuardedBrowserAction`).
  */
 export async function runBrowserAction(
   pool: BrowserProvider,
@@ -863,70 +921,8 @@ export async function runBrowserAction(
   body: Payload,
 ): Promise<VerbResult> {
   if (!isBrowserAction(action)) return error(`Unknown action "${action}".`);
-  // Exhaustive over guards.ts's table: an action listed there with no case here, or a case
-  // for one not listed, fails typecheck.
-  switch (action) {
-    case 'create':
-      return handleCreate(pool, browserId, body);
-    case 'open':
-      return handleOpen(pool, browserId, body);
-    case 'click':
-      return handleClick(pool, browserId, body);
-    case 'type':
-      return handleType(pool, browserId, body);
-    case 'press':
-      return handlePress(pool, browserId, body);
-    case 'scroll':
-      return handleScroll(pool, browserId, body);
-    case 'scroll_to_bottom':
-      return handleScrollToBottom(pool, browserId, body);
-    case 'navigate':
-      return handleNavigate(pool, browserId, body);
-    case 'hover':
-      return handleHover(pool, browserId, body);
-    case 'wait_for':
-      return handleWaitFor(pool, browserId, body);
-    case 'screenshot':
-      return handleScreenshot(pool, browserId, body);
-    case 'extract':
-      return handleExtract(pool, browserId, body);
-    case 'extract_images':
-      return handleExtractImages(pool, browserId, body);
-    case 'evaluate':
-      return handleEvaluate(pool, browserId, body);
-    case 'html':
-      return handleHtml(pool, browserId, body);
-    case 'annotate':
-      return handleAnnotate(pool, browserId);
-    case 'remove_annotations':
-      return handleRemoveAnnotations(pool, browserId);
-    case 'get_cookies':
-      return handleGetCookies(pool, browserId, body);
-    case 'set_cookie':
-      return handleSetCookie(pool, browserId, body);
-    case 'delete_cookies':
-      return handleDeleteCookies(pool, browserId, body);
-    case 'list_tabs':
-      return handleListTabs(pool);
-    case 'close_tab':
-      return handleCloseTab(pool, browserId);
-    case 'set_request_blocking':
-      return handleSetRequestBlocking(pool, body);
-    case 'get_request_block_stats':
-      return handleGetRequestBlockStats(pool, browserId);
-    case 'get_network_log':
-      return handleGetNetworkLog(pool, browserId, body);
-    case 'set_init_script':
-      return handleSetInitScript(pool, body);
-    case 'download':
-      return handleDownload(pool, browserId, body);
-    case 'list_downloads':
-      return handleListDownloads(pool, browserId);
-    default: {
-      const unhandled: never = action;
-      return error(`Unknown action "${String(unhandled)}".`);
-    }
-  }
+  const run: BrowserRunner = BROWSER_ACTION_TABLE[action].run;
+  return run(pool, browserId, body);
 }
 
 /**
@@ -950,6 +946,7 @@ export async function runGuardedBrowserAction(
   const guard = await enforceBrowserGuards({
     provider: pool,
     action,
+    mutates: isMutatingAction(action),
     session,
     sessionId,
     allowSelfTarget,

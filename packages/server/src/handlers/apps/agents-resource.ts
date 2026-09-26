@@ -30,9 +30,10 @@
  * session-tier equivalent, and there is no principal above them to inherit one.
  */
 
-import type { VerbResult } from '../uri-registry.js';
+import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
+import { getActivePool, NoActiveSessionError } from '../utils.js';
 import type { ResolvedUri } from '../uri-resolve.js';
-import { okJson, error, getActivePool, NoActiveSessionError } from '../utils.js';
+import { defineActions, summarizeActions } from '../define-actions.js';
 import { parseAppAgentsPath } from './paths.js';
 import { getAppId, requireMonitorId } from '../../agents/agent-context.js';
 import { getAppMeta, subAgentDenialReason } from '../../features/apps/discovery.js';
@@ -53,6 +54,26 @@ import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('subagents');
 
+interface PersonaActionCtx {
+  scope: Scope;
+  payload?: Record<string, unknown>;
+}
+
+const personaActions = defineActions<PersonaActionCtx>({
+  spawn: {
+    description: 'On the collection: create a sub-agent (personaId, systemPrompt, tools?, model?).',
+    run: ({ scope, payload }) => spawn(scope, payload),
+  },
+  message: {
+    description: 'On one sub-agent: send it "content"; the answer streams.',
+    run: ({ scope, payload }) => message(scope, payload),
+  },
+  interrupt: {
+    description: 'On one sub-agent: stop its running turn.',
+    run: ({ scope }) => interrupt(scope),
+  },
+});
+
 const DESCRIBE = {
   description:
     'This app\'s sub-agents ("personas") — AI instances with a system prompt you supply at ' +
@@ -70,12 +91,7 @@ const DESCRIBE = {
     type: 'object',
     required: ['action'],
     properties: {
-      action: {
-        type: 'string',
-        enum: ['spawn', 'message', 'interrupt'],
-        description:
-          'spawn (on the collection) creates a sub-agent; message/interrupt address one.',
-      },
+      action: { ...personaActions.schema, description: summarizeActions(personaActions) },
       personaId: {
         type: 'string',
         description: 'For spawn: the id to register the sub-agent under. [A-Za-z0-9_-], max 64.',
@@ -274,31 +290,24 @@ export async function invokePersonas(
   if (isVerbResult(scope)) return scope;
 
   const action = typeof payload?.action === 'string' ? payload.action : '';
+  return personaActions.dispatch(action, { scope, payload });
+}
 
-  switch (action) {
-    case 'spawn':
-      return spawn(scope, payload);
-    case 'message':
-      return message(scope, payload);
-    case 'interrupt': {
-      const record = requirePersona(scope);
-      if ('content' in record) return record;
-      // The same `isRunning()` guard every other interrupt door applies
-      // (`AgentPool.interruptAll`, `handlers/agents.ts`), and for the reason
-      // `interruptAll`'s doc gives: interrupting an idle agent is not free. A
-      // prewarmed Claude sub-agent holds an open stream, and this took
-      // `closePersistentSession()` on it — so an app polling `interrupt` on a
-      // finished sub-agent paid a cold start for its next message, and left a stale
-      // `markInterrupted` that swallowed the first action of the turn after it.
-      if (!record.agent.session.isRunning()) {
-        return okJson({ personaId: record.subId, interrupted: false });
-      }
-      await record.agent.session.interrupt();
-      return okJson({ personaId: record.subId, interrupted: true });
-    }
-    default:
-      return error(`Unknown action "${action}". Use "spawn", "message", or "interrupt".`);
+async function interrupt(scope: Scope): Promise<VerbResult> {
+  const record = requirePersona(scope);
+  if ('content' in record) return record;
+  // The same `isRunning()` guard every other interrupt door applies
+  // (`AgentPool.interruptAll`, `handlers/agents.ts`), and for the reason
+  // `interruptAll`'s doc gives: interrupting an idle agent is not free. A
+  // prewarmed Claude sub-agent holds an open stream, and this took
+  // `closePersistentSession()` on it — so an app polling `interrupt` on a
+  // finished sub-agent paid a cold start for its next message, and left a stale
+  // `markInterrupted` that swallowed the first action of the turn after it.
+  if (!record.agent.session.isRunning()) {
+    return okJson({ personaId: record.subId, interrupted: false });
   }
+  await record.agent.session.interrupt();
+  return okJson({ personaId: record.subId, interrupted: true });
 }
 
 /** Validate the spawn's tool list, or explain what's wrong with it. */

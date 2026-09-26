@@ -33,7 +33,9 @@ import type {
   SoftKeyboard,
   WindowCaptureAction,
 } from '@yaar/shared';
-import type { ContentBlock, ReadOptions, Verb, VerbResult } from '../../handlers/uri-registry.js';
+import type { ContentBlock, VerbResult } from '../../lib/verb-result.js';
+import type { ReadOptions } from '../../lib/read-options.js';
+import type { Verb } from '../../handlers/uri-registry.js';
 import { boot, type Harness } from './harness/boot.js';
 import { expectSettlesWithin } from './harness/liveness.js';
 

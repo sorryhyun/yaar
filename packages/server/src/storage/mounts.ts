@@ -6,9 +6,10 @@
  */
 
 import { stat } from 'fs/promises';
-import { join, normalize, relative, isAbsolute } from 'path';
+import { normalize, relative, isAbsolute } from 'path';
 import { createPersistedStore } from './persisted-store.js';
 import { STORAGE_DIR } from '../config.js';
+import { containedPath, isPathWithin } from '@yaar/lib/paths';
 
 export interface MountEntry {
   alias: string;
@@ -59,8 +60,7 @@ async function validateHostPath(hostPath: string): Promise<string | null> {
   }
 
   // Reject paths inside STORAGE_DIR (circular mount)
-  const rel = relative(STORAGE_DIR, hostPath);
-  if (!rel.startsWith('..') && !isAbsolute(rel)) {
+  if (isPathWithin(STORAGE_DIR, hostPath)) {
     return 'Host path must not be inside the storage directory';
   }
 
@@ -134,12 +134,9 @@ function resolveMountEntry(
   const mount = store.peek()?.find((m) => m.alias === alias);
   if (!mount) return null;
 
-  // Resolve the sub-path against the host directory
-  const absolutePath = normalize(subPath ? join(mount.hostPath, subPath) : mount.hostPath);
-
-  // Ensure the resolved path stays within the mount's host directory
-  const rel = relative(mount.hostPath, absolutePath);
-  if (rel.startsWith('..') || isAbsolute(rel)) return null;
+  // Resolve the sub-path against the host directory, staying within it
+  const absolutePath = containedPath(mount.hostPath, subPath);
+  if (!absolutePath) return null;
 
   return { mount, absolutePath };
 }

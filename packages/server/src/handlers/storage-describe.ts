@@ -16,8 +16,8 @@
 import { stat } from 'fs/promises';
 import { extname } from 'path';
 import { archiveFormatOf } from '@yaar/lib/archive';
-import type { VerbResult } from './uri-registry.js';
-import { okJson, error, mimeFromPath } from './utils.js';
+import { okJson, error, type VerbResult } from '../lib/verb-result.js';
+import { mimeFromPath } from './utils.js';
 import { resolvePath, storageList } from '../storage/storage-manager.js';
 
 /** Verbs a directory answers to. `read` is included because it falls through to list. */

@@ -17,8 +17,7 @@
  * One document, not a collection: `read` is the only verb that answers with content.
  */
 
-import type { VerbResult } from '../uri-registry.js';
-import { okJson, okResource, error } from '../utils.js';
+import { okJson, okResource, error, type VerbResult } from '../../lib/verb-result.js';
 import { listApps, loadAppSkill } from '../../features/apps/discovery.js';
 import { skillSections } from '../../features/apps/describe.js';
 import { parseAppSkillPath } from './paths.js';

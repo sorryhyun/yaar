@@ -27,6 +27,18 @@ mock.module('../lib/browser/cdp.js', () => ({
       }),
     ),
   },
+  // Mirrors the real `fetchBrowserWsUrl`, against the mocked `globalThis.fetch` below —
+  // mocking the whole module means the real one is gone too.
+  fetchBrowserWsUrl: async (port: number, timeoutMs: number) => {
+    const resp = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!resp.ok) {
+      throw new Error(`DevTools endpoint on port ${port} answered with status ${resp.status}`);
+    }
+    const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
+    return info.webSocketDebuggerUrl ?? null;
+  },
 }));
 
 // ── Mock global fetch for Chrome debug HTTP API ──────────────────────────────

@@ -24,7 +24,7 @@ import {
   readApplication,
 } from '../handlers/apps/app-resource.js';
 import type { ResolvedUri } from '../handlers/uri-resolve.js';
-import type { VerbResult } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 
 const APP_ID = 'identity-agreement-fixture';
 const appDir = join(USER_APPS_DIR, APP_ID);

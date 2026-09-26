@@ -8,8 +8,8 @@
  * dead end one level down.
  */
 import { describe, it, expect, afterAll } from 'bun:test';
-import { applyReadOptions, CHAR_PAGE_SIZE, ok, okResource } from '../handlers/utils.js';
-import { hasLineFilter } from '../handlers/uri-registry.js';
+import { applyReadOptions, CHAR_PAGE_SIZE, hasLineFilter } from '../lib/read-options.js';
+import { ok, okResource } from '../lib/verb-result.js';
 import { SPILL_DIR, SPILL_THRESHOLD_CHARS, spillOversizedResult } from '../mcp/result-spill.js';
 import { storageDelete, storageRead } from '../storage/storage-manager.js';
 

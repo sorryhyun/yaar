@@ -5,8 +5,7 @@
  * notifications when the target window is modified.
  */
 
-import type { VerbResult } from '../../handlers/uri-registry.js';
-import { okJson, error } from '../../handlers/utils.js';
+import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
 import { getAgentId, requireMonitorId } from '../../agents/agent-context.js';
 import { monitorRole } from '../../agents/roles.js';
 import { getActivePool } from '../../handlers/utils.js';

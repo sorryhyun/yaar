@@ -37,17 +37,21 @@ describe('Claude tool_result → StreamMessage', () => {
   it('keeps the text alongside the image marker', () => {
     const mapped = mapClaudeMessage(
       userWith([
-        { type: 'text', text: 'STALE: ' },
+        { type: 'text', text: 'STALE:' },
         { type: 'image', data: 'aGVsbG8=', mimeType: 'image/webp' },
       ]),
     );
-    expect(mapped?.content).toBe('STALE: [image omitted]');
+    // Newline-joined, matching the Codex mapper (both go through the shared
+    // providers/mcp-content.ts formatter) — previously joined with no separator.
+    expect(mapped?.content).toBe('STALE:\n[image omitted]');
   });
 
   it('emits a tool_result even when no block yields text', () => {
     const mapped = mapClaudeMessage(userWith([]));
     expect(mapped?.type).toBe('tool_result');
-    expect(mapped?.content).toBe('');
+    // Shared with the Codex mapper (providers/mcp-content.ts): no blocks at all
+    // degrades to this default, not '', which a UI would render as "did nothing".
+    expect(mapped?.content).toBe('Tool completed');
   });
 
   it('still maps a plain text result unchanged', () => {

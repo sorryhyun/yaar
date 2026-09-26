@@ -20,8 +20,9 @@
  * empty store.
  */
 
-import { mkdir, readFile, rename, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { createDebouncedJsonFile, type DebouncedJsonFile } from '@yaar/lib/json-file';
 import { getBrowserStateDir } from '../../config.js';
 
 /** One named session, as it looked the last time anything changed. */
@@ -56,8 +57,12 @@ function storePath(): string {
 export class BrowserSessionStore {
   private records = new Map<string, BrowserSessionRecord>();
   private loaded = false;
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private writing: Promise<void> = Promise.resolve();
+  private readonly writer: DebouncedJsonFile = createDebouncedJsonFile(
+    storePath(),
+    () => this.list(),
+    // Losing a record costs a revive, never a running session — no onError, swallow.
+    { delayMs: FLUSH_DELAY_MS },
+  );
 
   /**
    * Read the file once. Safe to call on every access — the second call is free,
@@ -106,50 +111,17 @@ export class BrowserSessionStore {
       createdAt: prev?.createdAt ?? now,
       updatedAt: now,
     });
-    this.scheduleFlush();
+    this.writer.schedule();
   }
 
   forget(id: string): void {
     if (!this.records.delete(id)) return;
-    this.scheduleFlush();
+    this.writer.schedule();
   }
 
   /** Write now and wait for it — for shutdown, where the debounce would be lost. */
   async flush(): Promise<void> {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    await this.write();
-  }
-
-  private scheduleFlush(): void {
-    if (this.flushTimer) return;
-    this.flushTimer = setTimeout(() => {
-      this.flushTimer = null;
-      void this.write();
-    }, FLUSH_DELAY_MS);
-    // A pending write must never be the reason a test run or a shutdown hangs.
-    this.flushTimer.unref?.();
-  }
-
-  /**
-   * Serialize writes through one chain: `remember` can fire faster than the disk,
-   * and two overlapping rename-into-place calls are how the file ends up empty.
-   */
-  private write(): Promise<void> {
-    this.writing = this.writing.then(async () => {
-      const path = storePath();
-      const tmp = `${path}.tmp`;
-      try {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(tmp, JSON.stringify(this.list(), null, 2), 'utf-8');
-        await rename(tmp, path);
-      } catch {
-        // Losing the record costs a revive, never a running session.
-      }
-    });
-    return this.writing;
+    await this.writer.flush();
   }
 }
 

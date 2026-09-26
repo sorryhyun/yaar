@@ -6,9 +6,10 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
-import { ResourceRegistry, foldNotes, type VerbResult } from './uri-registry.js';
+import { ResourceRegistry } from './uri-registry.js';
+import { foldNotes, formatBatchResults, type VerbResult } from '../lib/verb-result.js';
+import { getActiveSession } from './utils.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { getActiveSession, formatBatchResults } from './utils.js';
 import { expandBraceUri } from '@yaar/shared';
 import { registerConfigHandlers } from './config.js';
 import { registerStorageHandlers } from './storage.js';
@@ -102,7 +103,7 @@ function appendLayoutContext(result: VerbResult): VerbResult {
         ...result,
         content: [...result.content, { type: 'text' as const, text: note.text }],
         // Beside a `structuredContent` the text block never reaches a model (see `okJson`
-        // in utils.ts), so the layout rides inside the object too — as data, not as the
+        // in lib/verb-result.ts), so the layout rides inside the object too — as data, not as the
         // text block, which would arrive as one escaped line. MCP-only, so the app's
         // `POST /api/verb` data never sees the key.
         ...(result.structuredContent

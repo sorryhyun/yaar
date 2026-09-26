@@ -8,6 +8,7 @@
 import { join } from 'path';
 import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
+import { envFlag } from '../config/env.js';
 import { errMessage } from '@yaar/lib/errors';
 import { SHELL_RESET_CSS } from '@yaar/shared';
 import { registerDevReloadHandler } from './server.js';
@@ -94,10 +95,7 @@ const BUNDLE_WORKER = join(import.meta.dir, 'dev-bundle-worker.ts');
  * either way; `make mobile-bench` pins it on so it measures what a phone gets.
  */
 function reactProduction(): boolean {
-  const flag = process.env.YAAR_REACT_PROD;
-  if (flag === '1') return true;
-  if (flag === '0') return false;
-  return process.platform === 'android';
+  return envFlag('YAAR_REACT_PROD', process.platform === 'android');
 }
 
 async function runBundleWorker(

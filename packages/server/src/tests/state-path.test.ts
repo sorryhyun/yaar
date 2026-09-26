@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  splitStatePath,
-  selectStatePath,
-  searchValuePaths,
-} from '../features/window/state-path.js';
+import { splitStatePath, selectStatePath, searchValuePaths } from '../lib/state-path.js';
 
 const scene = {
   nodes: [

@@ -14,9 +14,10 @@
  *   invoke('yaar://user/clipboard', { action: 'save', ... })   → the whole of it, to a file
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { ok, okJson, okWithImages, error, type VerbResult } from '../lib/verb-result.js';
+import { assertUri, requireAction } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, okJson, okWithImages, error, assertUri, requireAction } from './utils.js';
 import { defineActions } from './define-actions.js';
 import { showNotification, dismissNotification } from '../features/user/notifications.js';
 import { askUser, requestUserInput } from '../features/user/prompts.js';

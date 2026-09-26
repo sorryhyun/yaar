@@ -31,8 +31,8 @@
  */
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { VerbResult } from '../handlers/uri-registry.js';
-import { CHAR_PAGE_SIZE } from '../handlers/utils.js';
+import type { VerbResult } from '../lib/verb-result.js';
+import { CHAR_PAGE_SIZE } from '../lib/read-options.js';
 import { resolvePath, storageWrite } from '../storage/storage-manager.js';
 
 export const SPILL_THRESHOLD_CHARS = 100_000;

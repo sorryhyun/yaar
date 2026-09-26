@@ -51,9 +51,21 @@
       "types": "./dist/ssrf.d.ts",
       "import": "./dist/ssrf.js"
     },
+    "./paths": {
+      "types": "./dist/paths.d.ts",
+      "import": "./dist/paths.js"
+    },
+    "./process": {
+      "types": "./dist/process.d.ts",
+      "import": "./dist/process.js"
+    },
     "./image": {
       "types": "./dist/image.d.ts",
       "import": "./dist/image.js"
+    },
+    "./json-file": {
+      "types": "./dist/json-file.d.ts",
+      "import": "./dist/json-file.js"
     },
     "./errors": {
       "types": "./dist/errors.d.ts",

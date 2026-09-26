@@ -3,23 +3,24 @@
  *
  * `yaar://session/browser` is the one door that reaches `LocalUserBrowser` (the
  * user's own Chrome, with their cookies and logins). Access control is enforced
- * upstream in `ResourceRegistry.execute()` — this resource is marked
- * `access: 'session-principal'`, so only the session agent ever gets here.
+ * upstream in `ResourceRegistry.execute()` — everything under `yaar://session` is
+ * session-principal (the registry derives it from the prefix), so only the session agent
+ * or a bundled system app ever gets here.
  *
  * This module just picks the right provider instance and runs the *same* action
  * layer used by `/api/browser`, with the Phase-3 consent + driving guards
  * applied.
  */
 
-import type { VerbResult } from '../../handlers/uri-registry.js';
-import { error, getActiveSessionId } from '../../handlers/utils.js';
+import { error, type VerbResult } from '../../lib/verb-result.js';
+import { getActiveSessionId } from '../../handlers/utils.js';
 import {
   getLocalBrowser,
   getHeadlessBrowser,
   isForceHeadless,
   type BrowserProvider,
 } from '../../lib/browser/index.js';
-import { runGuardedBrowserAction, handleListTabs } from '../browser/actions.js';
+import { runGuardedBrowserAction, runBrowserAction } from '../browser/actions.js';
 
 /**
  * Resolve the provider behind the session door.
@@ -61,7 +62,7 @@ export async function sessionBrowserRead(): Promise<VerbResult> {
   // Pull in tabs the user already had open (incl. YAAR's own tab) before
   // listing — otherwise the list only shows tabs YAAR itself opened.
   await resolved.provider.syncExistingTabs();
-  return handleListTabs(resolved.provider);
+  return runBrowserAction(resolved.provider, 'list_tabs', '0', {});
 }
 
 /**

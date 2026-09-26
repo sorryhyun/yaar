@@ -17,7 +17,8 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { initRegistry } from '../handlers/index.js';
-import type { VerbResult, Verb } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
+import type { Verb } from '../handlers/uri-registry.js';
 import { appActions } from '../handlers/apps/app-resource.js';
 import { USER_APPS_DIR } from '../features/apps/roots.js';
 import { invalidateAppsCache } from '../features/apps/discovery.js';

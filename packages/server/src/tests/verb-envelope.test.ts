@@ -10,9 +10,15 @@
 
 import { describe, expect, test } from 'bun:test';
 import { handleVerbRoutes, toEnvelope } from '../http/routes/verb.js';
-import { foldNotes, formatBatchResults, okJson, okLinks, prependNote } from '../handlers/utils.js';
+import {
+  foldNotes,
+  formatBatchResults,
+  okJson,
+  okLinks,
+  prependNote,
+  type VerbResult,
+} from '../lib/verb-result.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
-import type { VerbResult } from '../handlers/uri-registry.js';
 import type { SessionId } from '../session/types.js';
 
 describe('okLinks', () => {

@@ -169,7 +169,7 @@ The canonical way agents address windows. The monitor is injected automatically 
 | `read` | `yaar://windows/{windowId}` | Metadata (including `z` and `focused` — see below) + `__content`; on an iframe window, metadata + `__screenshot` instead, with `contentOmitted` naming where the content went |
 | `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links. **The index**: a command's `description` is its rendered signature plus the *first sentence* of its documentation, so the list is enough to call from without being the whole manual — for a 52-command app it is ~10 KB rather than 80. `describe` on the row's own URI has the full text |
 | `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
-| `read` | `yaar://windows/{windowId}/state/{key}/{seg}/…` | One part of a state value. The app is asked for `{key}`; the server walks each segment as an object key or the `id` of an array element (`state/scene/nodes/{nodeId}/geometry`); a position is `__idx/{n}` (`nodes/__idx/0`), so a numeric id stays reachable. A miss names what that level has. `pattern`/`lines` filter the selected part (`features/window/state-path.ts`) |
+| `read` | `yaar://windows/{windowId}/state/{key}/{seg}/…` | One part of a state value. The app is asked for `{key}`; the server walks each segment as an object key or the `id` of an array element (`state/scene/nodes/{nodeId}/geometry`); a position is `__idx/{n}` (`nodes/__idx/0`), so a numeric id stays reachable. A miss names what that level has. `pattern`/`lines` filter the selected part (`packages/server/src/lib/state-path.ts`) |
 | `read` + `pattern` | `yaar://windows/{windowId}/state/{key}[/…]` | On an object or array value, and without `lines`, a path search: one `path: value` line per leaf, tested against the pattern, each path appendable to the read URI (ids for elements with a unique one, `__idx/{n}` otherwise). `context: N` shows N sibling values on each side under the same parent, containers summarized as `{keys}`/`[n]`. A text value keeps the numbered line grep |
 | `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params. An **array** payload runs it once per element, in order (see [Batching](#batching)) |
 | `list` / `read` | `yaar://windows/{windowId}/history` | What has been done to the window, oldest first: each `app_command` (command, params preview, sender, `ok`/`error`) and each `replayed` / `restored` event. `list` gives one link per entry; `read` the entries as JSON; `read …/history/{seq}` one entry with full params. Holds what *agents* sent — state the user produced inside the window was never a command and is not here |
@@ -274,7 +274,8 @@ so an agent reading the manifest is handed URIs it can call directly.
 Session-scoped resources. The whole namespace is **session-principal**, `yaar://session/agents`
 and `yaar://session/agents/*` included: a caller gets in iff its role is `session` **or** it is a
 bundled `kind: "system"` app presenting an iframe token (enforced centrally in
-`ResourceRegistry.execute()`, the gate both doors end at). Monitor and app agents get a 403 — an
+`ResourceRegistry.execute()`, the gate both doors end at, and derived from the prefix at
+registration, so no handler under it can opt out or forget). Monitor and app agents get a 403 — an
 app/window agent hands work back to its monitor through its own `relay` tool, not through
 `yaar://session/agents/monitor`.
 
@@ -516,7 +517,8 @@ interface ResourceHandler {
   verbs: Verb[];                 // which verbs this handler supports (describe is always auto-generated)
   invokeSchema?: Record<string, unknown>;  // JSON Schema for invoke payload (optional)
   access?: 'session-principal';  // when set, only the session agent or a bundled system app's
-                                 // iframe token may call any verb (403 for everyone else)
+                                 // iframe token may call any verb (403 for everyone else);
+                                 // implied for every pattern under yaar://session
 
   exists?(resolved: ResolvedUri): Promise<boolean>;       // consulted before the auto-generated describe
   describe?(resolved: ResolvedUri): Promise<VerbResult>;  // custom describe; overrides auto-generation
@@ -601,6 +603,8 @@ Resolution points: the server resolves iframe content URIs in `features/window/c
 | `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver for all namespaces |
 | `packages/server/src/handlers/uri-registry.ts` | `ResourceRegistry` — central handler registry + principal enforcement |
 | `packages/server/src/handlers/uri-resolve.ts` | Server-side typed resolution for all URI namespaces |
+| `packages/server/src/lib/verb-result.ts` | `VerbResult` + the pure result builders (`ok`, `okJson`, `error`, `okLinks`, …) |
+| `packages/server/src/lib/read-options.ts` | `ReadOptions` and the read filters (`lines`/`pattern`/`chars`), `applyEdit` |
 | `packages/server/src/handlers/index.ts` | The 5 verb MCP tool definitions |
 | `packages/server/src/handlers/{config,window,agents,...}.ts` | Per-namespace handler registration |
 | `packages/server/src/http/routes/verb.ts` | `POST /api/verb` — iframe verb access with token + permission checks |

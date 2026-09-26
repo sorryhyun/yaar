@@ -7,13 +7,22 @@
  *   read('yaar://session/agents/{agentId}')               → agent info
  *   invoke('yaar://session/agents/{agentId}', { action }) → interrupt / relay
  *   delete('yaar://session/agents/{agentId}')             → dispose a session or app agent
+ *
+ * Session-principal only, like everything under yaar://session — the registry derives
+ * that from the prefix (`ResourceRegistry.register`). These two registrations are why
+ * it derives rather than trusts: they were once registered without the tag, and a
+ * monitor or app agent (which never passes the HTTP door's `isSessionUri` refusal)
+ * reached them. `relay` comes from the session agent, Process Explorer's
+ * interrupt/kill from a bundled system app token; both qualify.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { ok, okJson, okJsonResource, error, type VerbResult } from '../lib/verb-result.js';
+import { getActivePool, requireAction } from './utils.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { getAgentId, requireMonitorId } from '../agents/agent-context.js';
-import { ok, okJson, okJsonResource, error, getActivePool, requireAction } from './utils.js';
-import { executeSessionAction } from '../features/agents/session-actions.js';
+import { defineActions, summarizeActions } from './define-actions.js';
+import { executeSessionAction, type SessionAction } from '../features/agents/session-actions.js';
 import { relayToMonitor } from '../features/agents/relay.js';
 
 function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
@@ -25,18 +34,91 @@ function getPool() {
   return getActivePool();
 }
 
+interface AgentActionCtx {
+  resolved: ResolvedSession;
+  payload: Record<string, unknown>;
+}
+
+/** audit / coordinate / query — work handed to the session agent, so only its URI takes them. */
+function sessionAgentAction(action: SessionAction, description: string) {
+  return {
+    description,
+    run: async ({ resolved, payload }: AgentActionCtx): Promise<VerbResult> => {
+      if (resolved.id !== 'session') {
+        return error(`"${action}" is only supported on yaar://session/agents/session.`);
+      }
+      const pool = getPool();
+      if (!pool) return error('Session not initialized.');
+
+      const result = await executeSessionAction(pool, action, {
+        plan: payload.plan as string | undefined,
+        question: payload.question as string | undefined,
+      });
+      return result.success
+        ? ok(`Session agent completed "${action}" action.`)
+        : error(result.error!);
+    },
+  };
+}
+
+const agentActions = defineActions<AgentActionCtx>({
+  interrupt: {
+    description:
+      'Interrupt this agent (by instance id or role; "session" for the session agent). ' +
+      'With no id, interrupt every agent.',
+    run: async ({ resolved }) => {
+      const pool = getPool();
+      if (!pool) return error('No agents — session not initialized.');
+
+      if (!resolved.id) {
+        await pool.interruptAll();
+        return ok('Interrupted all agents.');
+      }
+
+      if (resolved.id === 'session') {
+        const agent = pool.agentPool.getSessionAgent();
+        if (!agent || !agent.session.isRunning()) return error('Session agent is not running.');
+        await agent.session.interrupt();
+        return ok('Interrupted session agent.');
+      }
+
+      const interrupted = await pool.agentPool.interruptByIdOrRole(resolved.id);
+      if (!interrupted) return error(`Agent "${resolved.id}" not found or not running.`);
+      return ok(`Interrupted agent "${resolved.id}".`);
+    },
+  },
+  relay: {
+    description: 'Send "message" to the monitor agent. Only on yaar://session/agents/monitor.',
+    run: async ({ resolved, payload }) => {
+      if (resolved.id !== 'monitor')
+        return error('Relay is only supported on yaar://session/agents/monitor.');
+      if (typeof payload.message !== 'string' || !payload.message)
+        return error('"message" (string) is required for relay.');
+
+      const pool = getPool();
+      if (!pool) return error('Agent pool not initialized.');
+
+      const agentId = getAgentId() ?? 'unknown';
+      const monitorId = requireMonitorId();
+      const messageId = relayToMonitor(pool, agentId, monitorId, payload.message);
+
+      return ok(`Relayed to monitor agent (messageId: ${messageId}).`);
+    },
+  },
+  audit: sessionAgentAction('audit', 'Have the session agent audit the session.'),
+  coordinate: sessionAgentAction(
+    'coordinate',
+    'Have the session agent carry out a cross-monitor "plan".',
+  ),
+  query: sessionAgentAction('query', 'Ask the session agent a "question" about session state.'),
+});
+
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://session/agents', {
     description:
       'List all active agents (session, monitor, app, sub-agent, ephemeral), flat and as ' +
       'the ownership tree they form.',
     verbs: ['describe', 'list'],
-    // Tagged like every other yaar://session/* registration, rather than relying on
-    // the HTTP door's `isSessionUri` refusal alone: the two agent registrations were
-    // the only ones the registry gate did not cover, so a monitor or app *agent*
-    // (which never passes through the HTTP door) reached them. Process Explorer keeps
-    // working because it qualifies as a bundled system app, not because of the gap.
-    access: 'session-principal',
 
     async list(): Promise<VerbResult> {
       const pool = getPool();
@@ -85,18 +167,11 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       'Agent instance. Read for agent info, invoke to interrupt, relay, or invoke the session agent, ' +
       'delete to dispose the session agent or an app agent (by instanceId or appId).',
     verbs: ['describe', 'read', 'invoke', 'delete'],
-    // See the sibling registration above. `relay` is reached from the session agent
-    // (role `session`) and Process Explorer's interrupt/kill from a system app token;
-    // both still qualify.
-    access: 'session-principal',
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
-        action: {
-          type: 'string',
-          enum: ['interrupt', 'relay', 'audit', 'coordinate', 'query'],
-        },
+        action: { ...agentActions.schema, description: summarizeActions(agentActions) },
         message: { type: 'string', description: 'Message to relay (for relay action)' },
         plan: { type: 'string', description: 'Coordination plan (for coordinate action)' },
         question: {
@@ -150,62 +225,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       assertSessionAgents(resolved);
       const actionErr = requireAction(payload);
       if (actionErr) return actionErr;
-
-      const action = payload!.action as string;
-
-      if (resolved.id === 'session') {
-        if (action === 'audit' || action === 'coordinate' || action === 'query') {
-          const pool = getPool();
-          if (!pool) return error('Session not initialized.');
-
-          const result = await executeSessionAction(pool, action, {
-            plan: payload!.plan as string | undefined,
-            question: payload!.question as string | undefined,
-          });
-          return result.success
-            ? ok(`Session agent completed "${action}" action.`)
-            : error(result.error!);
-        }
-      }
-
-      if (action === 'interrupt') {
-        const pool = getPool();
-        if (!pool) return error('No agents — session not initialized.');
-
-        if (resolved.id) {
-          if (resolved.id === 'session') {
-            const agent = pool.agentPool.getSessionAgent();
-            if (!agent || !agent.session.isRunning()) return error('Session agent is not running.');
-            await agent.session.interrupt();
-            return ok('Interrupted session agent.');
-          }
-
-          const interrupted = await pool.agentPool.interruptByIdOrRole(resolved.id);
-          if (!interrupted) return error(`Agent "${resolved.id}" not found or not running.`);
-          return ok(`Interrupted agent "${resolved.id}".`);
-        }
-
-        await pool.interruptAll();
-        return ok('Interrupted all agents.');
-      }
-
-      if (action === 'relay') {
-        if (!resolved.id || resolved.id !== 'monitor')
-          return error('Relay is only supported on yaar://session/agents/monitor.');
-        if (typeof payload!.message !== 'string' || !payload!.message)
-          return error('"message" (string) is required for relay.');
-
-        const pool = getPool();
-        if (!pool) return error('Agent pool not initialized.');
-
-        const agentId = getAgentId() ?? 'unknown';
-        const monitorId = requireMonitorId();
-        const messageId = relayToMonitor(pool, agentId, monitorId, payload!.message as string);
-
-        return ok(`Relayed to monitor agent (messageId: ${messageId}).`);
-      }
-
-      return error(`Unknown action "${action}".`);
+      return agentActions.dispatch(payload!.action as string, { resolved, payload: payload! });
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

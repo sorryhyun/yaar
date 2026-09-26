@@ -19,7 +19,7 @@ import { initRegistry } from '../handlers/index.js';
 import { addAllowedDomain } from '../features/config/domains.js';
 import { storageList, storageDelete } from '../storage/storage-manager.js';
 import { STORAGE_DIR } from '../config.js';
-import type { VerbResult } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 import type { SessionId } from '../session/types.js';
 
 /** Comfortably past the inline cap, and cheap to produce. */

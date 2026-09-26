@@ -4,18 +4,23 @@
 
 import type { AppManifest, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { isPreviewAppId } from '@yaar/shared';
-import type { ContentBlock, ReadOptions, VerbResult } from '../../handlers/uri-registry.js';
-import { hasLineFilter, isContentBlocks } from '../../handlers/uri-registry.js';
-import { getAgentId } from '../../agents/agent-context.js';
-import type { WindowStateRegistry } from '../../session/window-state.js';
 import {
+  isContentBlocks,
   ok,
   okJson,
   error,
-  getActiveSessionId,
   jsonText,
+  type ContentBlock,
+  type VerbResult,
+} from '../../lib/verb-result.js';
+import {
+  hasLineFilter,
   applyReadOptionsToValue,
-} from '../../handlers/utils.js';
+  type ReadOptions,
+} from '../../lib/read-options.js';
+import { getActiveSessionId } from '../../handlers/utils.js';
+import { getAgentId } from '../../agents/agent-context.js';
+import type { WindowStateRegistry } from '../../session/window-state.js';
 import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type PendingOutcome } from '../../session/pending-store.js';
@@ -31,7 +36,7 @@ import {
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
-import { splitStatePath, selectStatePath } from './state-path.js';
+import { splitStatePath, selectStatePath } from '../../lib/state-path.js';
 import {
   gatedStoragePath,
   gatedStoragePathError,
@@ -107,7 +112,7 @@ function wrapAppValue(value: unknown, read?: { label: string; options?: ReadOpti
   // for programmatic consumers (app→app SDK calls). The text block is `jsonText`'s
   // (compact when large, or when an array) and truncated; the structured copy is
   // the full value. Note the model reads the *structured* copy — both the Claude CLI
-  // and Codex prefer it over text blocks (see `okJson` in handlers/utils.ts) — so
+  // and Codex prefer it over text blocks (see `okJson` in lib/verb-result.ts) — so
   // MAX_TEXT_BYTES does not bound what reaches the model context for an object return.
   //
   // `structuredContent` is object-only (MCP contract), so bare arrays get the

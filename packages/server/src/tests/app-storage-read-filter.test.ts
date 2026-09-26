@@ -10,7 +10,7 @@
 import { describe, it, expect, afterAll } from 'bun:test';
 import { readStorage } from '../handlers/apps/storage-resource.js';
 import { resolvePath, storageWrite, storageDelete } from '../storage/storage-manager.js';
-import type { VerbResult } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 
 const APP_ID = `preview--__read-filter-test-${process.pid}`;
 const BODY = 'alpha\nbeta\ngamma\nbeta again';

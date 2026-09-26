@@ -25,7 +25,7 @@ import type {
   BrowserSessionInfo,
   BrowserTabEvent,
 } from './types.js';
-import { CDPClient } from './cdp.js';
+import { CDPClient, fetchBrowserWsUrl } from './cdp.js';
 import { BrowserSessionStore } from './session-store.js';
 import { getBrowserIdleMinutes } from '../../config.js';
 
@@ -302,13 +302,10 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   /** Connect to browser-level CDP for target discovery (auto-adopt new tabs). */
   private async setupTargetDiscovery(port: number): Promise<void> {
     try {
-      const resp = await fetch(`http://127.0.0.1:${port}/json/version`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
-      if (!info.webSocketDebuggerUrl) return;
+      const wsUrl = await fetchBrowserWsUrl(port, 5000);
+      if (!wsUrl) return;
 
-      this.browserCdp = await CDPClient.connect(info.webSocketDebuggerUrl);
+      this.browserCdp = await CDPClient.connect(wsUrl);
       await this.browserCdp.send('Target.setDiscoverTargets', { discover: true });
 
       this.browserCdp.on('Target.targetCreated', (params: unknown) => {

@@ -9,15 +9,7 @@
  */
 
 import { parseFileUri } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult, ReadOptions } from './uri-registry.js';
-import type { ResolvedUri } from './uri-resolve.js';
-import {
-  storageRead,
-  storageWrite,
-  storageList,
-  storageDelete,
-  storageGrep,
-} from '../storage/index.js';
+import type { ResourceRegistry } from './uri-registry.js';
 import {
   ok,
   okJson,
@@ -27,8 +19,19 @@ import {
   okLinks,
   error,
   notFoundError,
-} from './utils.js';
-import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
+  prependNote,
+  type VerbResult,
+} from '../lib/verb-result.js';
+import { applyEdit, applyReadOptions, type ReadOptions } from '../lib/read-options.js';
+import { mimeFromPath } from './utils.js';
+import type { ResolvedUri } from './uri-resolve.js';
+import {
+  storageRead,
+  storageWrite,
+  storageList,
+  storageDelete,
+  storageGrep,
+} from '../storage/index.js';
 import { copyStorageBytes, decodeWriteContent } from './storage-bytes.js';
 import {
   COMPRESS_ACTION,
@@ -37,17 +40,11 @@ import {
   EXTRACT_ACTION,
   FROM_SCHEMA,
   copyFrom,
-  isCopyPayload,
 } from './storage-copy.js';
+import { defineActions } from './define-actions.js';
+import { STORAGE_ACTION_DOCS } from './storage-actions.js';
 import { invokeArchiveAction } from './storage-archive.js';
 import { describeStoragePath } from './storage-describe.js';
-
-/**
- * `share` — Android's share sheet for one file. Offered only where there can be a sheet:
- * a server running on the phone itself (Termux). Advertising it anywhere else would hand
- * every agent an action that can only fail.
- */
-const SHARE_ACTIONS = process.platform === 'android' ? ['share'] : [];
 
 // ── Helpers ──
 
@@ -62,6 +59,106 @@ async function readStorageRaw(path: string): Promise<{ content: string } | { err
     return { error: `File not found: ${path}` };
   }
 }
+
+interface StorageActionCtx {
+  /** Path under the storage root; `''` for the root itself. */
+  path: string;
+  payload: Record<string, unknown>;
+}
+
+const storageActions = defineActions<StorageActionCtx>({
+  write: {
+    description: STORAGE_ACTION_DOCS.write,
+    run: async ({ path, payload }) => {
+      if (!path) return error('Cannot write to storage root. Provide a file path.');
+      const decoded = decodeWriteContent(payload);
+      if ('error' in decoded) return error(decoded.error);
+      const result = await storageWrite(path, decoded.content);
+      if (!result.success) return error(result.error!);
+      return ok(`Written to yaar://storage/${path}`);
+    },
+  },
+  [COPY_ACTION]: {
+    description: STORAGE_ACTION_DOCS.copy,
+    run: async ({ path, payload }) => {
+      if (!path) return error('Cannot copy onto the storage root. Provide a destination path.');
+      // The same field `POST /api/verb` checks `read` on before dispatching here —
+      // see handlers/storage-copy.ts. This handler authorizes nothing itself.
+      const from = copyFrom(payload);
+      if (from === null) return error(COPY_FROM_REQUIRED);
+      const copied = await copyStorageBytes(from, path);
+      if ('error' in copied) return error(copied.error);
+      return ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`);
+    },
+  },
+  edit: {
+    description: STORAGE_ACTION_DOCS.edit,
+    run: async ({ path, payload }) => {
+      if (!path) return error('Provide a file path to edit.');
+      const raw = await readStorageRaw(path);
+      if ('error' in raw) return error(raw.error);
+
+      const edited = await applyEdit(raw.content, payload);
+      if ('error' in edited) return error(edited.error);
+
+      const writeResult = await storageWrite(path, edited.result);
+      if (!writeResult.success) return error(writeResult.error!);
+      return ok(`Edited yaar://storage/${path}`);
+    },
+  },
+  grep: {
+    description: STORAGE_ACTION_DOCS.grep,
+    run: async ({ path, payload }) => {
+      if (typeof payload.pattern !== 'string')
+        return error('"pattern" (string) is required for grep.');
+      const result = await storageGrep(path, payload.pattern, payload.glob as string | undefined);
+      if (!result.success) return error(result.error!);
+      return okJson({
+        matches: result.matches,
+        truncated: result.truncated,
+        scannedFiles: result.scannedFiles,
+      });
+    },
+  },
+  // Same shape as copy: this URI is written, `from` is read.
+  [EXTRACT_ACTION]: {
+    description: STORAGE_ACTION_DOCS.extract,
+    run: ({ path, payload }) =>
+      invokeArchiveAction(EXTRACT_ACTION, payload, path, `yaar://storage/${path}`),
+  },
+  [COMPRESS_ACTION]: {
+    description: STORAGE_ACTION_DOCS.compress,
+    run: ({ path, payload }) =>
+      invokeArchiveAction(COMPRESS_ACTION, payload, path, `yaar://storage/${path}`),
+  },
+  // Android's share sheet for one file. Declared only where there can be a sheet — a
+  // server running on the phone itself (Termux). Anywhere else it would hand every agent
+  // an action that can only fail.
+  ...(process.platform === 'android'
+    ? {
+        share: {
+          description: STORAGE_ACTION_DOCS.share,
+          run: async ({ path }: StorageActionCtx) => {
+            if (!path) return error('Provide a file path to share.');
+            const { resolvePathAsync } = await import('../storage/storage-manager.js');
+            const resolved = await resolvePathAsync(path);
+            if (!resolved) return error('Invalid storage path.');
+            const stat = await Bun.file(resolved.absolutePath)
+              .stat()
+              .catch(() => null);
+            if (!stat) return notFoundError(`File not found: yaar://storage/${path}`);
+            if (stat.isDirectory()) return error('Only a file can be shared, not a folder.');
+            const { shareFile } = await import('../features/android/index.js');
+            const shared = await shareFile(resolved.absolutePath, path.split('/').pop());
+            if (!shared.ok) return error(shared.error);
+            return ok(
+              `Opened the share sheet for yaar://storage/${path}. The user picks where it goes.`,
+            );
+          },
+        },
+      }
+    : {}),
+});
 
 // ── Registration ──
 
@@ -79,7 +176,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       'an entry as yaar://storage/{archive}/{entry}. To unpack one, invoke the new folder with ' +
       'action "extract" and "from" the archive; to build one, invoke the archive to create with ' +
       'action "compress" and "from" the files or folders to pack.' +
-      (SHARE_ACTIONS.length
+      (storageActions.has('share')
         ? ' This server runs on the user\'s phone: invoke a file with action "share" to open ' +
           "Android's share sheet for it (the user picks the app to send it to)."
         : ''),
@@ -88,18 +185,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       type: 'object',
       required: ['action'],
       properties: {
-        action: {
-          type: 'string',
-          enum: [
-            'write',
-            COPY_ACTION,
-            'edit',
-            'grep',
-            EXTRACT_ACTION,
-            COMPRESS_ACTION,
-            ...SHARE_ACTIONS,
-          ],
-        },
+        action: storageActions.schema,
         pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
         glob: {
           type: 'string',
@@ -246,81 +332,10 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       if (!parsed && resolved.sourceUri !== 'yaar://storage') return error('Invalid storage URI.');
       if (!payload?.action) return error('Payload must include "action" ("write" or "edit").');
 
-      const action = payload.action as string;
-      const path = parsed?.path ?? '';
-
-      if (action === 'write') {
-        if (!path) return error('Cannot write to storage root. Provide a file path.');
-        const decoded = decodeWriteContent(payload);
-        if ('error' in decoded) return error(decoded.error);
-        const result = await storageWrite(path, decoded.content);
-        if (!result.success) return error(result.error!);
-        return ok(`Written to yaar://storage/${path}`);
-      }
-
-      if (isCopyPayload(payload)) {
-        if (!path) return error('Cannot copy onto the storage root. Provide a destination path.');
-        // The same field `POST /api/verb` checks `read` on before dispatching here —
-        // see handlers/storage-copy.ts. This handler authorizes nothing itself.
-        const from = copyFrom(payload);
-        if (from === null) return error(COPY_FROM_REQUIRED);
-        const copied = await copyStorageBytes(from, path);
-        if ('error' in copied) return error(copied.error);
-        return ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`);
-      }
-
-      // `extract` / `compress` — same shape as copy: this URI is written, `from` is read.
-      const archived = await invokeArchiveAction(payload, path, `yaar://storage/${path}`);
-      if (archived) return archived;
-
-      if (action === 'edit') {
-        if (!path) return error('Provide a file path to edit.');
-        const raw = await readStorageRaw(path);
-        if ('error' in raw) return error(raw.error);
-
-        const edited = await applyEdit(raw.content, payload);
-        if ('error' in edited) return error(edited.error);
-
-        const writeResult = await storageWrite(path, edited.result);
-        if (!writeResult.success) return error(writeResult.error!);
-        return ok(`Edited yaar://storage/${path}`);
-      }
-
-      if (action === 'share' && SHARE_ACTIONS.length) {
-        if (!path) return error('Provide a file path to share.');
-        const { resolvePathAsync } = await import('../storage/storage-manager.js');
-        const resolved = await resolvePathAsync(path);
-        if (!resolved) return error('Invalid storage path.');
-        const stat = await Bun.file(resolved.absolutePath)
-          .stat()
-          .catch(() => null);
-        if (!stat) return notFoundError(`File not found: yaar://storage/${path}`);
-        if (stat.isDirectory()) return error('Only a file can be shared, not a folder.');
-        const { shareFile } = await import('../features/android/index.js');
-        const shared = await shareFile(resolved.absolutePath, path.split('/').pop());
-        if (!shared.ok) return error(shared.error);
-        return ok(
-          `Opened the share sheet for yaar://storage/${path}. The user picks where it goes.`,
-        );
-      }
-
-      if (action === 'grep') {
-        if (typeof payload.pattern !== 'string')
-          return error('"pattern" (string) is required for grep.');
-        const result = await storageGrep(path, payload.pattern, payload.glob as string | undefined);
-        if (!result.success) return error(result.error!);
-        return okJson({
-          matches: result.matches,
-          truncated: result.truncated,
-          scannedFiles: result.scannedFiles,
-        });
-      }
-
-      return error(
-        `Unknown action "${action}". Use "write", "copy", "edit", "grep", "extract", "compress"${
-          SHARE_ACTIONS.length ? ', or "share"' : ''
-        }.`,
-      );
+      return storageActions.dispatch(payload.action as string, {
+        path: parsed?.path ?? '',
+        payload,
+      });
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

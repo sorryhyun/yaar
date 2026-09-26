@@ -12,9 +12,10 @@
  */
 
 import type { OSAction } from '@yaar/shared';
-import type { ResourceHandler, VerbResult } from '../uri-registry.js';
+import type { ResourceHandler } from '../uri-registry.js';
+import { ok, okJson, okLinks, error, type VerbResult } from '../../lib/verb-result.js';
+import { extractIdFromUri } from '../utils.js';
 import type { ResolvedUri } from '../uri-resolve.js';
-import { ok, okJson, okLinks, error, extractIdFromUri } from '../utils.js';
 import { defineActions } from '../define-actions.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { listApps, getAppMeta } from '../../features/apps/discovery.js';

@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error } from '../../lib/verb-result.js';
 import {
   readAppConfig,
   writeAppConfig,

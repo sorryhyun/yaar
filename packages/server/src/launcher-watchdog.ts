@@ -13,7 +13,7 @@
  * checks on it, shutting down the normal way once it is gone. Unset, nothing is watched.
  */
 
-import { readFileSync } from 'fs';
+import { isProcessAlive, readProcessStartTime } from '@yaar/lib/process';
 import { createLogger } from './observability/log.js';
 
 const log = createLogger('launcher');
@@ -21,29 +21,13 @@ const log = createLogger('launcher');
 const POLL_MS = 2_000;
 
 /**
- * The process's start time from `/proc/<pid>/stat` (field 22), or null where there is no
- * procfs. It is what tells the launcher apart from an unrelated process that was handed
- * its PID after it died — Android recycles PIDs quickly.
+ * Alive, and — when a start time was captured at watch-start — still the *same* process.
+ * `readProcessStartTime` is what tells the launcher apart from an unrelated process that
+ * was handed its PID after it died — Android recycles PIDs quickly.
  */
-function readStartTime(pid: number): string | null {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8');
-    // Field 2 (comm) is parenthesized and may contain spaces; count from after it.
-    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function isAlive(pid: number, startTime: string | null): boolean {
-  if (startTime !== null) return readStartTime(pid) === startTime;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM: it exists, it is just not ours to signal.
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
+  if (startTime !== null) return readProcessStartTime(pid) === startTime;
+  return isProcessAlive(pid);
 }
 
 /**
@@ -51,7 +35,7 @@ function isAlive(pid: number, startTime: string | null): boolean {
  * away, then every `pollMs`). Returns the function that stops watching.
  */
 export function watchProcess(pid: number, onGone: () => void, pollMs = POLL_MS): () => void {
-  const startTime = readStartTime(pid);
+  const startTime = readProcessStartTime(pid);
   let timer: ReturnType<typeof setInterval> | null = null;
   const stop = () => {
     if (timer) clearInterval(timer);

@@ -15,6 +15,7 @@
  */
 
 import { TermuxApi } from '@yaar/lib/termux';
+import { envFlag } from '../../config/env.js';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('termux');
@@ -22,9 +23,12 @@ const log = createLogger('termux');
 let api: TermuxApi | null = null;
 let reported = false;
 
-/** Android, and not turned off. Says nothing yet about whether Termux:API is installed. */
+/**
+ * Android, and not turned off — or forced on elsewhere for testing. Says nothing yet about
+ * whether Termux:API is installed.
+ */
 export function wantsTermuxApi(): boolean {
-  return process.platform === 'android' && process.env.YAAR_TERMUX_API !== '0';
+  return envFlag('YAAR_TERMUX_API', process.platform === 'android');
 }
 
 /**

@@ -26,7 +26,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { requireMonitorId, getWindowId, getAgentRole } from '../../agents/agent-context.js';
-import { getActiveSession, ok, error } from '../../handlers/utils.js';
+import { getActiveSession } from '../../handlers/utils.js';
+import { ok, error } from '../../lib/verb-result.js';
 import type { LiveSession } from '../../session/live-session.js';
 import { genId } from '@yaar/lib/ids';
 import { getAppMeta } from '../../features/apps/discovery.js';

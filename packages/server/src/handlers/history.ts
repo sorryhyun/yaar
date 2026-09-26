@@ -9,9 +9,10 @@
  *   read('yaar://history/{id}/blobs/{sha256}')        → an offloaded result's bytes
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { okJsonResource, okLinks, okResource, error, type VerbResult } from '../lib/verb-result.js';
+import { getActiveSession } from './utils.js';
 import type { ResolvedUri, ResolvedHistory } from './uri-resolve.js';
-import { okJsonResource, okLinks, okResource, error, getActiveSession } from './utils.js';
 import {
   listSessions,
   readSessionTranscript,

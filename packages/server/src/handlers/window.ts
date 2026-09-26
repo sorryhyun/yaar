@@ -25,11 +25,7 @@
  */
 
 import type { SoftKeyboard } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult, ResourceHandler, ReadOptions } from './uri-registry.js';
-import { hasLineFilter } from './uri-registry.js';
-import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
-import type { WindowState, WindowStateRegistry } from '../session/window-state.js';
-import { clientAwayNote } from '../session/client-presence.js';
+import type { ResourceRegistry, ResourceHandler } from './uri-registry.js';
 import {
   ok,
   okJson,
@@ -37,12 +33,13 @@ import {
   okLinks,
   error,
   prependNote,
-  getActiveSession,
-  getActiveSessionId,
-  assertUri,
-  requireAction,
-  applyReadOptionsToValue,
-} from './utils.js';
+  type VerbResult,
+} from '../lib/verb-result.js';
+import { hasLineFilter, applyReadOptionsToValue, type ReadOptions } from '../lib/read-options.js';
+import { getActiveSession, getActiveSessionId, assertUri, requireAction } from './utils.js';
+import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
+import type { WindowState, WindowStateRegistry } from '../session/window-state.js';
+import { clientAwayNote } from '../session/client-presence.js';
 import { formatWindowFlags } from '../features/window/helpers.js';
 import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';

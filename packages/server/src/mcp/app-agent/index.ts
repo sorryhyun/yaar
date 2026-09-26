@@ -61,15 +61,16 @@ import {
 } from './storage-override.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
+import { getActiveSession, getActivePool } from '../../handlers/utils.js';
 import {
-  getActiveSession,
-  getActivePool,
   ok,
   okJson,
   error,
   prependNote,
   foldNotes,
-} from '../../handlers/utils.js';
+  type VerbResult,
+} from '../../lib/verb-result.js';
+import type { Verb } from '../../handlers/uri-registry.js';
 import { scopedAppStoragePath } from '../../handlers/apps/index.js';
 
 /**
@@ -148,7 +149,6 @@ export function appRelativeEntries(appId: string, result: StorageListResult): St
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '@yaar/lib/ids';
 import { getAppMeta, type ControlEntry } from '../../features/apps/discovery.js';
-import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { describeApp } from '../../features/apps/describe.js';
 import { loadAppDocs } from '../../features/apps/docs.js';
 import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';

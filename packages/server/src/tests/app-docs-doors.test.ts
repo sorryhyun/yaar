@@ -29,7 +29,8 @@ import { describeApp } from '../features/apps/describe.js';
 import { loadAppDocs, loadAppDocTopic, agentDocsFilesFor } from '../features/apps/docs.js';
 import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
 import { registerAppsHandlers } from '../handlers/apps/register.js';
-import { ResourceRegistry, type VerbResult } from '../handlers/uri-registry.js';
+import { ResourceRegistry } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 import type { ResolvedUri } from '../handlers/uri-resolve.js';
 import { parseAppDocsPath } from '../handlers/apps/paths.js';
 

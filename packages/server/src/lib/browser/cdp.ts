@@ -7,6 +7,30 @@
 
 import WebSocket from 'ws';
 
+/**
+ * Fetch Chrome's DevTools `/json/version` and return the browser-level WebSocket
+ * debugger URL — the one call every CDP attach starts from, written six times over
+ * before this.
+ *
+ * Throws on anything that means the endpoint could not be read at all: network
+ * error, timeout, non-OK status, or an unparsable body. Every call site already
+ * wraps a probe like this in its own try/catch, so rethrowing costs nothing and
+ * keeps "unreachable" distinguishable from the one case that resolves instead —
+ * a response that parsed fine but carried no `webSocketDebuggerUrl`, returned as
+ * `null` so a caller like `setupTargetDiscovery` can treat it as "nothing to
+ * connect to yet" rather than log it as a failure.
+ */
+export async function fetchBrowserWsUrl(port: number, timeoutMs: number): Promise<string | null> {
+  const resp = await fetch(`http://127.0.0.1:${port}/json/version`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!resp.ok) {
+    throw new Error(`DevTools endpoint on port ${port} answered with status ${resp.status}`);
+  }
+  const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
+  return info.webSocketDebuggerUrl ?? null;
+}
+
 export class CDPClient {
   private ws: WebSocket;
   private nextId = 1;

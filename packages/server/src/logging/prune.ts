@@ -31,6 +31,7 @@
 
 import { readdir, rm, stat } from 'fs/promises';
 import { join } from 'path';
+import { isProcessAlive } from '@yaar/lib/process';
 import { SESSIONS_DIR } from './index.js';
 import type { SessionMetadata } from './types.js';
 
@@ -49,21 +50,6 @@ export interface PruneOptions {
   graceMs?: number;
   /** Clock override for tests. */
   now?: number;
-}
-
-/**
- * Is `pid` a process that currently exists?
- *
- * `EPERM` means it exists and belongs to someone else — still alive, still off limits.
- */
-function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
 }
 
 /**

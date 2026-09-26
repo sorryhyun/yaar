@@ -14,7 +14,8 @@
  */
 import { describe, it, expect } from 'bun:test';
 
-import { ResourceRegistry, type VerbResult } from '../handlers/uri-registry.js';
+import { ResourceRegistry } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../lib/verb-result.js';
 
 /** A handler that answers every invoke, remembering the payloads in order. */
 function registryWithRecorder(): { registry: ResourceRegistry; seen: unknown[] } {

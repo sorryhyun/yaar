@@ -6,9 +6,9 @@
  * instead of the legacy `/api/fetch` endpoint.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { okJson, okWithImages, error, type VerbResult } from '../lib/verb-result.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { okJson, okWithImages, error } from './utils.js';
 import { performFetch, MAX_DOWNLOAD_SIZE } from '../features/http/fetch.js';
 import { planResponseBody } from '../features/http/binary-body.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';

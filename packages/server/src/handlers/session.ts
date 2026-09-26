@@ -8,11 +8,16 @@
  *   read('yaar://session/context')       → current context tape summary
  *
  * Historical session log browsing is in handlers/history.ts (yaar://history/).
+ *
+ * Every yaar://session registration is session-principal only. None of them says so:
+ * `ResourceRegistry.register` derives it from the prefix, so a new one cannot forget.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry } from './uri-registry.js';
+import { ok, okJsonResource, okLinks, error, type VerbResult } from '../lib/verb-result.js';
+import { getActiveSession } from './utils.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { ok, okJsonResource, okLinks, error, getActiveSession } from './utils.js';
+import { defineActions, summarizeActions } from './define-actions.js';
 import { getSessionId, requireMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getHeadlessBrowser } from '../lib/browser/index.js';
@@ -23,7 +28,24 @@ import {
   disposeMonitor,
 } from '../features/session/monitors.js';
 import { sessionBrowserRead, sessionBrowserInvoke } from '../features/session/browser.js';
-import { BROWSER_ACTIONS } from '../features/browser/guards.js';
+import { BROWSER_ACTIONS } from '../features/browser/actions.js';
+import type { ContextPool } from '../agents/context-pool.js';
+
+function monitorAction(action: 'suspend' | 'resume' | 'interrupt', description: string) {
+  return {
+    description,
+    run: async ({ pool, monitorId }: { pool: ContextPool; monitorId: string }) => {
+      const result = await controlMonitor(pool, monitorId, action);
+      return result.success ? ok(result.message) : error(result.message);
+    },
+  };
+}
+
+const monitorActions = defineActions<{ pool: ContextPool; monitorId: string }>({
+  suspend: monitorAction('suspend', "Hold the monitor's queued messages until resumed."),
+  resume: monitorAction('resume', 'Resume a suspended monitor and drain its queue.'),
+  interrupt: monitorAction('interrupt', "Interrupt the monitor agent's running turn."),
+});
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──
@@ -76,7 +98,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://session', {
     description: 'Current session. Read for system info.',
     verbs: ['describe', 'read'],
-    access: 'session-principal',
 
     async read(): Promise<VerbResult> {
       const info = {
@@ -98,7 +119,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       '(not the headless sandbox behind /api/browser). Read to list open tabs; invoke with ' +
       '{ action, ... } to navigate/click/type/extract/screenshot, etc. Session agent only.',
     verbs: ['describe', 'read', 'invoke'],
-    access: 'session-principal',
     invokeSchema: {
       type: 'object',
       required: ['action'],
@@ -128,7 +148,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     description:
       'Active monitors in the current session. Read for list of monitor IDs and their status.',
     verbs: ['describe', 'read'],
-    access: 'session-principal',
 
     async read(): Promise<VerbResult> {
       const session = getActiveSession();
@@ -148,12 +167,11 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     description:
       'Individual monitor. Read for status, invoke to suspend/resume/interrupt, delete to dispose.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
-    access: 'session-principal',
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['suspend', 'resume', 'interrupt'] },
+        action: { ...monitorActions.schema, description: summarizeActions(monitorActions) },
       },
     },
 
@@ -193,13 +211,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         return error(`Monitor "${monitorId}" not found.`);
       }
 
-      const action = payload.action as string;
-      if (action !== 'suspend' && action !== 'resume' && action !== 'interrupt') {
-        return error(`Unknown action "${action}". Supported: suspend, resume, interrupt.`);
-      }
-
-      const result = await controlMonitor(pool, monitorId, action);
-      return result.success ? ok(result.message) : error(result.message);
+      return monitorActions.dispatch(payload.action as string, { pool, monitorId });
     },
 
     // Deletion is the session's, not the pool's — a monitor exists whether or not it has
@@ -220,7 +232,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     description:
       'Current session context tape. Read for a summary of messages tracked by the context system.',
     verbs: ['describe', 'read'],
-    access: 'session-principal',
 
     async read(): Promise<VerbResult> {
       const session = getActiveSession();

@@ -12,14 +12,10 @@ import { errMessage } from '@yaar/lib/errors';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp, type AppPrincipal } from '../access.js';
 import { getHeadlessBrowser } from '../../lib/browser/index.js';
-import {
-  enforceBrowserGuards,
-  isMutatingAction,
-  isYaarOriginUrl,
-} from '../../features/browser/guards.js';
+import { enforceBrowserGuards, isYaarOriginUrl } from '../../features/browser/guards.js';
 import { getSessionId, runWithAgentContext } from '../../agents/agent-context.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { runBrowserAction } from '../../features/browser/actions.js';
+import { isMutatingAction, runBrowserAction } from '../../features/browser/actions.js';
 import type { EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -332,6 +328,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const guard = await enforceBrowserGuards({
       provider: pool,
       action,
+      mutates: isMutatingAction(action),
       session: guardedSession,
       sessionId,
     });
