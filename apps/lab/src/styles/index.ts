@@ -10,3 +10,4 @@ import './chart.css';
 import './graph.css';
 import './markdown.css';
 import './agent.css';
+import './narrow.css';

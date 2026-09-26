@@ -20,7 +20,7 @@
   left: 0;
   right: 0;
   top: 0;
-  height: 38px;
+  height: var(--lab-head);
   padding: 0 var(--yaar-sp-3);
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -32,12 +32,26 @@
 .lab-toolbar .lab-spacer {
   flex: 1 1 auto;
 }
+/* The secondary actions are toolbar items on wide layouts and the ⋯ menu on
+   narrow ones (narrow.css); `contents` keeps them plain toolbar items here. */
+.lab-actions {
+  display: contents;
+}
+.lab-actions > * {
+  flex: 0 0 auto;
+}
+.lab-more,
+.lab-tab-ico,
+.lab-cell-bar > .lab-run,
+.lab-cell-bar > .lab-cell-num {
+  display: none;
+}
 .lab-cells {
   position: absolute;
   left: 0;
   right: 0;
-  top: 38px;
-  bottom: 26px;
+  top: var(--lab-head);
+  bottom: var(--lab-foot);
   overflow-y: auto;
   padding: var(--yaar-sp-3);
 }
@@ -48,7 +62,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 26px;
+  height: var(--lab-foot);
   justify-content: flex-start;
   gap: var(--yaar-sp-2);
   padding: 0 var(--yaar-sp-3);

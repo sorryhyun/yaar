@@ -11,6 +11,10 @@ body {
 }
 
 .lab-root {
+  /* Toolbar and status bar heights; the pane offsets in shell.css and agent.css follow
+     them, and narrow.css raises them for touch. */
+  --lab-head: 38px;
+  --lab-foot: 26px;
   position: absolute;
   inset: 0;
   font-family: var(--yaar-font);

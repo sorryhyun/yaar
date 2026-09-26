@@ -18,5 +18,8 @@ export const stopEdit = (id: string) => setEditingMd(editingMd().filter((x) => x
 
 export function autosize(el: HTMLTextAreaElement): void {
   el.style.height = 'auto';
-  el.style.height = Math.max(38, Math.min(700, el.scrollHeight + 2)) + 'px';
+  // offsetHeight - clientHeight is the horizontal scrollbar when lines do not wrap
+  // (the narrow layout); without it the scrollbar covers the last line.
+  const chrome = Math.max(2, el.offsetHeight - el.clientHeight);
+  el.style.height = Math.max(38, Math.min(700, el.scrollHeight + chrome)) + 'px';
 }

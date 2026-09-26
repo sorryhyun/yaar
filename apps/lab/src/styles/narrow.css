@@ -1,0 +1,228 @@
+/* Narrow (<=640px) and touch layouts, keyed on the .lab-narrow / .lab-touch classes
+   App.ts sets on .lab-root from matchMedia. Imported last: every rule here overrides
+   the wide layout, which the other sheets describe unchanged. */
+
+/* ── Narrow: the notebook list is a drawer over the content ── */
+.lab-narrow .lab-main {
+  left: 0;
+}
+.lab-narrow .lab-sidebar {
+  z-index: 30;
+  width: min(280px, 85%);
+  box-shadow: var(--yaar-shadow-lg);
+  animation: lab-drawer-in 180ms ease-out;
+}
+.lab-side-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 29;
+  background: rgba(0, 0, 0, 0.45);
+  animation: lab-fade-in 180ms ease-out;
+}
+@keyframes lab-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes lab-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── Narrow header: icon tabs, ellipsized title, secondary actions behind ⋯ ── */
+/* Overflow is visible so the ⋯ menu can hang below the bar; the title is the
+   one item that gives up width, so nothing is left to scroll sideways. */
+.lab-narrow .lab-toolbar {
+  z-index: 20;
+  gap: var(--yaar-sp-1);
+  padding: 0 var(--yaar-sp-2);
+  overflow: visible;
+}
+.lab-narrow .lab-toolbar .lab-spacer {
+  display: none;
+}
+.lab-narrow .lab-title {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  font-size: var(--yaar-text-base);
+  text-overflow: ellipsis;
+}
+.lab-narrow .lab-lbl {
+  display: none;
+}
+.lab-narrow .lab-tab-ico {
+  display: inline;
+}
+.lab-narrow .lab-tab {
+  padding: 2px var(--yaar-sp-2);
+}
+.lab-narrow .lab-tab-badge {
+  margin-left: 2px;
+}
+.lab-narrow .lab-toolbar .lab-btn {
+  padding: 3px var(--yaar-sp-2);
+}
+.lab-narrow .lab-more {
+  display: inline-block;
+}
+.lab-narrow .lab-actions {
+  display: none;
+}
+.lab-narrow .lab-actions-open {
+  position: absolute;
+  top: calc(var(--lab-head) - 2px);
+  right: var(--yaar-sp-2);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--yaar-sp-1);
+  min-width: 170px;
+  padding: var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  box-shadow: var(--yaar-shadow-lg);
+}
+.lab-narrow .lab-actions-open .lab-btn {
+  text-align: left;
+}
+.lab-narrow .lab-actions-open .lab-timeout {
+  padding: var(--yaar-sp-1);
+}
+.lab-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+/* ── Narrow cells: no gutter, run + number move into the cell bar ── */
+.lab-narrow .lab-cells {
+  padding: var(--yaar-sp-2);
+}
+.lab-narrow .lab-cell {
+  gap: 0;
+  margin-bottom: var(--yaar-sp-2);
+}
+.lab-narrow .lab-cell-gutter {
+  display: none;
+}
+.lab-narrow .lab-cell-bar > .lab-run {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 26px;
+  font-size: 12px;
+}
+.lab-narrow .lab-cell-bar > .lab-cell-num {
+  display: inline;
+  min-width: 14px;
+  margin: 0 2px 0 0;
+}
+.lab-narrow .lab-type {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.lab-narrow .lab-cell-bar .lab-mini-danger {
+  margin-left: var(--yaar-sp-2);
+}
+.lab-narrow .lab-add-row {
+  padding-left: 0;
+}
+/* Code scrolls sideways rather than wrapping mid-expression. */
+.lab-narrow .lab-editor {
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  overflow-y: hidden;
+  font-size: var(--yaar-text-sm);
+  padding: var(--yaar-sp-2);
+}
+.lab-narrow .lab-output {
+  padding: var(--yaar-sp-2);
+}
+
+/* ── Narrow status bar and agent log ── */
+.lab-narrow .lab-status {
+  padding: 0 var(--yaar-sp-2);
+}
+.lab-narrow .lab-status > * {
+  flex: 0 0 auto;
+}
+/* The last-run summary is the one item that gives up width. */
+.lab-narrow .lab-status .lab-last {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.lab-narrow .lab-status .lab-spacer {
+  flex: 1 1 0;
+}
+.lab-narrow .lab-agent-head,
+.lab-narrow .lab-agent-body {
+  padding-left: var(--yaar-sp-2);
+  padding-right: var(--yaar-sp-2);
+}
+.lab-narrow .lab-run-head {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.lab-narrow .lab-run-head .lab-run-peek {
+  order: 1;
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+/* ── Touch (coarse pointer, any width): ~40px targets ── */
+.lab-root.lab-touch {
+  --lab-head: 48px;
+  --lab-foot: 40px;
+}
+.lab-touch .lab-btn,
+.lab-touch .lab-mini,
+.lab-touch .lab-tab,
+.lab-touch .lab-type,
+.lab-touch .lab-side-del {
+  min-width: 40px;
+  min-height: 40px;
+}
+.lab-touch .lab-run,
+.lab-touch.lab-narrow .lab-cell-bar > .lab-run {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+.lab-touch .lab-cell-gutter {
+  flex-basis: 44px;
+  width: 44px;
+}
+.lab-touch .lab-status .lab-mini {
+  min-height: 32px;
+}
+.lab-touch .lab-timeout input {
+  width: 56px;
+  min-height: 36px;
+}
+.lab-touch .lab-agent-head {
+  height: 48px;
+}
+.lab-touch .lab-agent-body {
+  top: 48px;
+}
+.lab-touch .lab-side-head {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.lab-touch .lab-side-list {
+  top: 49px;
+}
+/* No hover on touch, so delete is always shown. */
+.lab-touch .lab-side-item {
+  padding-right: 52px;
+}
+.lab-touch .lab-side-del {
+  display: block;
+  top: 50%;
+  transform: translateY(-50%);
+}

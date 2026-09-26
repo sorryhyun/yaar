@@ -10,9 +10,41 @@ import { busy, cancelRun, resetKernel } from '../kernel/worker';
 import { AgentPanel } from './AgentPanel';
 import { CellRow } from './CellRow';
 import { Sidebar } from './Sidebar';
+import { autosize, editors } from './editor-registry';
 import type { Cell } from '../types';
 
 const [sidebar, setSidebar] = createSignal(true);
+
+// Narrow and touch are read in JS, not only in CSS media queries: narrow changes what the
+// sidebar IS (a drawer over the content, closed by default), and the root classes keep
+// every breakpoint rule on one switch that previewEval can flip to test the layout.
+const NARROW = '(max-width: 640px)';
+const COARSE = '(pointer: coarse)';
+const [narrow, setNarrow] = createSignal(matchMedia(NARROW).matches);
+const [coarse, setCoarse] = createSignal(matchMedia(COARSE).matches);
+const [drawer, setDrawer] = createSignal(false);
+const [menu, setMenu] = createSignal(false);
+matchMedia(NARROW).addEventListener('change', (e) => {
+  setNarrow(e.matches);
+  setDrawer(false);
+  setMenu(false);
+  // The code editor wraps on one side of the breakpoint and scrolls on the other.
+  editors.forEach((el) => el.isConnected && autosize(el));
+});
+matchMedia(COARSE).addEventListener('change', (e) => setCoarse(e.matches));
+
+function toggleSidebar(): void {
+  if (narrow()) setDrawer(!drawer());
+  else setSidebar(!sidebar());
+}
+
+function SidePane() {
+  if (!narrow()) return sidebar() ? Sidebar() : null;
+  if (!drawer()) return null;
+  return html`
+    <div class="lab-side-scrim" onClick=${() => setDrawer(false)}></div>
+    ${Sidebar(() => setDrawer(false))}`;
+}
 
 /** The notebook itself — one of the two things the main pane can show. */
 function NotebookView() {
@@ -40,11 +72,17 @@ export default function App() {
   const onNotebook = () => mainView() === 'notebook';
 
   return html`
-    <div class=${() => 'lab-root' + (sidebar() ? '' : ' lab-no-side')}>
-      ${() => (sidebar() ? Sidebar() : null)}
+    <div
+      class=${() =>
+        'lab-root' +
+        (sidebar() ? '' : ' lab-no-side') +
+        (narrow() ? ' lab-narrow' : '') +
+        (coarse() ? ' lab-touch' : '')}
+    >
+      ${SidePane}
       <div class="lab-main">
         <div class="y-toolbar lab-toolbar">
-          <button class="lab-mini" title="Toggle notebook list" onClick=${() => setSidebar(!sidebar())}>☰</button>
+          <button class="lab-mini" title="Toggle notebook list" onClick=${toggleSidebar}>☰</button>
           <input
             class="lab-title"
             value=${() => current()?.title || ''}
@@ -56,34 +94,49 @@ export default function App() {
               class=${() => 'lab-tab' + (onNotebook() ? ' lab-tab-on' : '')}
               title="The notebook"
               onClick=${() => setMainView('notebook')}
-            >Notebook</button>
+            ><span class="lab-tab-ico">📓</span><span class="lab-lbl">Notebook</span></button>
             <button
               class=${() => 'lab-tab' + (onNotebook() ? '' : ' lab-tab-on')}
               title="Agent runs — everything started over the app protocol"
               onClick=${() => setMainView('agent')}
-            >🤖 Agent runs<${Show} when=${() => unseen() > 0}><span class="lab-tab-badge">${unseen}</span><//></button>
+            >🤖<span class="lab-lbl"> Agent runs</span><${Show} when=${() => unseen() > 0}><span class="lab-tab-badge">${unseen}</span><//></button>
           </div>
           <span class="lab-spacer"></span>
           <${Show} when=${onNotebook}>
-            <button class="lab-btn" disabled=${busy} onClick=${() => void runAll()}>▶▶ Run all</button>
-            <button class="lab-btn" onClick=${() => addCell('', 'code')}>+ Code</button>
-            <button class="lab-btn" onClick=${() => addCell('', 'markdown')}>+ Text</button>
-            <button class="lab-btn" onClick=${() => clearAllOutputs()}>Clear out</button>
+            <button class="lab-btn" title="Run all cells" disabled=${busy} onClick=${() => void runAll()}>▶▶<span class="lab-lbl"> Run all</span></button>
           <//>
-          <button class="lab-btn" onClick=${() => {
-            resetKernel();
-            showToast('Kernel restarted', 'info');
-          }}>Reset kernel</button>
-          <label class="lab-timeout">
-            timeout
-            <input
-              type="number"
-              min="1"
-              max="600"
-              value=${() => Math.round(timeoutMs() / 1000)}
-              onChange=${(e: Event) => setTimeoutMs(Math.max(1, Number((e.target as HTMLInputElement).value) || 30) * 1000)}
-            />s
-          </label>
+          <button
+            class="lab-btn lab-more"
+            title="More actions"
+            onClick=${() => setMenu(!menu())}
+          >⋯</button>
+          <${Show} when=${menu}>
+            <div class="lab-menu-scrim" onClick=${() => setMenu(false)}></div>
+          <//>
+          <div
+            class=${() => 'lab-actions' + (menu() ? ' lab-actions-open' : '')}
+            onClick=${(e: MouseEvent) => (e.target as HTMLElement).closest('button') && setMenu(false)}
+          >
+            <${Show} when=${onNotebook}>
+              <button class="lab-btn" onClick=${() => addCell('', 'code')}>+ Code</button>
+              <button class="lab-btn" onClick=${() => addCell('', 'markdown')}>+ Text</button>
+              <button class="lab-btn" onClick=${() => clearAllOutputs()}>Clear out</button>
+            <//>
+            <button class="lab-btn" onClick=${() => {
+              resetKernel();
+              showToast('Kernel restarted', 'info');
+            }}>Reset kernel</button>
+            <label class="lab-timeout">
+              timeout
+              <input
+                type="number"
+                min="1"
+                max="600"
+                value=${() => Math.round(timeoutMs() / 1000)}
+                onChange=${(e: Event) => setTimeoutMs(Math.max(1, Number((e.target as HTMLInputElement).value) || 30) * 1000)}
+              />s
+            </label>
+          </div>
         </div>
         ${() => (onNotebook() ? NotebookView() : AgentPanel())}
         <div class="y-statusbar lab-status">
@@ -93,7 +146,7 @@ export default function App() {
           <//>
           <span class="lab-spacer"></span>
           <span class="lab-note">${() => status()}</span>
-          <span class="lab-note">${() => {
+          <span class="lab-note lab-last">${() => {
             const r = lastRun();
             return r
               ? (r.ok ? 'last: ' : 'last failed: ') +

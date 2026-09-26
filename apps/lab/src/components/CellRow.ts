@@ -21,22 +21,28 @@ export function CellRow(cell: () => Cell, index: number) {
   createEffect(() => {
     if (flashed() && root) root.scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
+  // Rendered twice, in the gutter and in the bar; CSS shows the gutter copy on wide
+  // layouts and the bar copy on narrow ones, where the gutter is dropped.
+  const runButton = () => html`
+    <button
+      class="lab-run"
+      title="Run (Shift+Enter)"
+      disabled=${() => !isCode() || busy()}
+      onClick=${() => void runCell(id())}
+    >${() => (running() ? '●' : '▶')}</button>`;
   return html`
     <div
       ref=${(el: HTMLDivElement) => (root = el)}
       class=${() => 'lab-cell' + (running() ? ' lab-cell-running' : '') + (flashed() ? ' lab-cell-flash' : '')}
     >
       <div class="lab-cell-gutter">
-        <button
-          class="lab-run"
-          title="Run (Shift+Enter)"
-          disabled=${() => !isCode() || busy()}
-          onClick=${() => void runCell(id())}
-        >${() => (running() ? '●' : '▶')}</button>
+        ${runButton()}
         <span class="lab-cell-num">${index + 1}</span>
       </div>
       <div class="lab-cell-body">
         <div class="lab-cell-bar">
+          ${runButton()}
+          <span class="lab-cell-num">${index + 1}</span>
           <select
             class="lab-type"
             onChange=${(e: Event) => updateCell(id(), { type: (e.target as HTMLSelectElement).value as Cell['type'] })}

@@ -222,6 +222,13 @@ caller need not know which kind a cell produced.
   callback, since the node is not in the document yet.
 - Layout is absolute positioning throughout, not flex chains, because Solid's `html` inserts
   comment markers into reactive slots and breaks `flex: 1`.
+- **Narrow and touch layouts live in `styles/narrow.css`**, keyed on `.lab-narrow`
+  (<=640px) and `.lab-touch` (coarse pointer), which `App.ts` sets on `.lab-root` from
+  `matchMedia`. The other sheets describe the wide layout only. Narrow turns the sidebar
+  into a drawer, moves secondary toolbar actions behind ⋯, and shows the cell bar's copy
+  of the run button in place of the gutter. Pane offsets follow `--lab-head`/`--lab-foot`;
+  change heights there, not in the individual rules. Test a layout by toggling the class
+  with `previewEval` — a devtools preview is never a coarse pointer.
 - `previewScreenshot` in devtools does not render textarea heights or scroll position
   faithfully. Verify layout with `previewEval` measurements, and verify charts by exporting
   a PNG and reading it back.

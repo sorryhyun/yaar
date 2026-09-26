@@ -4,8 +4,11 @@ import { showConfirm, tryToast } from '@bundled/yaar';
 import { deleteNotebook, newNotebook, openNotebook, saveCurrent } from '../state/persistence';
 import { current, notebooks } from '../state/signals';
 
-/** The notebook list. Switching notebooks always saves the open one first. */
-export function Sidebar() {
+/**
+ * The notebook list. Switching notebooks always saves the open one first.
+ * `onPick` runs after a notebook is opened or created — the narrow-layout drawer closes on it.
+ */
+export function Sidebar(onPick?: () => void) {
   return html`
     <div class="lab-sidebar">
       <div class="y-toolbar lab-side-head">
@@ -13,6 +16,7 @@ export function Sidebar() {
         <button class="lab-mini" title="New notebook" onClick=${async () => {
           await saveCurrent();
           await newNotebook('Untitled');
+          onPick?.();
         }}>+</button>
       </div>
       <div class="lab-side-list">
@@ -21,9 +25,11 @@ export function Sidebar() {
             <div
               class=${() => 'lab-side-item' + (current()?.id === m.id ? ' lab-side-item-on' : '')}
               onClick=${async () => {
-                if (current()?.id === m.id) return;
-                await saveCurrent();
-                await tryToast(() => openNotebook(m.id));
+                if (current()?.id !== m.id) {
+                  await saveCurrent();
+                  await tryToast(() => openNotebook(m.id));
+                }
+                onPick?.();
               }}
             >
               <div class="lab-side-name">${m.title}</div>
