@@ -242,6 +242,39 @@ describe('provider parity — what inputTokens means', () => {
   });
 });
 
+describe('context window', () => {
+  it("takes Claude's from the largest model a turn touched", () => {
+    const msg = {
+      ...(result(raw(10, 47, 15232, 3313)) as object),
+      modelUsage: {
+        'claude-haiku-4-5': { contextWindow: 200_000 },
+        'claude-opus-5-5': { contextWindow: 1_000_000 },
+      },
+    } as unknown as SDKMessage;
+    expect(mapClaudeMessage(msg)?.contextWindow).toBe(1_000_000);
+    expect(mapClaudeMessage(result(raw(1, 2, 3, 4)))?.contextWindow).toBeUndefined();
+  });
+
+  it("carries Codex's alongside the running total", () => {
+    const total = {
+      totalTokens: 10,
+      inputTokens: 6,
+      cachedInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      outputTokens: 4,
+      reasoningOutputTokens: 0,
+    };
+    const stated = mapNotification('thread/tokenUsage/updated', {
+      tokenUsage: { total, last: total, modelContextWindow: 272_000 },
+    });
+    const unstated = mapNotification('thread/tokenUsage/updated', {
+      tokenUsage: { total, last: total, modelContextWindow: null },
+    });
+    expect(stated?.contextWindow).toBe(272_000);
+    expect(unstated?.contextWindow).toBeUndefined();
+  });
+});
+
 describe('AgentSession lifetime accounting', () => {
   function session() {
     return new AgentSession('conn-usage-test');

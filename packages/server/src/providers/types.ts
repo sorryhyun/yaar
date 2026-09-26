@@ -194,6 +194,12 @@ export interface StreamMessage {
    * which rebases it instead.
    */
   sessionCostUsd?: number;
+  /**
+   * The model's context window in tokens, when the provider states it: Claude's
+   * `result.modelUsage[*].contextWindow`, Codex's `tokenUsage.modelContextWindow`.
+   * Rides whichever message carries it; `AgentSession` keeps the latest.
+   */
+  contextWindow?: number;
 }
 
 export interface TransportOptions {

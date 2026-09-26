@@ -9,7 +9,7 @@
  *   invoke('yaar://apps/self/agents', { action: 'spawn', personaId, systemPrompt, model? })
  *   invoke('yaar://apps/self/agents/{id}', { action: 'message', content })
  *   invoke('yaar://apps/self/agents/{id}', { action: 'interrupt' })
- *   read  ('yaar://apps/self/agents/{id}')                              → status + last answer
+ *   read  ('yaar://apps/self/agents/{id}')                              → status, last turn, usage, last answer
  *   delete('yaar://apps/self/agents/{id}')                              → dispose one
  *   delete('yaar://apps/self/agents')                                   → dispose all
  *
@@ -62,7 +62,9 @@ const DESCRIBE = {
     '"subagents": { "max": N } — in app.json. None of them hold YAAR verbs, permissions, or a ' +
     'principal. Spawned without "tools" one receives text and returns text; spawned with them ' +
     'it may call each declared tool, which is dispatched to YOUR OWN iframe as the command ' +
-    'persona:{toolName} (with personaId in params) and answers with whatever your handler returns.',
+    'persona:{toolName} (with personaId in params) and answers with whatever your handler returns. ' +
+    'read one to learn how its last turn ended (turn.state, and turn.error/errorCode on a failure), ' +
+    'its lifetime token usage, its contextWindow, and its lastResponse.',
   verbs: ['read', 'list', 'invoke', 'delete'],
   invokeSchema: {
     type: 'object',
@@ -106,6 +108,8 @@ const DESCRIBE = {
  * happens to address it.
  */
 function personaView(p: SubAgent, pool: AgentPool): Record<string, unknown> {
+  const usage = p.agent.session.getUsage();
+  const contextWindow = p.agent.session.getContextWindow();
   return {
     personaId: p.subId,
     instanceId: p.agent.instanceId,
@@ -115,6 +119,17 @@ function personaView(p: SubAgent, pool: AgentPool): Record<string, unknown> {
     ...(p.model ? { model: p.model } : {}),
     ...(p.tools.length > 0 ? { tools: p.tools.map((t) => t.name) } : {}),
     ...(p.lastResponse !== undefined ? { lastResponse: p.lastResponse } : {}),
+    ...(p.turn ? { turn: p.turn } : {}),
+    // Lifetime, like the `usage` stream frame it mirrors — not how full the context is.
+    usage: {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.inputTokens + usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      ...(usage.costUsd !== undefined ? { costUsd: usage.costUsd } : {}),
+    },
+    ...(contextWindow ? { contextWindow } : {}),
   };
 }
 

@@ -131,6 +131,9 @@ window is a tool *error*, not a dead turn — and never launches a window.
 | `busy` | Whether a turn is in flight |
 | `createdAt` | Timestamp |
 | `model`, `tools`, `lastResponse` | Present only when set (`tools` is names only) |
+| `turn` | The most recent turn, absent before the first `message`: `{ taskId, state, startedAt, endedAt?, error?, errorCode? }`. `state` is `running`, `completed`, `interrupted`, or `error`; on `error`, `error` is the reason in prose and `errorCode` the provider's own discriminant when it gave one (`error_max_turns`, `contextWindowExceeded`, …) |
+| `usage` | Lifetime tokens: `{ inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens, costUsd? }` — the same figures as the stream's `usage` frame. Not how full the context is |
+| `contextWindow` | The model's context window in tokens, once the provider has stated it |
 
 **`message`** returns as soon as the turn is queued (`{ taskId, personaId, instanceId, streamUri }`),
 so N sub-agents generate concurrently. It **rejects rather than queues** when the target is

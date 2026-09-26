@@ -28,7 +28,7 @@ import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
 import { genId } from '@yaar/lib/ids';
 import { errMessage } from '@yaar/lib/errors';
-import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
+import { StreamToEventMapper, type TurnEnd } from './session-policies/stream-to-event-mapper.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { runInAgentContext } from './agent-context.js';
@@ -52,6 +52,11 @@ export interface HandleMessageOptions {
   messageId?: string;
   /** Callback to record messages to context tape */
   onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  /**
+   * How the turn ended — completed, interrupted, or an error with its reason. Called
+   * once per turn that reached the provider; not at all when there was no provider.
+   */
+  onTurnEnd?: (end: TurnEnd) => void;
   /** When true, fork from the parent session instead of continuing it */
   forkSession?: boolean;
   /** Parent session/thread ID to fork from (used with forkSession) */
@@ -135,6 +140,9 @@ export class AgentSession {
     cacheWriteTokens: 0,
   };
 
+  /** The model's context window in tokens, as last stated by the provider. */
+  private contextWindow: number | undefined;
+
   private toolActionBridge: ToolActionBridge;
 
   constructor(
@@ -192,6 +200,11 @@ export class AgentSession {
   /** This agent's lifetime token consumption. A copy — callers must not mutate it. */
   getUsage(): TokenUsage {
     return { ...this.usage };
+  }
+
+  /** The model's context window in tokens, or undefined until a provider states one. */
+  getContextWindow(): number | undefined {
+    return this.contextWindow;
   }
 
   /**
@@ -537,6 +550,10 @@ export class AgentSession {
         agentInstanceId: stableAgentId,
         streamSessionId: this.liveSessionId,
         onUsage: (usage, scope, sessionCostUsd) => this.recordUsage(usage, scope, sessionCostUsd),
+        onContextWindow: (tokens) => {
+          this.contextWindow = tokens;
+        },
+        onTurnEnd: options.onTurnEnd,
       });
       mapper = turnMapper;
 

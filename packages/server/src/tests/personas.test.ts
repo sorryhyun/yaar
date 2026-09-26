@@ -71,8 +71,30 @@ function fakeProvider(recorded: Recorded[]): AITransport {
     },
     async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
       recorded.push({ prompt, options });
+      if (prompt === 'overflow') {
+        yield {
+          type: 'error',
+          error: 'The conversation exceeded the model context window.',
+          errorCode: 'contextWindowExceeded',
+        } as StreamMessage;
+        return;
+      }
       yield { type: 'text', content: `answer to ${prompt}` } as StreamMessage;
-      yield { type: 'complete' } as StreamMessage;
+      yield (
+        prompt === 'metered'
+          ? {
+              type: 'complete',
+              usage: {
+                inputTokens: 12,
+                outputTokens: 30,
+                cacheReadTokens: 900,
+                cacheWriteTokens: 0,
+              },
+              usageScope: 'turn',
+              contextWindow: 200_000,
+            }
+          : { type: 'complete' }
+      ) as StreamMessage;
     },
     async interrupt() {
       return { outcome: 'acknowledged' as const };
@@ -319,6 +341,44 @@ describe('persona lifecycle in AgentPool', () => {
     await pool.subAgents.runTurn(alice!, 'question', 'task-1');
 
     expect(alice!.lastResponse).toBe('answer to question');
+  });
+
+  it('records how the last turn ended', async () => {
+    const alice = await spawn('alice');
+    expect(alice!.turn).toBeUndefined();
+
+    await pool.subAgents.runTurn(alice!, 'question', 'task-1');
+
+    expect(alice!.turn).toMatchObject({ taskId: 'task-1', state: 'completed' });
+    expect(alice!.turn!.endedAt).toBeGreaterThanOrEqual(alice!.turn!.startedAt);
+    expect(alice!.turn!.error).toBeUndefined();
+  });
+
+  it("records a failed turn's error and the provider's code for it", async () => {
+    const alice = await spawn('alice');
+    await pool.subAgents.runTurn(alice!, 'overflow', 'task-2');
+
+    expect(alice!.turn).toMatchObject({
+      taskId: 'task-2',
+      state: 'error',
+      error: 'The conversation exceeded the model context window.',
+      errorCode: 'contextWindowExceeded',
+    });
+
+    // The next turn replaces the verdict rather than inheriting it.
+    await pool.subAgents.runTurn(alice!, 'question', 'task-3');
+    expect(alice!.turn).toMatchObject({ taskId: 'task-3', state: 'completed' });
+    expect(alice!.turn!.error).toBeUndefined();
+  });
+
+  it('keeps token usage and the context window the provider stated', async () => {
+    const alice = await spawn('alice');
+    expect(alice!.agent.session.getContextWindow()).toBeUndefined();
+
+    await pool.subAgents.runTurn(alice!, 'metered', 'task-1');
+
+    expect(alice!.agent.session.getUsage()).toMatchObject({ inputTokens: 12, outputTokens: 30 });
+    expect(alice!.agent.session.getContextWindow()).toBe(200_000);
   });
 
   it('reports personas on the roster with their app, monitor, and persona id', async () => {

@@ -30,6 +30,8 @@ import {
   type RosterMember,
 } from './agent-roster.js';
 import { SpawnReservations } from './spawn-reservations.js';
+import type { TurnEnd } from './session-policies/stream-to-event-mapper.js';
+import { errMessage } from '@yaar/lib/errors';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('SubAgentRegistry');
@@ -70,6 +72,15 @@ export interface SubAgent {
    */
   lastResponse?: string;
   /**
+   * The most recent turn: its task id, where it stands, and — once it has ended —
+   * how. Absent until the first `message`.
+   *
+   * Same audience as {@link lastResponse}: an app whose worker went quiet can `read`
+   * the persona and learn whether the turn is still running, finished, was
+   * interrupted, or failed, and why, instead of guessing from a silent stream.
+   */
+  turn?: SubAgentTurn;
+  /**
    * The app-defined tools this sub-agent was spawned with; empty for a tool-less one.
    *
    * Prompt material plus a dispatch table, not a capability list — see
@@ -78,6 +89,21 @@ export interface SubAgent {
    * each one is *called* when it lands there (`persona:{name}`).
    */
   tools: SubAgentToolSpec[];
+}
+
+/**
+ * One sub-agent turn, as `read` reports it. `error` and `errorCode` are set only when
+ * `state` is `error`; `errorCode` is the provider's own discriminant (e.g. Claude's
+ * `error_max_turns`, Codex's `contextWindowExceeded`) and is absent for a turn that
+ * failed by a throw rather than a provider verdict.
+ */
+export interface SubAgentTurn {
+  taskId: string;
+  state: 'running' | 'completed' | 'interrupted' | 'error';
+  startedAt: number;
+  endedAt?: number;
+  error?: string;
+  errorCode?: string;
 }
 
 /**
@@ -271,34 +297,59 @@ export class SubAgentRegistry {
    *
    * The returned promise resolves when the turn ends; callers that want the verb to
    * return immediately (the app's `message` action does) simply don't await it. The
-   * final text lands on `record.lastResponse` either way.
+   * final text lands on `record.lastResponse` and the outcome on `record.turn` either
+   * way.
    *
    * The turn's hands come from {@link buildSubAgentProfile} and never from this
    * method. That is the shape law 3 asks for: this registry knows a record's declared
    * tool *names* and nothing about what a sub-agent may touch, so there is no branch
    * here that could be widened into "…and also these tools".
    */
-  runTurn(record: SubAgent, content: string, messageId: string): Promise<void> {
+  async runTurn(record: SubAgent, content: string, messageId: string): Promise<void> {
     const profile = buildSubAgentProfile(record);
-    return record.agent.session.handleMessage(content, {
-      role: subAgentRole(record.appId, record.subId),
-      source: monitorSource(record.monitorId),
-      messageId,
-      monitorId: record.monitorId,
-      systemPromptOverride: profile.systemPrompt,
-      // The containment. See profiles/sub-agent.ts — this allowlist is what decides
-      // which MCP servers the turn even connects to (none when the sub-agent has
-      // no tools, the `subagent` namespace alone when it has some), on both providers:
-      // Claude derives them in `claude/sdk-options.ts`, Codex in `codexServerFilter`.
-      allowedTools: profile.allowedTools,
-      ...(record.model ? { model: record.model } : {}),
-      // Not a context tape write — nothing here reaches `ContextTape`. It is the one
-      // callback that hands back the turn's final assistant text, which `read` serves
-      // to an iframe that missed the `done` frame.
-      onContextMessage: (role, text) => {
-        if (role === 'assistant') record.lastResponse = text;
-      },
-    });
+    const turn: SubAgentTurn = { taskId: messageId, state: 'running', startedAt: Date.now() };
+    record.turn = turn;
+    // First verdict wins, and only for this turn — a later turn has replaced the object.
+    const end = (outcome: TurnEnd) => {
+      if (record.turn !== turn) return;
+      record.turn = {
+        ...turn,
+        state: outcome.status,
+        endedAt: Date.now(),
+        ...(outcome.status === 'error'
+          ? { error: outcome.error, ...(outcome.code ? { errorCode: outcome.code } : {}) }
+          : {}),
+      };
+    };
+
+    try {
+      await record.agent.session.handleMessage(content, {
+        role: subAgentRole(record.appId, record.subId),
+        source: monitorSource(record.monitorId),
+        messageId,
+        monitorId: record.monitorId,
+        systemPromptOverride: profile.systemPrompt,
+        // The containment. See profiles/sub-agent.ts — this allowlist is what decides
+        // which MCP servers the turn even connects to (none when the sub-agent has
+        // no tools, the `subagent` namespace alone when it has some), on both providers:
+        // Claude derives them in `claude/sdk-options.ts`, Codex in `codexServerFilter`.
+        allowedTools: profile.allowedTools,
+        ...(record.model ? { model: record.model } : {}),
+        // Not a context tape write — nothing here reaches `ContextTape`. It is the one
+        // callback that hands back the turn's final assistant text, which `read` serves
+        // to an iframe that missed the `done` frame.
+        onContextMessage: (role, text) => {
+          if (role === 'assistant') record.lastResponse = text;
+        },
+        onTurnEnd: end,
+      });
+    } catch (err) {
+      end({ status: 'error', error: errMessage(err) });
+      throw err;
+    }
+    // `handleMessage` returns without opening a turn when the agent has no provider;
+    // nothing above has spoken, and `running` would otherwise stand forever.
+    end({ status: 'error', error: 'The turn never started: the sub-agent has no provider.' });
   }
 
   /** Dispose one sub-agent. Returns false when the app never spawned it. */

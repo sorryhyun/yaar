@@ -5,6 +5,7 @@ import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-a
 import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-policy.js';
 import {
   WindowSubscriptionPolicy,
+  fitPayload,
   frameAppEvent,
   MAX_PAYLOAD_CHARS,
 } from '../agents/context-pool-policies/window-subscription-policy.js';
@@ -425,5 +426,65 @@ describe('WindowSubscriptionPolicy — app event channels', () => {
     expect(framed).toContain(`[truncated, ${size} chars]`);
     // Body capped at MAX_PAYLOAD_CHARS + truncation note; frame stays under the raw size.
     expect(framed.length).toBeLessThan(MAX_PAYLOAD_CHARS + 200);
+  });
+
+  describe('fitPayload', () => {
+    const splitNote = (body: string) => {
+      const nl = body.lastIndexOf('\n');
+      return { json: body.slice(0, nl), note: body.slice(nl + 1) };
+    };
+
+    it('passes a payload that fits through untouched', () => {
+      const payload = { kind: 'result', answer: 'short' };
+      expect(fitPayload(payload, 1000)).toBe(JSON.stringify(payload));
+    });
+
+    it('cuts long strings, keeps every key, and names what it cut', () => {
+      const payload = {
+        kind: 'result',
+        taskId: 't1',
+        answer: 'a'.repeat(40_000),
+        log: 'b'.repeat(9_000),
+        tail: 'kept',
+      };
+      const body = fitPayload(payload, MAX_PAYLOAD_CHARS);
+      expect(body.length).toBeLessThanOrEqual(MAX_PAYLOAD_CHARS);
+
+      const { json, note } = splitNote(body);
+      const parsed = JSON.parse(json);
+      expect(Object.keys(parsed)).toEqual(['kind', 'taskId', 'answer', 'log', 'tail']);
+      expect(parsed.kind).toBe('result');
+      expect(parsed.tail).toBe('kept');
+      expect(parsed.answer).toMatch(/^a+…\[cut, 40000 chars\]$/);
+      expect(parsed.log).toMatch(/^b+…\[cut, 9000 chars\]$/);
+      expect(note).toContain('cut 2 fields');
+      expect(note).toContain('answer (40000 chars)');
+      expect(note).toContain('log (9000 chars)');
+    });
+
+    it('shares one cap, so a string under it arrives whole', () => {
+      const payload = { big: 'x'.repeat(50_000), medium: 'm'.repeat(2_000) };
+      const parsed = JSON.parse(splitNote(fitPayload(payload, MAX_PAYLOAD_CHARS)).json);
+      expect(parsed.medium).toBe('m'.repeat(2_000));
+      expect(parsed.big.startsWith('x'.repeat(2_000))).toBe(true);
+    });
+
+    it('spells nested and non-identifier paths', () => {
+      const payload = { items: [{ text: 'y'.repeat(30_000) }], 'odd key': 'z'.repeat(30_000) };
+      const { note } = splitNote(fitPayload(payload, MAX_PAYLOAD_CHARS));
+      expect(note).toContain('items[0].text (30000 chars)');
+      expect(note).toContain('["odd key"] (30000 chars)');
+    });
+
+    it('drops array tails when strings alone cannot make room', () => {
+      const payload = { rows: Array.from({ length: 5_000 }, (_, i) => i) };
+      const body = fitPayload(payload, MAX_PAYLOAD_CHARS);
+      expect(body.length).toBeLessThanOrEqual(MAX_PAYLOAD_CHARS);
+      const { json, note } = splitNote(body);
+      const rows = JSON.parse(json).rows as unknown[];
+      expect(rows[0]).toBe(0);
+      expect(rows.at(-1)).toMatch(/^…\[cut, \d+ more items\]$/);
+      expect(note).toContain('rows (5000 items)');
+    });
   });
 });

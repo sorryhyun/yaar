@@ -17,6 +17,18 @@ import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('StreamToEventMapper');
 
+/**
+ * How a turn ended, handed to {@link StreamMapperOptions.onTurnEnd} exactly once.
+ *
+ * The same latch that publishes the stream's terminal frame decides it, so a caller
+ * that keeps this never disagrees with what a live subscriber was told. `code` is the
+ * provider's own discriminant for the error (`StreamMessage.errorCode`), absent when
+ * the turn failed by a throw rather than a provider verdict.
+ */
+export type TurnEnd =
+  | { status: AgentTurnStatus }
+  | { status: 'error'; error: string; code?: string };
+
 export interface StreamMappingState {
   responseText: string;
   thinkingText: string;
@@ -100,6 +112,10 @@ export interface StreamMapperOptions {
     scope: 'turn' | 'session',
     sessionCostUsd?: number,
   ) => { total: TokenUsage; delta: TokenUsage };
+  /** The model's context window, whenever a provider message states it. */
+  onContextWindow?: (tokens: number) => void;
+  /** Called once, from whichever of {@link StreamToEventMapper.finish}/`fail` latches first. */
+  onTurnEnd?: (end: TurnEnd) => void;
 }
 
 export class StreamToEventMapper {
@@ -148,6 +164,8 @@ export class StreamToEventMapper {
     scope: 'turn' | 'session',
     sessionCostUsd?: number,
   ) => { total: TokenUsage; delta: TokenUsage };
+  private readonly onContextWindow?: (tokens: number) => void;
+  private readonly onTurnEnd?: (end: TurnEnd) => void;
 
   /**
    * This turn's own share, summed from the deltas the accumulator reports back.
@@ -176,6 +194,8 @@ export class StreamToEventMapper {
     this.agentInstanceId = options.agentInstanceId;
     this.streamSessionId = options.streamSessionId;
     this.onUsage = options.onUsage;
+    this.onContextWindow = options.onContextWindow;
+    this.onTurnEnd = options.onTurnEnd;
   }
 
   /**
@@ -271,13 +291,15 @@ export class StreamToEventMapper {
       status,
       ...(this.state.responseText ? { text: this.state.responseText } : {}),
     });
+    this.onTurnEnd?.({ status });
   }
 
   /** Close the turn with a terminal `error` frame. Same once-only rule as {@link finish}. */
-  fail(error: string): void {
+  fail(error: string, code?: string): void {
     if (this.turnClosed) return;
     this.turnClosed = true;
     this.emitStreamFrame('error', { error });
+    this.onTurnEnd?.({ status: 'error', error, ...(code ? { code } : {}) });
   }
 
   async map(message: StreamMessage): Promise<void> {
@@ -297,6 +319,7 @@ export class StreamToEventMapper {
     // the very terminal that latches the turn closed — folding it after that
     // would publish the numbers into an already-finished stream.
     this.recordUsage(message);
+    if (message.contextWindow) this.onContextWindow?.(message.contextWindow);
 
     switch (message.type) {
       // Accounting only; `recordUsage` above already folded and published it.
@@ -631,7 +654,7 @@ export class StreamToEventMapper {
         });
         // Terminal for observers: a provider error ends the turn, so it takes the
         // same latch as `done` rather than adding a second close after it.
-        this.fail(message.error ?? 'Unknown error');
+        this.fail(message.error ?? 'Unknown error', message.errorCode);
         break;
 
       default:

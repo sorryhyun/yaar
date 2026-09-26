@@ -65,16 +65,173 @@ let counter = 0;
  * `<window:change>` / `<app_interaction>` framing.
  */
 export function frameAppEvent(windowId: string, channel: string, payload: unknown): string {
-  let body: string;
-  try {
-    body = typeof payload === 'string' ? payload : JSON.stringify(payload ?? null);
-  } catch {
-    body = String(payload);
-  }
-  if (body.length > MAX_PAYLOAD_CHARS) {
-    body = `${body.slice(0, MAX_PAYLOAD_CHARS)}… [truncated, ${body.length} chars]`;
-  }
+  const body = fitPayload(payload, MAX_PAYLOAD_CHARS);
   return `<app:event window="${windowId}" channel="${channel}">\n${body}\n</app:event>`;
+}
+
+/** Room left beside the JSON for the note naming what was cut. */
+const CUT_NOTE_RESERVE = 1024;
+/** Most cut paths the note spells out before it summarizes the rest as a count. */
+const MAX_NOTED_PATHS = 8;
+/** A string is never cut below this while arrays still have items to give up. */
+const MIN_STRING_CAP = 64;
+
+interface Cut {
+  path: string;
+  /** Length before the cut: chars for a string, items for an array. */
+  was: number;
+  kind: 'string' | 'array';
+}
+
+/**
+ * Serialize a payload into at most `max` chars, cutting by structure rather than by
+ * position.
+ *
+ * The old cut kept the first `max` chars of the serialized JSON, which left the agent
+ * holding half an object: the keys after the cut point gone and nothing saying which.
+ * An app's payload is usually a small envelope around one or two long strings (a
+ * worker's `{ kind, taskId, answer }`), so this shrinks long strings instead — all of
+ * them to one shared cap, the largest that fits, so short fields arrive whole and the
+ * envelope stays valid JSON. Each cut string ends in `…[cut, N chars]`, and a note
+ * after the JSON lists the cut paths.
+ *
+ * Arrays give up their tails only when strings alone cannot make room (thousands of
+ * short items). A payload that still does not fit — tens of thousands of keys — falls
+ * back to the positional cut, labelled as such.
+ */
+export function fitPayload(payload: unknown, max: number): string {
+  if (typeof payload === 'string') return fitString(payload, max);
+
+  let full: string | undefined;
+  try {
+    full = JSON.stringify(payload ?? null);
+  } catch {
+    // Circular or a BigInt — no structure to preserve.
+    return fitString(String(payload), max);
+  }
+  // A function or a symbol serializes to nothing.
+  if (full === undefined) return String(payload);
+  if (full.length <= max) return full;
+
+  const value: unknown = JSON.parse(full);
+  const budget = max - CUT_NOTE_RESERVE;
+
+  const byStrings = largestFit(longestString(value), (cap) => shrink(value, cap, Infinity), budget);
+  if (byStrings) return withCutNote(byStrings, full.length, max);
+
+  const stringCap = Math.min(MIN_STRING_CAP, longestString(value));
+  const byArrays = largestFit(
+    longestArray(value),
+    (cap) => shrink(value, stringCap, Math.max(1, cap)),
+    budget,
+  );
+  if (byArrays) return withCutNote(byArrays, full.length, max);
+
+  return `${full.slice(0, max)}… [truncated mid-JSON: ${full.length} chars, too many fields to cut by structure]`;
+}
+
+/** A plain string has no structure to keep, so it keeps its head. */
+function fitString(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}… [truncated, ${text.length} chars]`;
+}
+
+/**
+ * Binary-search the largest cap in `[0, upper]` whose shrunk serialization fits in
+ * `budget`. Null when even a cap of 0 does not.
+ */
+function largestFit(
+  upper: number,
+  shrinkAt: (cap: number) => { json: string; cuts: Cut[] },
+  budget: number,
+): { json: string; cuts: Cut[] } | null {
+  let best = shrinkAt(0);
+  if (best.json.length > budget) return null;
+  let lo = 0;
+  let hi = upper;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const attempt = shrinkAt(mid);
+    if (attempt.json.length <= budget) {
+      best = attempt;
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+/** Copy `value` with every string over `stringCap` and every array over `arrayCap` cut. */
+function shrink(
+  value: unknown,
+  stringCap: number,
+  arrayCap: number,
+): { json: string; cuts: Cut[] } {
+  const cuts: Cut[] = [];
+  const walk = (node: unknown, path: string): unknown => {
+    if (typeof node === 'string') {
+      if (node.length <= stringCap) return node;
+      cuts.push({ path, was: node.length, kind: 'string' });
+      return `${node.slice(0, stringCap)}…[cut, ${node.length} chars]`;
+    }
+    if (Array.isArray(node)) {
+      const kept = node.slice(0, arrayCap).map((item, i) => walk(item, `${path}[${i}]`));
+      if (node.length > arrayCap) {
+        cuts.push({ path, was: node.length, kind: 'array' });
+        kept.push(`…[cut, ${node.length - arrayCap} more items]`);
+      }
+      return kept;
+    }
+    if (node && typeof node === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(node)) out[key] = walk(child, joinPath(path, key));
+      return out;
+    }
+    return node;
+  };
+  const json = JSON.stringify(walk(value, ''));
+  return { json, cuts };
+}
+
+function joinPath(path: string, key: string): string {
+  if (/^[A-Za-z_$][\w$]*$/.test(key)) return path ? `${path}.${key}` : key;
+  return `${path}[${JSON.stringify(key)}]`;
+}
+
+function longestString(value: unknown): number {
+  if (typeof value === 'string') return value.length;
+  const children = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value)
+      : [];
+  let longest = 0;
+  for (const child of children) longest = Math.max(longest, longestString(child));
+  return longest;
+}
+
+function longestArray(value: unknown): number {
+  if (!value || typeof value !== 'object') return 0;
+  const children = Array.isArray(value) ? value : Object.values(value);
+  let longest = Array.isArray(value) ? value.length : 0;
+  for (const child of children) longest = Math.max(longest, longestArray(child));
+  return longest;
+}
+
+/** The JSON, then one line naming what was cut from it. */
+function withCutNote(fit: { json: string; cuts: Cut[] }, fullChars: number, max: number): string {
+  const named = fit.cuts
+    .slice(0, MAX_NOTED_PATHS)
+    .map(
+      (c) =>
+        `${c.path.slice(0, 80) || '(root)'} (${c.was} ${c.kind === 'string' ? 'chars' : 'items'})`,
+    );
+  const rest = fit.cuts.length - named.length;
+  const note =
+    `[truncated from ${fullChars} to fit ${max} chars — cut ${fit.cuts.length} ` +
+    `field${fit.cuts.length === 1 ? '' : 's'}: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}]`;
+  return `${fit.json}\n${note}`;
 }
 
 /** Frame a window-change event for prompt injection. Counterpart to `frameAppEvent`. */

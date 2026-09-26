@@ -63,6 +63,22 @@ function mapUsage(u: RawUsage | undefined): TokenUsage | undefined {
   };
 }
 
+/**
+ * The context window from a result's per-model usage, or undefined when none is
+ * stated. The largest wins: `modelUsage` also lists the auxiliary models a turn
+ * touched (a Haiku title call), and the window that bounds the conversation is the
+ * main model's.
+ */
+function contextWindowOf(
+  modelUsage: Record<string, { contextWindow?: number }> | undefined,
+): number | undefined {
+  let largest = 0;
+  for (const entry of Object.values(modelUsage ?? {})) {
+    if (typeof entry?.contextWindow === 'number') largest = Math.max(largest, entry.contextWindow);
+  }
+  return largest > 0 ? largest : undefined;
+}
+
 function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   return {
     inputTokens: a.inputTokens + b.inputTokens,
@@ -274,11 +290,15 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
       typeof resultMsg.total_cost_usd === 'number'
         ? { sessionCostUsd: resultMsg.total_cost_usd }
         : {};
-    const accounting = usage
-      ? { usage, usageScope: 'turn' as const, ...cost }
-      : Object.keys(cost).length
-        ? { usage: { ...ZERO_USAGE }, usageScope: 'turn' as const, ...cost }
-        : {};
+    const window = contextWindowOf(resultMsg.modelUsage);
+    const accounting = {
+      ...(usage
+        ? { usage, usageScope: 'turn' as const, ...cost }
+        : Object.keys(cost).length
+          ? { usage: { ...ZERO_USAGE }, usageScope: 'turn' as const, ...cost }
+          : {}),
+      ...(window ? { contextWindow: window } : {}),
+    };
 
     if (result.is_error || result.subtype?.startsWith('error')) {
       // `errors[]` is routinely empty, which is how every failed turn used to

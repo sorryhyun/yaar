@@ -240,6 +240,9 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
         // `total`, not `last` — the thread's running total, re-sent several times
         // per turn. Adding these up would multiply the real figure.
         usageScope: 'session',
+        ...(typeof p.tokenUsage.modelContextWindow === 'number'
+          ? { contextWindow: p.tokenUsage.modelContextWindow }
+          : {}),
       };
     }
 

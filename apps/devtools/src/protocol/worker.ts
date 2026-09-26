@@ -174,7 +174,8 @@ export const workerCommands = {
       'kind "result") — workerWait blocks for it instead, and the "worker" state key is the ' +
       'plain look. Interim findings arrive with the result; an urgent one wakes you early ' +
       'as kind "report" — a cue to re-scope or call workerInterrupt, not a sign the task is ' +
-      'done. A very long answer can reach you marked "[truncated, N chars]" — the wakeup is a ' +
+      'done. A very long answer can reach you with its long fields shortened — each ending ' +
+      '"…[cut, N chars]", with a note after the JSON naming them — because the wakeup is a ' +
       'prompt injection with a context budget; call workerWait with the taskId to read the ' +
       'full record, which is kept whole. Several workers run in parallel, up to the cap in ' +
       '`workerConfig` (default 2, max 3): each call lands on a free worker and returns its ' +
