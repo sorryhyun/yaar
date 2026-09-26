@@ -31,7 +31,8 @@ import { join } from 'path';
 import { initCompiler, typecheckSandbox } from '../../packages/compiler/dist/index.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../packages/server/src/config.ts';
 import { autoCompileApps } from '../../packages/server/src/features/apps/auto-compile.ts';
-import { APP_ROOTS } from '../../packages/server/src/features/apps/roots.ts';
+import { resolveAppDir } from '../../packages/server/src/features/apps/roots.ts';
+import { readManifestFile } from '../../packages/server/src/features/apps/manifest.ts';
 
 const argv = process.argv.slice(2);
 const wantTypecheck = argv.includes('--typecheck');
@@ -56,22 +57,19 @@ for (const f of result.failed) console.error('  FAIL ' + f.appId + ': ' + f.erro
 // green build says nothing about tsc. Opt-in because it is the slow half, and the
 // release does not need it: CI typechecks the packages, and an app's types are the
 // author's business at edit time.
-const findAppPath = (appId: string): string | null =>
-  APP_ROOTS.map((root) => join(root, appId)).find((p) => existsSync(join(p, 'src', 'main.ts'))) ??
-  null;
+// The same directory the compile above built: the one the id resolves to.
+const findAppPath = (appId: string): string | null => {
+  const dir = resolveAppDir(appId);
+  return dir && existsSync(join(dir, 'src', 'main.ts')) ? dir : null;
+};
 
 let typecheckFailed = false;
 if (wantTypecheck) {
   for (const appId of result.compiled.length ? result.compiled : only) {
     const appPath = findAppPath(appId);
     if (!appPath) continue;
-    let bundles: string[] | undefined;
-    try {
-      const meta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
-      if (Array.isArray(meta.bundles)) bundles = meta.bundles;
-    } catch {
-      // No app.json — typecheck with no gated bundles, same as the compile would.
-    }
+    // No app.json — typecheck with no gated bundles, same as the compile would.
+    const bundles = (await readManifestFile(appPath))?.bundles;
     const tc = await typecheckSandbox(appPath, { bundles });
     if (tc.success) {
       console.log('  typecheck ' + appId + ': clean');

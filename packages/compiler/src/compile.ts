@@ -52,8 +52,13 @@ export function getSandboxDir(): string {
 
 export interface CompileOptions {
   minify?: boolean;
+  /** The document title. Defaults to app.json's `name`, then `'App'`. */
   title?: string;
-  /** Allowed yaar-* bundle names from app.json. Gates @bundled/yaar-dev, @bundled/yaar-web, etc. */
+  /**
+   * Allowed yaar-* bundle names. Gates @bundled/yaar-dev, @bundled/yaar-web, etc.
+   * Defaults to app.json's `bundles` — pass it only to compile against something other
+   * than what the project declares.
+   */
   bundles?: string[];
 }
 
@@ -73,15 +78,27 @@ export interface AppLinkConfig {
 }
 
 /**
- * Read `links` from the app.json beside `src/`. Absent, malformed, or carrying a
- * `base` that is not a parseable absolute URL all yield `{}` — a link policy is a
- * convenience, and a typo in it must not fail a build that would otherwise ship.
+ * The app.json beside `src/`, parsed; `{}` when absent or malformed. Read once per
+ * compile: the title, the bundle gate and the link policy all default from it.
  */
-async function readLinkConfig(sandboxPath: string): Promise<AppLinkConfig> {
+async function readAppJson(sandboxPath: string): Promise<Record<string, unknown>> {
   try {
     const json = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
-    const base = json?.links?.base;
-    if (typeof base !== 'string' || !base) return {};
+    return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * `links` off the manifest. Absent, malformed, or carrying a `base` that is not a
+ * parseable absolute URL all yield `{}` — a link policy is a convenience, and a typo in
+ * it must not fail a build that would otherwise ship.
+ */
+function linkConfigOf(appJson: Record<string, unknown>): AppLinkConfig {
+  const base = (appJson.links as { base?: unknown } | undefined)?.base;
+  if (typeof base !== 'string' || !base) return {};
+  try {
     const parsed = new URL(base);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return {};
     return { base: parsed.href };
@@ -272,7 +289,7 @@ export async function compileTypeScript(
   sandboxPath: string,
   options: CompileOptions = {},
 ): Promise<CompileResult> {
-  const { minify = true, title = 'App' } = options;
+  const { minify = true } = options;
   const entryPoint = join(sandboxPath, 'src', 'main.ts');
   const distDir = join(sandboxPath, 'dist');
   const outputPath = join(distDir, 'index.html');
@@ -286,6 +303,14 @@ export async function compileTypeScript(
       errors: [`Entry point not found: src/main.ts`],
     };
   }
+
+  const appJson = await readAppJson(sandboxPath);
+  const title = options.title ?? (typeof appJson.name === 'string' ? appJson.name : 'App');
+  const bundles =
+    options.bundles ??
+    (Array.isArray(appJson.bundles)
+      ? appJson.bundles.filter((b): b is string => typeof b === 'string')
+      : undefined);
 
   // One read of each source file for the whole compile: the token guard, the
   // bundler's source hook, and protocol extraction all go through it. Scoped to
@@ -306,7 +331,7 @@ export async function compileTypeScript(
     const jsCode = await compileWithBun(
       entryPoint,
       minify,
-      options.bundles,
+      bundles,
       readThreeRenderer(sandboxPath),
       sources,
     );
@@ -321,7 +346,7 @@ export async function compileTypeScript(
     // the app.json beside `src/`, so the `defineApp({ id })` check holds for the
     // deploy and tooling callers too, not only for a compile that passes it.
     const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
-      bundles: options.bundles,
+      bundles,
       sources,
     });
     if (extraction.errors.length > 0) {
@@ -345,7 +370,7 @@ export async function compileTypeScript(
       title,
       sdkCode,
       extraction.protocol ?? undefined,
-      await readLinkConfig(sandboxPath),
+      linkConfigOf(appJson),
     );
 
     // A YAAR app compiles to one self-contained HTML the frontend loads into an
@@ -379,9 +404,7 @@ export async function compileTypeScript(
         sourceHash,
         appJsonHash,
         compilerVersion: COMPILER_VERSION,
-        ortVersion: options.bundles?.includes('yaar-ml')
-          ? (getOrtVersion() ?? undefined)
-          : undefined,
+        ortVersion: bundles?.includes('yaar-ml') ? (getOrtVersion() ?? undefined) : undefined,
         compiledAt: new Date().toISOString(),
       });
     } catch {

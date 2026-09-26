@@ -2,15 +2,14 @@
  * Retire what is on screen from an app's previous build.
  *
  * Deploying an app replaces its files, and nothing that is already running notices:
- * an open window keeps rendering the bundle its iframe loaded, and the app agent keeps
- * answering from the manifest it was built with. Both then look live while describing a
- * build that no longer exists — the window someone screenshots to confirm a deploy
- * worked is the one showing the code the deploy replaced.
+ * an open window keeps rendering the bundle its iframe loaded. It then looks live while
+ * describing a build that no longer exists — the window someone screenshots to confirm a
+ * deploy worked is the one showing the code the deploy replaced.
  *
- * So a deploy retires them. The windows close (relaunching from the dock loads the new
- * bundle) and the cached agent profile is dropped (the next turn is built from the new
- * `protocol.json`). Deliberately *not* done: disposing the app agent. The prompt is
- * passed per turn, so invalidating the profile already refreshes it, and disposing would
+ * So a deploy (and an install, uninstall or restore — see `changed.ts`, the one caller)
+ * retires them: the windows close, and relaunching from the dock loads the new bundle.
+ * The app agent is *not* disposed. Its cached profile is dropped by `notifyAppChanged`,
+ * and since the prompt is passed per turn that already refreshes it; disposing would
  * throw away the conversation for no gain.
  */
 
@@ -42,7 +41,7 @@ export interface RetireResult {
 }
 
 /**
- * Close every window of `appId` in the calling session and drop its cached agent profile.
+ * Close every window of `appId` in the calling session.
  *
  * Session-scoped, like every other action emitted here: an action is addressed to a
  * session or it is dropped (see `ActionEmitter.resolveSessionId`). Another browser on
@@ -51,7 +50,7 @@ export interface RetireResult {
  * The caller's own window is spared. An app that deploys *itself* — devtools is the
  * standing example — is mid-request inside that window, and closing it would kill the
  * tool at the moment it succeeded, which reads as a crash rather than a deploy. Its other
- * windows still go, its profile is still invalidated, and it is named in
+ * windows still go, and it is named in
  * {@link RetireResult.staleWindow} so the deploy's answer can say what is still stale.
  */
 export function retireStaleApp(appId: string): RetireResult {
@@ -92,8 +91,6 @@ export function retireStaleApp(appId: string): RetireResult {
       log.warn('could not close window', { windowId: win.id, appId, err });
     }
   }
-
-  session.getPool()?.invalidateAppProfile(appId);
 
   return { closed, ...(staleWindow ? { staleWindow } : {}) };
 }

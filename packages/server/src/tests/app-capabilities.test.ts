@@ -137,6 +137,26 @@ describe('reading a manifest', () => {
     }
   });
 
+  it('still asks when one permission entry is malformed', async () => {
+    // Read raw, `null` threw inside the permission filter and the whole read came back
+    // empty — so the install skipped the dialog, while the token mint (which parses the
+    // same list) still granted `yaar://config/` and the bundle next to it.
+    const malformedDir = join(USER_APPS_DIR, 'capability-malformed-fixture');
+    mkdirSync(malformedDir, { recursive: true });
+    writeFileSync(
+      join(malformedDir, 'app.json'),
+      JSON.stringify({ permissions: [null, 42, 'yaar://config/'], bundles: ['yaar-dev'] }),
+    );
+    try {
+      const read = await readAppCapabilities(malformedDir);
+      expect(read.permissions).toEqual(['yaar://config/']);
+      expect(read.bundles).toEqual(['yaar-dev']);
+      expect(isEmpty(read)).toBe(false);
+    } finally {
+      rmSync(malformedDir, { recursive: true, force: true });
+    }
+  });
+
   it('reads nothing from a directory with no manifest', async () => {
     expect(isEmpty(await readAppCapabilities(join(USER_APPS_DIR, 'no-such-app')))).toBe(true);
   });

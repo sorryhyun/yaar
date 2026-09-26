@@ -25,26 +25,35 @@ import { describe, expect, it } from 'bun:test';
 
 import { ClaudeSessionProvider } from '../providers/claude/session-provider.js';
 import { TurnRouter } from '../providers/claude/turn-router.js';
+import { TurnGate, type TurnHandle } from '../providers/turn-gate.js';
 
 /**
  * Stand in for a live persistent session. The real one spawns a CLI, and the
  * field is private, so the field itself is the seam — what matters here is which
  * branch `steer()` takes and what it writes.
+ *
+ * `busy` begins a turn on the session's gate; `started` (default true) says
+ * whether its own message is already on the wire. `turn` is that turn's handle,
+ * so a test can start or end it the way `runPersistentTurn` would.
  */
 function fakePersistentSession(overrides: {
   busy: boolean;
-  turnStarted?: Promise<void> | null;
+  started?: boolean;
   detachable?: boolean;
 }) {
   const pushed: unknown[] = [];
   let streamInputCalls = 0;
+  const turns = new TurnGate();
+  let turn: TurnHandle<void> | null = null;
+  if (overrides.busy) {
+    turn = turns.begin();
+    if (overrides.started !== false) turn.start();
+  }
   const session = {
-    busy: overrides.busy,
+    turns,
     fingerprint: 'fp',
     openedWithResume: undefined,
     turnsProcessed: 1,
-    turnId: 7,
-    turnStarted: overrides.turnStarted ?? null,
     mcpReady: Promise.resolve(),
     abortController: new AbortController(),
     channel: {
@@ -60,7 +69,7 @@ function fakePersistentSession(overrides: {
     },
     router: new TurnRouter({ detachable: () => !!overrides.detachable, onDetached: () => {} }),
   };
-  return { session, pushed, streamInput: () => streamInputCalls };
+  return { session, turn: turn!, pushed, streamInput: () => streamInputCalls };
 }
 
 function setPersistentSession(provider: ClaudeSessionProvider, value: unknown): void {
@@ -116,11 +125,7 @@ describe('ClaudeSessionProvider.steer()', () => {
 
   it("waits for the turn's own message before writing", async () => {
     const provider = new ClaudeSessionProvider();
-    let startTurn!: () => void;
-    const turnStarted = new Promise<void>((resolve) => {
-      startTurn = resolve;
-    });
-    const { session, pushed } = fakePersistentSession({ busy: true, turnStarted });
+    const { session, turn, pushed } = fakePersistentSession({ busy: true, started: false });
     setPersistentSession(provider, session);
 
     const steered = provider.steer('and now this');
@@ -129,25 +134,20 @@ describe('ClaudeSessionProvider.steer()', () => {
     await Promise.resolve();
     expect(pushed).toEqual([]);
 
-    startTurn();
+    turn.start();
     expect(await steered).toBe(true);
     expect(pushed).toHaveLength(1);
   });
 
   it('refuses when the turn ends while it waits', async () => {
     const provider = new ClaudeSessionProvider();
-    let startTurn!: () => void;
-    const turnStarted = new Promise<void>((resolve) => {
-      startTurn = resolve;
-    });
-    const { session, pushed } = fakePersistentSession({ busy: true, turnStarted });
+    const { session, turn, pushed } = fakePersistentSession({ busy: true, started: false });
     setPersistentSession(provider, session);
 
     const steered = provider.steer('too late');
-    // The turn unwinds — `runPersistentTurn`'s finally clears busy and wakes the
+    // The turn unwinds — `runPersistentTurn`'s finally ends it, which wakes the
     // waiter rather than holding it for the full deadline.
-    session.busy = false;
-    startTurn();
+    turn.end();
 
     expect(await steered).toBe(false);
     expect(pushed).toEqual([]);
@@ -155,18 +155,13 @@ describe('ClaudeSessionProvider.steer()', () => {
 
   it('refuses when the next turn started while it waited', async () => {
     const provider = new ClaudeSessionProvider();
-    let startTurn!: () => void;
-    const turnStarted = new Promise<void>((resolve) => {
-      startTurn = resolve;
-    });
-    const { session, pushed } = fakePersistentSession({ busy: true, turnStarted });
+    const { session, pushed } = fakePersistentSession({ busy: true, started: false });
     setPersistentSession(provider, session);
 
     const steered = provider.steer('meant for the previous turn');
-    // Same stream, still busy — but a different turn. Without the id check this
-    // would land as the new turn's opening message.
-    session.turnId++;
-    startTurn();
+    // Same stream, still busy — but a different turn. Without the identity check
+    // this would land as the new turn's opening message.
+    session.turns.begin().start();
 
     expect(await steered).toBe(false);
     expect(pushed).toEqual([]);
@@ -174,11 +169,7 @@ describe('ClaudeSessionProvider.steer()', () => {
 
   it('refuses when the stream was replaced while it waited', async () => {
     const provider = new ClaudeSessionProvider();
-    let startTurn!: () => void;
-    const turnStarted = new Promise<void>((resolve) => {
-      startTurn = resolve;
-    });
-    const { session, pushed } = fakePersistentSession({ busy: true, turnStarted });
+    const { session, turn, pushed } = fakePersistentSession({ busy: true, started: false });
     setPersistentSession(provider, session);
 
     const steered = provider.steer('into a dead process');
@@ -186,7 +177,7 @@ describe('ClaudeSessionProvider.steer()', () => {
     // captured session is a corpse whose stdin no longer goes anywhere.
     const replacement = fakePersistentSession({ busy: true });
     setPersistentSession(provider, replacement.session);
-    startTurn();
+    turn.start();
 
     expect(await steered).toBe(false);
     expect(pushed).toEqual([]);

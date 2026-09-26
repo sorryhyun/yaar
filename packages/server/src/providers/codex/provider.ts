@@ -23,6 +23,8 @@ import type {
 import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
+import { createInputChannel } from '../input-channel.js';
+import { TurnGate } from '../turn-gate.js';
 import { getOrchestratorPrompt } from '../../agents/profiles/orchestrator/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
@@ -44,6 +46,18 @@ import type {
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('codex:provider');
+
+/**
+ * How long a steer waits for `turn/start` to answer with the turn id it must
+ * name. One RPC round trip on a local socket; past this the turn is not
+ * starting, and the caller is better served by the fresh turn it falls back to.
+ */
+const STEER_TURN_START_MS = 10_000;
+
+/** The notification that ends a turn, as the mapper typed it — the only place that decides. */
+function endsTurn(message: StreamMessage): boolean {
+  return message.type === 'complete' || message.type === 'error';
+}
 
 interface ThreadSession {
   threadId: string;
@@ -108,15 +122,11 @@ export class CodexProvider implements AITransport {
    */
   private turnAbort: AbortController | null = null;
 
-  // Interrupt signal: shared instance field so interrupt() can reach the active query.
-  private resolveMessage: ((done: boolean) => void) | null = null;
-
-  // Current in-flight turn ID for interrupt/steer support
-  private currentTurnId: string | null = null;
-
-  // Resolves when currentTurnId is set — allows steer() to wait for turn start
-  private turnReadyResolve: (() => void) | null = null;
-  private turnReadyPromise: Promise<void> | null = null;
+  /**
+   * The in-flight turn, keyed by the id `turn/start` returned — what `turn/steer`
+   * names as `expectedTurnId` and `turn/interrupt` names as `turnId`.
+   */
+  private readonly turns = new TurnGate<string>();
 
   // Guards the idle-recovery retry in query() so a persistently-broken thread
   // can't recurse forever (resume fails → new thread → turn/start fails → …).
@@ -199,36 +209,22 @@ export class CodexProvider implements AITransport {
         actionEmitter.setCurrentMonitor(options.monitorId);
       }
 
-      // pendingMessages is local per-query to avoid cross-talk.
-      const pendingMessages: StreamMessage[] = [];
-      this.resolveMessage = null;
-
+      // Local per query, so a nested recovery query cannot read this one's
+      // notifications. Turn end is the mapper's call alone: the channel closes
+      // behind the first message it typed terminal. The loop used to decide it
+      // again from the raw method name, and the two copies disagreed on an
+      // `error` the app-server was about to retry (see `errors.ts`).
+      const inbox = createInputChannel<StreamMessage>({ isLast: endsTurn });
       const notificationHandler = (method: string, params: unknown) => {
         const message = mapNotification(method, params);
-        if (message) {
-          pendingMessages.push(message);
-          if (this.resolveMessage) {
-            this.resolveMessage(false);
-            this.resolveMessage = null;
-          }
-        }
-
-        // Check for turn completion. An `error` the app-server says it will
-        // retry is *not* one: closing the loop here abandons a turn that is
-        // still running, and the answer the retry produces is never read. The
-        // mapper makes the same distinction (a notice, not a terminal error);
-        // both have to agree or the loop and the stream disagree about whether
-        // the turn ended.
-        const retryable = method === 'error' && (params as { willRetry?: boolean })?.willRetry;
-        if (!retryable && (method === 'turn/completed' || method === 'error')) {
-          if (this.resolveMessage) {
-            this.resolveMessage(true);
-            this.resolveMessage = null;
-          }
-        }
+        if (message) inbox.push(message);
       };
-
       client.on('notification', notificationHandler);
+
+      // interrupt() aborts; closing the inbox is what wakes a read parked on it.
+      const closeInbox = () => inbox.close();
+      if (abort.signal.aborted) closeInbox();
+      else abort.signal.addEventListener('abort', closeInbox, { once: true });
 
       // Handle server-initiated requests (approval dialogs)
       const serverRequestHandler = (id: number, method: string, params: unknown) => {
@@ -239,6 +235,7 @@ export class CodexProvider implements AITransport {
       };
       client.on('server_request', serverRequestHandler);
 
+      const turn = this.turns.begin();
       try {
         const input: Array<
           { type: 'text'; text: string; text_elements: never[] } | { type: 'image'; url: string }
@@ -250,48 +247,24 @@ export class CodexProvider implements AITransport {
           }
         }
 
-        // Prepare turn-ready promise so steer() can wait for the turn to start
-        this.turnReadyPromise = new Promise<void>((resolve) => {
-          this.turnReadyResolve = resolve;
-        });
-
-        // Start the turn and capture the turn ID for interrupt/steer support
+        // Start the turn; its id is what steer and interrupt name.
         const turnResult = await client.request<TurnStartParams, TurnStartResponse>('turn/start', {
           threadId: this.currentSession!.threadId,
           input,
         });
-        this.currentTurnId = turnResult.turn.id;
-        this.turnReadyResolve?.();
-        this.turnReadyResolve = null;
+        turn.start(turnResult.turn.id);
 
-        while (true) {
+        for await (const message of inbox.iterable) {
+          // Whatever was queued when the stop came is the stopped turn's tail.
           if (abort.signal.aborted) break;
-
-          while (pendingMessages.length > 0) {
-            const message = pendingMessages.shift()!;
-            yield message;
-
-            if (message.type === 'complete' || message.type === 'error') {
-              return;
-            }
-          }
-
-          const done = await new Promise<boolean>((resolve) => {
-            this.resolveMessage = resolve;
-          });
-
-          if (done && pendingMessages.length === 0) {
-            break;
-          }
+          yield message;
         }
       } finally {
         client.off('notification', notificationHandler);
         client.off('server_request', serverRequestHandler);
+        abort.signal.removeEventListener('abort', closeInbox);
         actionEmitter.clearCurrentMonitor();
-        this.currentTurnId = null;
-        this.turnReadyResolve?.();
-        this.turnReadyResolve = null;
-        this.turnReadyPromise = null;
+        turn.end();
       }
     } catch (err) {
       // Session recovery: the app-server evicted our idle thread from memory (or
@@ -329,23 +302,21 @@ export class CodexProvider implements AITransport {
   async steer(content: string): Promise<boolean> {
     if (!this.client?.isConnected || !this.currentSession?.threadId) return false;
 
-    // Wait for the turn to start (resolves the timing race between
-    // running=true and currentTurnId being set after turn/start RPC)
-    if (!this.currentTurnId && this.turnReadyPromise) {
-      await Promise.race([
-        this.turnReadyPromise,
-        new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
-      ]);
-    }
+    // The agent counts as running from before `turn/start` has answered, and
+    // `turn/steer` must name the id that answer carries (see `turn-gate.ts`).
+    const target = await this.turns.waitForStart(STEER_TURN_START_MS);
+    if (!target.ok) return false;
 
-    const turnId = this.currentTurnId;
-    if (!turnId) return false;
+    // Re-read after the wait: dispose() may have taken both away meanwhile.
+    const client = this.client;
+    const threadId = this.currentSession?.threadId;
+    if (!client?.isConnected || !threadId) return false;
 
     try {
-      await this.client.request<TurnSteerParams, TurnSteerResponse>('turn/steer', {
-        threadId: this.currentSession.threadId,
+      await client.request<TurnSteerParams, TurnSteerResponse>('turn/steer', {
+        threadId,
         input: [{ type: 'text', text: content, text_elements: [] }],
-        expectedTurnId: turnId,
+        expectedTurnId: target.value,
       });
       return true;
     } catch (err) {
@@ -365,7 +336,7 @@ export class CodexProvider implements AITransport {
    */
   async interrupt(): Promise<InterruptReceipt> {
     const threadId = this.currentSession?.threadId;
-    const turnId = this.currentTurnId;
+    const turnId = this.turns.current;
     const canAsk = !!this.client?.isConnected && !!threadId && !!turnId;
 
     let outcome: InterruptReceipt['outcome'] = canAsk ? 'acknowledged' : 'idle';
@@ -383,11 +354,8 @@ export class CodexProvider implements AITransport {
       }
     }
 
+    // The abort closes the read loop's inbox (see query()).
     this.turnAbort?.abort();
-    if (this.resolveMessage) {
-      this.resolveMessage(true);
-      this.resolveMessage = null;
-    }
     return { outcome };
   }
 
@@ -456,11 +424,9 @@ export class CodexProvider implements AITransport {
     // Don't stop the AppServer — it's owned by WarmPool.
     this.appServer = null;
     this.currentSession = null;
-    this.currentTurnId = null;
-    this.resolveMessage = null;
-    this.turnReadyResolve?.();
-    this.turnReadyResolve = null;
-    this.turnReadyPromise = null;
+    // A query abandoned mid-turn never reaches its own `finally`; wake any steer
+    // waiting on it rather than leaving it to time out.
+    this.turns.reset();
   }
 
   /**

@@ -137,7 +137,7 @@ src/
 │   ├── agents/           # Agent-facing feature logic
 │   ├── android/          # Termux:API — native notifications while the desktop is out of sight, phone clipboard, share sheet;
 │   │                     #   child-process-limit.ts — reads Android's phantom-process toggle, caps monitors while it is on (yaar://system/android)
-│   ├── apps/             # App listing, agent docs loading, docs.ts (agent/docs/ topic tier), describe.ts, capabilities.ts (grant ceiling), marketplace, badge
+│   ├── apps/             # App listing, agent docs loading, manifest.ts (the one app.json read + normalise), changed.ts (notifyAppChanged — every on-disk app change), docs.ts (agent/docs/ topic tier), describe.ts, capabilities.ts (grant ceiling), marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)

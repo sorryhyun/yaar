@@ -13,20 +13,12 @@
  * backstop. We only ever block on a concrete "published version ≥ local version".
  */
 
-import { join } from 'path';
-import { readFile } from 'fs/promises';
 import { fetchPublishedVersion } from '../market/marketplace.js';
+import { readManifest } from './manifest.js';
 
 /** Read `app.json`'s `version`, or null if absent/unreadable. */
 export async function readAppVersion(appDir: string): Promise<string | null> {
-  try {
-    const meta = JSON.parse(await readFile(join(appDir, 'app.json'), 'utf8')) as {
-      version?: unknown;
-    };
-    return typeof meta.version === 'string' ? meta.version : null;
-  } catch {
-    return null;
-  }
+  return (await readManifest(appDir))?.version ?? null;
 }
 
 /**

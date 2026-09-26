@@ -19,9 +19,10 @@ Everything an app agent is told and allowed lives in one `AgentProfile`, built b
 
 - **Built lazily, cached per app.** `AppTaskProcessor` builds it on the app's first turn and
   caches it per `appId` for the session (a profile depends only on the app, not the monitor).
-  A deploy invalidates it (`retire.ts` → `ContextPool.invalidateAppProfile`) so the next turn
-  rebuilds from the new files; the agent and its conversation survive, only the instructions
-  change.
+  Any change to the app's files on disk — deploy, install, uninstall, restore — invalidates it
+  in every session (`features/apps/changed.ts` → `ContextPool.invalidateAppProfile`) so the next
+  turn rebuilds from the new files; the agent and its conversation survive, only the
+  instructions change.
 - **Applied per turn.** The prompt is passed as `systemPromptOverride` on every turn
   (`app-task-processor.ts` → `runAgentTurn`), never baked into the provider session.
 - **Model** comes from `app.json`'s `agentType` via `resolveAgentModel` (`model-tiers.ts`):

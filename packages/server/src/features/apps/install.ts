@@ -8,8 +8,8 @@ import { rm, unlink, mkdir, rename } from 'fs/promises';
 import { compileTypeScript } from '@yaar/compiler';
 import { ok, error, type VerbResult } from '../../lib/verb-result.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getSessionId } from '../../agents/agent-context.js';
-import { listApps, invalidateAppsCache } from './discovery.js';
+import { listApps } from './discovery.js';
+import { notifyAppChanged } from './changed.js';
 import { INSTALL_ROOT, appIdRefusal, resolveAppDir } from './roots.js';
 import { saveAppGrant, clearAppGrant } from '../../storage/app-grants.js';
 import {
@@ -23,30 +23,8 @@ import {
 import { getStorageDir, MARKET_URL } from '../../config.js';
 import { errMessage } from '@yaar/lib/errors';
 import { getConfigDir } from '../../storage/storage-manager.js';
-import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { readSettings } from '../../storage/settings.js';
-import { ServerEventType, type OSAction } from '@yaar/shared';
 import { extractAppArchive } from './archive.js';
-
-/**
- * Broadcast a desktop action through the session-scoped 'desktop-shortcut' channel
- * so it reaches the frontend even outside agent context (e.g. HTTP route handlers).
- */
-function broadcastDesktopAction(action: OSAction): void {
-  const sessionId = getSessionId();
-  if (sessionId) {
-    actionEmitter.emit('desktop-shortcut', {
-      sessionId,
-      event: {
-        type: ServerEventType.ACTIONS,
-        actions: [action],
-        agentId: 'system',
-      },
-    });
-  } else {
-    actionEmitter.emitAction(action);
-  }
-}
 
 export async function installApp(appId: string): Promise<VerbResult> {
   // The id becomes a path segment under INSTALL_ROOT and an identity every permission
@@ -148,39 +126,20 @@ export async function installApp(appId: string): Promise<VerbResult> {
   await saveAppGrant(appId, grantFor(requested));
 
   if (existsSync(join(appDir, 'src', 'main.ts'))) {
-    let bundles: string[] | undefined;
-    let title = appId;
-    try {
-      const meta = JSON.parse(await Bun.file(join(appDir, 'app.json')).text());
-      if (Array.isArray(meta.bundles)) bundles = meta.bundles;
-      if (typeof meta.name === 'string') title = meta.name;
-    } catch {
-      // No app.json or it's malformed — fall back to appId as the title.
-    }
-    const compileResult = await compileTypeScript(appDir, { title, bundles });
+    // Title and bundles default from the app.json just installed.
+    const compileResult = await compileTypeScript(appDir);
     if (!compileResult.success) {
+      // The files are on disk either way, so everything that caches them has to hear
+      // about it — only the success message is withheld.
+      await notifyAppChanged(appId, { retire: false });
       return error(
         `Installed "${appId}" but compilation failed: ${compileResult.errors?.join(', ') ?? 'Unknown error'}`,
       );
     }
   }
 
-  invalidateAppsCache(); // app files just changed on disk — re-scan below
-  const apps = await listApps();
-  const installed = apps.find((a) => a.id === appId);
-  if (installed && installed.createShortcut !== false) {
-    const shortcut = await ensureAppShortcut({
-      id: installed.id,
-      name: installed.name,
-      icon: installed.icon,
-      iconType: installed.iconType,
-    });
-    broadcastDesktopAction({ type: 'desktop.createShortcut', shortcut } as OSAction);
-  }
-
-  // Emit refreshApps AFTER shortcut is persisted to disk, so the frontend
-  // fetch of /api/shortcuts (triggered by appsVersion bump) includes the new shortcut.
-  broadcastDesktopAction({ type: 'desktop.refreshApps' } as OSAction);
+  // An update replaced the files under anything still running the previous version.
+  await notifyAppChanged(appId, { retire: isUpdate });
 
   return ok(`${isUpdate ? 'Updated' : 'Installed'} app "${appId}" successfully.`);
 }
@@ -196,7 +155,6 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
   }
 
   await rm(appDir, { recursive: true, force: true });
-  invalidateAppsCache(); // app dir removed — drop stale cached listing
 
   const configPath = join(getConfigDir(), `${appId}.json`);
   await unlink(configPath).catch(() => {});
@@ -205,16 +163,8 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
   // reviving a grant against a manifest the user never saw.
   await clearAppGrant(appId);
 
-  const removed = await removeAppShortcut(appId);
-  if (removed) {
-    broadcastDesktopAction({
-      type: 'desktop.removeShortcut',
-      shortcutId: `app-${appId}`,
-    } as OSAction);
-  }
-
-  // Emit refreshApps AFTER shortcut removal is persisted to disk.
-  broadcastDesktopAction({ type: 'desktop.refreshApps' } as OSAction);
+  // Its windows are running an app that no longer exists; the shortcut goes with it.
+  await notifyAppChanged(appId, { retire: true });
 
   return ok(`Deleted app "${appId}" successfully.`);
 }

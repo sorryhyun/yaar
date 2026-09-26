@@ -565,25 +565,11 @@ export class LiveSession {
 
     if (hook.action.type !== 'os_action') return;
 
-    const hookLogger = this.getSessionLogger();
+    // The same door as a tool's emit, so a hook-opened window is tracked, stamped, and
+    // wakes its subscribers exactly as an agent-opened one does. No agent id: it is
+    // delivered as-is, addressed to no role.
     for (const action of ([] as OSAction[]).concat(hook.action.payload as OSAction)) {
-      if (action.type.startsWith('window.')) {
-        // Resolved before *and* after the registry write, for the same reason every
-        // other emit path does it: a hook that closes a window resolves to nothing
-        // once the close has been applied. See `window-handle-stamp.ts`.
-        const raw = actionWindowId(action);
-        const priorHandle = raw ? this.resolveWindowHandle(raw, monitorId) : undefined;
-        this.windowState.handleAction(action, monitorId);
-        const stamped = stampWindowHandle(
-          action,
-          windowHandleFor(action, this.resolveWindowHandle, monitorId, priorHandle),
-        );
-        hookLogger?.logAction(stamped);
-        this.broadcast({ type: ServerEventType.ACTIONS, actions: [stamped], monitorId });
-      } else {
-        hookLogger?.logAction(action);
-        this.broadcast({ type: ServerEventType.ACTIONS, actions: [action], monitorId });
-      }
+      this.handleEmittedAction({ action, sessionId: this.sessionId, monitorId });
     }
   }
 

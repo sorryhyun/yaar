@@ -58,7 +58,7 @@ import {
 } from './agent-roster.js';
 import { AppAgentRegistry } from './app-agent-registry.js';
 import { SubAgentRegistry } from './sub-agent-registry.js';
-import type { ServerEvent } from '@yaar/shared';
+import { ServerEventType, type ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { AITransport, TokenUsage } from '../providers/types.js';
@@ -113,7 +113,7 @@ export class AgentPool {
   /** The two services every registry tier gets, bound to this pool. */
   private registryHost(): AgentHost {
     return {
-      createAgent: () => this.createWithFreshProvider(),
+      createAgent: () => this.createWithProvider(),
       disposeAgent: (agent, label) => this.disposeAgent(agent, label),
     };
   }
@@ -278,12 +278,12 @@ export class AgentPool {
    *
    * The slot is acquired before the first await and handed to the agent only on the
    * success path. Every other exit — a refused initialize, or a *throw* out of it
-   * (`acquireWarmProvider` raises `CodexVersionError`, and nothing in the pool's call
-   * chain catches it) — gives the slot back here. Held on the throwing path, it was
+   * (a provider whose attach throws, and nothing in the pool's call chain catches it)
+   * — gives the slot back here. Held on the throwing path, it was
    * held for the life of the process, invisibly: no agent exists to show in
    * `/api/agents/stats`, and no dispose path will ever reach one.
    */
-  private async createAgentCore(preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
+  private async createAgentCore(provider: AITransport): Promise<PooledAgent | null> {
     const limiter = getAgentLimiter();
     if (!limiter.tryAcquire()) {
       log.warn('global agent limit reached');
@@ -312,8 +312,7 @@ export class AgentPool {
         this.broadcastFn,
       );
 
-      const initialized = await session.initialize(preWarmedProvider);
-      if (!initialized) return null;
+      session.attachProvider(provider);
 
       const agent: PooledAgent = {
         session,
@@ -335,40 +334,47 @@ export class AgentPool {
   }
 
   /**
-   * Acquire a provider, build an agent on it, and hand the provider back if the
-   * build fails. Every tier that supplies its own provider goes through here.
+   * Build an agent on a provider — the caller's, or a fresh one from the pool's seam —
+   * and hand the provider back if the build fails. Every tier goes through here.
    *
    * The compensation is the whole point: `createAgentCore` returns `null` for a
    * refused limiter slot, and a provider acquired a line earlier is a live child
    * process (or a warm-pool slot) that nothing else holds a reference to. Written
-   * out at four call sites before this existed, which is four chances to forget it.
-   *
-   * `createMonitorAgent` is deliberately not a caller — `ContextPool` supplies that
-   * tier's provider from the warm pool and owns its disposal.
+   * out at four call sites before this existed, which is four chances to forget it —
+   * and `ContextPool` still wrote it out at every monitor spawn until the monitor tier
+   * came through here too.
    *
    * A *throw* out of `createAgentCore` gets the same compensation as a `null`: the
    * `if (!agent)` shape it replaced was skipped entirely on that path, so the child
    * process outlived every reference to it.
+   *
+   * No provider is reported here only when this pool went looking for one; a caller
+   * that supplies its own has already reported (or chosen not to report) its absence.
    */
-  private async createWithFreshProvider(): Promise<PooledAgent | null> {
-    const provider = await this.acquireProvider();
+  private async createWithProvider(supplied?: AITransport): Promise<PooledAgent | null> {
+    const provider = supplied ?? (await this.acquireProvider());
+    if (!provider) {
+      this.broadcastFn({
+        type: ServerEventType.ERROR,
+        error: 'No AI provider available. Install Claude CLI.',
+      });
+      return null;
+    }
     let agent: PooledAgent | null = null;
     try {
-      agent = await this.createAgentCore(provider ?? undefined);
+      agent = await this.createAgentCore(provider);
       return agent;
     } finally {
-      if (!agent && provider) await provider.dispose();
+      if (!agent) await provider.dispose();
     }
   }
 
   /**
-   * Create a monitor agent for the given monitor with the given provider.
+   * Create a monitor agent for the given monitor. The provider is disposed if the agent
+   * cannot be built, whether it was handed in or acquired here.
    */
-  async createMonitorAgent(
-    monitorId = '0',
-    preWarmedProvider?: AITransport,
-  ): Promise<PooledAgent | null> {
-    const agent = await this.createAgentCore(preWarmedProvider);
+  async createMonitorAgent(monitorId = '0', provider?: AITransport): Promise<PooledAgent | null> {
+    const agent = await this.createWithProvider(provider);
     if (agent) {
       this.monitorAgents.set(monitorId, agent);
       log.info('monitor agent created', { monitorId, instanceId: agent.instanceId });
@@ -381,7 +387,7 @@ export class AgentPool {
    * The caller is responsible for calling disposeEphemeral() after the task.
    */
   async createEphemeral(): Promise<PooledAgent | null> {
-    const agent = await this.createWithFreshProvider();
+    const agent = await this.createWithProvider();
     if (!agent) return null;
     this.ephemeralAgents.add(agent);
     log.info('ephemeral agent created', { instanceId: agent.instanceId });
@@ -475,7 +481,7 @@ export class AgentPool {
   async createSessionAgent(): Promise<PooledAgent | null> {
     if (this.sessionAgent) return this.sessionAgent;
 
-    const agent = await this.createWithFreshProvider();
+    const agent = await this.createWithProvider();
     if (!agent) return null;
 
     this.sessionAgent = agent;

@@ -29,7 +29,6 @@ import type { ContextSource } from './context.js';
 import { genId } from '@yaar/lib/ids';
 import { errMessage } from '@yaar/lib/errors';
 import { StreamToEventMapper, type TurnEnd } from './session-policies/stream-to-event-mapper.js';
-import { acquireWarmProvider } from '../providers/factory.js';
 import { runInAgentContext } from './agent-context.js';
 import { principalRole } from './roles.js';
 import { assembleSystemPromptForRole } from './system-prompt.js';
@@ -294,26 +293,22 @@ export class AgentSession {
   }
 
   /**
-   * Attach this agent's provider — the pool's warm one, or a fresh one from the factory.
+   * Attach this agent's provider. The pool always hands one in.
    *
-   * Acquire and attach is *all* this does. It used to also mint a `SessionLogger` and emit
+   * Attach is *all* this does. It used to also mint a `SessionLogger` and emit
    * `CONNECTION_STATUS`, duplicating both from `ContextPool.initialize()`: the log mint
    * created a second `session_logs/` directory for a session that already had one, and the
    * status event went out with no `sessionId` on it — the exact hazard `ContextPool` names
    * at its own emit, where the client adopting the wrong id left every app it launched
    * holding a token for a session the hub does not hold. Two owners for one fact is one
    * too many, and the pool is the owner: it knows both ids and mints the log once.
+   *
+   * It also used to fall back to the global `acquireWarmProvider()` when handed none,
+   * which walked straight past the pool's injected `acquireProvider` seam — a test's
+   * stub answered the pool, and the real warm pool answered here.
    */
-  async initialize(preWarmedProvider?: AITransport): Promise<boolean> {
-    this.provider = preWarmedProvider ?? (await acquireWarmProvider());
-    if (!this.provider) {
-      await this.sendEvent({
-        type: ServerEventType.ERROR,
-        error: 'No AI provider available. Install Claude CLI.',
-      });
-      return false;
-    }
-    return true;
+  attachProvider(provider: AITransport): void {
+    this.provider = provider;
   }
 
   /** Full system prompt for a turn: profile base + scope + environment + memory. */

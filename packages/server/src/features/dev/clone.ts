@@ -7,6 +7,7 @@ import { join } from 'path';
 import { resolveAppDir } from '../apps/roots.js';
 import { agentDocPathsFor, APP_ROOT_DOCS } from '../apps/discovery.js';
 import { agentDocsFilesFor } from '../apps/docs.js';
+import { readManifest } from '../apps/manifest.js';
 
 interface CloneFile {
   path: string;
@@ -72,18 +73,12 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
     return { success: false, error: 'No source found for app. Only apps with src/ can be cloned.' };
   }
 
-  // Read app.json for metadata
-  let meta = { name: appId, icon: '', description: '' };
-  try {
-    const appJson = JSON.parse(await Bun.file(join(appDir, 'app.json')).text());
-    meta = {
-      name: appJson.name ?? appId,
-      icon: appJson.icon ?? '',
-      description: appJson.description ?? '',
-    };
-  } catch {
-    /* no app.json */
-  }
+  const manifest = await readManifest(appDir);
+  const meta = {
+    name: manifest?.name ?? appId,
+    icon: manifest?.icon ?? '',
+    description: manifest?.description ?? '',
+  };
 
   // Read all source files recursively
   const files: CloneFile[] = [];

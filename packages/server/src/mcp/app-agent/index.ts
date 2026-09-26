@@ -148,7 +148,8 @@ export function appRelativeEntries(appId: string, result: StorageListResult): St
 }
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '@yaar/lib/ids';
-import { getAppMeta, type ControlEntry } from '../../features/apps/discovery.js';
+import { getAppMeta } from '../../features/apps/discovery.js';
+import type { ControlEntry } from '../../features/apps/manifest.js';
 import { describeApp } from '../../features/apps/describe.js';
 import { loadAppDocs } from '../../features/apps/docs.js';
 import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';

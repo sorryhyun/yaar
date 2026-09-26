@@ -66,19 +66,24 @@ export async function updateShortcut(
   return shortcut;
 }
 
+/**
+ * Give an app its desktop shortcut unless it already has one. `created` says which —
+ * the frontend *appends* a `desktop.createShortcut`, so announcing one that was already
+ * there puts a second icon on the desktop.
+ */
 export async function ensureAppShortcut(app: {
   id: string;
   name: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
-}): Promise<DesktopShortcut> {
+}): Promise<{ shortcut: DesktopShortcut; created: boolean }> {
   const shortcuts = await readShortcuts();
   const existing = shortcuts.find((s) => s.id === `app-${app.id}`);
-  if (existing) return existing;
+  if (existing) return { shortcut: existing, created: false };
   const shortcut = buildAppShortcut(app);
   shortcuts.push(shortcut);
   await writeShortcuts(shortcuts);
-  return shortcut;
+  return { shortcut, created: true };
 }
 
 export async function removeAppShortcut(appId: string): Promise<boolean> {

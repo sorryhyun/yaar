@@ -26,6 +26,7 @@ import { generateAppIframeToken } from '../iframe-tokens.js';
 import { appHtmlCsp } from '../csp.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
 import { resolveAppDir, resolveAppSource } from '../../features/apps/roots.js';
+import { readManifestFile } from '../../features/apps/manifest.js';
 import type { EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -374,20 +375,17 @@ async function dispatchDevAction(
   // hardcoded), while a token mint has only `preview--{projectId}` and reconstructs
   // devtools' project layout. Anything that changes where a project's app.json lives
   // has to change both.
-  let bundles: string[] | undefined;
-  try {
-    const appJson = JSON.parse(await Bun.file(join(absolutePath, 'app.json')).text());
-    if (Array.isArray(appJson.bundles)) bundles = appJson.bundles;
-  } catch {
-    /* no app.json */
-  }
+  //
+  // Uncached: a project's app.json is rewritten in place as the user edits it.
+  const bundles = (await readManifestFile(absolutePath))?.bundles;
 
   switch (action) {
     case 'compile': {
       const { compileTypeScript } = await import('@yaar/compiler');
+      // `bundles` is the list read above, which is also the compiler's own default; the
+      // title falls back to the project's app.json `name`.
       const result = await compileTypeScript(absolutePath, {
-        title: (body.title as string) ?? 'App',
-        bundles,
+        title: typeof body.title === 'string' ? body.title : undefined,
       });
       if (!result.success) {
         return jsonResponse({

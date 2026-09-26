@@ -45,7 +45,7 @@ import {
 // Static, and safe to be: `discovery.js` reaches back into `http/` only through
 // `import type { PermissionEntry } from '../../http/access.js'`, which erases. That
 // type-only edge is the whole reason there is no cycle here — see the note on it.
-import { getAppMeta } from '../features/apps/discovery.js';
+import { getAppMeta, type AppMeta } from '../features/apps/discovery.js';
 import { getStorageDir } from '../config.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 import { createLogger } from '../observability/log.js';
@@ -379,13 +379,23 @@ export async function previewPermissions(
 /**
  * Generate an iframe token with automatic app metadata resolution.
  * Consolidates the repeated pattern of: getAppMeta -> extract permissions -> generateIframeToken.
+ *
+ * `appMeta` is for a caller that has just resolved it for the same app (`window.create`
+ * sizes the window from it), so the mint does not resolve it a second time. Omit it to
+ * have it resolved here; `null` means "resolved, and there is none".
  */
 export async function generateAppIframeToken(
   windowId: string,
   sessionId: string,
-  { appId, permissions: explicitPermissions, monitorId }: IframeTokenOptions = {},
+  {
+    appId,
+    permissions: explicitPermissions,
+    monitorId,
+    appMeta: resolvedMeta,
+  }: IframeTokenOptions & { appMeta?: AppMeta | null } = {},
 ): Promise<string> {
-  const appMeta = appId ? await getAppMeta(appId) : null;
+  const appMeta =
+    resolvedMeta !== undefined ? resolvedMeta : appId ? await getAppMeta(appId) : null;
   // A devtools preview has no installed manifest to resolve — that is the point, it is
   // not deployed yet — so its declared list is read off the project file (and capped by
   // devtools' own reach). See `previewPermissions`.

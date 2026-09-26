@@ -11,15 +11,14 @@ import {
   extractProtocolFromDir,
   formatProtocolError,
 } from '@yaar/compiler';
-import { actionEmitter } from '../../session/action-emitter.js';
 import { publishFrame } from '../../streams/stream-hub.js';
-import { type AppManifest, buildYaarUri } from '@yaar/shared';
+import type { AppManifest } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
-import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { DEPLOY_ROOT, appIdRefusal, resolveAppDir } from '../apps/roots.js';
-import { agentDocPaths, APP_ROOT_DOCS, invalidateAppsCache } from '../apps/discovery.js';
+import { agentDocPaths, APP_ROOT_DOCS } from '../apps/discovery.js';
+import { readManifest, readManifestFile } from '../apps/manifest.js';
 import { agentDocsFilesFor } from '../apps/docs.js';
-import { retireStaleApp } from '../apps/retire.js';
+import { notifyAppChanged } from '../apps/changed.js';
 import { snapshotApp } from './git.js';
 
 /**
@@ -81,17 +80,6 @@ async function writeIfChanged(filePath: string, content: string): Promise<void> 
     // File doesn't exist yet — fall through to write it.
   }
   await Bun.write(filePath, content);
-}
-
-/** The `bundles` an app opted into — gates `@bundled/yaar-*` in both compile and typecheck. */
-async function readBundles(sandboxPath: string): Promise<string[] | undefined> {
-  try {
-    const appMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
-    if (Array.isArray(appMeta.bundles)) return appMeta.bundles;
-  } catch {
-    /* no app.json, or unreadable */
-  }
-  return undefined;
 }
 
 export interface DeployArgs {
@@ -177,6 +165,11 @@ export async function doDeploy(
     return { success: false, error: `Sandbox "${sandboxId}" not found.` };
   }
 
+  // The sandbox's own app.json: its `bundles` gate `@bundled/yaar-*` in the typecheck,
+  // the compile and the protocol fold alike, and its keys are the base of the manifest
+  // this deploy writes. Uncached — a sandbox is rewritten under the same path by design.
+  const sandbox = await readManifestFile(sandboxPath);
+
   // Type-check the source before any of it reaches apps/.
   //
   // Bundling does not type check — Bun strips types and builds happily around them — so
@@ -194,7 +187,7 @@ export async function doDeploy(
     .catch(() => false);
   if (hasSource && !skipTypecheck) {
     emit('progress', { step: 'typecheck', message: 'Type checking…' });
-    const result = await typecheckSandbox(sandboxPath, { bundles: await readBundles(sandboxPath) });
+    const result = await typecheckSandbox(sandboxPath, { bundles: sandbox?.bundles });
     if (!result.success) {
       const diagnostics = result.diagnostics ?? [];
       const error =
@@ -215,9 +208,9 @@ export async function doDeploy(
     try {
       await stat(join(sandboxPath, 'src', 'main.ts'));
       emit('progress', { step: 'compile', message: 'Compiling…' });
+      // `bundles` defaults from the sandbox's app.json, the same list read above.
       const compileResult = await compileTypeScript(sandboxPath, {
         title: name ?? toDisplayName(appId),
-        bundles: await readBundles(sandboxPath),
       });
       if (!compileResult.success) {
         const error = `Auto-compile failed:\n${compileResult.errors?.join('\n') ?? 'Unknown error'}`;
@@ -248,7 +241,7 @@ export async function doDeploy(
       // Zod schema, and that build resolves gated SDKs through the same gate the
       // compile did. Omitting it would fail an app on a permission it has.
       const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
-        bundles: await readBundles(sandboxPath),
+        bundles: sandbox?.bundles,
       });
       if (extraction.errors.length > 0) {
         const error =
@@ -319,19 +312,14 @@ export async function doDeploy(
   }
 
   // Base metadata preserves permissions, etc. carried over from clone.
-  let sandboxMeta: Record<string, unknown> = {};
-  try {
-    sandboxMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
-  } catch {
-    // No app.json in the sandbox — sandboxMeta stays empty.
-  }
+  const sandboxMeta = sandbox?.raw ?? {};
 
   // `appId` in app.json is what protocol extraction compares `defineApp({ id })`
   // against, so deploying under a *different* id installs an app whose own next
   // compile fails on a mismatch it did nothing to cause. Refuse here, where both
   // names are in hand and the fix is one edit, rather than at that later build.
-  const declaredAppId = sandboxMeta.appId;
-  if (typeof declaredAppId === 'string' && declaredAppId && declaredAppId !== appId) {
+  const declaredAppId = sandbox?.appId;
+  if (declaredAppId && declaredAppId !== appId) {
     const error =
       `This project's app.json declares appId "${declaredAppId}" but you are deploying as ` +
       `"${appId}". The id is what the app registers under and what \`defineApp({ id })\` must ` +
@@ -341,15 +329,12 @@ export async function doDeploy(
     return { success: false, error };
   }
 
-  let existingMeta: Record<string, unknown> = {};
-  try {
-    existingMeta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
-  } catch {
-    // No existing app.json — this is a first deploy.
-  }
+  // Null on a first deploy.
+  const existing = await readManifest(appPath);
+  const existingMeta = existing?.raw ?? {};
 
-  const resolvedIcon = icon ?? (existingMeta.icon as string | undefined) ?? '🎮';
-  const displayName = name ?? (existingMeta.name as string | undefined) ?? toDisplayName(appId);
+  const resolvedIcon = icon ?? existing?.icon ?? '🎮';
+  const displayName = name ?? existing?.name ?? toDisplayName(appId);
 
   // Deploy is destructive: `syncDir` deletes files no longer in source and dist/
   // is wiped. Snapshot the current state first so the previous version is always
@@ -454,47 +439,15 @@ export async function doDeploy(
     const finalName = (metadata.name as string) ?? displayName;
     const finalIcon = (metadata.icon as string) ?? resolvedIcon;
 
-    if (metadata.createShortcut !== false) {
-      await ensureAppShortcut({
-        id: appId,
-        name: finalName,
-        icon: finalIcon,
-        iconType: 'emoji',
-      });
-      actionEmitter.emitAction({
-        type: 'desktop.createShortcut',
-        shortcut: {
-          id: `app-${appId}`,
-          label: finalName,
-          icon: finalIcon,
-          target: buildYaarUri('apps', appId),
-          createdAt: Date.now(),
-        },
-      });
-    } else {
-      const removed = await removeAppShortcut(appId);
-      if (removed) {
-        actionEmitter.emitAction({
-          type: 'desktop.removeShortcut',
-          shortcutId: `app-${appId}`,
-        });
-      }
-    }
-
-    // App files on disk just changed — drop the cached listing so the
-    // frontend's refreshApps fetch and any agent describe sees the new build.
-    invalidateAppsCache();
-
     // Everything already running this app is now running the *previous* build: an open
     // window's iframe holds the old bundle, and the app agent's cached profile holds the
     // old manifest. Close the windows and drop the profile so the next launch and the
     // next turn both come from what was just written. The one window a deploy cannot
     // close is the one it is being issued from, so that one is reported instead — see
     // features/apps/retire.ts.
-    const { closed: closedWindows, staleWindow } = retireStaleApp(appId);
-
-    // Emit refreshApps AFTER shortcut changes are persisted to disk.
-    actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+    const { closed: closedWindows, staleWindow } = await notifyAppChanged(appId, {
+      retire: true,
+    });
 
     // Record the deployed state as a commit — this is the ref a later deploy
     // rolls back to.

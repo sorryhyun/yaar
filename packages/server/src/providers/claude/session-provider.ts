@@ -25,7 +25,9 @@ import type {
   ProviderType,
 } from '../types.js';
 import { mapClaudeMessage, ToolBlockBuffer, TurnUsageTracker } from './message-mapper.js';
-import { createInputChannel, type InputChannel } from './input-channel.js';
+import { createInputChannel, type InputChannel } from '../input-channel.js';
+import { withDeadline } from '../deadline.js';
+import { TurnGate } from '../turn-gate.js';
 import { TurnRouter, type DetachedTurn } from './turn-router.js';
 import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tripwire.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
@@ -52,6 +54,14 @@ interface TextContentBlock {
 }
 
 type ContentBlock = TextContentBlock | ImageContentBlock;
+
+/** A user message as YAAR writes it to the CLI's stdin (the SDK fills in `session_id`). */
+interface OutgoingUserMessage {
+  type: 'user';
+  uuid: string;
+  message: { role: 'user'; content: string | ContentBlock[] };
+  parent_tool_use_id: null;
+}
 
 /** The turn-supplied half of an SDK options request; the provider fills the rest. */
 type TurnOptionsRequest = Omit<
@@ -93,21 +103,6 @@ const STEER_TURN_START_MS = MCP_CONNECT_WAIT_MS + 5000;
  * repair hook still fixes whatever lands.
  */
 const MAX_ESCAPE_RETRIES = 1;
-
-/**
- * Resolve `promise`, or reject once `ms` have passed.
- *
- * Deliberately not a "resolve with undefined on timeout": every caller here
- * treats a missing answer as a reason to escalate, and `undefined` is already
- * the SDK's spelling for "old CLI, acknowledged with no detail". Collapsing the
- * two would make a hung control channel look like a clean stop.
- */
-function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
-    promise.then(resolve, reject).finally(() => clearTimeout(timer));
-  });
-}
 
 /** First wait before reopening a bridged stream whose process went away; doubles per failure. */
 const REMOTE_REOPEN_MS = 2000;
@@ -163,7 +158,7 @@ function isStaleSessionError(mapped: StreamMessage): boolean {
  */
 interface PersistentSession {
   stream: ReturnType<typeof sdkQuery>;
-  channel: InputChannel;
+  channel: InputChannel<OutgoingUserMessage>;
   /** Prompt/tools/model identity — a change forces a reopen (with resume). */
   fingerprint: string;
   /** Resolves once every configured MCP server is connected (bounded wait). */
@@ -175,15 +170,12 @@ interface PersistentSession {
   /** Turns pushed so far — a virgin stream can still be swapped for a resume. */
   turnsProcessed: number;
   /**
-   * Identifies the in-flight turn. Codex steers by naming an `expectedTurnId`,
-   * so a steer that lost the race is refused by app-server rather than absorbed
-   * into whatever runs next; the CLI exposes no turn id, so this counter is the
-   * local stand-in. Only ever compared for equality.
+   * The YAAR turn in flight, if any — `turns.active` is what "busy" means here.
+   * Codex steers by naming an `expectedTurnId`, so a steer that lost the race is
+   * refused by app-server rather than absorbed into whatever runs next; the CLI
+   * exposes no turn id, so the gate's own turn identity is the local stand-in.
    */
-  turnId: number;
-  /** Resolves once this turn's own message is on the wire; null while idle. */
-  turnStarted: Promise<void> | null;
-  busy: boolean;
+  turns: TurnGate;
   /** Where each frame the pump reads goes — see `turn-router.ts`. */
   router: TurnRouter;
   /** Set when the pump has stopped: the process is gone and the stream with it. */
@@ -347,15 +339,14 @@ export class ClaudeSessionProvider implements AITransport {
    * The two guards are Codex's, transplanted, and each closes a way this could
    * land somewhere other than the turn the caller meant:
    *
-   * 1. **Wait for the turn to start.** `runPersistentTurn` marks itself busy
+   * 1. **Wait for the turn to start.** `runPersistentTurn` begins its turn
    *    before gating on `mcpReady`, so there is a real window in which a steer
    *    would be written *ahead* of the message it is meant to steer — the
-   *    conversation would read in the wrong order. Codex waits on
-   *    `turnReadyPromise` for the same race.
+   *    conversation would read in the wrong order.
    * 2. **Re-check identity after the wait.** A turn that ended while we waited
    *    would otherwise take our message as the *next* turn's opening line.
-   *    `turnId` is the `expectedTurnId` analogue; the session identity check
-   *    catches a stream closed and reopened underneath us.
+   *    `TurnGate` refuses a wait whose turn is over or replaced; the session
+   *    identity check catches a stream closed and reopened underneath us.
    */
   async steer(content: string): Promise<boolean> {
     const session = this.persistentSession;
@@ -363,26 +354,17 @@ export class ClaudeSessionProvider implements AITransport {
     // A claude.ai turn is running and no YAAR turn is: it is the turn there is to steer.
     // The CLI folds the message into it; if the turn ends first, the message runs as a
     // turn of its own and the router hands it to the external-turn path, not to silence.
-    if (!session.busy && session.router.detachedActive) {
+    if (!session.turns.active && session.router.detachedActive) {
       this.send(session, content);
       return true;
     }
-    if (!session.busy) return false;
 
-    const turnId = session.turnId;
-    const started = session.turnStarted;
-    if (started) {
-      try {
-        await withDeadline(started, STEER_TURN_START_MS);
-      } catch {
-        log.warn('steer: turn never started; not steering');
-        return false;
-      }
-    }
-
-    if (this.persistentSession !== session || !session.busy || session.turnId !== turnId) {
+    const target = await session.turns.waitForStart(STEER_TURN_START_MS);
+    if (!target.ok) {
+      if (target.reason === 'timeout') log.warn('steer: turn never started; not steering');
       return false;
     }
+    if (this.persistentSession !== session) return false;
 
     this.send(session, content);
     return true;
@@ -497,7 +479,7 @@ export class ClaudeSessionProvider implements AITransport {
       : false;
     if (
       existing &&
-      (existing.busy ||
+      (existing.turns.active ||
         existing.pumpDone ||
         existing.fingerprint !== fingerprint ||
         wrongConversation)
@@ -511,14 +493,9 @@ export class ClaudeSessionProvider implements AITransport {
     }
 
     const session = this.persistentSession!;
-    session.busy = true;
-    session.turnId++;
-    // Steering waits on this rather than on `busy`: busy is true from here, but
-    // the turn's own message is not on the wire until after the MCP gate below.
-    let markTurnStarted!: () => void;
-    session.turnStarted = new Promise<void>((resolve) => {
-      markTurnStarted = resolve;
-    });
+    // Steering waits for `turn.start()`, not for this: the turn is in flight from
+    // here, but its own message is not on the wire until after the MCP gate below.
+    const turn = session.turns.begin();
     let messageCount = 0;
     // One tracker per turn — the stream outlives the turn, the accumulator must not.
     const turnUsage = new TurnUsageTracker();
@@ -529,7 +506,7 @@ export class ClaudeSessionProvider implements AITransport {
     // Set between "we interrupted" and "the interrupted turn's terminal arrived",
     // which is the one result message this turn must swallow rather than yield.
     let awaitingEscapeRetry = false;
-    let inbox: InputChannel | null = null;
+    let inbox: InputChannel<unknown> | null = null;
     try {
       await session.mcpReady;
       session.turnsProcessed++;
@@ -537,7 +514,7 @@ export class ClaudeSessionProvider implements AITransport {
       // Reading before writing: the first frame of the answer must find its reader.
       inbox = session.router.openTurn(uuid);
       this.send(session, messageContent, uuid);
-      markTurnStarted();
+      turn.start();
 
       for (;;) {
         const { value: msg, done } = await inbox.iterable.next();
@@ -642,12 +619,10 @@ export class ClaudeSessionProvider implements AITransport {
       }
     } finally {
       if (inbox) session.router.closeTurn(inbox);
-      session.busy = false;
-      session.turnStarted = null;
-      // Wake a steer still waiting on a turn that ended, or that never started
-      // at all (the MCP gate threw). It re-checks and refuses rather than
-      // holding the caller for the full deadline.
-      markTurnStarted();
+      // Also wakes a steer still waiting on a turn that ended, or that never
+      // started at all (the MCP gate threw): it refuses rather than holding the
+      // caller for the full deadline.
+      turn.end();
     }
   }
 
@@ -656,7 +631,7 @@ export class ClaudeSessionProvider implements AITransport {
     fingerprint: string,
     openedWithResume: string | undefined,
   ): void {
-    const channel = createInputChannel();
+    const channel = createInputChannel<OutgoingUserMessage>();
     const stream = sdkQuery({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK expects SDKUserMessage but accepts partial
       prompt: channel.iterable as AsyncIterable<any>,
@@ -673,9 +648,7 @@ export class ClaudeSessionProvider implements AITransport {
       abortController: sdkOptions.abortController ?? new AbortController(),
       openedWithResume,
       turnsProcessed: 0,
-      turnId: 0,
-      turnStarted: null,
-      busy: false,
+      turns: new TurnGate(),
       router: new TurnRouter({
         detachable: () => this.remote !== null,
         onDetached: (turn) => this.announceExternalTurn(session, turn),
@@ -709,7 +682,7 @@ export class ClaudeSessionProvider implements AITransport {
       // A process that exits under a running turn is that turn's to handle — it reads the
       // end and retries. One that exits while idle on the bridge would otherwise leave
       // claude.ai talking to nobody until the desktop's next turn happened to reopen it.
-      if (this.persistentSession === session && !session.busy && this.remote) {
+      if (this.persistentSession === session && !session.turns.active && this.remote) {
         log.warn('bridged stream ended while idle; reopening', { error: session.pumpError });
         void this.closePersistentSession();
       }
@@ -945,7 +918,7 @@ export class ClaudeSessionProvider implements AITransport {
   async interrupt(): Promise<InterruptReceipt> {
     const session = this.persistentSession;
     if (!session) return { outcome: 'idle' };
-    if (!session.busy && session.router.detachedActive) {
+    if (!session.turns.active && session.router.detachedActive) {
       // A claude.ai turn is the one running. Stop it the soft way: killing the process
       // would take the bridge down with it.
       try {
@@ -957,7 +930,7 @@ export class ClaudeSessionProvider implements AITransport {
         return { outcome: 'escalated' };
       }
     }
-    if (!session.busy) {
+    if (!session.turns.active) {
       // Idle on the bridge: nothing to stop, and closing would disconnect claude.ai.
       if (this.remote) return { outcome: 'idle' };
       await this.closePersistentSession();

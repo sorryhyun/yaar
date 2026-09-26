@@ -286,52 +286,79 @@ export class ContextPool implements PoolContext {
     }
     this.agentPool.setLogger(this.sharedLogger);
 
-    const monitorAgent = await this.agentPool.createMonitorAgent('0', provider);
-    if (!monitorAgent) {
-      await provider.dispose();
-      return false;
-    }
-    this.prewarmMonitorAgent(monitorAgent, '0');
-
-    // Send the hub id as `sessionId` — the client mints iframe tokens and rejoins the
-    // WebSocket with whatever this event carries, and both are keyed by the hub. The
-    // log id rides alongside for the history/restore UI, which is keyed by log dir.
-    await this.sendEvent({
-      type: ServerEventType.CONNECTION_STATUS,
-      status: 'connected',
-      provider: provider.name,
-      sessionId: this.sessionId,
-      logSessionId: this.logSessionId ?? undefined,
-    });
-
+    // The provider was acquired above because the log needs its name before the first
+    // agent (which is handed the log) can exist.
+    if (!(await this.spawnMonitorAgent('0', provider)).ok) return false;
+    await this.announceConnected(provider.name);
     return true;
   }
 
   async createMonitorAgent(monitorId: string): Promise<boolean> {
-    const provider = await this.acquireProvider();
-    if (!provider) {
+    const spawned = await this.spawnMonitorAgent(monitorId);
+    if (!spawned.ok) {
       await this.sendEvent({
         type: ServerEventType.ERROR,
-        error: 'No AI provider available for new monitor.',
+        error:
+          spawned.reason === 'no-provider'
+            ? 'No AI provider available for new monitor.'
+            : 'Agent limit reached. Cannot create new monitor.',
         monitorId,
       });
       return false;
     }
-
-    const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
-    if (!agent) {
-      await provider.dispose();
-      await this.sendEvent({
-        type: ServerEventType.ERROR,
-        error: 'Agent limit reached. Cannot create new monitor.',
-        monitorId,
-      });
-      return false;
-    }
-
-    this.prewarmMonitorAgent(agent, monitorId);
     log.info('created monitor agent', { monitorId });
     return true;
+  }
+
+  /**
+   * Acquire a provider (unless handed one), build the monitor's agent on it, and prewarm.
+   *
+   * Every monitor agent is born here — first boot, a new monitor, a monitor reset, a
+   * session reset. They were four hand-copies of this sequence, and each copy was one
+   * place to forget a step: the session reset skipped the prewarm, so the first turn
+   * after it paid the full provider spawn and MCP handshake. What each caller does with
+   * a failure differs (an ERROR event, a warning), so that stays with the caller.
+   *
+   * A provider that cannot be used is disposed by `AgentPool.createMonitorAgent`.
+   */
+  private async spawnMonitorAgent(
+    monitorId: string,
+    supplied?: AITransport,
+  ): Promise<
+    { ok: true; provider: AITransport } | { ok: false; reason: 'no-provider' | 'agent-limit' }
+  > {
+    const provider = supplied ?? (await this.acquireProvider());
+    if (!provider) return { ok: false, reason: 'no-provider' };
+    const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
+    if (!agent) return { ok: false, reason: 'agent-limit' };
+    this.prewarmMonitorAgent(agent, monitorId);
+    return { ok: true, provider };
+  }
+
+  /**
+   * Tell the client which session and provider it is talking to.
+   *
+   * `sessionId` is the hub id — the client mints iframe tokens and rejoins the WebSocket
+   * with whatever this event carries, and both are keyed by the hub. The log id rides
+   * alongside for the history/restore UI, which is keyed by log dir.
+   *
+   * `reset()` used to write its own copy of this event, and that copy sent the *log* id as
+   * `sessionId` — so after a reset the desktop adopted a directory name
+   * (`2026-08-04_14-55-15`) as its session, and every app it launched from then on held a
+   * token naming a session the hub does not hold. Their session-scoped verbs
+   * (`yaar://session/agents`, `yaar://windows`, `yaar://history/`) each parked the full
+   * `SessionHub.waitFor()` and answered 503, so Process Explorer, Session Logs and
+   * Configurations simply never loaded, while storage-only apps like devtools were
+   * unaffected.
+   */
+  private async announceConnected(providerName: string): Promise<void> {
+    await this.sendEvent({
+      type: ServerEventType.CONNECTION_STATUS,
+      status: 'connected',
+      provider: providerName,
+      sessionId: this.sessionId,
+      logSessionId: this.logSessionId ?? undefined,
+    });
   }
 
   /**
@@ -447,7 +474,7 @@ export class ContextPool implements PoolContext {
     }
   }
 
-  /** An app's files changed on disk (deploy) — rebuild its agent profile next turn. */
+  /** An app's files changed on disk (`notifyAppChanged`) — rebuild its agent profile next turn. */
   invalidateAppProfile(appId: string): void {
     this.appProcessor.invalidateProfile(appId);
   }
@@ -871,18 +898,11 @@ export class ContextPool implements PoolContext {
       this.budgetPolicy.clearMonitor(monitorId);
       delete this.savedThreadIds?.[monitorRole(monitorId)];
 
-      const provider = await this.acquireProvider();
-      if (!provider) {
-        log.warn('reset monitor: no provider available', { monitorId });
+      const spawned = await this.spawnMonitorAgent(monitorId);
+      if (!spawned.ok) {
+        log.warn('reset monitor: failed to recreate agent', { monitorId, reason: spawned.reason });
         return;
       }
-      const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
-      if (!agent) {
-        await provider.dispose();
-        log.warn('reset monitor: failed to recreate agent', { monitorId });
-        return;
-      }
-      this.prewarmMonitorAgent(agent, monitorId);
       log.info('reset monitor', { monitorId, prunedMessages: pruned.length });
     } finally {
       this.resettingMonitors.delete(monitorId);
@@ -918,37 +938,12 @@ export class ContextPool implements PoolContext {
 
     // Re-create fresh main agents for ALL previously active monitors
     for (const monitorId of activeMonitorIds) {
-      const provider = await this.acquireProvider();
-      if (provider) {
-        const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
-        if (agent) {
-          // Every other monitor spawn prewarms; a reset that skipped it left the first
-          // turn after it paying the full provider spawn and MCP handshake.
-          this.prewarmMonitorAgent(agent, monitorId);
-          if (monitorId === '0') {
-            // Same two ids, same rule as `initialize()` above: `sessionId` is the hub key
-            // the client mints iframe tokens against, `logSessionId` is the transcript dir.
-            // This emitter sent the *log* id as `sessionId` — so after a reset the desktop
-            // adopted a directory name (`2026-08-04_14-55-15`) as its session, and every
-            // app it launched from then on held a token naming a session the hub does not
-            // hold. Their session-scoped verbs (`yaar://session/agents`, `yaar://windows`,
-            // `yaar://history/`) each parked the full `SessionHub.waitFor()` and answered
-            // 503, so Process Explorer, Session Logs and Configurations simply never
-            // loaded, while storage-only apps like devtools were unaffected.
-            await this.sendEvent({
-              type: ServerEventType.CONNECTION_STATUS,
-              status: 'connected',
-              provider: provider.name,
-              sessionId: this.sessionId,
-              logSessionId: this.logSessionId ?? undefined,
-            });
-          }
-        } else {
-          await provider.dispose();
-          log.warn('reset: failed to recreate agent', { monitorId });
-        }
-      } else {
-        log.warn('reset: no provider available', { monitorId });
+      const spawned = await this.spawnMonitorAgent(monitorId);
+      if (!spawned.ok) {
+        log.warn('reset: failed to recreate agent', { monitorId, reason: spawned.reason });
+      } else if (monitorId === '0') {
+        // The whole pool was rebuilt: re-tell the client which session it is talking to.
+        await this.announceConnected(spawned.provider.name);
       }
     }
 

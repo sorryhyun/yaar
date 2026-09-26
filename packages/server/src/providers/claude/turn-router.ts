@@ -30,7 +30,7 @@
  * **abandoned**, and their frames are dropped up to their `result`.
  */
 
-import { createInputChannel, type InputChannel } from './input-channel.js';
+import { createInputChannel, type InputChannel } from '../input-channel.js';
 
 /** A turn the CLI is running that no YAAR turn is reading. */
 export interface DetachedTurn {
@@ -53,7 +53,7 @@ interface RoutedFrame {
 
 interface DetachedState {
   prompt: string | undefined;
-  channel: InputChannel;
+  channel: InputChannel<unknown>;
   announced: boolean;
 }
 
@@ -85,7 +85,7 @@ export class TurnRouter {
   private owner: 'turn' | 'detached' | 'abandoned' | null = null;
   /** Own commands whose reader closed before their `result`; see the header. */
   private readonly abandoned = new Set<string>();
-  private inbox: InputChannel | null = null;
+  private inbox: InputChannel<unknown> | null = null;
   private inboxUuid: string | null = null;
   private backlog: unknown[] = [];
   private detached: DetachedState | null = null;
@@ -109,8 +109,8 @@ export class TurnRouter {
    * Start reading as the YAAR turn for `uuid`. Frames that arrived with nobody reading
    * come first — that is where a pull-per-turn reader would have found them.
    */
-  openTurn(uuid: string): InputChannel {
-    const inbox = createInputChannel();
+  openTurn(uuid: string): InputChannel<unknown> {
+    const inbox = createInputChannel<unknown>();
     for (const frame of this.backlog) inbox.push(frame);
     this.backlog = [];
     this.inbox = inbox;
@@ -127,7 +127,7 @@ export class TurnRouter {
    * it was interrupted, a steer or an escape correction still queued behind it — has no
    * reader any more, so it is abandoned rather than left for the next turn.
    */
-  closeTurn(inbox: InputChannel): void {
+  closeTurn(inbox: InputChannel<unknown>): void {
     if (this.inbox !== inbox) return;
     this.inbox = null;
     this.inboxUuid = null;
@@ -210,7 +210,11 @@ export class TurnRouter {
   private toDetached(f: RoutedFrame, frame: unknown): void {
     let turn = this.detached;
     if (!turn) {
-      turn = this.detached = { prompt: undefined, channel: createInputChannel(), announced: false };
+      turn = this.detached = {
+        prompt: undefined,
+        channel: createInputChannel<unknown>(),
+        announced: false,
+      };
     }
     if (turn.prompt === undefined && f.type === 'user' && f.isReplay && !f.isSynthetic) {
       turn.prompt = promptText(f.message?.content);

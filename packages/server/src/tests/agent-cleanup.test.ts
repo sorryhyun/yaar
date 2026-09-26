@@ -54,10 +54,15 @@ mock.module('../agents/limiter.js', () => ({
   resetAgentLimiter: mock(() => {}),
 }));
 
+const mockProviderDispose = mock(async () => {});
+function fakeProvider() {
+  return { name: 'fake', providerType: 'claude', dispose: mockProviderDispose };
+}
+
 mock.module('../providers/factory.js', () => ({
   getAvailableProviders: mock(async () => []),
   initWarmPool: mock(async () => {}),
-  acquireWarmProvider: mock(() => Promise.resolve(null)),
+  acquireWarmProvider: mock(() => Promise.resolve(fakeProvider())),
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
 }));
 
@@ -90,13 +95,13 @@ mock.module('../storage/storage-manager.js', () => ({
 const mockCleanup = mock(() => Promise.resolve() as Promise<void>);
 const mockInterrupt = mock(() => Promise.resolve() as Promise<void>);
 const mockIsRunning = mock(() => false);
-const mockInitialize = mock(() => Promise.resolve(true));
+const mockAttachProvider = mock((_provider: unknown) => {});
 
 installMockAgentSession({
   cleanup: mockCleanup,
   interrupt: mockInterrupt,
   isRunning: mockIsRunning,
-  initialize: mockInitialize,
+  attachProvider: mockAttachProvider,
   getMonitorId: () => '0',
 });
 
@@ -112,12 +117,13 @@ beforeEach(() => {
   mockCleanup.mockClear();
   mockInterrupt.mockClear();
   mockIsRunning.mockClear();
-  mockInitialize.mockClear();
+  mockAttachProvider.mockClear();
+  mockProviderDispose.mockClear();
 
   mockCleanup.mockResolvedValue(undefined);
   mockInterrupt.mockResolvedValue(undefined);
   mockIsRunning.mockReturnValue(false);
-  mockInitialize.mockResolvedValue(true);
+  mockAttachProvider.mockImplementation(() => {});
   mockTryAcquire.mockReturnValue(true);
 });
 
@@ -203,20 +209,47 @@ describe('AgentPool limiter slot release on error', () => {
     expect(mockRelease).toHaveBeenCalledTimes(2);
   });
 
-  it('createAgentCore returns its slot when initialize throws', async () => {
+  it('createAgentCore returns its slot, and the provider, when attaching throws', async () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
     );
 
-    // What `acquireWarmProvider()` does on an under-versioned Codex CLI. No caller in
-    // the pool's chain catches it, so the slot was held with no agent to show for it.
-    mockInitialize.mockRejectedValueOnce(new Error('CodexVersionError'));
+    // No caller in the pool's chain catches a throw out of agent construction, so the
+    // slot was held with no agent to show for it.
+    mockAttachProvider.mockImplementationOnce(() => {
+      throw new Error('attach failed');
+    });
 
     const err = await pool.createMonitorAgent('0').catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
     expect(mockTryAcquire).toHaveBeenCalledTimes(1);
     expect(mockRelease).toHaveBeenCalledTimes(1);
+    expect(mockProviderDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes a supplied monitor provider when the agent limit refuses it', async () => {
+    const pool = new AgentPool(
+      'test-session' as SessionId,
+      mock(() => {}),
+    );
+    mockTryAcquire.mockReturnValueOnce(false);
+
+    // `ContextPool` hands its monitor tier a provider it acquired itself, and used to
+    // dispose it by hand at each of its four spawn sites.
+    const agent = await pool.createMonitorAgent('1', fakeProvider() as never);
+    expect(agent).toBeNull();
+    expect(mockProviderDispose).toHaveBeenCalledTimes(1);
+    expect(pool.getMonitorAgent('1')).toBeNull();
+  });
+
+  it('takes no slot and reports an error when no provider is available', async () => {
+    const broadcast = mock((_event: unknown) => {});
+    const pool = new AgentPool('test-session' as SessionId, broadcast, async () => null);
+
+    expect(await pool.createEphemeral()).toBeNull();
+    expect(mockTryAcquire).not.toHaveBeenCalled();
+    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ type: 'ERROR' }));
   });
 });
 

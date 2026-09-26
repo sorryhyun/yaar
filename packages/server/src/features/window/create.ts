@@ -261,6 +261,7 @@ export async function handleCreate(
           iframeToken: await generateAppIframeToken(actualId, getSessionId() ?? '', {
             appId,
             monitorId: windowMonitorId,
+            appMeta,
           }),
         }
       : {}),

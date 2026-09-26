@@ -26,7 +26,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { getStorageDir } from '../../config.js';
 import { USER_APPS_DIR } from '../../features/apps/roots.js';
-import { listApps } from '../../features/apps/discovery.js';
+import { listApps, invalidateAppsCache } from '../../features/apps/discovery.js';
 import { snapshotApp, appHistory, appDiff, restoreApp } from '../../features/dev/git.js';
 
 // A real app directory is required — `resolveAppDir` only sees apps on disk.
@@ -129,7 +129,10 @@ describe('app version history', () => {
     await writeFile(join(appDir, 'app.json'), '{"name":"Renamed"}\n');
     await snapshotApp(APP_ID, 'v2');
 
-    // Prime the listing cache with the pre-restore manifest.
+    // Prime the listing cache with the pre-restore manifest. The edit above is by hand,
+    // and so is `seed`, so nothing told the listing — and an earlier case's restore
+    // refreshed it through `notifyAppChanged`, which leaves it warm.
+    invalidateAppsCache();
     expect((await listApps()).find((a) => a.id === APP_ID)?.name).toBe('Renamed');
 
     const result = await restoreApp(APP_ID, 'HEAD~1');

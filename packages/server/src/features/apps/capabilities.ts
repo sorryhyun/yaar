@@ -8,11 +8,10 @@
  * boundary, and one worth testing without downloading a tarball first.
  */
 
-import { join } from 'path';
 import type { CapabilityLine } from '@yaar/shared';
 import { namesYtdlpDoor, type PermissionEntry } from '../../http/access.js';
 import { coversSharedTreeOnly } from '../../http/uri-match.js';
-import { parseSubAgents, type SubAgentsEntry } from './discovery.js';
+import { readManifestFile, type SubAgentsEntry } from './manifest.js';
 import { resolveAppSource } from './roots.js';
 import { readAppGrant, type AppGrant } from '../../storage/app-grants.js';
 
@@ -203,10 +202,13 @@ function permissionKey(p: PermissionEntry): string {
 /**
  * Read the capabilities an app's app.json declares. Missing/invalid → none.
  *
- * `subagents` goes through `parseSubAgents` rather than being read raw, so the number in
- * the dialog is the number the app will actually get — the parser clamps to the per-app
- * ceiling, and a dialog that promised 40 while the grant was 16 would be a lie the user
- * could not detect.
+ * Every field comes through `normalizeManifest`, the same reading `getAppMeta` grants
+ * from, so the dialog lists what the app will actually get. That is exact for
+ * `subagents` — the parser clamps to the per-app ceiling, and a dialog that promised 40
+ * while the grant was 16 would be a lie the user could not detect — and it is load-bearing
+ * for `permissions`: read raw, one malformed entry (`null`, a number) threw inside the
+ * filter below and the whole read came back empty, so the install skipped the dialog while
+ * the mint still granted every well-formed entry and every bundle beside it.
  *
  * A declared `yaar://storage/shared/` is dropped for the mirror-image reason: every app
  * is granted the commons at token mint time (`SHARED_GRANT` in iframe-tokens.ts), so a
@@ -220,27 +222,17 @@ function permissionKey(p: PermissionEntry): string {
  * is where the user prices this capability.
  */
 export async function readAppCapabilities(appDir: string): Promise<AppCapabilities> {
-  const caps: AppCapabilities = { permissions: [], bundles: [], streams: [] };
-  try {
-    const metaContent = await Bun.file(join(appDir, 'app.json')).text();
-    const meta = JSON.parse(metaContent);
-    if (Array.isArray(meta.permissions)) {
-      caps.permissions = (meta.permissions as PermissionEntry[]).filter(
-        (p) => !coversSharedTreeOnly(p) && !namesYtdlpDoor(typeof p === 'string' ? p : p.uri),
-      );
-    }
-    if (Array.isArray(meta.bundles)) {
-      caps.bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
-    }
-    if (Array.isArray(meta.streams)) {
-      caps.streams = meta.streams.filter((s: unknown): s is string => typeof s === 'string');
-    }
-    const subagents = parseSubAgents(meta);
-    if (subagents) caps.subagents = subagents;
-  } catch {
-    // No app.json or invalid JSON
-  }
-  return caps;
+  // Uncached: this reads an install's staging directory as often as an installed app.
+  const meta = await readManifestFile(appDir);
+  if (!meta) return { permissions: [], bundles: [], streams: [] };
+  return {
+    permissions: (meta.permissions ?? []).filter(
+      (p) => !coversSharedTreeOnly(p) && !namesYtdlpDoor(typeof p === 'string' ? p : p.uri),
+    ),
+    bundles: meta.bundles ?? [],
+    streams: meta.streams ?? [],
+    ...(meta.subagents ? { subagents: meta.subagents } : {}),
+  };
 }
 
 /**

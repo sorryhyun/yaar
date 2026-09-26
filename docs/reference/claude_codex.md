@@ -369,7 +369,9 @@ This means:
 | `providers/warm-pool.ts` | Pre-initialization pool with auto-replenish |
 | `providers/cli-probe.ts` | Cached `--version` probes behind every provider's availability check |
 | `providers/claude/session-provider.ts` | Claude Agent SDK integration — persistent streaming session, prewarm |
-| `providers/claude/input-channel.ts` | `InputChannel` — pushes turns into the open persistent stream |
+| `providers/input-channel.ts` | `createInputChannel<T>` — push/pull queue: Claude's stdin stream and turn inboxes, Codex's notification read loop |
+| `providers/turn-gate.ts` | `TurnGate` — a steer waits for its turn's own message to be on the wire, and refuses a turn that ended or was replaced |
+| `providers/deadline.ts` | `withDeadline` — bounded wait whose timer is cleared on every path |
 | `providers/claude/message-mapper.ts` | SDK message → StreamMessage |
 | `providers/codex/provider.ts` | Codex provider with thread management |
 | `providers/codex/app-server.ts` | AppServer process manager (spawn, WS connections, auth) |

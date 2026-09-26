@@ -37,7 +37,7 @@
 import { mock } from 'bun:test';
 
 export interface MockAgentSessionOverrides {
-  initialize?: () => Promise<boolean>;
+  attachProvider?: (provider: unknown) => void;
   handleMessage?: (prompt: string, opts: unknown) => unknown;
   isRunning?: () => boolean;
   interrupt?: () => Promise<void>;
@@ -51,7 +51,7 @@ export interface MockAgentSessionOverrides {
 export function installMockAgentSession(overrides: MockAgentSessionOverrides = {}): void {
   mock.module('../../agents/agent-session.js', () => {
     class MockAgentSession {
-      initialize = mock(overrides.initialize ?? (async () => true));
+      attachProvider = mock(overrides.attachProvider ?? (() => {}));
       handleMessage = mock(overrides.handleMessage ?? (async () => {}));
       isRunning = mock(overrides.isRunning ?? (() => false));
       interrupt = mock(overrides.interrupt ?? (async () => {}));

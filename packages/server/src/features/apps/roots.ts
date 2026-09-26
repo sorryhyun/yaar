@@ -13,6 +13,7 @@
 
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { readdir, stat } from 'fs/promises';
 import { PREVIEW_APP_PREFIX } from '@yaar/shared';
 import { PROJECT_ROOT, WORKSPACE_NAME } from '../../config.js';
 
@@ -110,18 +111,63 @@ export function appIdRefusal(appId: string): string | null {
   return null;
 }
 
+/**
+ * Where an existing app lives and which root it came from, or null. Bundled wins: a
+ * user-installed app cannot shadow a shipped one.
+ */
+export function resolveApp(appId: string): { dir: string; source: AppSource } | null {
+  const bundled = join(APPS_DIR, appId);
+  if (existsSync(bundled)) return { dir: bundled, source: 'bundled' };
+  const user = join(USER_APPS_DIR, appId);
+  if (existsSync(user)) return { dir: user, source: 'user' };
+  return null;
+}
+
 /** Directory for an existing app, searching all roots (bundled first), or null. */
 export function resolveAppDir(appId: string): string | null {
-  for (const root of APP_ROOTS) {
-    const dir = join(root, appId);
-    if (existsSync(dir)) return dir;
-  }
-  return null;
+  return resolveApp(appId)?.dir ?? null;
 }
 
 /** Whether an app is shipped (`bundled`) or installed (`user`); null if not found. */
 export function resolveAppSource(appId: string): AppSource | null {
-  if (existsSync(join(APPS_DIR, appId))) return 'bundled';
-  if (existsSync(join(USER_APPS_DIR, appId))) return 'user';
-  return null;
+  return resolveApp(appId)?.source ?? null;
+}
+
+/** Stable bytewise ordering for app IDs, independent of filesystem or locale order. */
+export function compareAppIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Every app directory across both roots, in bytewise id order — the same answer
+ * {@link resolveApp} gives id by id, for the callers that need all of them.
+ *
+ * An id present in both roots is listed once, as the bundled copy. A symlinked app
+ * directory counts, because `resolveApp` follows the link too: an app that answers by
+ * id but is missing from the list is two answers to one question.
+ */
+export async function listAppDirs(): Promise<{ appId: string; dir: string; source: AppSource }[]> {
+  const byId = new Map<string, { appId: string; dir: string; source: AppSource }>();
+  for (const root of APP_ROOTS) {
+    const source: AppSource = root === APPS_DIR ? 'bundled' : 'user';
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue; // root doesn't exist
+    }
+    for (const entry of entries) {
+      if (byId.has(entry.name)) continue;
+      const dir = join(root, entry.name);
+      const isDir =
+        entry.isDirectory() ||
+        (entry.isSymbolicLink() &&
+          (await stat(dir).then(
+            (s) => s.isDirectory(),
+            () => false,
+          )));
+      if (isDir) byId.set(entry.name, { appId: entry.name, dir, source });
+    }
+  }
+  return [...byId.values()].sort((a, b) => compareAppIds(a.appId, b.appId));
 }

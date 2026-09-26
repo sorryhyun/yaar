@@ -15,6 +15,8 @@ import { getBroadcastCenter } from '../session/broadcast-center.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import type { SessionId, YaarWebSocket } from '../session/types.js';
+import { subscriptionRegistry } from '../http/subscriptions.js';
+import type { Hook } from '../features/config/hooks.js';
 
 const SESSION = 'iframe-feedback-session' as SessionId;
 
@@ -94,5 +96,65 @@ describe('iframe-emitted actions awaiting feedback', () => {
 
     expect(create).toBeDefined();
     expect(create?.windowId).toBe('0/devtools-preview-1752345678902');
+  });
+});
+
+/**
+ * A hook's OS Actions (launch, schedule) used to be delivered by their own loop in
+ * `LiveSession.runHookAction`, which stamped and broadcast but skipped the rest of what an
+ * emitted action does — so a window a launch hook opened never woke `yaar://windows`
+ * subscribers. It now enters `handleEmittedAction` like every other emit.
+ */
+describe('hook-emitted actions', () => {
+  it('are stamped, delivered once, and wake window subscribers', async () => {
+    const events: ServerEvent[] = [];
+    const notified: string[] = [];
+    const session = new LiveSession(SESSION);
+    const bc = getBroadcastCenter();
+    bc.subscribe('conn-1', fakeSocket(events), SESSION);
+    bc.subscribeToMonitor('conn-1', '0');
+    const realNotify = subscriptionRegistry.notifyChange.bind(subscriptionRegistry);
+    subscriptionRegistry.notifyChange = (uri: string, sessionId?: string) => {
+      if (sessionId === SESSION) notified.push(uri);
+      realNotify(uri, sessionId);
+    };
+    try {
+      await session.runHookAction(
+        {
+          id: 'launch-dock',
+          event: 'launch',
+          action: {
+            type: 'os_action',
+            payload: [
+              {
+                type: 'window.create',
+                windowId: 'dock',
+                title: 'Dock',
+                bounds: { x: 0, y: 0, w: 100, h: 40 },
+                content: { renderer: 'markdown', data: '' },
+              },
+              { type: 'window.close', windowId: 'dock' },
+            ],
+          },
+        } as unknown as Hook,
+        '0',
+      );
+    } finally {
+      subscriptionRegistry.notifyChange = realNotify;
+      bc.unsubscribe('conn-1');
+      await session.cleanup();
+    }
+
+    const actions = events
+      .filter((e) => e.type === ServerEventType.ACTIONS)
+      .flatMap((e) => (e as unknown as { actions: OSAction[] }).actions) as (OSAction & {
+      windowId?: string;
+    })[];
+    expect(actions.map((a) => [a.type, a.windowId])).toEqual([
+      ['window.create', '0/dock'],
+      // Resolved before the close was applied, or it would go out as the raw id.
+      ['window.close', '0/dock'],
+    ]);
+    expect(notified.filter((uri) => uri === 'yaar://windows/0/dock')).toHaveLength(2);
   });
 });

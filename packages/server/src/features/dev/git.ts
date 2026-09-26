@@ -520,16 +520,8 @@ export async function restoreApp(appId: string, ref: string): Promise<RestoreRes
   if (existsSync(join(dir.path, 'src', 'main.ts'))) {
     try {
       const { compileTypeScript } = await import('@yaar/compiler');
-      let bundles: string[] | undefined;
-      let title = appId;
-      try {
-        const meta = JSON.parse(await Bun.file(join(dir.path, 'app.json')).text());
-        if (Array.isArray(meta.bundles)) bundles = meta.bundles;
-        if (typeof meta.name === 'string') title = meta.name;
-      } catch {
-        /* no app.json */
-      }
-      const result = await compileTypeScript(dir.path, { title, bundles });
+      // Title and bundles default from the restored app.json.
+      const result = await compileTypeScript(dir.path);
       if (result.success) recompiled = true;
       else compileError = result.errors?.join('\n') ?? 'Unknown compile error';
     } catch (err) {
@@ -537,21 +529,14 @@ export async function restoreApp(appId: string, ref: string): Promise<RestoreRes
     }
   }
 
-  // The restore rewrote app.json/protocol.json whether or not the build succeeded, so the
-  // cached listing is stale either way. Running windows and the agent profile are only
-  // retired once there is a new bundle to relaunch into — a failed recompile leaves the
-  // old dist/ serving, and closing its windows would just reopen the same build.
-  const { invalidateAppsCache } = await import('../apps/discovery.js');
-  invalidateAppsCache();
-  let closedWindows: string[] = [];
-  let staleWindow: string | undefined;
-  if (recompiled) {
-    const { retireStaleApp } = await import('../apps/retire.js');
-    ({ closed: closedWindows, staleWindow } = retireStaleApp(appId));
-  }
-
-  const { actionEmitter } = await import('../../session/action-emitter.js');
-  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+  // The restore rewrote app.json and the agent docs whether or not the build succeeded,
+  // so every cache of them is stale either way. Running windows are only retired once
+  // there is a new bundle to relaunch into — a failed recompile leaves the old dist/
+  // serving, and closing its windows would just reopen the same build.
+  const { notifyAppChanged } = await import('../apps/changed.js');
+  const { closed: closedWindows, staleWindow } = await notifyAppChanged(appId, {
+    retire: recompiled,
+  });
 
   return {
     success: true,

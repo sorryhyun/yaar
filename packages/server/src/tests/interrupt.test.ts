@@ -24,6 +24,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import { AgentPool } from '../agents/agent-pool.js';
 import { ClaudeSessionProvider } from '../providers/claude/session-provider.js';
 import { TurnRouter } from '../providers/claude/turn-router.js';
+import { TurnGate } from '../providers/turn-gate.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
 import type { OSAction } from '@yaar/shared';
@@ -43,8 +44,10 @@ function fakePersistentSession(overrides: {
 }) {
   const closed = { channel: false, aborted: false, returned: false };
   const abortController = new AbortController();
+  const turns = new TurnGate();
+  if (overrides.busy) turns.begin().start();
   const session = {
-    busy: overrides.busy,
+    turns,
     fingerprint: 'fp',
     openedWithResume: undefined,
     turnsProcessed: 1,
