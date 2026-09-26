@@ -23,6 +23,7 @@ import {
   disposeMonitor,
 } from '../features/session/monitors.js';
 import { sessionBrowserRead, sessionBrowserInvoke } from '../features/session/browser.js';
+import { BROWSER_ACTIONS } from '../features/browser/guards.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──
@@ -104,33 +105,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       properties: {
         action: {
           type: 'string',
-          enum: [
-            'open',
-            'navigate',
-            'click',
-            'type',
-            'press',
-            'scroll',
-            'hover',
-            'wait_for',
-            'screenshot',
-            'extract',
-            'extract_images',
-            'evaluate',
-            'html',
-            'annotate',
-            'remove_annotations',
-            'get_cookies',
-            'set_cookie',
-            'delete_cookies',
-            'list_tabs',
-            'close_tab',
-            'create',
-            'set_request_blocking',
-            'get_request_block_stats',
-            'get_network_log',
-            'set_init_script',
-          ],
+          enum: [...BROWSER_ACTIONS],
         },
         browserId: { type: 'string', description: 'Tab id (default "0").' },
         url: { type: 'string', description: 'URL for open/navigate.' },

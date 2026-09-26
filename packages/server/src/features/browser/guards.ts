@@ -34,36 +34,63 @@ import { savePermission, checkPermission } from '../../storage/permissions.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 
 /**
- * Actions that change page/tab/browser state via raw CDP. Everything not listed
- * (screenshot, extract, extract_images, html, get_cookies, list_tabs, wait_for,
- * annotate, remove_annotations, create, screenshot) is treated as read-only.
+ * Every browser action, and whether it changes page/tab/browser state via raw CDP.
+ * This table is the one list: the dispatcher in `actions.ts` switches over its keys
+ * exhaustively and `yaar://session/browser` advertises them, so a new action has to
+ * be classified here before it can run or be discovered. A hand-kept mutating set
+ * beside two other hand-kept lists is how `scroll_to_bottom` once ran unguarded.
  *
  * `evaluate` is mutating: arbitrary JS can change the DOM, storage, or navigate.
+ * `create` is not — it opens a fresh tab, and the guards have no session to check yet.
  */
-const MUTATING_ACTIONS = new Set([
+const BROWSER_ACTION_MUTATES = {
+  create: false,
+  open: true,
+  navigate: true,
+  click: true,
+  type: true,
+  press: true,
+  scroll: true,
+  // Scrolls step by step until the page stops growing, firing lazy-load handlers on the way:
+  // `scroll` repeated, so gated as `scroll` is.
+  scroll_to_bottom: true,
+  hover: true,
+  wait_for: false,
+  screenshot: false,
+  extract: false,
+  extract_images: false,
+  evaluate: true,
+  html: false,
+  annotate: false,
+  remove_annotations: false,
+  get_cookies: false,
+  set_cookie: true,
+  delete_cookies: true,
+  list_tabs: false,
+  close_tab: true,
   // Provider-wide: an init script and a URL blocklist change what every tab sees.
-  'set_request_blocking',
-  'set_init_script',
-  'open',
-  'navigate',
-  'click',
-  'type',
-  'press',
-  'scroll',
-  'hover',
-  'evaluate',
-  'set_cookie',
-  'delete_cookies',
-  'close_tab',
+  set_request_blocking: true,
+  get_request_block_stats: false,
+  get_network_log: false,
+  set_init_script: true,
   // `download` clicks a link it injected, with the tab's cookies attached, and lands the
   // bytes in the shared commons. It is `evaluate` with a filesystem on the end of it, so
   // it is gated exactly as `evaluate` is — most of all on the user's real Chrome, where
   // the credentials it would spend are the user's own.
-  'download',
-]);
+  download: true,
+  list_downloads: false,
+} as const satisfies Record<string, boolean>;
+
+export type BrowserAction = keyof typeof BROWSER_ACTION_MUTATES;
+
+export const BROWSER_ACTIONS = Object.keys(BROWSER_ACTION_MUTATES) as BrowserAction[];
+
+export function isBrowserAction(action: string): action is BrowserAction {
+  return Object.hasOwn(BROWSER_ACTION_MUTATES, action);
+}
 
 export function isMutatingAction(action: string): boolean {
-  return MUTATING_ACTIONS.has(action);
+  return isBrowserAction(action) && BROWSER_ACTION_MUTATES[action];
 }
 
 /**

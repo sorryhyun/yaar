@@ -50,7 +50,7 @@ mock.module('../features/config/domains.js', () => ({
 // Patch the single method the guards actually call, and put it back afterwards.
 
 const { actionEmitter } = await import('../session/action-emitter.js');
-const { enforceBrowserGuards, isMutatingAction, isYaarOriginUrl } =
+const { enforceBrowserGuards, isMutatingAction, isYaarOriginUrl, isBrowserAction } =
   await import('../features/browser/guards.js');
 
 let dialogConfirms = true;
@@ -85,6 +85,21 @@ describe('browser guards', () => {
       expect(isMutatingAction(a)).toBe(true);
     }
     for (const a of ['screenshot', 'extract', 'html', 'get_cookies', 'list_tabs', 'wait_for']) {
+      expect(isMutatingAction(a)).toBe(false);
+    }
+  });
+
+  // scroll_to_bottom once dispatched without being in the hand-kept mutating set, so it
+  // skipped the self-target refusal and the real-Chrome consent that `scroll` gets.
+  it('gates scroll_to_bottom and download like their single-step cousins', () => {
+    expect(isMutatingAction('scroll_to_bottom')).toBe(true);
+    expect(isMutatingAction('download')).toBe(true);
+    expect(isMutatingAction('list_downloads')).toBe(false);
+  });
+
+  it('treats names outside the action table as unknown, not as prototype keys', () => {
+    for (const a of ['bogus', 'constructor', 'toString', '__proto__']) {
+      expect(isBrowserAction(a)).toBe(false);
       expect(isMutatingAction(a)).toBe(false);
     }
   });

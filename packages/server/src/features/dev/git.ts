@@ -459,6 +459,10 @@ export interface RestoreResult {
   recompiled: boolean;
   /** Set when the source restored but recompiling it failed. */
   compileError?: string;
+  /** Windows of this app closed because they were running the pre-restore build. */
+  closedWindows: string[];
+  /** The caller's own window of this app, spared and still on the pre-restore build. */
+  staleWindow?: string;
 }
 
 /**
@@ -533,6 +537,19 @@ export async function restoreApp(appId: string, ref: string): Promise<RestoreRes
     }
   }
 
+  // The restore rewrote app.json/protocol.json whether or not the build succeeded, so the
+  // cached listing is stale either way. Running windows and the agent profile are only
+  // retired once there is a new bundle to relaunch into — a failed recompile leaves the
+  // old dist/ serving, and closing its windows would just reopen the same build.
+  const { invalidateAppsCache } = await import('../apps/discovery.js');
+  invalidateAppsCache();
+  let closedWindows: string[] = [];
+  let staleWindow: string | undefined;
+  if (recompiled) {
+    const { retireStaleApp } = await import('../apps/retire.js');
+    ({ closed: closedWindows, staleWindow } = retireStaleApp(appId));
+  }
+
   const { actionEmitter } = await import('../../session/action-emitter.js');
   actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
@@ -543,5 +560,7 @@ export async function restoreApp(appId: string, ref: string): Promise<RestoreRes
     files,
     recompiled,
     ...(compileError && { compileError }),
+    closedWindows,
+    ...(staleWindow ? { staleWindow } : {}),
   };
 }

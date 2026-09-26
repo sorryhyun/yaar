@@ -10,8 +10,14 @@
 import { join, dirname } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
+/**
+ * An integer env var, or `defaultValue` when it is unset or not a number. Falling back
+ * rather than returning `NaN` matters: `MAX_AGENTS=abc` would otherwise reach the limiter
+ * as a limit that every comparison fails against.
+ */
 export function getEnvInt(key: string, defaultValue: number): number {
-  return parseInt(process.env[key] ?? String(defaultValue), 10);
+  const parsed = parseInt(process.env[key] ?? '', 10);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
 }
 
 // __YAAR_BUNDLED is injected at compile time via bun build --define

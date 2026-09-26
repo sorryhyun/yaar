@@ -14,17 +14,27 @@ import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('claude:mapper');
 
-/** Track tool_use_id → toolName from content_block_start events */
-const toolNameById = new Map<string, string>();
-
-/** Buffer pending tool_use blocks: accumulate input_json_delta, emit at content_block_stop */
+/** A tool_use block still streaming: input_json_delta accumulates until content_block_stop. */
 interface PendingToolUse {
   toolName: string;
   toolUseId?: string;
   inputChunks: string[];
 }
-const pendingToolUse = new Map<number, PendingToolUse>();
-let currentBlockIndex = -1;
+
+/**
+ * One stream's in-flight tool_use blocks, keyed by content-block index.
+ *
+ * Held by the caller for the same reason as {@link TurnUsageTracker}: block
+ * indices restart at 0 in every assistant message, so a module-level buffer let
+ * two agents streaming tool calls at once overwrite each other's entries —
+ * wrong tool name, merged argument JSON, or a `tool_use` that never came out.
+ */
+export class ToolBlockBuffer {
+  readonly pending = new Map<number, PendingToolUse>();
+  currentIndex = -1;
+  /** tool_use_id → tool name, so the `tool_result` (a separate message) can be labelled. */
+  readonly names = new Map<string, string>();
+}
 
 /** The wire shape of an Anthropic usage block, as it appears on every carrier below. */
 interface RawUsage {
@@ -172,8 +182,14 @@ export class TurnUsageTracker {
  *
  * `turn` is the caller's per-turn usage accumulator; omit it and the mid-turn
  * token reports are simply not produced (the `result` figure still is).
+ * `blocks` is the caller's per-stream tool-call buffer; omit it and tool calls
+ * are not assembled from stream events.
  */
-export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): StreamMessage | null {
+export function mapClaudeMessage(
+  msg: SDKMessage,
+  turn?: TurnUsageTracker,
+  blocks?: ToolBlockBuffer,
+): StreamMessage | null {
   // Log important message types (skip noisy stream_event)
   const msgType = (msg as { type: string; subtype?: string }).type;
   const msgSubtype = (msg as { subtype?: string }).subtype;
@@ -254,7 +270,7 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
   }
 
   if (msg.type === 'stream_event') {
-    return mapStreamEvent(msg.event, turn);
+    return mapStreamEvent(msg.event, turn, blocks);
   }
 
   if (msg.type === 'result') {
@@ -319,7 +335,7 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
   }
 
   if (msg.type === 'user') {
-    return extractToolResult(msg.message);
+    return extractToolResult(msg.message, blocks);
   }
 
   // Subscription-level rate limiting — its own top-level message type, not a
@@ -355,7 +371,11 @@ function countEscapeSpellings(rawJson: string): StreamMessage['toolInputEscapes'
   return { unicodeEscapes, literalBackslashU };
 }
 
-function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage | null {
+function mapStreamEvent(
+  event: unknown,
+  turn?: TurnUsageTracker,
+  blocks?: ToolBlockBuffer,
+): StreamMessage | null {
   if (!event || typeof event !== 'object') return null;
 
   const evt = event as {
@@ -385,15 +405,15 @@ function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage 
 
   if (evt.type === 'content_block_start') {
     const block = evt.content_block as { type: string; name?: string; id?: string } | undefined;
-    if (block?.type === 'tool_use' && block.name) {
-      if (block.id) toolNameById.set(block.id, block.name);
-      const idx = evt.index ?? ++currentBlockIndex;
-      currentBlockIndex = idx;
+    if (blocks && block?.type === 'tool_use' && block.name) {
+      if (block.id) blocks.names.set(block.id, block.name);
+      const idx = evt.index ?? ++blocks.currentIndex;
+      blocks.currentIndex = idx;
       // Still buffered — the authoritative `tool_use` with parsed input waits for
       // content_block_stop. But the *name* is known right now, and withholding it
       // until the arguments finish is what made a large tool call look like a
       // hang. Announce it; the input follows as deltas.
-      pendingToolUse.set(idx, {
+      blocks.pending.set(idx, {
         toolName: block.name,
         toolUseId: block.id,
         inputChunks: [],
@@ -419,9 +439,9 @@ function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage 
     if (delta.type === 'thinking_delta' && delta.thinking) {
       return { type: 'thinking', content: delta.thinking };
     }
-    if (delta.type === 'input_json_delta' && delta.partial_json) {
-      const idx = evt.index ?? currentBlockIndex;
-      const pending = pendingToolUse.get(idx);
+    if (blocks && delta.type === 'input_json_delta' && delta.partial_json) {
+      const idx = evt.index ?? blocks.currentIndex;
+      const pending = blocks.pending.get(idx);
       if (!pending) return null;
       // Keep buffering — this fragment is still needed to assemble the real input
       // at content_block_stop. Forwarding a *copy* of it only adds a display feed;
@@ -437,11 +457,11 @@ function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage 
     }
   }
 
-  if (evt.type === 'content_block_stop') {
-    const idx = evt.index ?? currentBlockIndex;
-    const pending = pendingToolUse.get(idx);
+  if (blocks && evt.type === 'content_block_stop') {
+    const idx = evt.index ?? blocks.currentIndex;
+    const pending = blocks.pending.get(idx);
     if (pending) {
-      pendingToolUse.delete(idx);
+      blocks.pending.delete(idx);
       let toolInput: Record<string, unknown> | undefined;
       let toolInputEscapes: StreamMessage['toolInputEscapes'];
       if (pending.inputChunks.length > 0) {
@@ -470,7 +490,7 @@ function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage 
  * Extract tool result from a user message.
  * User messages in Claude's conversation format contain tool_result blocks.
  */
-function extractToolResult(message: unknown): StreamMessage | null {
+function extractToolResult(message: unknown, blocks?: ToolBlockBuffer): StreamMessage | null {
   if (!message || typeof message !== 'object') return null;
 
   const msg = message as Record<string, unknown>;
@@ -532,10 +552,10 @@ function extractToolResult(message: unknown): StreamMessage | null {
       // then jumped straight to `Responding…`, never showing the pause where the
       // model is actually reading the image; no `tool` stream frame, so
       // process-explorer left the call stuck in `using-tool`; no logged result,
-      // and a leaked `toolNameById` entry.
+      // and a leaked tool-name entry.
       const toolName =
-        (toolResult.tool_use_id && toolNameById.get(toolResult.tool_use_id)) ?? 'mcp_tool';
-      if (toolResult.tool_use_id) toolNameById.delete(toolResult.tool_use_id);
+        (toolResult.tool_use_id && blocks?.names.get(toolResult.tool_use_id)) ?? 'mcp_tool';
+      if (toolResult.tool_use_id) blocks?.names.delete(toolResult.tool_use_id);
       return {
         type: 'tool_result',
         toolName,

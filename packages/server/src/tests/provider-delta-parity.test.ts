@@ -18,9 +18,9 @@
  * These are unit tests over the two mapper functions — no SDK, no app-server —
  * because the property under test is the normalization, not the transport.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { mapClaudeMessage } from '../providers/claude/message-mapper.js';
+import { mapClaudeMessage, ToolBlockBuffer } from '../providers/claude/message-mapper.js';
 import { mapNotification } from '../providers/codex/message-mapper.js';
 import type { StreamMessage } from '../providers/types.js';
 
@@ -151,8 +151,15 @@ describe('tool parameter streaming — Claude', () => {
       event: { type: 'content_block_stop', index: 0 },
     }) as unknown as SDKMessage;
 
+  // One buffer per test, as a real stream holds one per turn.
+  let blocks: ToolBlockBuffer;
+  beforeEach(() => {
+    blocks = new ToolBlockBuffer();
+  });
+  const map = (msg: SDKMessage) => mapClaudeMessage(msg, undefined, blocks);
+
   it('announces the tool name before any argument has arrived', () => {
-    expect(mapClaudeMessage(start('Write', 'tu_1'))).toEqual({
+    expect(map(start('Write', 'tu_1'))).toEqual({
       type: 'tool_use_start',
       toolName: 'Write',
       toolUseId: 'tu_1',
@@ -160,9 +167,9 @@ describe('tool parameter streaming — Claude', () => {
   });
 
   it('forwards argument fragments as display-only deltas, in order', () => {
-    mapClaudeMessage(start('Write', 'tu_2'));
+    map(start('Write', 'tu_2'));
     const fragments = ['{"path":', '"/tmp/a.txt",', '"body":"hello"}'];
-    const mapped = fragments.map((f) => mapClaudeMessage(inputDelta(f)));
+    const mapped = fragments.map((f) => map(inputDelta(f)));
 
     expect(mapped.map((m) => m?.type)).toEqual(Array(3).fill('tool_input_delta'));
     expect(mapped.map((m) => m?.content)).toEqual(fragments);
@@ -171,12 +178,12 @@ describe('tool parameter streaming — Claude', () => {
   });
 
   it('still emits the authoritative tool_use with fully parsed input at block stop', () => {
-    mapClaudeMessage(start('Write', 'tu_3'));
-    for (const f of ['{"path":', '"/tmp/a.txt"}']) mapClaudeMessage(inputDelta(f));
+    map(start('Write', 'tu_3'));
+    for (const f of ['{"path":', '"/tmp/a.txt"}']) map(inputDelta(f));
 
     // The deltas were forwarded *and* buffered — streaming them must not consume
     // them, or the real call would arrive with no arguments.
-    expect(mapClaudeMessage(stop())).toEqual({
+    expect(map(stop())).toEqual({
       type: 'tool_use',
       toolName: 'Write',
       toolUseId: 'tu_3',
@@ -185,11 +192,11 @@ describe('tool parameter streaming — Claude', () => {
   });
 
   it('records escape spellings from the raw JSON before parse erases them', () => {
-    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc1'));
+    map(start('mcp__verbs__invoke', 'tu_esc1'));
     // Escape split across fragments on purpose — chunks are joined before scanning.
-    for (const f of ['{"message":"\\uc5', '48\\ub155"}']) mapClaudeMessage(inputDelta(f));
+    for (const f of ['{"message":"\\uc5', '48\\ub155"}']) map(inputDelta(f));
 
-    expect(mapClaudeMessage(stop())).toEqual({
+    expect(map(stop())).toEqual({
       type: 'tool_use',
       toolName: 'mcp__verbs__invoke',
       toolUseId: 'tu_esc1',
@@ -199,40 +206,40 @@ describe('tool parameter streaming — Claude', () => {
   });
 
   it('omits toolInputEscapes when the model wrote literal characters', () => {
-    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc2'));
-    mapClaudeMessage(inputDelta('{"message":"안녕"}'));
+    map(start('mcp__verbs__invoke', 'tu_esc2'));
+    map(inputDelta('{"message":"안녕"}'));
 
-    const result = mapClaudeMessage(stop());
+    const result = map(stop());
     expect(result?.toolInput).toEqual({ message: '안녕' });
     expect(result && 'toolInputEscapes' in result).toBe(false);
   });
 
   it('counts double-escaped sequences as literalBackslashU — the corrupting form', () => {
-    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc3'));
+    map(start('mcp__verbs__invoke', 'tu_esc3'));
     // Raw JSON `\\uc548` parses to the literal text `안` in the value.
-    mapClaudeMessage(inputDelta('{"message":"\\\\uc548"}'));
+    map(inputDelta('{"message":"\\\\uc548"}'));
 
-    expect(mapClaudeMessage(stop())).toMatchObject({
+    expect(map(stop())).toMatchObject({
       toolInput: { message: '\\uc548' },
       toolInputEscapes: { unicodeEscapes: 0, literalBackslashU: 1 },
     });
   });
 
   it('does not count mandatory control-character escapes as a spelling choice', () => {
-    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc4'));
+    map(start('mcp__verbs__invoke', 'tu_esc4'));
     //   has no literal spelling in JSON — the escape is required, not chosen.
-    mapClaudeMessage(inputDelta('{"message":"a\\u0000b"}'));
+    map(inputDelta('{"message":"a\\u0000b"}'));
 
-    const result = mapClaudeMessage(stop());
+    const result = map(stop());
     expect(result && 'toolInputEscapes' in result).toBe(false);
   });
 
   it('survives malformed argument JSON without losing the call', () => {
-    mapClaudeMessage(start('Write', 'tu_4'));
-    mapClaudeMessage(inputDelta('{"path": "unterminated'));
+    map(start('Write', 'tu_4'));
+    map(inputDelta('{"path": "unterminated'));
     // A truncated argument stream still yields the call, just without input —
     // the streamed fragments are display-only precisely because of this case.
-    expect(mapClaudeMessage(stop())).toMatchObject({
+    expect(map(stop())).toMatchObject({
       type: 'tool_use',
       toolName: 'Write',
       toolInput: undefined,

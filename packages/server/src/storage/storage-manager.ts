@@ -821,8 +821,9 @@ export async function storageGrep(
 }
 
 // --- Config directory helpers ---
-
-const CONFIG_DIR = getConfigDir();
+// The config dir is resolved per call, like persisted-store.ts does: the loopback harness
+// points YAAR_CONFIG at a temp dir after this module is imported, and a module-load
+// snapshot would split config files between the two directories.
 
 /**
  * Modification time (ms) of a config file, or `null` if it doesn't exist.
@@ -831,8 +832,9 @@ const CONFIG_DIR = getConfigDir();
  * read + parse on every access.
  */
 export async function configStatMtime(filePath: string): Promise<number | null> {
-  const normalizedPath = normalize(join(CONFIG_DIR, filePath));
-  const rel = relative(CONFIG_DIR, normalizedPath);
+  const configDir = getConfigDir();
+  const normalizedPath = normalize(join(configDir, filePath));
+  const rel = relative(configDir, normalizedPath);
   if (rel.startsWith('..') || rel.includes('..')) return null;
   try {
     return (await stat(normalizedPath)).mtimeMs;
@@ -845,8 +847,9 @@ export async function configStatMtime(filePath: string): Promise<number | null> 
  * Read a file from the config directory.
  */
 export async function configRead(filePath: string): Promise<StorageReadResult> {
-  const normalizedPath = normalize(join(CONFIG_DIR, filePath));
-  const rel = relative(CONFIG_DIR, normalizedPath);
+  const configDir = getConfigDir();
+  const normalizedPath = normalize(join(configDir, filePath));
+  const rel = relative(configDir, normalizedPath);
   if (rel.startsWith('..') || rel.includes('..')) {
     return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
   }
@@ -867,8 +870,9 @@ export async function configWrite(
   filePath: string,
   content: string
 ): Promise<StorageWriteResult> {
-  const normalizedPath = normalize(join(CONFIG_DIR, filePath));
-  const rel = relative(CONFIG_DIR, normalizedPath);
+  const configDir = getConfigDir();
+  const normalizedPath = normalize(join(configDir, filePath));
+  const rel = relative(configDir, normalizedPath);
   if (rel.startsWith('..') || rel.includes('..')) {
     return { success: false, path: filePath, error: 'Invalid path: path traversal detected' };
   }

@@ -48,7 +48,7 @@ before changing a default or adding a knob.
 | `YAAR_LAUNCHER_PID` | unset | Shut down once this process is gone — how `make termux` avoids an orphaned server (`launcher-watchdog.ts`) |
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` (the inline cap stays 10MB) |
 | `YAAR_FREEDPI` | on | Route outbound TLS through a local fragmenting proxy, to get past SNI-matching DPI (`0` disables) |
-| `MONITOR_MAX_CONCURRENT` / `_ACTIONS_PER_MIN` / `_OUTPUT_PER_MIN` | `2` / `30` / `50000` | Background monitor budget |
+| `MONITOR_MAX_CONCURRENT` / `_ACTIONS_PER_MIN` / `_OUTPUT_PER_MIN` | `4` / `60` / `100000` | Background monitor budget |
 | `APP_AGENT_IDLE_MINUTES` | `60` | Idle minutes before an app agent is reclaimed (`0` disables) |
 | `CODEX_WS_PORT` / `CODEX_HOME` | `4510` / codex's | App-server port; codex config dir, **read by YAAR before the spawn** |
 | `CHROME_PATH` / `CHROME_DEBUG_PORT` | auto / `9222` | Chrome binary; DevTools port for the session-door browser |

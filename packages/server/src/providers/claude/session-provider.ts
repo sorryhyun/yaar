@@ -22,7 +22,7 @@ import type {
   TransportOptions,
   ProviderType,
 } from '../types.js';
-import { mapClaudeMessage, TurnUsageTracker } from './message-mapper.js';
+import { mapClaudeMessage, ToolBlockBuffer, TurnUsageTracker } from './message-mapper.js';
 import { createInputChannel, type InputChannel } from './input-channel.js';
 import { TurnRouter, type DetachedTurn } from './turn-router.js';
 import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tripwire.js';
@@ -524,6 +524,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     let messageCount = 0;
     // One tracker per turn — the stream outlives the turn, the accumulator must not.
     const turnUsage = new TurnUsageTracker();
+    const toolBlocks = new ToolBlockBuffer();
     // Per-turn too: block indices restart with each assistant message.
     const tripwire = new EscapeTripwire();
     let escapeRetries = 0;
@@ -604,7 +605,7 @@ export class ClaudeSessionProvider extends BaseTransport {
           }
         }
 
-        const mapped = mapClaudeMessage(msg as SDKMessage, turnUsage);
+        const mapped = mapClaudeMessage(msg as SDKMessage, turnUsage, toolBlocks);
         if (!mapped) continue;
 
         // Detect stale session error and retry without resume
@@ -732,11 +733,12 @@ export class ClaudeSessionProvider extends BaseTransport {
 
   private async *mapExternal(frames: AsyncIterable<unknown>): AsyncIterable<StreamMessage> {
     const usage = new TurnUsageTracker();
+    const toolBlocks = new ToolBlockBuffer();
     for await (const msg of frames) {
       yield* this.drainEscapeGuards();
       // The conversation is the one this stream carries; nothing pins a different one.
       this.captureSessionId(msg, undefined);
-      const mapped = mapClaudeMessage(msg as SDKMessage, usage);
+      const mapped = mapClaudeMessage(msg as SDKMessage, usage, toolBlocks);
       if (mapped) yield mapped;
     }
   }
@@ -909,6 +911,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       void this.waitForMcpConnected(stream, sdkOptions).finally(releaseMcpGate);
       let messageCount = 0;
       const turnUsage = new TurnUsageTracker();
+      const toolBlocks = new ToolBlockBuffer();
 
       for await (const msg of stream) {
         messageCount++;
@@ -916,7 +919,7 @@ export class ClaudeSessionProvider extends BaseTransport {
 
         this.captureSessionId(msg, options.sessionId);
 
-        const mapped = mapClaudeMessage(msg, turnUsage);
+        const mapped = mapClaudeMessage(msg, turnUsage, toolBlocks);
         if (mapped) {
           // Detect stale session error and retry without resume
           if (isStaleSessionError(mapped)) {

@@ -254,6 +254,21 @@ export function registerWindowHandlers(
     description: 'List the open windows on your monitor.',
     verbs: ['describe', 'list'],
 
+    /**
+     * The registry folds `yaar://windows/` onto this exact handler for every verb it
+     * declares, so without this both spellings got the auto-generated describe — "list
+     * the open windows", no invoke, no schema — and the window manual with `create`'s
+     * schema was unreachable. Answer with that manual, addressed to the slash form,
+     * which is the one `invoke` lands on.
+     */
+    async describe(): Promise<VerbResult> {
+      return windowHandler.describe!({
+        kind: 'window',
+        windowId: '',
+        sourceUri: 'yaar://windows/',
+      });
+    },
+
     async list(): Promise<VerbResult> {
       // The caller's monitor, not the session: an agent may only address windows on
       // the monitor it runs on, so listing another desktop's windows offers it URIs

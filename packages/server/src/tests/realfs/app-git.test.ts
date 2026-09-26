@@ -26,6 +26,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { getStorageDir } from '../../config.js';
 import { USER_APPS_DIR } from '../../features/apps/roots.js';
+import { listApps } from '../../features/apps/discovery.js';
 import { snapshotApp, appHistory, appDiff, restoreApp } from '../../features/dev/git.js';
 
 // A real app directory is required — `resolveAppDir` only sees apps on disk.
@@ -121,6 +122,19 @@ describe('app version history', () => {
     expect(await Bun.file(join(appDir, 'src', 'app.ts')).text()).toContain('v = 1');
     // `checkout -- .` would leave this behind; `read-tree -u --reset` removes it.
     expect(existsSync(join(appDir, 'src', 'added.ts'))).toBe(false);
+  });
+
+  it('drops the cached app listing so it describes the restored app.json', async () => {
+    await snapshotApp(APP_ID, 'v1');
+    await writeFile(join(appDir, 'app.json'), '{"name":"Renamed"}\n');
+    await snapshotApp(APP_ID, 'v2');
+
+    // Prime the listing cache with the pre-restore manifest.
+    expect((await listApps()).find((a) => a.id === APP_ID)?.name).toBe('Renamed');
+
+    const result = await restoreApp(APP_ID, 'HEAD~1');
+    expect(result.success).toBe(true);
+    expect((await listApps()).find((a) => a.id === APP_ID)?.name).toBe('Fixture');
   });
 
   it('keeps history append-only so a restore can itself be undone', async () => {

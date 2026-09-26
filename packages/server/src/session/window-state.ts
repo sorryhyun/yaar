@@ -942,6 +942,10 @@ export class WindowStateRegistry {
     this.windows.clear();
     this.appCommands.clear();
     this.appNoReplay.clear();
+    // Authority dies with its window. Left here, a grant would be readable by whatever
+    // later window reuses the id — the per-window close drops these for the same reason.
+    this.delegatedGrants.clear();
+    this.undelegatedUris.clear();
     this.stack = [];
     this.focused = null;
     this.handleMap.clear();

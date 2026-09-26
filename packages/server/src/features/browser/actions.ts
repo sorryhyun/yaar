@@ -11,7 +11,12 @@ import { ok, okJson, okWithImages, error, getActiveSessionId } from '../../handl
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
-import { isYaarOriginUrl, enforceBrowserGuards, isMutatingAction } from './guards.js';
+import {
+  isYaarOriginUrl,
+  enforceBrowserGuards,
+  isMutatingAction,
+  isBrowserAction,
+} from './guards.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import { ServerEventType, type BrowserTabSummary, type OSAction } from '@yaar/shared';
 import { handleCreate as handleWindowCreate } from '../window/create.js';
@@ -857,6 +862,9 @@ export async function runBrowserAction(
   browserId: string,
   body: Payload,
 ): Promise<VerbResult> {
+  if (!isBrowserAction(action)) return error(`Unknown action "${action}".`);
+  // Exhaustive over guards.ts's table: an action listed there with no case here, or a case
+  // for one not listed, fails typecheck.
   switch (action) {
     case 'create':
       return handleCreate(pool, browserId, body);
@@ -914,8 +922,10 @@ export async function runBrowserAction(
       return handleDownload(pool, browserId, body);
     case 'list_downloads':
       return handleListDownloads(pool, browserId);
-    default:
-      return error(`Unknown action "${action}".`);
+    default: {
+      const unhandled: never = action;
+      return error(`Unknown action "${String(unhandled)}".`);
+    }
   }
 }
 

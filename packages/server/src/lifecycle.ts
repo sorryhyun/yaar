@@ -466,7 +466,13 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
     // First, while the deadline above still has room: every live session, so each
     // `SessionLogger` flushes its debounced write buffer. Nothing else here rescues
     // it, and the buffer is the only shutdown casualty that cannot be recreated.
+    // The reload caches are collected before the drain (it empties the hub) and flushed
+    // after it, so an entry recorded while a session tears down still makes the write.
+    const reloadCaches = getSessionHub()
+      .all()
+      .map((s) => s.reloadCache);
     await getSessionHub().drain();
+    await Promise.all(reloadCaches.map((c) => c.flush()));
 
     // Drop the Tailscale serve rules
     if (activeTunnel) {

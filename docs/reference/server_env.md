@@ -516,9 +516,9 @@ Setup and day-to-day use: [`docs/guides/termux.md`](../guides/termux.md).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MONITOR_MAX_CONCURRENT` | `2` | Concurrent background monitor tasks |
-| `MONITOR_MAX_ACTIONS_PER_MIN` | `30` | Monitor action rate limit |
-| `MONITOR_MAX_OUTPUT_PER_MIN` | `50000` | Monitor output rate limit |
+| `MONITOR_MAX_CONCURRENT` | `4` | Concurrent background monitor tasks |
+| `MONITOR_MAX_ACTIONS_PER_MIN` | `60` | Monitor action rate limit |
+| `MONITOR_MAX_OUTPUT_PER_MIN` | `100000` | Monitor output rate limit |
 | `APP_AGENT_IDLE_MINUTES` | `60` | Idle minutes before an app agent is reclaimed (`0` disables) |
 
 ### Why `APP_AGENT_IDLE_MINUTES` exists

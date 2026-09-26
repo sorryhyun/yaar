@@ -182,12 +182,16 @@ export class AppTaskProcessor {
       return;
     }
 
-    this.ctx.windowQueuePolicy.setProcessing(processingKey, true);
-
+    // The flag is the main turn's alone. A parallel (`actionId`) task neither checks it
+    // above nor owns it here: one that set and cleared it would, finishing mid-turn,
+    // mark the app idle under a main turn still running — and the next message would
+    // start a second main turn on the same agent and overwrite `inflight`.
+    //
     // Published in the same synchronous block as the flag, so there is no instant in
     // which the app reads as busy with no turn to wait for.
     let settleTurn: () => void = () => {};
     if (!isParallel) {
+      this.ctx.windowQueuePolicy.setProcessing(processingKey, true);
       this.inflight.set(
         processingKey,
         new Promise<void>((resolve) => {
@@ -211,13 +215,12 @@ export class AppTaskProcessor {
 
       const agent = await this.ctx.agentPool.appAgents.getOrCreate(monitorId, appId);
       if (!agent) {
-        this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
         log.error('failed to create app agent', { appId, monitorId });
         await this.ctx.sendEvent({
           type: ServerEventType.ERROR,
           error: `Failed to create agent for app ${appId}`,
         });
-        if (!isParallel) await this.processQueue(processingKey);
+        // The flag, the settle and the drain are all the `finally`'s below.
         return;
       }
 
@@ -322,16 +325,21 @@ export class AppTaskProcessor {
       // next turn's to own — so the waiter finds the app idle-or-busy correctly instead
       // of clearing a flag `processQueue` has just set.
       settleTurn();
-      if (!isParallel) this.inflight.delete(processingKey);
-      // A close that landed mid-turn asked for this agent to be retired. Here, and not
-      // where the close ran: this is inside the processing lock and ahead of the drain,
-      // so the queued messages below are answered by the *replacement* agent rather than
-      // starting a turn on one that is about to be disposed underneath them.
-      if (this.pendingRelease.delete(processingKey)) {
-        await this.releaseAgent(monitorId, appId);
+      // Everything below is the main turn's teardown. A parallel task that ran it would
+      // clear the flag under a main turn still running, or honour a close's pending
+      // release by disposing the agent that turn is standing on.
+      if (!isParallel) {
+        this.inflight.delete(processingKey);
+        // A close that landed mid-turn asked for this agent to be retired. Here, and not
+        // where the close ran: this is inside the processing lock and ahead of the drain,
+        // so the queued messages below are answered by the *replacement* agent rather
+        // than starting a turn on one that is about to be disposed underneath them.
+        if (this.pendingRelease.delete(processingKey)) {
+          await this.releaseAgent(monitorId, appId);
+        }
+        this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
+        await this.processQueue(processingKey);
       }
-      this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
-      if (!isParallel) await this.processQueue(processingKey);
     }
   }
 

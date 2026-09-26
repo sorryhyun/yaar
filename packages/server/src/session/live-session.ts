@@ -414,7 +414,8 @@ export class LiveSession {
         actions: [stamped],
         monitorId: event.monitorId,
       });
-      this.sessionLogger?.logAction(stamped);
+      // The getter, not the field: a pool that minted its own logger leaves the field null.
+      this.getSessionLogger()?.logAction(stamped);
     }
   }
 

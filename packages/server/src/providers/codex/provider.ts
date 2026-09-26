@@ -17,7 +17,7 @@ import type { InterruptReceipt, StreamMessage, TransportOptions, ProviderType } 
 import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
-import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator/index.js';
+import { getOrchestratorPrompt } from '../../agents/profiles/orchestrator/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
 import { SUB_AGENT_MCP_SERVER } from '../../agents/profiles/sub-agent.js';
@@ -88,7 +88,9 @@ function codexServerFilter(allowedTools: string[] | undefined): (name: string) =
 export class CodexProvider extends BaseTransport {
   readonly name = 'codex';
   readonly providerType: ProviderType = 'codex';
-  readonly systemPrompt = SYSTEM_PROMPT;
+  // `config/system-prompt.txt` wins over the built-in prompt, as it does for Claude. Read once
+  // per instance: `needsNewThread` compares this string, so it must not vary between turns.
+  readonly systemPrompt = getOrchestratorPrompt();
 
   private appServer: AppServer | null;
   private client: JsonRpcWsClient | null = null;

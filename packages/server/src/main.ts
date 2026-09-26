@@ -209,13 +209,12 @@ async function startup() {
     );
   });
 
-  // Catch unhandled errors — ensure Chrome and other resources are cleaned up
+  // Catch unhandled errors — ensure Chrome and other resources are cleaned up.
+  // Unhandled *rejections* are deliberately not here: initializeSubsystems logs and
+  // continues on those, because stray CDP rejections are routine and a second,
+  // shutting-down listener would fire alongside it and kill the server anyway.
   process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
-    handleShutdown();
-  });
-  process.on('unhandledRejection', (err) => {
-    console.error('Unhandled rejection:', err);
     handleShutdown();
   });
 }

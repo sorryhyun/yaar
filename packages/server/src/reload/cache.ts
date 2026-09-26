@@ -5,7 +5,7 @@
  * exact (O(1)) and fuzzy (O(n)) matching for cache lookups.
  */
 
-import { mkdir } from 'fs/promises';
+import { mkdir, rename, writeFile } from 'fs/promises';
 import { dirname } from 'path';
 import type { OSAction } from '@yaar/shared';
 import type { CacheEntry, CacheMatch, Fingerprint } from './types.js';
@@ -24,6 +24,8 @@ export class ReloadCache {
   private exactMap: Map<string, CacheEntry> = new Map();
   private entries: CacheEntry[] = [];
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Tail of the write chain — see {@link write}. */
+  private writing: Promise<void> = Promise.resolve();
   private idCounter = 0;
 
   constructor(filePath: string) {
@@ -64,20 +66,46 @@ export class ReloadCache {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.saveToDisk().catch((err) => {
-        log.error('failed to save', { err });
-      });
+      void this.write();
     }, SAVE_DEBOUNCE_MS);
+    // A pending save must never be what keeps a test run or a shutdown alive; shutdown
+    // calls flush() instead of waiting on the timer.
+    this.saveTimer.unref?.();
   }
 
-  private async saveToDisk(): Promise<void> {
-    try {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      const data = JSON.stringify({ entries: this.entries, idCounter: this.idCounter }, null, 2);
-      await Bun.write(this.filePath, data);
-    } catch (err) {
-      log.error('failed to write cache file', { path: this.filePath, err });
+  /**
+   * Write any pending save now and wait for it — for shutdown, where the debounce
+   * would be lost. A cache with nothing pending only waits out an in-flight write, so
+   * a session that never recorded anything does not leave an empty file behind.
+   */
+  async flush(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      await this.write();
+      return;
     }
+    await this.writing;
+  }
+
+  /**
+   * Serialize writes through one chain and rename into place: two overlapping writes
+   * of the same file can interleave, and a torn file parses as corrupt, which `load()`
+   * treats as "no cache" and silently starts over.
+   */
+  private write(): Promise<void> {
+    this.writing = this.writing.then(async () => {
+      const tmp = `${this.filePath}.tmp`;
+      try {
+        await mkdir(dirname(this.filePath), { recursive: true });
+        const data = JSON.stringify({ entries: this.entries, idCounter: this.idCounter }, null, 2);
+        await writeFile(tmp, data, 'utf-8');
+        await rename(tmp, this.filePath);
+      } catch (err) {
+        log.error('failed to write cache file', { path: this.filePath, err });
+      }
+    });
+    return this.writing;
   }
 
   /**

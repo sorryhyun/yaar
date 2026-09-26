@@ -150,18 +150,20 @@ function releaseHeldTurns(): void {
 
 mock.module('../agents/agent-session.js', () => {
   class MockAgentSession {
-    private running = false;
+    // A depth, not a boolean: a parallel (`actionId`) turn can overlap a held main
+    // turn, and the first one to finish must not make the other read as stopped.
+    private running = 0;
     initialize = mock(async () => true);
     handleMessage = mock(async (_prompt: string, _opts: unknown) => {
-      this.running = true;
+      this.running++;
       try {
         if (!blockTurns) return;
         await new Promise<void>((resolve) => held.push(resolve));
       } finally {
-        this.running = false;
+        this.running--;
       }
     });
-    isRunning = () => this.running;
+    isRunning = () => this.running > 0;
     interrupt = mock(async () => {});
     cleanup = mock(async () => {});
     getRawSessionId = mock(() => null);
@@ -272,7 +274,7 @@ describe('a window message answered on a fresh app agent', () => {
    */
   async function runningAgent(): Promise<{
     instanceId: string;
-    session: { isRunning(): boolean; steer: unknown; interrupt: unknown };
+    session: { isRunning(): boolean; steer: unknown; interrupt: unknown; handleMessage: unknown };
   }> {
     for (let i = 0; i < 100; i++) {
       const agent = pool.agentPool.appAgents.get(MONITOR, APP);
@@ -359,6 +361,39 @@ describe('a window message answered on a fresh app agent', () => {
 
     await message('m2');
     expect(incumbent.session.steer).toHaveBeenCalled();
+
+    releaseHeldTurns();
+    await first;
+  });
+
+  it('keeps the app busy when a parallel action finishes under a running turn', async () => {
+    // A parallel (`actionId`) task skips the processing flag on the way in, so it must
+    // leave it alone on the way out. When it cleared the flag unconditionally, a button
+    // click finishing mid-turn marked the app idle, and the next message started a second
+    // main turn on the same agent instead of steering into the one still running.
+    blockTurns = true;
+    const first = message('m1');
+    const incumbent = await runningAgent();
+
+    blockTurns = false;
+    await pool.handleTask({
+      requestedType: 'app',
+      kind: 'user',
+      messageId: 'click',
+      windowId: WINDOW,
+      monitorId: MONITOR,
+      actionId: 'a1',
+      content: 'clicked',
+    });
+    const handleMessage = incumbent.session.handleMessage as unknown as {
+      mock: { calls: unknown[] };
+    };
+    expect(handleMessage.mock.calls.length).toBe(2);
+
+    await message('m2');
+    expect(incumbent.session.steer).toHaveBeenCalled();
+    // Steered, not run: no third turn started on the agent.
+    expect(handleMessage.mock.calls.length).toBe(2);
 
     releaseHeldTurns();
     await first;

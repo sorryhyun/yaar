@@ -941,6 +941,9 @@ export class ContextPool implements PoolContext {
       if (provider) {
         const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
         if (agent) {
+          // Every other monitor spawn prewarms; a reset that skipped it left the first
+          // turn after it paying the full provider spawn and MCP handshake.
+          this.prewarmMonitorAgent(agent, monitorId);
           if (monitorId === '0') {
             // Same two ids, same rule as `initialize()` above: `sessionId` is the hub key
             // the client mints iframe tokens against, `logSessionId` is the transcript dir.
