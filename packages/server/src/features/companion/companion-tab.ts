@@ -45,7 +45,7 @@
  * `cleanupIdle` would collect it precisely when it is about to be needed.
  */
 
-import { getBrowserProvider } from '../../lib/browser/index.js';
+import { getHeadlessBrowser } from '../../lib/browser/index.js';
 import { isYaarOriginUrl } from '../browser/guards.js';
 import type { BrowserSession } from '../../lib/browser/index.js';
 import { IS_REMOTE } from '../../config.js';
@@ -107,7 +107,7 @@ export async function startCompanionTab(port: number): Promise<void> {
   if (!wantsCompanionTab()) return;
   stopped = false;
 
-  const provider = getBrowserProvider();
+  const provider = getHeadlessBrowser();
   if (!(await provider.isAvailable())) {
     log.info('no browser available; the desktop will answer only while its own tab is in front');
     return;
@@ -133,7 +133,7 @@ export async function startCompanionTab(port: number): Promise<void> {
  */
 async function openTab(port: number): Promise<void> {
   if (stopped) return;
-  const provider = getBrowserProvider();
+  const provider = getHeadlessBrowser();
   const url = companionUrl(port);
 
   try {
@@ -185,7 +185,7 @@ export async function stopCompanionTab(): Promise<void> {
   }
   if (!session) return;
   session = null;
-  await getBrowserProvider()
+  await getHeadlessBrowser()
     .closeSession(BROWSER_ID)
     .catch(() => {});
 }

@@ -77,13 +77,13 @@ async function openBrowserWindow(
 /**
  * Emit a window action via the session-scoped 'browser-action' channel.
  * This ensures the frontend receives the action even when called from
- * HTTP routes (no active agent turn / ToolActionBridge).
+ * HTTP routes (no active agent turn to deliver it).
  */
 function emitBrowserWindowAction(action: OSAction, sessionId?: string): void {
   const sid = sessionId ?? getActiveSessionId();
   if (!sid) return;
   // Only emit via session channel when there's no agent context —
-  // during agent turns, ToolActionBridge already handles broadcast.
+  // during agent turns, `LiveSession.handleEmittedAction` already delivers it.
   if (getAgentId()) return;
   actionEmitter.emit('browser-action', {
     sessionId: sid,

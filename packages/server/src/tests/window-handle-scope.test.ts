@@ -178,7 +178,7 @@ describe('WindowStateRegistry resolves raw IDs on the acting monitor', () => {
     reg.handleAction(createAppWindow('devtools'), '0');
     reg.handleAction(createAppWindow('devtools'), '1');
 
-    expect(reg.getWindowCount()).toBe(2);
+    expect(reg.listWindows()).toHaveLength(2);
     expect(reg.handleMap.listByMonitor('0')).toEqual(['0/devtools']);
     expect(reg.handleMap.listByMonitor('1')).toEqual(['1/devtools']);
   });
@@ -216,8 +216,12 @@ describe('WindowStateRegistry resolves raw IDs on the acting monitor', () => {
 
     reg.setAppProtocol('0/ai-chat');
 
-    expect(onMonitor('0', () => reg.isAppProtocolWindow('ai-chat'))).toBe(true);
-    expect(onMonitor('1', () => reg.isAppProtocolWindow('ai-chat'))).toBe(false);
+    // `isAppProtocolWindow` was the registry's own wrapper for this; production reads
+    // the field straight off `getWindow()` (see `session/app-window-coordinator.ts`), so
+    // the check here does too.
+    const isAppProtocol = (id: string) => reg.getWindow(id)?.appProtocol === true;
+    expect(onMonitor('0', () => isAppProtocol('ai-chat'))).toBe(true);
+    expect(onMonitor('1', () => isAppProtocol('ai-chat'))).toBe(false);
   });
 
   it('closing one monitor’s window leaves the other monitor’s open', () => {

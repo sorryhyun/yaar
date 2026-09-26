@@ -28,7 +28,6 @@ YAAR Server Process
 └── CodexProvider (one per agent)
     └── Own WebSocket connection (JSON-RPC)
         ├── thread/start → new thread
-        ├── thread/fork  → fork from parent
         ├── thread/resume → resume saved thread
         └── turn/start   → run a turn
 ```
@@ -48,23 +47,17 @@ const stream = sdkQuery({ prompt, options: { systemPrompt, model } });
 
 // Subsequent queries: resume the session
 const stream = sdkQuery({ prompt, options: { resume: sessionId } });
-
-// Window agent fork: fork from parent's session
-const stream = sdkQuery({ prompt, options: { resume: parentSessionId, forkSession: true } });
 ```
 
 - Sessions are opaque IDs managed by the Claude backend
 - `resume: sessionId` continues the conversation (full history preserved server-side)
-- `forkSession: true` creates a new session branching from the parent's history
+- No agent forks another's session: every agent starts or resumes its own
 
 ### Codex: Threads
 
 ```typescript
 // New thread
 const { thread } = await appServer.threadStart({ baseInstructions: systemPrompt });
-
-// Fork from parent thread
-const { thread } = await appServer.threadFork({ threadId: parentThreadId });
 
 // Resume a saved thread
 await appServer.threadResume({ threadId: savedThreadId });
@@ -75,7 +68,6 @@ await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] })
 
 - Threads are explicitly created and managed via JSON-RPC
 - `thread/start` creates a fresh thread with base instructions
-- `thread/fork` branches from a parent thread's history
 - `thread/resume` reconnects to a previously saved thread
 - Each turn is a separate RPC call within a thread
 
@@ -85,7 +77,6 @@ await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] })
 |--------|--------|-------|
 | Session creation | Implicit on first query | Explicit `thread/start` |
 | Session resume | `resume: sessionId` | `thread/resume` → `turn/start` |
-| Session fork | `forkSession: true` | `thread/fork` |
 | History storage | Server-side (Anthropic) | Server-side (OpenAI) |
 | Concurrency | Unlimited parallel queries | Parallel via per-provider WebSocket connections |
 
@@ -186,7 +177,7 @@ mcpServers: {
 ### Codex
 
 MCP servers are declared **per thread**, not at process spawn — `CodexProvider.buildMcpScope`
-builds an `mcp_servers` override for each `thread/start`/`resume`/`fork`, because that is the only
+builds an `mcp_servers` override for each `thread/start`/`resume`, because that is the only
 place that can stamp the calling agent's identity onto them:
 
 ```jsonc
@@ -207,7 +198,7 @@ replacing it, so anything declared there could never be taken away from a thread
 
 | Setting | Claude | Codex |
 |---------|--------|-------|
-| Model | Sonnet/Opus by agent tier | `claudeModelToCodex()` maps Fable → `gpt-6-astra` (fable mode's monitor only), Opus-tier → `gpt-5.6-sol` and Sonnet-tier → `gpt-5.6-terra` (Terra is also the default, since app agents default to the Sonnet tier); per-query `options.model` honored via `thread/start`/`thread/fork` |
+| Model | Sonnet/Opus by agent tier | `claudeModelToCodex()` maps Fable → `gpt-6-astra` (fable mode's monitor only), Opus-tier → `gpt-5.6-sol` and Sonnet-tier → `gpt-5.6-terra` (Terra is also the default, since app agents default to the Sonnet tier); per-query `options.model` honored via `thread/start` |
 | Thinking | Not explicitly configured (no `thinking`/`maxThinkingTokens` option set anywhere in the Claude provider — default SDK behavior) | High reasoning effort (`-c model_reasoning_effort=high`) |
 | Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Disabled by design (`-c web_search=disabled`) — YAAR controls HTTP access via MCP tools |
 | Shell tool | N/A (MCP tools only) | Explicitly disabled (`features.shell_tool=false`) |
@@ -313,11 +304,10 @@ breaks the build rather than degrading to the code name. Covered by
 
 Retry and interruption:
 
-- Abort controller for interruption (`this.createAbortController()`)
-- Three auto-retry paths in `session-provider.ts`: the persistent stream ending before any
+- Abort controller per persistent stream (minted in `getSDKOptions`, kept on the session)
+- Two auto-retry paths in `session-provider.ts`: the persistent stream ending before any
   message came back retries fresh with a new session (no `resume`); a stale-session error
-  detected mid-turn on the main persistent-session path retries without `resume`; the same
-  stale-session retry exists on the fork-turn path. Claude and Codex are not asymmetric here —
+  detected mid-turn retries without `resume`. Claude and Codex are not asymmetric here —
   both retry around session/thread invalidation.
 
 ### Codex
@@ -358,8 +348,8 @@ WarmPool (owns the AppServer singleton)
 │   └── Process lifecycle management (spawn, stop)
 ├── CodexProvider (monitor agent, monitor 0)
 │   └── Own WS connection → own thread → own turns
-├── CodexProvider (window agent)
-│   └── Own WS connection → forked thread → own turns
+├── CodexProvider (app agent)
+│   └── Own WS connection → own thread → own turns
 └── CodexProvider (ephemeral agent)
     └── Own WS connection → own thread → own turns
 ```
@@ -375,9 +365,9 @@ This means:
 | File | Purpose |
 |------|---------|
 | `providers/types.ts` | `AITransport` interface, `StreamMessage`, `TransportOptions` |
-| `providers/factory.ts` | Auto-detection, dynamic imports, provider registry |
+| `providers/factory.ts` | Availability detection (`GET /api/providers`), warm-pool re-exports |
 | `providers/warm-pool.ts` | Pre-initialization pool with auto-replenish |
-| `providers/base-transport.ts` | Shared abort/interrupt logic |
+| `providers/cli-probe.ts` | Cached `--version` probes behind every provider's availability check |
 | `providers/claude/session-provider.ts` | Claude Agent SDK integration — persistent streaming session, prewarm |
 | `providers/claude/input-channel.ts` | `InputChannel` — pushes turns into the open persistent stream |
 | `providers/claude/message-mapper.ts` | SDK message → StreamMessage |

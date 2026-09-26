@@ -288,8 +288,8 @@ async function bootTwoAppWindows() {
   /**
    * The same call, but inside a real turn — which is what a `window.capture` needs.
    *
-   * An emitted OS Action only reaches the browser through `ToolActionBridge`, and that is
-   * installed per turn. A capture asserted from a bare `call()` would be asserting the
+   * An emitted OS Action only reaches the browser on behalf of an agent the session's pool
+   * knows, and a bare `call()`'s agent id is not one. A capture asserted from it would be the
    * timeout path with extra steps: the frame never goes out, so nothing can answer it.
    */
   const callInTurn = async (verb: Verb, uri: string): Promise<VerbResult> => {

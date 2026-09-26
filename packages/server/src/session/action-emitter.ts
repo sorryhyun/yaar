@@ -440,8 +440,8 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * An expiry fires on a timer, so there is no AsyncLocalStorage context to stamp a
    * monitor from — and a dialog belongs to the session anyway, not to one monitor. The
    * dedicated channel reaches `LiveSession.broadcast()` (see the listeners in
-   * live-session.ts); emitting on `'action'` instead would only reach a session with a
-   * live ToolActionBridge subscription, which by expiry time there may not be.
+   * live-session.ts); on `'action'` it would be delivered only on behalf of an agent the
+   * session still knows, which by expiry time there may not be.
    */
   private emitSessionAction(sessionId: string | undefined, action: OSAction): void {
     if (!sessionId) {

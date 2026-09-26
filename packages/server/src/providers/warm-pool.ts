@@ -19,30 +19,20 @@ import { createLogger } from '../observability/log.js';
 
 const log = createLogger('WarmPool');
 
-interface WarmPoolConfig {
-  /** Number of providers to pre-warm (default: 1) */
-  poolSize: number;
-  /** Whether to automatically replenish used providers (default: true) */
-  autoReplenish: boolean;
-}
-
-const DEFAULT_CONFIG: WarmPoolConfig = {
-  poolSize: 1,
-  autoReplenish: true,
-};
+/**
+ * How many warmed providers the pool keeps ready. `acquire()` hands one out and
+ * replenishes in the background, so one is enough for the next agent to find a
+ * warm instance; `/api/agents/stats` reports it as `poolSize`.
+ */
+const POOL_SIZE = 1;
 
 class ProviderWarmPool {
-  private config: WarmPoolConfig;
   private pool: AITransport[] = [];
   private preferredProvider: ProviderType | null = null;
   private initializing = false;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
   private sharedCodexAppServer: AppServer | null = null;
-
-  constructor(config: Partial<WarmPoolConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
-  }
 
   /**
    * Initialize the warm pool by pre-creating and warming up providers.
@@ -101,13 +91,6 @@ class ProviderWarmPool {
     if (this.pool.length === 0) {
       log.warn('no provider available');
       return;
-    }
-
-    for (let i = 1; i < this.config.poolSize; i++) {
-      const provider = await this.createWarmProvider(this.preferredProvider!);
-      if (provider) {
-        this.pool.push(provider);
-      }
     }
 
     log.info('warmed providers', { count: this.pool.length });
@@ -221,7 +204,7 @@ class ProviderWarmPool {
 
       // Replenish in background — each Codex provider now has its own WS
       // connection, so background replenish is safe for both providers.
-      if (this.config.autoReplenish && this.preferredProvider) {
+      if (this.preferredProvider) {
         this.replenishBackground();
       }
 
@@ -240,13 +223,13 @@ class ProviderWarmPool {
    * Replenish the pool in the background (Claude only).
    */
   private replenishBackground(): void {
-    if (!this.preferredProvider || this.pool.length >= this.config.poolSize) return;
+    if (!this.preferredProvider || this.pool.length >= POOL_SIZE) return;
 
     this.createWarmProvider(this.preferredProvider)
       .then((provider) => {
         if (!provider) return;
 
-        if (this.pool.length < this.config.poolSize) {
+        if (this.pool.length < POOL_SIZE) {
           this.pool.push(provider);
           const sessionId = provider.getSessionId?.() ?? 'no-session';
           log.info('replenished pool', { providerSession: sessionId, poolSize: this.pool.length });
@@ -274,7 +257,7 @@ class ProviderWarmPool {
     warmedSessions: string[];
   } {
     return {
-      poolSize: this.config.poolSize,
+      poolSize: POOL_SIZE,
       available: this.pool.length,
       preferredProvider: this.preferredProvider,
       warmedSessions: this.pool
@@ -331,7 +314,6 @@ export async function initWarmPool(): Promise<boolean> {
 
 /**
  * Acquire a pre-warmed provider.
- * Use this instead of getFirstAvailableProvider() for faster provider acquisition.
  */
 export async function acquireWarmProvider(): Promise<AITransport | null> {
   return getWarmPool().acquire();

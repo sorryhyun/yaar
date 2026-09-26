@@ -255,7 +255,6 @@ describe('AgentPool.interruptAll()', () => {
     const pool = new AgentPool(
       'ses-interrupt-pool' as SessionId,
       () => {},
-      (id) => id,
       async () => fakeProvider(),
     );
     try {

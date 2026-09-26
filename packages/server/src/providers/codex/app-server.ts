@@ -164,9 +164,6 @@ export class AppServer extends EventEmitter {
   private readonly config: AppServerConfig;
   private readonly wsPort: number;
 
-  // Capabilities received from initialize handshake
-  private initializeResult: InitializeResponse | null = null;
-
   constructor(config: AppServerConfig = {}) {
     super();
     // EventEmitter *throws* on an 'error' event with no listener, whereas the
@@ -461,10 +458,6 @@ export class AppServer extends EventEmitter {
 
         assertSupportedCodex(result.userAgent);
 
-        if (!this.initializeResult) {
-          this.initializeResult = result;
-        }
-
         return client;
       } catch (err) {
         client?.close();
@@ -538,10 +531,6 @@ export class AppServer extends EventEmitter {
 
   get isRunning(): boolean {
     return this.process !== null && this.controlClient !== null;
-  }
-
-  getCapabilities(): InitializeResponse | null {
-    return this.initializeResult;
   }
 
   async accountRead(params: GetAccountParams): Promise<GetAccountResponse> {

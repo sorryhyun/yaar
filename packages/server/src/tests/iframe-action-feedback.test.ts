@@ -1,9 +1,9 @@
 /**
  * Actions an iframe app emits must stay answerable.
  *
- * Agents reach the frontend through ToolActionBridge, which stamps the pending
- * request's id onto the action. Iframe apps have no bridge — LiveSession broadcasts
- * their actions itself — and that path used to drop the requestId. An action awaiting
+ * Agents' actions used to reach the frontend through a per-agent bridge, which stamped
+ * the pending request's id onto the action. Iframe apps had no bridge — LiveSession
+ * broadcast their actions itself — and that path used to drop the requestId. An action awaiting
  * feedback is only answerable if the frontend knows which request to answer:
  * `window.capture` reads the id off the action and skips the capture without one, so
  * devtools could open a preview and never screenshot it. The read simply timed out.

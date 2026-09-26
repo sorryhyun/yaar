@@ -345,7 +345,6 @@ describe('tool-bearing sub-agents in AgentPool', () => {
     pool = new AgentPool(
       'ses-subagent' as SessionId,
       () => {},
-      (id) => id,
       async () => fakeProvider(recorded),
     );
   });

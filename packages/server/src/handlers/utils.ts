@@ -189,7 +189,7 @@ export const okJsonResource = (uri: string, data: object): VerbResult =>
   okResource(uri, JSON.stringify(data, null, 2), 'application/json');
 
 /** Text block a list result carries when it has no children. See `okLinks`. */
-export const EMPTY_LIST_TEXT = '(empty)';
+const EMPTY_LIST_TEXT = '(empty)';
 
 /**
  * Create a successful result with resource_link blocks for navigable lists.
@@ -265,7 +265,7 @@ export function assertUri<K extends ResolvedUri['kind']>(
 }
 
 /** Check that payload contains a required field. Returns error VerbResult if missing, null if present. */
-export function requireField(
+function requireField(
   payload: Record<string, unknown> | undefined,
   field: string,
   context?: string,

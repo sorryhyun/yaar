@@ -7,12 +7,7 @@
  * sandbox door regardless of `YAAR_BROWSER_PROVIDER`.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
-import {
-  getHeadlessBrowser,
-  getLocalBrowser,
-  isForceHeadless,
-  getBrowserProvider,
-} from '../lib/browser/index.js';
+import { getHeadlessBrowser, getLocalBrowser, isForceHeadless } from '../lib/browser/index.js';
 
 const ORIGINAL = process.env.YAAR_BROWSER_PROVIDER;
 afterEach(() => {
@@ -37,15 +32,6 @@ describe('two-door browser providers', () => {
 
   it('the two doors are different instances', () => {
     expect(getHeadlessBrowser()).not.toBe(getLocalBrowser());
-  });
-
-  it('the deprecated getBrowserProvider() alias is always the headless instance', () => {
-    process.env.YAAR_BROWSER_PROVIDER = 'headless';
-    // getBrowserProvider() has no production callers left (both live doors are reached
-    // by name — getHeadlessBrowser() / getLocalBrowser()); it stays pinned to headless
-    // regardless of the env var, which only isForceHeadless() reads.
-    expect(getBrowserProvider()).toBe(getHeadlessBrowser());
-    expect(getBrowserProvider().controlsUserBrowser).toBe(false);
   });
 
   it('isForceHeadless reflects only the headless opt-out value', () => {

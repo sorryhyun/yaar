@@ -245,8 +245,3 @@ export async function checkEmbeddable(
     return verdict;
   }
 }
-
-/** Test seam — the cache outlives a single probe by design. */
-export function clearEmbeddableCache(): void {
-  cache.clear();
-}

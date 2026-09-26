@@ -140,6 +140,12 @@ function laneOf(event: ClientEvent | undefined): string {
 }
 
 export function createWsHandlers(options: WebSocketServerOptions) {
+  // The boot logger is one session's transcript, so it goes to the first session created
+  // here and to no other. Every new session used to be handed it: a second tab whose stale
+  // id the hub did not know, or the replacement for an evicted session, wrote into the boot
+  // session's log directory — and kept writing after that session's cleanup had disposed
+  // it. A session created without one has its pool mint its own (`ContextPool.initialize`).
+  let bootLogger = options.sessionLogger;
   return {
     async open(ws: ServerWebSocket<WsData>) {
       if (ws.data.kind === 'bridge') return handleBridgeOpen(ws);
@@ -152,11 +158,12 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         restoreActions: options.restoreActions,
         contextMessages: options.contextMessages,
         savedThreadIds: options.savedThreadIds,
-        sessionLogger: options.sessionLogger,
+        sessionLogger: bootLogger,
         acquireProvider: options.acquireProvider,
       };
       const requestedSessionId = ws.data.sessionId;
       const { session, recoveryMode } = hub.attach(requestedSessionId, sessionOptions);
+      if (recoveryMode !== 'attached') bootLogger = undefined;
       hub.cancelEviction(session.sessionId);
 
       // Update ws.data with the actual session ID (may differ from requested)

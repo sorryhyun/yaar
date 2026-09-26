@@ -14,7 +14,7 @@ import { registerConfigHandlers } from './config.js';
 import { registerStorageHandlers } from './storage.js';
 import { registerWindowHandlers } from './window.js';
 import { registerUserHandlers } from './user.js';
-import { registerAppsHandlers } from './apps.js';
+import { registerAppsHandlers } from './apps/index.js';
 import { registerSessionHandlers } from './session.js';
 import { registerHistoryHandlers } from './history.js';
 import { registerAgentsHandlers } from './agents.js';

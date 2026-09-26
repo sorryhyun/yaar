@@ -29,10 +29,11 @@
  * your own id) targets your own window — no permission needed. Passing another app's id targets
  * that app, gated by the caller's app.json `controls` list (and, for command, its command list).
  *
- * ── Why the storage dispatch below is NOT shared with `handlers/apps.ts` ──
+ * ── Why the storage dispatch below is NOT shared with `handlers/apps/` ──
  *
- * They look like the same code and are not. `handlers/apps.ts` serves the *verbs* door, where
- * the caller names the appId in the URI and the access chokepoint decides whether they may;
+ * They look like the same code and are not. `handlers/apps/storage-resource.ts` serves the
+ * *verbs* door, where the caller names the appId in the URI and the access chokepoint decides
+ * whether they may;
  * this file serves app agents, whose only tools are the four below (see APP_AGENT_TOOL_NAMES)
  * and whose appId is taken from their own window and therefore cannot be named or forged.
  * Different key, different threat model — and every leaf differs accordingly:
@@ -69,7 +70,7 @@ import {
   prependNote,
   foldNotes,
 } from '../../handlers/utils.js';
-import { scopedAppStoragePath } from '../../handlers/apps.js';
+import { scopedAppStoragePath } from '../../handlers/apps/index.js';
 
 /**
  * The URI that names what a relative `storage/...` tool argument actually resolved to.

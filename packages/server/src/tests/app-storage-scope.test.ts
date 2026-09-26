@@ -8,13 +8,13 @@
  * inside STORAGE_DIR and was therefore allowed: one app could read and write another's
  * storage, contradicting the app-agent prompt's own promise that storage is app-scoped.
  *
- * The guard lives next to the layout (`handlers/apps.ts`) rather than in the app-agent
+ * The guard lives next to the layout (`handlers/apps/paths.ts`) rather than in the app-agent
  * door, so the two cannot drift apart. These tests pin the containment property itself:
  * whatever comes back must stay under `apps/{appId}/`.
  */
 import { describe, it, expect } from 'bun:test';
 import { normalize } from 'path';
-import { appStoragePath, scopedAppStoragePath } from '../handlers/apps.js';
+import { appStoragePath, scopedAppStoragePath } from '../handlers/apps/index.js';
 
 describe('scopedAppStoragePath', () => {
   it('builds an app-scoped path for an ordinary relative path', () => {

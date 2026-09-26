@@ -22,6 +22,7 @@
  */
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
+import { installMockAgentSession } from './helpers/mock-agent-session.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // The set shared with multi-monitor.test.ts / monitor-identity.test.ts: enough to
@@ -41,12 +42,7 @@ function createMockProvider(): AITransport {
 }
 
 mock.module('../providers/factory.js', () => ({
-  providerRegistry: {},
   getAvailableProviders: mock(async () => []),
-  createProvider: mock(async () => null),
-  getFirstAvailableProvider: mock(async () => null),
-  getProviderInfo: mock(() => undefined),
-  getAllProviderInfo: mock(() => []),
   initWarmPool: mock(async () => {}),
   acquireWarmProvider: mock(async () => createMockProvider()),
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
@@ -77,7 +73,6 @@ mock.module('../agents/limiter.js', () => ({
   getAgentLimiter: () => ({
     tryAcquire: () => true,
     release: mock(() => {}),
-    clearWaiting: mock(() => {}),
   }),
   resetAgentLimiter: mock(() => {}),
 }));
@@ -148,51 +143,22 @@ function releaseHeldTurns(): void {
   for (const resolve of resolvers) resolve();
 }
 
-mock.module('../agents/agent-session.js', () => {
-  class MockAgentSession {
-    // A depth, not a boolean: a parallel (`actionId`) turn can overlap a held main
-    // turn, and the first one to finish must not make the other read as stopped.
-    private running = 0;
-    initialize = mock(async () => true);
-    handleMessage = mock(async (_prompt: string, _opts: unknown) => {
-      this.running++;
-      try {
-        if (!blockTurns) return;
-        await new Promise<void>((resolve) => held.push(resolve));
-      } finally {
-        this.running--;
-      }
-    });
-    isRunning = () => this.running > 0;
-    interrupt = mock(async () => {});
-    cleanup = mock(async () => {});
-    getRawSessionId = mock(() => null);
-    getRecordedActions = mock(() => []);
-    setOutputCallback = mock(() => {});
-    getInstanceId = mock(() => `agent-${Date.now()}`);
-    getUsage = mock(() => ({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    }));
-    getConnectionId = mock(() => 'test-conn');
-    getCurrentRole = mock(() => null);
-    getCurrentMessageId = mock(() => null);
-    wasInterrupted = mock(() => false);
-    steer = mock(async () => true);
-    prewarm = mock(async () => {});
-  }
-  return {
-    AgentSession: MockAgentSession,
-    getAgentId: mock(() => undefined),
-    getCurrentConnectionId: mock(() => undefined),
-    getSessionId: mock(() => undefined),
-    getMonitorId: mock(() => undefined),
-    getWindowId: mock(() => undefined),
-    runWithAgentId: mock((_id: string, fn: () => unknown) => fn()),
-    runWithAgentContext: mock((_ctx: unknown, fn: () => unknown) => fn()),
-  };
+// A depth, not a boolean: a parallel (`actionId`) turn can overlap a held main turn,
+// and the first one to finish must not make the other read as stopped.
+let runningTurns = 0;
+
+installMockAgentSession({
+  handleMessage: async (_prompt: string, _opts: unknown) => {
+    runningTurns++;
+    try {
+      if (!blockTurns) return;
+      await new Promise<void>((resolve) => held.push(resolve));
+    } finally {
+      runningTurns--;
+    }
+  },
+  isRunning: () => runningTurns > 0,
+  steer: async () => true,
 });
 
 // ── Imports under test (after mocks) ───────────────────────────────────────

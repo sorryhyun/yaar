@@ -2,11 +2,11 @@
  * Stamping the scoped handle onto an action on its way to the frontend.
  *
  * `WindowHandleMap` owns the *format* of a handle; this module owns the one rule about
- * **when** to ask it. Three paths emit window-bearing actions — the agent path
- * (`ToolActionBridge`), the non-agent path (`LiveSession.handleEmittedAction`, for the
- * iframe verb proxy and HTTP routes), and launch hooks — and each used to carry its own
- * copy of the rule. Only one copy had it right, which is how the incident below reached
- * production on the other two.
+ * **when** to ask it. Two paths emit window-bearing actions — tool emits of every kind
+ * (`LiveSession.handleEmittedAction`, for agents, the iframe verb proxy and HTTP routes)
+ * and launch hooks. There used to be a third, a per-agent bridge, and each path carried
+ * its own copy of the rule. Only one copy had it right, which is how the incident below
+ * reached production on the other two.
  *
  * The rule, and why it is not "just resolve the handle":
  *
@@ -39,9 +39,9 @@ import type { OSAction } from '@yaar/shared';
  * Raw window id + the acting monitor → the scoped handle, or `undefined`/the id itself
  * when there is no handle to give.
  *
- * Two implementations are passed in practice: `WindowHandleMap.resolve` (a pure lookup)
- * and `ContextPool`'s resolve-or-register wrapper, which mints the handle a monitor agent's
- * new window needs. Both fit this signature; neither is this module's business.
+ * Must be a pure lookup. A resolver that registered on a miss is how an agent's
+ * `window.close` used to file its handle straight back into the map after the close had
+ * removed it; minting the handle for a new window is the registry's job on the create.
  */
 export type WindowHandleResolver = (rawWindowId: string, monitorId?: string) => string | undefined;
 

@@ -12,8 +12,10 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'crypto';
-import { BaseTransport } from '../base-transport.js';
+import { errMessage } from '@yaar/lib/errors';
+import { isCliAvailable } from '../cli-probe.js';
 import type {
+  AITransport,
   EscapeGuardRecord,
   ExternalTurnHandlers,
   InterruptReceipt,
@@ -56,6 +58,11 @@ type TurnOptionsRequest = Omit<
   SDKOptionsRequest,
   'defaultSystemPrompt' | 'abortController' | 'onEscapeGuard'
 >;
+
+/** The SDK rejects with this when its abort controller fires — an expected stop, not a failure. */
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
 
 /** Max time to hold a turn's first message while MCP servers connect. */
 const MCP_CONNECT_WAIT_MS = 5000;
@@ -185,7 +192,7 @@ interface PersistentSession {
   pumpError: unknown;
 }
 
-export class ClaudeSessionProvider extends BaseTransport {
+export class ClaudeSessionProvider implements AITransport {
   readonly name = 'claude';
   readonly providerType: ProviderType = 'claude';
   readonly systemPrompt: string;
@@ -209,24 +216,25 @@ export class ClaudeSessionProvider extends BaseTransport {
   private ownPrompts: string[] = [];
 
   constructor() {
-    super();
     this.systemPrompt = getSystemPrompt();
   }
 
   async isAvailable(): Promise<boolean> {
-    return this.isCliAvailable(...getClaudeSpawnArgs());
+    return isCliAvailable(...getClaudeSpawnArgs());
   }
 
   /**
    * Get SDK options for queries. Binds a fresh abort controller to the process
-   * the resulting options will spawn (see sdk-options.ts for the options).
+   * the resulting options will spawn (see sdk-options.ts for the options); every
+   * caller hands the result straight to `openPersistentSession`, which keeps that
+   * controller on the session it belongs to.
    */
   private getSDKOptions({ resumeSession, options }: TurnOptionsRequest): SDKOptions {
     const sdkOptions = buildSDKOptions({
       resumeSession,
       options,
       defaultSystemPrompt: this.systemPrompt,
-      abortController: this.createAbortController(),
+      abortController: new AbortController(),
       onEscapeGuard: (record) => this.escapeGuardQueue.push(record),
     });
     // Both are for Remote Control, and both are fixed when the process starts — which is
@@ -348,10 +356,6 @@ export class ClaudeSessionProvider extends BaseTransport {
    *    would otherwise take our message as the *next* turn's opening line.
    *    `turnId` is the `expectedTurnId` analogue; the session identity check
    *    catches a stream closed and reopened underneath us.
-   *
-   * A fork's one-shot process is refused outright: it has no channel, and its
-   * prompt iterable has already completed. The caller's fallback — a fresh turn
-   * — is the only honest answer there.
    */
   async steer(content: string): Promise<boolean> {
     const session = this.persistentSession;
@@ -451,13 +455,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       actionEmitter.setCurrentMonitor(options.monitorId);
     }
     try {
-      if (options.forkSession && resumeSession) {
-        // Forks get a dedicated one-shot process; the forked conversation goes
-        // persistent from its own next turn.
-        yield* this.runOneShotTurn(messageContent, resumeSession, options);
-      } else {
-        yield* this.runPersistentTurn(messageContent, resumeSession, options);
-      }
+      yield* this.runPersistentTurn(messageContent, resumeSession, options);
     } finally {
       actionEmitter.clearCurrentMonitor();
     }
@@ -639,8 +637,8 @@ export class ClaudeSessionProvider extends BaseTransport {
       await this.closePersistentSession();
     } catch (err) {
       await this.closePersistentSession();
-      if (!this.isAbortError(err)) {
-        yield this.createErrorMessage(err);
+      if (!isAbortError(err)) {
+        yield { type: 'error', error: errMessage(err) };
       }
     } finally {
       if (inbox) session.router.closeTurn(inbox);
@@ -704,7 +702,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         session.router.route(value);
       }
     } catch (err) {
-      if (!this.isAbortError(err)) session.pumpError = err;
+      if (!isAbortError(err)) session.pumpError = err;
     } finally {
       session.pumpDone = true;
       session.router.end();
@@ -883,64 +881,6 @@ export class ClaudeSessionProvider extends BaseTransport {
     this.externalHandlers = handlers;
   }
 
-  /** Dedicated single-turn process, used for session forks. */
-  private async *runOneShotTurn(
-    messageContent: string | ContentBlock[],
-    resumeSession: string,
-    options: TransportOptions,
-  ): AsyncIterable<StreamMessage> {
-    const sdkOptions = this.getSDKOptions({ resumeSession, options });
-    sdkOptions.forkSession = true;
-
-    // Hold the user message until MCP servers connect (see openPersistentSession).
-    let releaseMcpGate!: () => void;
-    const mcpGate = new Promise<void>((resolve) => {
-      releaseMcpGate = resolve;
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const promptInput = (async function* (): AsyncGenerator<any> {
-      await mcpGate;
-      yield {
-        type: 'user',
-        message: { role: 'user', content: messageContent },
-      };
-    })();
-
-    try {
-      const stream = sdkQuery({ prompt: promptInput, options: sdkOptions });
-      void this.waitForMcpConnected(stream, sdkOptions).finally(releaseMcpGate);
-      let messageCount = 0;
-      const turnUsage = new TurnUsageTracker();
-      const toolBlocks = new ToolBlockBuffer();
-
-      for await (const msg of stream) {
-        messageCount++;
-        if (this.isAborted()) break;
-
-        this.captureSessionId(msg, options.sessionId);
-
-        const mapped = mapClaudeMessage(msg, turnUsage, toolBlocks);
-        if (mapped) {
-          // Detect stale session error and retry without resume
-          if (isStaleSessionError(mapped)) {
-            log.warn('stale session; retrying without resume', { resumeSession });
-            this.sessionId = null;
-            yield* this.executeQuery(messageContent, undefined, options);
-            return;
-          }
-          yield mapped;
-        }
-      }
-
-      log.info('fork turn finished', { messages: messageCount });
-    } catch (err) {
-      if (this.isAbortError(err)) {
-        return;
-      }
-      yield this.createErrorMessage(err);
-    }
-  }
-
   /**
    * Wait (bounded) until every configured MCP server reports connected
    * (~700ms for the local HTTP servers), so a turn's first message is only
@@ -995,16 +935,16 @@ export class ClaudeSessionProvider extends BaseTransport {
    * uuid are never listed — but it is the strongest signal the CLI offers, and
    * the alternative is killing a healthy warm process after every stop.
    *
-   * An *idle* session is closed rather than aborted. `this.abortController` is
-   * the same controller the open stream was built with (`getSDKOptions` mints
-   * it, `openPersistentSession` stores it), so `super.interrupt()` here would
-   * kill a prewarmed process while leaving `persistentSession` pointing at it —
-   * and the next turn would reuse that corpse, push a message into a dead
-   * channel, and return no answer at all.
+   * An *idle* session is closed rather than aborted: aborting the controller
+   * the open stream was built with would kill a prewarmed process while leaving
+   * `persistentSession` pointing at it — and the next turn would reuse that
+   * corpse, push a message into a dead channel, and return no answer at all.
+   * With no session there is no process at all: every controller this provider
+   * mints belongs to a stream, and closing the stream aborted it.
    */
   async interrupt(): Promise<InterruptReceipt> {
     const session = this.persistentSession;
-    if (!session) return super.interrupt();
+    if (!session) return { outcome: 'idle' };
     if (!session.busy && session.router.detachedActive) {
       // A claude.ai turn is the one running. Stop it the soft way: killing the process
       // would take the bridge down with it.
@@ -1050,6 +990,5 @@ export class ClaudeSessionProvider extends BaseTransport {
     this.externalHandlers = null;
     await this.closePersistentSession();
     this.sessionId = null;
-    await super.dispose();
   }
 }

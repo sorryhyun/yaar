@@ -60,7 +60,6 @@ import type {
 } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
-import { getAgentLimiter } from './limiter.js';
 import { genId } from '@yaar/lib/ids';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
@@ -198,23 +197,7 @@ export class ContextPool implements PoolContext {
       this.contextTape.restore(restoredContext);
       log.info('restored context from previous session', { messages: restoredContext.length });
     }
-    this.agentPool = new AgentPool(
-      sessionId,
-      broadcast,
-      (rawId, monitorId) => {
-        // The lookup must be scoped to the acting monitor before we fall back to
-        // registering. Raw IDs are derived from the appId, so an unscoped resolve
-        // would hand monitor 1's agent the handle of monitor 0's window of the same
-        // app — its window.create would land on monitor 0's window and every message
-        // after it would drive monitor 0's app agent instead of its own.
-        if (monitorId) {
-          const existing = windowState.handleMap.resolve(rawId, monitorId);
-          return existing ?? windowState.handleMap.register(rawId, monitorId);
-        }
-        return windowState.handleMap.resolve(rawId) ?? rawId;
-      },
-      this.acquireProvider,
-    );
+    this.agentPool = new AgentPool(sessionId, broadcast, this.acquireProvider);
 
     this.monitorProcessor = new MonitorTaskProcessor(this);
     this.appProcessor = new AppTaskProcessor(this);
@@ -802,8 +785,8 @@ export class ContextPool implements PoolContext {
     dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
     this.reportDropped(dropped, 'the agent pool was reset');
 
-    // 2. Reject blocked limiter/budget waiters so they unblock and exit
-    getAgentLimiter().clearWaiting(new Error('Pool resetting'));
+    // 2. Reject blocked budget waiters so they unblock and exit. (The AgentLimiter never
+    //    blocks — a spawn over the limit is refused — so it has no waiters to reject.)
     this.budgetPolicy.clearWaiting(new Error('Pool resetting'));
 
     // 3. Interrupt running queries so handleMessage loops exit

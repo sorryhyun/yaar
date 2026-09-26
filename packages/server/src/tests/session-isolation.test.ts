@@ -170,6 +170,7 @@ describe('0A — an action changes only its own session', () => {
       (live as unknown as { pool: unknown }).pool = {
         recordMonitorAction: (monitorId: string) => billed.push({ session, monitorId }),
         notifyWindowSubscribers: () => {},
+        agentPool: { findAgent: () => undefined },
         getSessionLogger: () => null,
         cleanup: async () => {},
       };

@@ -8,12 +8,18 @@
  * Architecture:
  * - One AppServer process shared across agents (owned by WarmPool)
  * - Each provider has its own WS connection (notifications routed per-connection)
- * - Each agent gets its own thread (via thread/start or thread/fork)
+ * - Each agent gets its own thread (via thread/start, or thread/resume on restore)
  * - Provider never stops the AppServer — WarmPool handles lifecycle
  */
 
-import { BaseTransport } from '../base-transport.js';
-import type { InterruptReceipt, StreamMessage, TransportOptions, ProviderType } from '../types.js';
+import { errMessage } from '@yaar/lib/errors';
+import type {
+  AITransport,
+  InterruptReceipt,
+  StreamMessage,
+  TransportOptions,
+  ProviderType,
+} from '../types.js';
 import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
@@ -26,8 +32,6 @@ import type {
   ThreadStartResponse,
   ThreadResumeParams,
   ThreadResumeResponse,
-  ThreadForkParams,
-  ThreadForkResponse,
   TurnStartParams,
   TurnStartResponse,
   TurnSteerParams,
@@ -85,7 +89,7 @@ function codexServerFilter(allowedTools: string[] | undefined): (name: string) =
   return (name) => needed.has(name);
 }
 
-export class CodexProvider extends BaseTransport {
+export class CodexProvider implements AITransport {
   readonly name = 'codex';
   readonly providerType: ProviderType = 'codex';
   // `config/system-prompt.txt` wins over the built-in prompt, as it does for Claude. Read once
@@ -95,6 +99,14 @@ export class CodexProvider extends BaseTransport {
   private appServer: AppServer | null;
   private client: JsonRpcWsClient | null = null;
   private currentSession: ThreadSession | null = null;
+
+  /**
+   * The running query's abort, so interrupt() can stop its read loop. Minted per
+   * query and cleared by that query on the way out — only if it is still the one
+   * installed, since the idle-recovery retry runs a nested query() that installs
+   * its own.
+   */
+  private turnAbort: AbortController | null = null;
 
   // Interrupt signal: shared instance field so interrupt() can reach the active query.
   private resolveMessage: ((done: boolean) => void) | null = null;
@@ -112,15 +124,7 @@ export class CodexProvider extends BaseTransport {
 
   /** @param appServer - The shared AppServer (owned by WarmPool, not this provider). */
   constructor(appServer: AppServer) {
-    super();
     this.appServer = appServer;
-  }
-
-  /**
-   * Get the underlying AppServer (for sharing with other providers).
-   */
-  getAppServer(): AppServer | null {
-    return this.appServer;
   }
 
   getSessionId(): string | null {
@@ -169,12 +173,13 @@ export class CodexProvider extends BaseTransport {
   }
 
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
-    this.createAbortController();
+    const abort = new AbortController();
+    this.turnAbort = abort;
 
     try {
       // Reconnect a socket that dropped while idle rather than failing the turn.
       if (!this.appServer?.isRunning || !(await this.ensureClient())) {
-        yield this.createErrorMessage(new Error('AppServer or WS connection is not available'));
+        yield { type: 'error', error: 'AppServer or WS connection is not available' };
         return;
       }
 
@@ -215,10 +220,7 @@ export class CodexProvider extends BaseTransport {
         // both have to agree or the loop and the stream disagree about whether
         // the turn ended.
         const retryable = method === 'error' && (params as { willRetry?: boolean })?.willRetry;
-        if (
-          !retryable &&
-          (method === 'turn/completed' || method === 'turn/failed' || method === 'error')
-        ) {
+        if (!retryable && (method === 'turn/completed' || method === 'error')) {
           if (this.resolveMessage) {
             this.resolveMessage(true);
             this.resolveMessage = null;
@@ -263,7 +265,7 @@ export class CodexProvider extends BaseTransport {
         this.turnReadyResolve = null;
 
         while (true) {
-          if (this.isAborted()) break;
+          if (abort.signal.aborted) break;
 
           while (pendingMessages.length > 0) {
             const message = pendingMessages.shift()!;
@@ -292,10 +294,6 @@ export class CodexProvider extends BaseTransport {
         this.turnReadyPromise = null;
       }
     } catch (err) {
-      if (this.isAbortError(err)) {
-        return;
-      }
-
       // Session recovery: the app-server evicted our idle thread from memory (or
       // the connection it lived behind dropped), so turn/start reported an
       // invalid thread. The thread is still persisted as a rollout on disk —
@@ -322,7 +320,9 @@ export class CodexProvider extends BaseTransport {
         return;
       }
 
-      yield this.createErrorMessage(err);
+      yield { type: 'error', error: errMessage(err) };
+    } finally {
+      if (this.turnAbort === abort) this.turnAbort = null;
     }
   }
 
@@ -383,7 +383,7 @@ export class CodexProvider extends BaseTransport {
       }
     }
 
-    await super.interrupt();
+    this.turnAbort?.abort();
     if (this.resolveMessage) {
       this.resolveMessage(true);
       this.resolveMessage = null;
@@ -448,7 +448,7 @@ export class CodexProvider extends BaseTransport {
   }
 
   async dispose(): Promise<void> {
-    await super.dispose();
+    await this.interrupt();
     if (this.client) {
       this.client.close();
       this.client = null;
@@ -517,7 +517,7 @@ export class CodexProvider extends BaseTransport {
 
   /**
    * Ensure the thread is set up based on transport options.
-   * Handles three cases: fork from parent, start new, or reuse existing.
+   * Handles three cases: resume a saved thread, start new, or reuse existing.
    * Returns true if a new thread was created (caller should yield sessionId).
    */
   private async ensureThread(options: TransportOptions): Promise<boolean> {
@@ -529,35 +529,9 @@ export class CodexProvider extends BaseTransport {
     const mcpConfig = scope ? { mcp_servers: scope.servers } : undefined;
     const mcpScope = scope?.signature;
 
-    // Case 1: Fork from parent session
-    if (options.forkSession && options.sessionId) {
-      log.info('forking thread from parent', { parentThreadId: options.sessionId });
-      try {
-        const fullParams: ThreadForkParams = {
-          threadId: options.sessionId,
-          baseInstructions: options.systemPrompt,
-          ...(options.model ? { model: options.model } : {}),
-          ...(mcpConfig ? { config: mcpConfig } : {}),
-        };
-        const result = await client.request<ThreadForkParams, ThreadForkResponse>(
-          'thread/fork',
-          fullParams,
-        );
-        this.currentSession = {
-          threadId: result.thread.id,
-          systemPrompt: options.systemPrompt,
-          model: options.model,
-          mcpScope,
-        };
-        return true;
-      } catch (err) {
-        log.warn('fork failed, falling back to new thread', { err });
-      }
-    }
-
-    // Case 2: Resume a saved thread
+    // Case 1: Resume a saved thread
     //
-    // `config` matters here for exactly the reason it does on start/fork: a thread's MCP
+    // `config` matters here for exactly the reason it does on start: a thread's MCP
     // server set is decided when the thread is (re)opened, and since the app-server process
     // declares none (see `app-server.ts`'s `spawnProcess`), a resume that omits it opens a
     // thread with zero YAAR namespaces — the agent then has no verbs at all and answers as
@@ -596,7 +570,7 @@ export class CodexProvider extends BaseTransport {
       }
     }
 
-    // Case 3: Need new thread (no session, system prompt, model, or MCP scope changed)
+    // Case 2: Need new thread (no session, system prompt, model, or MCP scope changed)
     const needsNewThread =
       !this.currentSession ||
       this.currentSession.systemPrompt !== options.systemPrompt ||
@@ -623,7 +597,7 @@ export class CodexProvider extends BaseTransport {
       return true;
     }
 
-    // Case 4: Reuse existing thread (same system prompt + model + MCP scope, continuing)
+    // Case 3: Reuse existing thread (same system prompt + model + MCP scope, continuing)
     return false;
   }
 }

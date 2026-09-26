@@ -1,5 +1,5 @@
 /**
- * App install/uninstall logic extracted from handlers/apps.ts.
+ * App install/uninstall logic, behind the app handlers in handlers/apps/.
  */
 
 import { join } from 'path';

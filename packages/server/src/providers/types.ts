@@ -5,14 +5,6 @@
 
 export type ProviderType = 'claude' | 'codex';
 
-export interface ProviderInfo {
-  type: ProviderType;
-  displayName: string;
-  description: string;
-  requiredCli?: string;
-  requiredEnvVars?: string[];
-}
-
 /**
  * Token consumption, normalized across providers.
  *
@@ -205,8 +197,7 @@ export interface StreamMessage {
 export interface TransportOptions {
   systemPrompt: string;
   model?: string;
-  sessionId?: string; // For session resumption, or parent session when forking
-  forkSession?: boolean; // When true with sessionId, creates a fork instead of continuing
+  sessionId?: string; // For session resumption
   resumeThread?: boolean; // When true with sessionId, resume via thread/resume
   images?: string[]; // Base64 data URLs for images (e.g., user drawings)
   monitorId?: string; // Which monitor originated this query (for action routing)

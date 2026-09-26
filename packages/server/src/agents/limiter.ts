@@ -1,8 +1,12 @@
 /**
  * AgentLimiter - Semaphore-pattern global agent limit enforcement.
  *
- * Ensures system-wide limit on total agents across all connections.
- * Uses a waiting queue with optional timeout for graceful backpressure.
+ * Ensures a system-wide limit on total agents across all connections. Non-blocking only:
+ * production calls `tryAcquire()`/`release()` and never blocks a caller waiting for a
+ * slot to free up (an `acquire()` that queued a waiter used to exist here, but nothing
+ * called it outside tests — see the audit at `backend_report.md` §2F — and a wait queue
+ * on a *process-global* semaphore is a hazard waiting to be reached: reject-on-shutdown
+ * for one session's waiters would have rejected every other session's too).
  */
 
 import { getEnvInt } from '../config.js';
@@ -10,16 +14,9 @@ import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AgentLimiter');
 
-interface WaitingRequest {
-  resolve: () => void;
-  reject: (error: Error) => void;
-  timeoutId?: NodeJS.Timeout;
-}
-
 export class AgentLimiter {
   private maxAgents: number;
   private currentCount = 0;
-  private waitingQueue: WaitingRequest[] = [];
 
   constructor(maxAgents?: number) {
     this.maxAgents = maxAgents ?? getEnvInt('MAX_AGENTS', 10);
@@ -40,20 +37,12 @@ export class AgentLimiter {
   }
 
   /**
-   * Get the number of requests waiting in the queue.
-   */
-  getWaitingCount(): number {
-    return this.waitingQueue.length;
-  }
-
-  /**
    * Get stats for monitoring.
    */
-  getStats(): { maxAgents: number; currentCount: number; waitingCount: number } {
+  getStats(): { maxAgents: number; currentCount: number } {
     return {
       maxAgents: this.maxAgents,
       currentCount: this.currentCount,
-      waitingCount: this.waitingQueue.length,
     };
   }
 
@@ -70,88 +59,20 @@ export class AgentLimiter {
   }
 
   /**
-   * Acquire an agent slot, waiting if at limit.
-   * Throws if timeout is reached while waiting.
-   *
-   * @param timeoutMs - Optional timeout in milliseconds. If not provided, waits indefinitely.
-   */
-  async acquire(timeoutMs?: number): Promise<void> {
-    // Try immediate acquisition
-    if (this.tryAcquire()) {
-      return;
-    }
-
-    // At limit - wait in queue
-    return new Promise<void>((resolve, reject) => {
-      const request: WaitingRequest = {
-        resolve: () => {
-          this.currentCount++;
-          resolve();
-        },
-        reject,
-      };
-
-      // Set up timeout if specified
-      if (timeoutMs !== undefined && timeoutMs > 0) {
-        request.timeoutId = setTimeout(() => {
-          // Remove from queue
-          const index = this.waitingQueue.indexOf(request);
-          if (index !== -1) {
-            this.waitingQueue.splice(index, 1);
-          }
-          reject(new Error(`Agent acquisition timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-      }
-
-      this.waitingQueue.push(request);
-    });
-  }
-
-  /**
-   * Release an agent slot, signaling waiting requests.
+   * Release an agent slot.
    */
   release(): void {
     if (this.currentCount <= 0) {
       log.warn('release() called when currentCount is 0');
       return;
     }
-
     this.currentCount--;
-
-    // Signal next waiting request
-    if (this.waitingQueue.length > 0) {
-      const next = this.waitingQueue.shift();
-      if (next) {
-        // Clear timeout if any
-        if (next.timeoutId) {
-          clearTimeout(next.timeoutId);
-        }
-        // resolve() increments currentCount
-        next.resolve();
-      }
-    }
-  }
-
-  /**
-   * Clear all waiting requests with an error.
-   * Called during shutdown.
-   */
-  clearWaiting(error?: Error): void {
-    const err = error ?? new Error('AgentLimiter shutting down');
-    for (const request of this.waitingQueue) {
-      if (request.timeoutId) {
-        clearTimeout(request.timeoutId);
-      }
-      request.reject(err);
-    }
-    this.waitingQueue = [];
   }
 
   /**
    * Reset the limiter (for testing).
    */
   reset(): void {
-    this.clearWaiting();
     this.currentCount = 0;
   }
 }

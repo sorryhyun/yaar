@@ -277,21 +277,12 @@ inspecting `p.turn?.status` in `message-mapper.ts`.
 | `turn/completed` | `StreamMessage { type: 'complete' }` or `{ type: 'error' }` | Turn finished — `status: 'failed'` or `'interrupted'` maps to `error`, otherwise `complete` |
 | `thread/tokenUsage/updated` | `StreamMessage { type: 'usage' }` (or `null`) | The thread's running token total, re-sent several times per turn (`usageScope: 'session'`; summing repeats would multiply the real figure). Codex counts `cachedInputTokens`/`cacheWriteInputTokens` *inside* `inputTokens`, unlike Claude, which reports them beside it — the mapper subtracts both out so `inputTokens` means the same thing (the fresh remainder) on both providers |
 | `error` | `StreamMessage { type: 'error' }` | Protocol error |
-| `item/commandExecution/outputDelta` | `StreamMessage { type: 'tool_output_delta' }` | Live tail of a running command's output — not the authoritative result (`item/commandExecution/completed`'s `aggregatedOutput` still is), so not fed back into context or the transcript |
+| `item/commandExecution/outputDelta` | `StreamMessage { type: 'tool_output_delta' }` | Live tail of a running command's output — not the authoritative result (the command's `item/completed`, carrying `aggregatedOutput`, still is), so not fed back into context or the transcript |
 
 ### Events We Skip
 
-Two mechanisms, both in `message-mapper.ts`. A method with its own `switch` case in
-`mapNotification` returns `null` directly:
-
-| Event | Reason |
-|-------|--------|
-| `turn/started` | No content to yield |
-| `item/agentMessage/completed` | Already streamed via deltas |
-| `item/reasoning/completed`, `item/reasoning/summaryTextDelta`, `item/reasoning/summaryTextCompleted`, `item/reasoning/summaryPartAdded` | Reasoning lifecycle/summary events — not needed beyond the `textDelta` stream |
-
-`item/reasoning/summaryTextDelta` and `item/reasoning/summaryPartAdded` are also listed in
-`IGNORED_METHODS` below; that listing is unreachable since the explicit case above matches first.
+Two mechanisms, both in `message-mapper.ts`. `turn/started` has its own `switch` case in
+`mapNotification` that returns `null` directly — there is no content to yield.
 
 Everything else falls to the `default` case, which checks `IGNORED_METHODS` (exact names) and
 `IGNORED_PREFIXES` (`codex/event/`, `fuzzyFileSearch/` — internal telemetry) before logging an
@@ -307,20 +298,13 @@ event as genuinely unknown:
 | `item/fileChange/outputDelta` | |
 | `item/commandExecution/terminalInteraction` | Sub-item progress — the coarser `item/started`/`item/completed` pair already covers this tool call |
 | `item/mcpToolCall/progress` | Sub-item progress — same as above |
-| `item/reasoning/summaryTextDelta`, `item/reasoning/summaryPartAdded` | Unreachable — an earlier explicit case already returns `null` for both (see above) |
+| `item/reasoning/summaryTextDelta`, `item/reasoning/summaryPartAdded` | Reasoning summary events — not needed beyond the `textDelta` stream |
 | `item/autoApprovalReview/started`, `item/autoApprovalReview/completed` | |
 | `rawResponseItem/completed` | |
 
-### Dead Notification Cases (defensive, unreachable)
-
-`message-mapper.ts` also has switch cases for `item/mcpToolCall/started`, `item/mcpToolCall/completed`,
-`item/commandExecution/started`, and `item/commandExecution/completed`. These method names do **not**
-appear in the generated `ServerNotification` union — Codex only emits the sub-item events listed
-above (`.../progress`, `.../outputDelta`, `.../terminalInteraction`), plus the coarse `item/started`/
-`item/completed` pair that already dispatches these item types. The four cases are unreachable given
-the current protocol; they share mapper functions with the `item/started`/`item/completed` handlers,
-so keeping them costs nothing, but treat them as legacy/defensive rather than a documented part of
-the live protocol.
+Every `case` in `mapNotification` names a method in the generated `ServerNotification` union.
+Tool calls arrive only as the coarse `item/started`/`item/completed` pair (plus the sub-item
+events above); there is no per-kind `item/{kind}/started`/`completed` notification to map.
 
 ### Bidirectional Requests (Approval Flow)
 

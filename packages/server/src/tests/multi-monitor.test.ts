@@ -6,6 +6,7 @@
  */
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
+import { installMockAgentSession } from './helpers/mock-agent-session.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -22,12 +23,7 @@ function createMockProvider(): AITransport {
 }
 
 mock.module('../providers/factory.js', () => ({
-  providerRegistry: {},
   getAvailableProviders: mock(async () => []),
-  createProvider: mock(async () => null),
-  getFirstAvailableProvider: mock(async () => null),
-  getProviderInfo: mock(() => undefined),
-  getAllProviderInfo: mock(() => []),
   initWarmPool: mock(async () => {}),
   acquireWarmProvider: mock(async () => createMockProvider()),
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
@@ -57,11 +53,6 @@ mock.module('../logging/session-logger.js', () => {
 class RealAgentLimiter {
   private maxAgents: number;
   private currentCount = 0;
-  private waitingQueue: Array<{
-    resolve: () => void;
-    reject: (e: Error) => void;
-    timeoutId?: NodeJS.Timeout;
-  }> = [];
   constructor(maxAgents?: number) {
     this.maxAgents = maxAgents ?? 10;
   }
@@ -71,15 +62,8 @@ class RealAgentLimiter {
   getCurrentCount() {
     return this.currentCount;
   }
-  getWaitingCount() {
-    return this.waitingQueue.length;
-  }
   getStats() {
-    return {
-      maxAgents: this.maxAgents,
-      currentCount: this.currentCount,
-      waitingCount: this.waitingQueue.length,
-    };
+    return { maxAgents: this.maxAgents, currentCount: this.currentCount };
   }
   tryAcquire() {
     if (this.currentCount < this.maxAgents) {
@@ -88,50 +72,10 @@ class RealAgentLimiter {
     }
     return false;
   }
-  async acquire(timeoutMs?: number) {
-    if (this.tryAcquire()) return;
-    return new Promise<void>((resolve, reject) => {
-      const req = {
-        resolve: () => {
-          this.currentCount++;
-          resolve();
-        },
-        reject,
-      } as any;
-      if (timeoutMs && timeoutMs > 0) {
-        req.timeoutId = setTimeout(() => {
-          const idx = this.waitingQueue.indexOf(req);
-          if (idx !== -1) this.waitingQueue.splice(idx, 1);
-          reject(new Error(`Agent acquisition timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-      }
-      this.waitingQueue.push(req);
-    });
-  }
   release() {
-    if (this.currentCount <= 0) {
-      console.warn('[AgentLimiter] release() called when currentCount is 0');
-      return;
-    }
-    this.currentCount--;
-    if (this.waitingQueue.length > 0) {
-      const next = this.waitingQueue.shift();
-      if (next) {
-        if (next.timeoutId) clearTimeout(next.timeoutId);
-        next.resolve();
-      }
-    }
-  }
-  clearWaiting(error?: Error) {
-    const err = error ?? new Error('AgentLimiter shutting down');
-    for (const r of this.waitingQueue) {
-      if (r.timeoutId) clearTimeout(r.timeoutId);
-      r.reject(err);
-    }
-    this.waitingQueue = [];
+    if (this.currentCount > 0) this.currentCount--;
   }
   reset() {
-    this.clearWaiting();
     this.currentCount = 0;
   }
 }
@@ -141,7 +85,6 @@ mock.module('../agents/limiter.js', () => ({
   getAgentLimiter: () => ({
     tryAcquire: () => true,
     release: mock(() => {}),
-    clearWaiting: mock(() => {}),
   }),
   resetAgentLimiter: mock(() => {}),
 }));
@@ -202,40 +145,7 @@ mock.module('../agents/profiles/index.js', () => ({
 }));
 
 // Mock AgentSession so we don't need real providers
-mock.module('../agents/agent-session.js', () => {
-  class MockAgentSession {
-    initialize = mock(async () => true);
-    handleMessage = mock(async () => {});
-    isRunning = mock(() => false);
-    interrupt = mock(async () => {});
-    cleanup = mock(async () => {});
-    getRawSessionId = mock(() => null);
-    getRecordedActions = mock(() => []);
-    setOutputCallback = mock(() => {});
-    getInstanceId = mock(() => `agent-${Date.now()}`);
-    getUsage = mock(() => ({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    }));
-    getConnectionId = mock(() => 'test-conn');
-    getCurrentRole = mock(() => null);
-    getCurrentMessageId = mock(() => null);
-    steer = mock(async () => false);
-    prewarm = mock(async () => {});
-  }
-  return {
-    AgentSession: MockAgentSession,
-    getAgentId: mock(() => undefined),
-    getCurrentConnectionId: mock(() => undefined),
-    getSessionId: mock(() => undefined),
-    getMonitorId: mock(() => '0'),
-    getWindowId: mock(() => undefined),
-    runWithAgentId: mock((_id: string, fn: () => unknown) => fn()),
-    runWithAgentContext: mock((_ctx: unknown, fn: () => unknown) => fn()),
-  };
-});
+installMockAgentSession({ getMonitorId: () => '0' });
 
 // ── Test setup ─────────────────────────────────────────────────────────────
 
@@ -290,18 +200,18 @@ describe('Multi-monitor lifecycle', () => {
 
     expect(created).toBe(true);
     expect(pool.agentPool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.agentPool.getMonitorAgentCount()).toBe(2);
+    expect(pool.agentPool.getMonitorAgentIds().length).toBe(2);
   });
 
   it('removeMonitorAgent cleans up the agent and queue', async () => {
     await pool.createMonitorAgent('1');
     expect(pool.agentPool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.agentPool.getMonitorAgentCount()).toBe(2);
+    expect(pool.agentPool.getMonitorAgentIds().length).toBe(2);
 
     await pool.removeMonitorAgent('1');
 
     expect(pool.agentPool.hasMonitorAgent('1')).toBe(false);
-    expect(pool.agentPool.getMonitorAgentCount()).toBe(1);
+    expect(pool.agentPool.getMonitorAgentIds().length).toBe(1);
     // Only default monitor should remain
     expect(pool.agentPool.hasMonitorAgent('0')).toBe(true);
   });
@@ -311,14 +221,14 @@ describe('Multi-monitor lifecycle', () => {
 
     expect(pool.agentPool.hasMonitorAgent('0')).toBe(true);
     expect(pool.agentPool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.agentPool.getMonitorAgentCount()).toBe(2);
+    expect(pool.agentPool.getMonitorAgentIds().length).toBe(2);
 
     // Removing default monitor should not affect monitor 1
     await pool.removeMonitorAgent('0');
 
     expect(pool.agentPool.hasMonitorAgent('0')).toBe(false);
     expect(pool.agentPool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.agentPool.getMonitorAgentCount()).toBe(1);
+    expect(pool.agentPool.getMonitorAgentIds().length).toBe(1);
   });
 
   it('hasMonitorAgent returns false after removal', async () => {

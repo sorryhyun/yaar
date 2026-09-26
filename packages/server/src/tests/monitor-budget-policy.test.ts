@@ -45,26 +45,17 @@ describe('MonitorBudgetPolicy', () => {
   describe('primary monitor bypass', () => {
     it('acquireTaskSlot returns immediately for primary monitor', async () => {
       // Fill up all slots first
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
+      await policy.acquireTaskSlot('1');
+      await policy.acquireTaskSlot('2');
       // primary monitor should still succeed without blocking
       await policy.acquireTaskSlot('0');
     });
 
-    it('tryAcquireTaskSlot always returns true for primary monitor', () => {
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
-      expect(policy.tryAcquireTaskSlot('0')).toBe(true);
-      expect(policy.tryAcquireTaskSlot('0')).toBe(true);
-    });
-
-    it('releaseTaskSlot is a no-op for primary monitor', () => {
-      policy.tryAcquireTaskSlot('1');
+    it('releaseTaskSlot is a no-op for primary monitor', async () => {
+      await policy.acquireTaskSlot('1');
       policy.releaseTaskSlot('0');
-      // monitor '1' still holds its slot, so second acquire should succeed (count=1 < max=2)
-      expect(policy.tryAcquireTaskSlot('3')).toBe(true);
-      // Now at capacity
-      expect(policy.tryAcquireTaskSlot('4')).toBe(false);
+      // monitor '1' still holds its slot — the primary's release must not have freed it.
+      expect(policy.getStats().runningSlots).toBe(1);
     });
 
     it('checkActionBudget always returns true for primary monitor', () => {
@@ -94,15 +85,9 @@ describe('MonitorBudgetPolicy', () => {
   // ── Semaphore ───────────────────────────────────────────────────────
 
   describe('semaphore', () => {
-    it('tryAcquireTaskSlot succeeds up to maxConcurrent then returns false', () => {
-      expect(policy.tryAcquireTaskSlot('1')).toBe(true);
-      expect(policy.tryAcquireTaskSlot('2')).toBe(true);
-      expect(policy.tryAcquireTaskSlot('3')).toBe(false);
-    });
-
     it('acquireTaskSlot blocks when at capacity, resolves when slot released', async () => {
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
+      await policy.acquireTaskSlot('1');
+      await policy.acquireTaskSlot('2');
 
       let acquired = false;
       const promise = policy.acquireTaskSlot('3').then(() => {
@@ -120,8 +105,8 @@ describe('MonitorBudgetPolicy', () => {
     });
 
     it('acquireTaskSlot rejects with timeout after 30s', async () => {
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
+      await policy.acquireTaskSlot('1');
+      await policy.acquireTaskSlot('2');
 
       const promise = policy.acquireTaskSlot('3').catch((e: Error) => e);
 
@@ -135,8 +120,8 @@ describe('MonitorBudgetPolicy', () => {
     });
 
     it('FIFO ordering: first waiter gets released first', async () => {
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
+      await policy.acquireTaskSlot('1');
+      await policy.acquireTaskSlot('2');
 
       const order: string[] = [];
       const p1 = policy.acquireTaskSlot('3').then(() => order.push('first'));
@@ -215,8 +200,8 @@ describe('MonitorBudgetPolicy', () => {
 
   describe('lifecycle', () => {
     it('clearWaiting rejects all pending waiters', async () => {
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
+      await policy.acquireTaskSlot('1');
+      await policy.acquireTaskSlot('2');
 
       const p1 = policy.acquireTaskSlot('3').catch((e: Error) => e);
       const p2 = policy.acquireTaskSlot('4').catch((e: Error) => e);
@@ -232,9 +217,9 @@ describe('MonitorBudgetPolicy', () => {
       expect((r2 as Error).message).toBe('shutting down');
     });
 
-    it('clear resets running count and clears all buckets', () => {
-      policy.tryAcquireTaskSlot('1');
-      policy.tryAcquireTaskSlot('2');
+    it('clear resets running count and clears all buckets', async () => {
+      await policy.acquireTaskSlot('1');
+      await policy.acquireTaskSlot('2');
       policy.recordAction('1');
       policy.recordOutput('1', 500);
 
@@ -246,7 +231,8 @@ describe('MonitorBudgetPolicy', () => {
       expect(Object.keys(stats.monitors)).toHaveLength(0);
 
       // Slots should be available again
-      expect(policy.tryAcquireTaskSlot('1')).toBe(true);
+      await policy.acquireTaskSlot('1');
+      expect(policy.getStats().runningSlots).toBe(1);
     });
   });
 });

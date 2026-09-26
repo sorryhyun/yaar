@@ -270,7 +270,6 @@ describe('persona lifecycle in AgentPool', () => {
     pool = new AgentPool(
       'ses-personas' as SessionId,
       () => {},
-      (id) => id,
       async () => fakeProvider(recorded),
     );
   });
@@ -604,7 +603,6 @@ describe('persona interrupt', () => {
     const pool = new AgentPool(
       SESSION,
       () => {},
-      (id) => id,
       async () => ({
         ...fakeProvider(recorded),
         async interrupt() {

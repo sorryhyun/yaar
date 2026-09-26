@@ -1,5 +1,5 @@
 /**
- * Tests for BrowserPool — Chrome process and tab session management.
+ * Tests for HeadlessServerBrowser — Chrome process and tab session management.
  *
  * Mocks chrome.js (process management), cdp.js (WebSocket connections),
  * and global fetch (Chrome debug HTTP API) to test pool logic in isolation.
@@ -67,11 +67,11 @@ const STATE_DIR = await mkdtemp(join(tmpdir(), 'yaar-browser-test-'));
 process.env.YAAR_BROWSER_STATE_DIR = STATE_DIR;
 
 // Import after mocks are set up
-const { BrowserPool } = await import('../lib/browser/pool.js');
+const { HeadlessServerBrowser } = await import('../lib/browser/pool.js');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function internals(pool: InstanceType<typeof BrowserPool>) {
+function internals(pool: InstanceType<typeof HeadlessServerBrowser>) {
   return pool as unknown as {
     sessions: Map<string, unknown>;
     chrome: unknown;
@@ -85,8 +85,8 @@ const settleStore = () => new Promise((r) => setTimeout(r, 20));
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('BrowserPool', () => {
-  let pool: InstanceType<typeof BrowserPool>;
+describe('HeadlessServerBrowser', () => {
+  let pool: InstanceType<typeof HeadlessServerBrowser>;
 
   beforeEach(async () => {
     mockFindChrome.mockClear();
@@ -103,7 +103,7 @@ describe('BrowserPool', () => {
     // survive a restart), so each test starts from an empty file rather than the
     // previous test's tabs.
     await rm(join(STATE_DIR, 'sessions.json'), { force: true });
-    pool = new BrowserPool();
+    pool = new HeadlessServerBrowser();
   });
 
   afterEach(async () => {
@@ -244,7 +244,7 @@ describe('BrowserPool', () => {
   });
 
   it('syncExistingTabs is a no-op and never launches Chrome when none is running', async () => {
-    const freshPool = new BrowserPool();
+    const freshPool = new HeadlessServerBrowser();
     await freshPool.syncExistingTabs();
     expect(mockLaunchChrome).not.toHaveBeenCalled();
     expect(freshPool.getAllSessions().size).toBe(0);
@@ -252,7 +252,7 @@ describe('BrowserPool', () => {
   });
 
   it('syncExistingTabs adopts new page targets, skipping known + internal ones', async () => {
-    const freshPool = new BrowserPool();
+    const freshPool = new HeadlessServerBrowser();
     await freshPool.createSession(); // boots Chrome; knownTargetIds = {'tab-mock'}
 
     // /json now reports three targets; /json/version keeps its single-object shape.
@@ -326,7 +326,7 @@ describe('BrowserPool', () => {
   });
 
   it('idle cleanup removes stale sessions', async () => {
-    const freshPool = new BrowserPool();
+    const freshPool = new HeadlessServerBrowser();
     const { session: s1 } = await freshPool.createSession();
     const { session: s2 } = await freshPool.createSession();
 

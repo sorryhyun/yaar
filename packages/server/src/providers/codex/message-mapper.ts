@@ -34,70 +34,22 @@ function mcpToolName(server?: string, tool?: string): string {
   return tool ?? 'mcp_tool';
 }
 
-// ============================================================================
-// Item mappers
-//
-// An item reaches the mapper two ways: inside `item/started` / `item/completed`
-// (where the item's own `type` selects the mapper) and as a dedicated
-// `item/{kind}/{phase}` notification (where the method name does). Both spell
-// the same StreamMessage, so both call the same mapper. These take the item as
-// `Partial<…> | undefined` because the sub-event params are the item itself and
-// carry no guarantee of any field — including `type`, which is why the sub-event
-// cases cannot be routed through the type switch.
-// ============================================================================
-
-function mapMcpToolCallStarted(item: Partial<McpToolCallItem> | undefined): StreamMessage {
-  return {
-    type: 'tool_use',
-    toolName: mcpToolName(item?.server, item?.tool),
-    toolInput: item?.arguments,
-  };
-}
-
-function mapMcpToolCallCompleted(item: Partial<McpToolCallItem> | undefined): StreamMessage {
-  if (item?.error) {
-    return {
-      type: 'tool_result',
-      toolName: mcpToolName(item?.server, item?.tool),
-      content: `Error: ${item.error.message}`,
-    };
-  }
-  return {
-    type: 'tool_result',
-    toolName: mcpToolName(item?.server, item?.tool),
-    content: formatMcpResult(item),
-  };
-}
-
-function mapCommandExecutionStarted(
-  item: Partial<CommandExecutionItem> | undefined,
-): StreamMessage {
-  return {
-    type: 'tool_use',
-    toolName: 'command',
-    toolUseId: item?.id,
-    toolInput: { command: item?.command },
-  };
-}
-
-function mapCommandExecutionCompleted(
-  item: Partial<CommandExecutionItem> | undefined,
-): StreamMessage {
-  return {
-    type: 'tool_result',
-    toolName: 'command',
-    toolUseId: item?.id,
-    content: formatCommandResult(item),
-  };
-}
-
 function mapItemStarted(p: ItemStartedNotification): StreamMessage | null {
   const item = p.item;
   switch (item?.type) {
     case 'mcpToolCall':
-      return mapMcpToolCallStarted(item);
+      return {
+        type: 'tool_use',
+        toolName: mcpToolName(item.server, item.tool),
+        toolInput: item.arguments,
+      };
     case 'commandExecution':
-      return mapCommandExecutionStarted(item);
+      return {
+        type: 'tool_use',
+        toolName: 'command',
+        toolUseId: item.id,
+        toolInput: { command: item.command },
+      };
     case 'webSearch':
       return {
         type: 'tool_use',
@@ -125,9 +77,18 @@ function mapItemCompleted(p: ItemCompletedNotification): StreamMessage | null {
   const item = p.item;
   switch (item?.type) {
     case 'mcpToolCall':
-      return mapMcpToolCallCompleted(item);
+      return {
+        type: 'tool_result',
+        toolName: mcpToolName(item.server, item.tool),
+        content: item.error ? `Error: ${item.error.message}` : formatMcpResult(item),
+      };
     case 'commandExecution':
-      return mapCommandExecutionCompleted(item);
+      return {
+        type: 'tool_result',
+        toolName: 'command',
+        toolUseId: item.id,
+        content: formatCommandResult(item),
+      };
     case 'webSearch':
       return {
         type: 'tool_result',
@@ -254,10 +215,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       return null;
     }
 
-    case 'item/agentMessage/completed':
-      // Already streamed via deltas, skip the completed snapshot
-      return null;
-
     case 'item/reasoning/textDelta': {
       const p = params as ReasoningTextDeltaNotification;
       if (p.delta) {
@@ -266,29 +223,14 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       return null;
     }
 
-    case 'item/reasoning/completed':
-    case 'item/reasoning/summaryTextDelta':
-    case 'item/reasoning/summaryTextCompleted':
-    case 'item/reasoning/summaryPartAdded':
-      return null;
-
     case 'item/started':
       return mapItemStarted(params as ItemStartedNotification);
 
     case 'item/completed':
       return mapItemCompleted(params as ItemCompletedNotification);
 
-    case 'item/mcpToolCall/started':
-      return mapMcpToolCallStarted(params as Partial<McpToolCallItem> | undefined);
-
-    case 'item/mcpToolCall/completed':
-      return mapMcpToolCallCompleted(params as Partial<McpToolCallItem> | undefined);
-
-    case 'item/commandExecution/started':
-      return mapCommandExecutionStarted(params as Partial<CommandExecutionItem> | undefined);
-
     case 'item/commandExecution/outputDelta': {
-      // The live tail of a running command. `item/commandExecution/completed`
+      // The live tail of a running command. `item/completed` for the command
       // still follows with `aggregatedOutput`, which stays the authoritative
       // result — these chunks only fill the silence while it runs, so they are
       // not fed back into context or the transcript.
@@ -301,9 +243,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
         content: p.delta,
       };
     }
-
-    case 'item/commandExecution/completed':
-      return mapCommandExecutionCompleted(params as Partial<CommandExecutionItem> | undefined);
 
     case 'error': {
       const p = params as ErrorNotification;
@@ -383,8 +322,8 @@ function formatContentBlock(block: unknown): string | null {
   }
 }
 
-function formatMcpResult(item: Partial<McpToolCallItem> | undefined): string {
-  if (!item?.result) {
+function formatMcpResult(item: McpToolCallItem): string {
+  if (!item.result) {
     return 'Tool completed';
   }
 
@@ -451,18 +390,18 @@ function formatWebSearchResult(item: WebSearchItem): string {
   return actionDesc ? `${item.query} → ${actionDesc}` : item.query;
 }
 
-function formatCommandResult(item: Partial<CommandExecutionItem> | undefined): string {
+function formatCommandResult(item: CommandExecutionItem): string {
   const parts: string[] = [];
 
-  if (item?.command) {
+  if (item.command) {
     parts.push(`$ ${item.command}`);
   }
 
-  if (item?.aggregatedOutput) {
+  if (item.aggregatedOutput) {
     parts.push(item.aggregatedOutput);
   }
 
-  if (item?.exitCode !== undefined && item.exitCode !== null && item.exitCode !== 0) {
+  if (item.exitCode !== undefined && item.exitCode !== null && item.exitCode !== 0) {
     parts.push(`[exit code: ${item.exitCode}]`);
   }
 

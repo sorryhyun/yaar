@@ -9,15 +9,13 @@
  * - has id, no method → response to our request → resolve/reject pending
  * - no id             → notification → emit 'notification'
  *
- * Bun compatibility:
- * Since Bun v1.1.22, `import WebSocket from 'ws'` returns Bun's native
- * WebSocket which has compatibility issues with tungstenite (codex's Rust
- * WS server — connections immediately end). We use RawWebSocket
- * (node:http-based) in Bun builds to bypass this.
+ * Transport: always RawWebSocket (`raw-ws.ts`). Under Bun — the only runtime
+ * the server runs on — `import WebSocket from 'ws'` returns Bun's native
+ * WebSocket, which has compatibility issues with tungstenite (codex's Rust
+ * WS server — connections immediately end).
  */
 
 import { EventEmitter } from 'node:events';
-import NodeWebSocket from 'ws';
 import { RawWebSocket } from './raw-ws.js';
 import type {
   JsonRpcRequest,
@@ -26,30 +24,6 @@ import type {
   JsonRpcNotification,
   JsonRpcMessage,
 } from './types.js';
-
-/**
- * Whether we're running in Bun (compiled exe or Bun runtime).
- * In Bun, `import WebSocket from 'ws'` gives Bun's native WebSocket which
- * has compatibility issues with tungstenite. Use RawWebSocket instead.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const isBun = typeof (globalThis as any).Bun !== 'undefined';
-
-/**
- * WebSocket-like interface shared by ws module and RawWebSocket.
- * Both extend EventEmitter with 'open', 'message', 'close', 'error' events.
- */
-type WsLike = NodeWebSocket | RawWebSocket;
-
-/** Create a WebSocket connection, using the right implementation for the runtime. */
-function createWs(url: string): WsLike {
-  if (isBun) {
-    return new RawWebSocket(url);
-  }
-  // Disable perMessageDeflate to avoid extension negotiation
-  // failures with Rust WS servers (tungstenite).
-  return new NodeWebSocket(url, { perMessageDeflate: false });
-}
 
 /**
  * Options for the WebSocket JSON-RPC client.
@@ -104,13 +78,13 @@ export interface JsonRpcWsClient {
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging -- see above
 export class JsonRpcWsClient extends EventEmitter {
-  private ws: WsLike;
+  private ws: RawWebSocket;
   private nextId = 1;
   private pendingRequests = new Map<number, PendingRequest>();
   private readonly requestTimeout: number;
   private closed = false;
 
-  private constructor(ws: WsLike, options: JsonRpcWsClientOptions = {}) {
+  private constructor(ws: RawWebSocket, options: JsonRpcWsClientOptions = {}) {
     super();
     // EventEmitter *throws* on an 'error' event with no listener, whereas the
     // hand-rolled fan-out this replaced dropped it silently — and connections
@@ -122,7 +96,7 @@ export class JsonRpcWsClient extends EventEmitter {
     this.ws = ws;
     this.requestTimeout = options.requestTimeout ?? 30000;
 
-    // Both NodeWebSocket and RawWebSocket emit 'message' with Buffer data
+    // RawWebSocket emits 'message' with Buffer data, as the ws module does
     ws.on('message', (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString()) as JsonRpcMessage;
@@ -177,7 +151,7 @@ export class JsonRpcWsClient extends EventEmitter {
             }
           }, connectTimeout);
 
-          const ws = createWs(url);
+          const ws = new RawWebSocket(url);
 
           ws.on('open', () => {
             if (!settled) {
@@ -187,7 +161,7 @@ export class JsonRpcWsClient extends EventEmitter {
             }
           });
 
-          // 'unexpected-response' is available on both ws module and RawWebSocket
+          // RawWebSocket reports a non-101 upgrade answer as 'unexpected-response'
           ws.on('unexpected-response', (_req: unknown, res: { statusCode?: number }) => {
             if (!settled) {
               settled = true;
@@ -286,19 +260,6 @@ export class JsonRpcWsClient extends EventEmitter {
   }
 
   /**
-   * Send a notification (no response expected).
-   */
-  notify<TParams>(method: string, params?: TParams): void {
-    if (this.closed) return;
-    const notification: JsonRpcNotification<TParams> = {
-      jsonrpc: '2.0',
-      method,
-      params,
-    };
-    this.ws.send(JSON.stringify(notification));
-  }
-
-  /**
    * Close the client and reject any pending requests.
    */
   close(): void {
@@ -317,13 +278,6 @@ export class JsonRpcWsClient extends EventEmitter {
    */
   get isConnected(): boolean {
     return !this.closed && this.ws.readyState === 1; // OPEN = 1 (standard)
-  }
-
-  /**
-   * Get the number of pending requests.
-   */
-  get pendingCount(): number {
-    return this.pendingRequests.size;
   }
 
   /**

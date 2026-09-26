@@ -13,7 +13,7 @@ describe('AgentLimiter', () => {
   });
 
   it('reports stats correctly', () => {
-    expect(limiter.getStats()).toEqual({ maxAgents: 3, currentCount: 0, waitingCount: 0 });
+    expect(limiter.getStats()).toEqual({ maxAgents: 3, currentCount: 0 });
   });
 
   describe('tryAcquire', () => {
@@ -43,85 +43,10 @@ describe('AgentLimiter', () => {
     });
   });
 
-  describe('async acquire', () => {
-    it('resolves immediately when under limit', async () => {
-      await limiter.acquire();
-      expect(limiter.getCurrentCount()).toBe(1);
-    });
-
-    it('waits and resolves when slot freed', async () => {
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-
-      let acquired = false;
-      const promise = limiter.acquire().then(() => {
-        acquired = true;
-      });
-
-      expect(acquired).toBe(false);
-      expect(limiter.getWaitingCount()).toBe(1);
-
-      limiter.release();
-      await promise;
-
-      expect(acquired).toBe(true);
-      expect(limiter.getCurrentCount()).toBe(3);
-    });
-
-    it('rejects on timeout', async () => {
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-
-      const result = await limiter.acquire(10).catch((e: Error) => e);
-      expect(result).toBeInstanceOf(Error);
-      expect((result as Error).message).toContain('timed out');
-    });
-  });
-
-  describe('clearWaiting', () => {
-    it('rejects all waiting requests', async () => {
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-
-      const p1 = limiter.acquire().catch((e: Error) => e);
-      const p2 = limiter.acquire().catch((e: Error) => e);
-
-      limiter.clearWaiting();
-
-      const r1 = await p1;
-      const r2 = await p2;
-      expect(r1).toBeInstanceOf(Error);
-      expect(r2).toBeInstanceOf(Error);
-      expect(limiter.getWaitingCount()).toBe(0);
-    });
-
-    it('rejects with the error passed to it, during a reset', async () => {
-      // Ported from pool-drain.test.ts's 'AgentLimiter.clearWaiting during reset' — the one
-      // assertion not already covered above: the rejection carries the custom error a reset
-      // passes in, not a generic one.
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-      limiter.tryAcquire();
-
-      const waiterPromise = limiter.acquire().catch((e: Error) => e);
-
-      limiter.clearWaiting(new Error('Pool resetting'));
-
-      const result = await waiterPromise;
-      expect(result).toBeInstanceOf(Error);
-      expect((result as Error).message).toBe('Pool resetting');
-      expect(limiter.getWaitingCount()).toBe(0);
-    });
-  });
-
-  it('reset clears everything', () => {
+  it('reset clears the count', () => {
     limiter.tryAcquire();
     limiter.tryAcquire();
     limiter.reset();
     expect(limiter.getCurrentCount()).toBe(0);
-    expect(limiter.getWaitingCount()).toBe(0);
   });
 });

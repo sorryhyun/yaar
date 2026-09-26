@@ -14,7 +14,7 @@
  * half of "sessions behave like processes" that a revived tab cannot supply on its
  * own. `YAAR_BROWSER_EPHEMERAL=1` goes back to a scratch dir wiped on shutdown.
  *
- * (Formerly `BrowserPool` — that name is kept as an alias for back-compat.)
+ * (Formerly `BrowserPool`.)
  *
  * All the CDP/session plumbing lives in `CdpBrowserProvider`; this class adds
  * only the launch-and-own-a-private-Chrome behavior.
@@ -23,7 +23,6 @@
 import { join } from 'path';
 import { CdpBrowserProvider } from './cdp-provider.js';
 import { LocalUserBrowser } from './local-user-browser.js';
-import type { BrowserProvider } from './types.js';
 import { getBrowserStateDir, isEphemeralBrowserProfile } from '../../config.js';
 import {
   findChrome,
@@ -115,15 +114,6 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
 }
 
 /**
- * Back-compat alias. `HeadlessServerBrowser` was formerly `BrowserPool`; the class
- * alias is still exercised by `tests/browser-pool.test.ts`.
- *
- * @deprecated Use `HeadlessServerBrowser` (or the `BrowserProvider` interface).
- */
-export const BrowserPool = HeadlessServerBrowser;
-export type BrowserPool = HeadlessServerBrowser;
-
-/**
  * Two doors, two instances (Phase 2 — principal-routed browser access).
  *
  * The single env-switched singleton is gone. Instead there are two providers
@@ -170,23 +160,4 @@ export function getLocalBrowser(): LocalUserBrowser {
  */
 export function isForceHeadless(): boolean {
   return process.env.YAAR_BROWSER_PROVIDER?.toLowerCase() === 'headless';
-}
-
-/**
- * Deprecated alias for `getHeadlessBrowser()`. The former back-compat callers
- * (availability probe, lifecycle shutdown, the `yaar://` overview count, the legacy
- * `/api/browser` route helper) have all been moved onto `getHeadlessBrowser()` directly;
- * this has no production callers left.
- *
- * @deprecated Prefer `getHeadlessBrowser()` / `getLocalBrowser()` by door.
- */
-export function getBrowserProvider(): BrowserProvider {
-  return getHeadlessBrowser();
-}
-
-/**
- * @deprecated Use `getHeadlessBrowser()`.
- */
-export function getBrowserPool(): BrowserProvider {
-  return getHeadlessBrowser();
 }

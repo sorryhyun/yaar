@@ -352,7 +352,7 @@ describe('F-17 — an expired dialog leaves the screen', () => {
     // The close is emitted from a timer callback, where there is no agent turn and so no
     // monitor to stamp. It therefore rides the session-scoped channel and must reach every
     // connection through LiveSession.broadcast() — emitting it on the 'action' channel
-    // instead would have reached only a session with a live ToolActionBridge subscription,
+    // instead would have been delivered only on behalf of an agent the session still knows,
     // which by expiry time is exactly what a session may no longer have.
     const sessionId = 'sess-wire' as SessionId;
     const received: ServerEvent[] = [];

@@ -46,17 +46,19 @@ describe('codex command output deltas', () => {
   });
 
   it('still delivers the whole output on completion, tagged with the same id', () => {
-    const started = mapNotification('item/commandExecution/started', {
-      type: 'commandExecution',
-      id: 'item-7',
-      command: 'make build',
+    const started = mapNotification('item/started', {
+      ...ITEM,
+      item: { type: 'commandExecution', id: 'item-7', command: 'make build' },
     });
-    const completed = mapNotification('item/commandExecution/completed', {
-      type: 'commandExecution',
-      id: 'item-7',
-      command: 'make build',
-      aggregatedOutput: 'one\ntwo\nthree\n',
-      exitCode: 0,
+    const completed = mapNotification('item/completed', {
+      ...ITEM,
+      item: {
+        type: 'commandExecution',
+        id: 'item-7',
+        command: 'make build',
+        aggregatedOutput: 'one\ntwo\nthree\n',
+        exitCode: 0,
+      },
     });
 
     expect(started).toMatchObject({ type: 'tool_use', toolName: 'command', toolUseId: 'item-7' });

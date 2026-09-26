@@ -170,7 +170,7 @@ const ROWS: WaitRow<unknown>[] = [
     what: 'a window capture, parked on the frontend rendering and reporting back',
     // The window-capture path (`handlers/window.ts` reading an iframe window) as the wait
     // itself: the emitter is the production code, and everything the answer travels
-    // through — ToolActionBridge → broadcast → message() → resolveFeedback → PendingStore
+    // through — LiveSession.handleEmittedAction → broadcast → message() → resolveFeedback → PendingStore
     // — is the code under test.
     block: (_h, s) =>
       actionEmitter.emitActionWithFeedback({ type: 'window.capture', windowId: s.windowKey }),

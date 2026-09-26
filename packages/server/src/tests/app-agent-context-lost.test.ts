@@ -28,6 +28,7 @@
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
 import { APP_AGENT_IDLE_MS } from '../config.js';
+import { installMockAgentSession } from './helpers/mock-agent-session.js';
 
 /** Every prompt handed to a turn, in order. Reset per test. */
 let prompts: string[] = [];
@@ -45,12 +46,7 @@ function createMockProvider(): AITransport {
 }
 
 mock.module('../providers/factory.js', () => ({
-  providerRegistry: {},
   getAvailableProviders: mock(async () => []),
-  createProvider: mock(async () => null),
-  getFirstAvailableProvider: mock(async () => null),
-  getProviderInfo: mock(() => undefined),
-  getAllProviderInfo: mock(() => []),
   initWarmPool: mock(async () => {}),
   acquireWarmProvider: mock(async () => createMockProvider()),
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
@@ -81,7 +77,6 @@ mock.module('../agents/limiter.js', () => ({
   getAgentLimiter: () => ({
     tryAcquire: () => true,
     release: mock(() => {}),
-    clearWaiting: mock(() => {}),
   }),
   resetAgentLimiter: mock(() => {}),
 }));
@@ -159,50 +154,21 @@ function releaseHeldTurns(): void {
   for (const resolve of resolvers) resolve();
 }
 
-mock.module('../agents/agent-session.js', () => {
-  class MockAgentSession {
-    private running = false;
-    initialize = mock(async () => true);
-    handleMessage = mock(async (prompt: string, _opts: unknown) => {
-      prompts.push(prompt);
-      this.running = true;
-      try {
-        if (!blockTurns) return;
-        await new Promise<void>((resolve) => held.push(resolve));
-      } finally {
-        this.running = false;
-      }
-    });
-    isRunning = () => this.running;
-    interrupt = mock(async () => {});
-    cleanup = mock(async () => {});
-    getRawSessionId = mock(() => null);
-    getRecordedActions = mock(() => []);
-    setOutputCallback = mock(() => {});
-    getInstanceId = mock(() => `agent-${Date.now()}`);
-    getUsage = mock(() => ({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    }));
-    getConnectionId = mock(() => 'test-conn');
-    getCurrentRole = mock(() => null);
-    getCurrentMessageId = mock(() => null);
-    wasInterrupted = mock(() => false);
-    steer = mock(async () => true);
-    prewarm = mock(async () => {});
-  }
-  return {
-    AgentSession: MockAgentSession,
-    getAgentId: mock(() => undefined),
-    getCurrentConnectionId: mock(() => undefined),
-    getSessionId: mock(() => undefined),
-    getMonitorId: mock(() => undefined),
-    getWindowId: mock(() => undefined),
-    runWithAgentId: mock((_id: string, fn: () => unknown) => fn()),
-    runWithAgentContext: mock((_ctx: unknown, fn: () => unknown) => fn()),
-  };
+let turnRunning = false;
+
+installMockAgentSession({
+  handleMessage: async (prompt: string, _opts: unknown) => {
+    prompts.push(prompt);
+    turnRunning = true;
+    try {
+      if (!blockTurns) return;
+      await new Promise<void>((resolve) => held.push(resolve));
+    } finally {
+      turnRunning = false;
+    }
+  },
+  isRunning: () => turnRunning,
+  steer: async () => true,
 });
 
 /**

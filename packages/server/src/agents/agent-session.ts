@@ -29,7 +29,6 @@ import type { ContextSource } from './context.js';
 import { genId } from '@yaar/lib/ids';
 import { errMessage } from '@yaar/lib/errors';
 import { StreamToEventMapper, type TurnEnd } from './session-policies/stream-to-event-mapper.js';
-import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { runInAgentContext } from './agent-context.js';
 import { principalRole } from './roles.js';
@@ -69,10 +68,6 @@ export interface HandleMessageOptions {
    * once per turn that reached the provider; not at all when there was no provider.
    */
   onTurnEnd?: (end: TurnEnd) => void;
-  /** When true, fork from the parent session instead of continuing it */
-  forkSession?: boolean;
-  /** Parent session/thread ID to fork from (used with forkSession) */
-  parentSessionId?: string;
   /** Canonical agent name for thread persistence (e.g. "default", "window-win1") */
   canonicalAgent?: string;
   /** Saved thread ID to resume (explicit restore only) */
@@ -120,7 +115,6 @@ export class AgentSession {
   /** True while the running turn is one claude.ai started (`HandleMessageOptions.external`). */
   private followingExternal = false;
   private sessionLogger: SessionLogger | null = null;
-  private unsubscribeAction: (() => void) | null = null;
   private instanceId: string;
   private hasProcessedFirstUserTurn = false;
   private currentMessageId: string | null = null;
@@ -155,8 +149,6 @@ export class AgentSession {
   /** The model's context window in tokens, as last stated by the provider. */
   private contextWindow: number | undefined;
 
-  private toolActionBridge: ToolActionBridge;
-
   constructor(
     connectionId: ConnectionId,
     sessionId?: string,
@@ -164,7 +156,6 @@ export class AgentSession {
     instanceId?: string,
     liveSessionId?: SessionId,
     broadcast?: (event: ServerEvent) => void,
-    resolveWindowHandle?: (rawId: string, monitorId?: string) => string,
   ) {
     this.connectionId = connectionId;
     this.liveSessionId = liveSessionId ?? connectionId;
@@ -172,37 +163,6 @@ export class AgentSession {
     this.sessionId = sessionId ?? null;
     this.instanceId = instanceId ?? genId('agent');
     this.sessionLogger = sharedLogger ?? null;
-
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const connection = this;
-
-    this.toolActionBridge = new ToolActionBridge(
-      {
-        get currentRole() {
-          return connection.currentRole;
-        },
-        get monitorId() {
-          return connection.currentMonitorId;
-        },
-        sessionId: this.liveSessionId,
-      },
-      this.sendEvent.bind(this),
-      this.getFilterAgentId.bind(this),
-      () => this.sessionLogger,
-      (action) => this.recordedActions.push(action),
-      resolveWindowHandle,
-    );
-    this.unsubscribeAction = actionEmitter.onAction(
-      this.toolActionBridge.handleToolAction.bind(this.toolActionBridge),
-    );
-  }
-
-  getConnectionId(): ConnectionId {
-    return this.connectionId;
-  }
-
-  getInstanceId(): string {
-    return this.instanceId;
   }
 
   isRunning(): boolean {
@@ -236,7 +196,7 @@ export class AgentSession {
    * re-sent several times per turn (replace with it, or the figure multiplies).
    *
    * `Math.max` on the replace path guards the one case where a running total can
-   * appear to go backwards — a resumed or forked thread starts its own count
+   * appear to go backwards — a resumed thread starts its own count
    * from zero — which would otherwise credit the agent a negative delta.
    *
    * `sessionCostUsd` obeys neither scope, which is why it is a separate
@@ -309,31 +269,24 @@ export class AgentSession {
     return this.interrupted;
   }
 
-  getCurrentMessageId(): string | null {
-    return this.currentMessageId;
-  }
-
-  getCurrentRole(): string | null {
-    return this.currentRole;
+  /**
+   * Take an action this agent emitted, as `LiveSession` delivers it: record it for the
+   * turn's reload fingerprint and context tape, and say how to address it on the wire.
+   *
+   * Null when the action names a monitor other than the one this agent's turn is on —
+   * such an action is applied to window state but not sent from here.
+   */
+  acceptEmittedAction(
+    action: OSAction,
+    monitorId: string | undefined,
+  ): { role: string; monitorId: string | undefined } | null {
+    if (monitorId && this.currentMonitorId && monitorId !== this.currentMonitorId) return null;
+    this.recordedActions.push(action);
+    return { role: this.currentRole ?? 'default', monitorId: monitorId ?? this.currentMonitorId };
   }
 
   getRecordedActions(): OSAction[] {
     return [...this.recordedActions];
-  }
-
-  getSessionId(): string {
-    if (this.sessionId) {
-      return this.sessionId;
-    }
-    return this.currentRole ?? 'default';
-  }
-
-  getRawSessionId(): string | null {
-    return this.sessionId;
-  }
-
-  private getFilterAgentId(): string {
-    return this.instanceId;
   }
 
   setOutputCallback(cb: ((bytes: number) => void) | null): void {
@@ -361,10 +314,6 @@ export class AgentSession {
       return false;
     }
     return true;
-  }
-
-  getSessionLogger(): SessionLogger | null {
-    return this.sessionLogger;
   }
 
   /** Full system prompt for a turn: profile base + scope + environment + memory. */
@@ -497,14 +446,11 @@ export class AgentSession {
     let mapper: StreamToEventMapper | null = null;
 
     try {
-      // For forked sessions, use the parent's session ID so the provider can fork from it.
       // For resume, use the saved thread ID (only on first message).
       // Otherwise, resume our own session if we've already sent a message.
       let sessionIdToUse: string | undefined;
       let resumeThread = false;
-      if (options.forkSession && options.parentSessionId) {
-        sessionIdToUse = options.parentSessionId;
-      } else if (options.resumeSessionId && !this.hasProcessedFirstUserTurn) {
+      if (options.resumeSessionId && !this.hasProcessedFirstUserTurn) {
         sessionIdToUse = options.resumeSessionId;
         resumeThread = true;
       } else if (this.hasProcessedFirstUserTurn && this.sessionId) {
@@ -518,7 +464,6 @@ export class AgentSession {
           options.systemPromptOverride,
         ),
         sessionId: sessionIdToUse,
-        forkSession: options.forkSession,
         resumeThread,
         images: images.length > 0 ? images : undefined,
         monitorId: options.monitorId,
@@ -544,7 +489,7 @@ export class AgentSession {
         onContextMessage,
         onSessionId: async (sessionId: string) => {
           // onSessionId callback - update session ID and log thread
-          // Update internal provider session ID for session resumption/forking.
+          // Update internal provider session ID for session resumption.
           // The log session ID (sent to frontend) is managed by ContextPool.
           this.sessionId = sessionId;
           const canonical = options.canonicalAgent;
@@ -716,10 +661,6 @@ export class AgentSession {
     // The emitter keeps interrupted agents by id; an agent that is gone can
     // neither emit nor be un-marked by a next turn, so drop the entry with it.
     actionEmitter.clearInterrupted(this.instanceId);
-    if (this.unsubscribeAction) {
-      this.unsubscribeAction();
-      this.unsubscribeAction = null;
-    }
     if (this.provider) {
       await this.provider.dispose();
       this.provider = null;

@@ -64,7 +64,6 @@ describe('app-agent idle reaper', () => {
     pool = new AgentPool(
       'ses-idle-reap' as SessionId,
       () => {},
-      (id) => id,
       async () => fakeProvider(),
     );
   });

@@ -14,8 +14,8 @@
  *
  * 1. A steer reaches the CLI by the same channel a turn's own message does — the
  *    stream's `streamInput` is never called, so stdin stays open.
- * 2. There is no turn to steer unless one is in flight: idle sessions, absent
- *    sessions, and forks (which have no channel) refuse.
+ * 2. There is no turn to steer unless one is in flight: idle and absent
+ *    sessions refuse.
  * 3. A steer waits for its turn's message to be on the wire first, so it can
  *    never be written ahead of the message it is meant to steer.
  * 4. A steer that lost the race refuses instead of becoming the next turn's
@@ -107,7 +107,7 @@ describe('ClaudeSessionProvider.steer()', () => {
     expect(pushed).toHaveLength(1);
   });
 
-  it('refuses when there is no persistent session — a fork has no channel', async () => {
+  it('refuses when there is no persistent session', async () => {
     const provider = new ClaudeSessionProvider();
     setPersistentSession(provider, null);
 

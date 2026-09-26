@@ -143,19 +143,19 @@ group('MonitorBudgetPolicy.checkActionBudget', () => {
   });
 });
 
-group('MonitorBudgetPolicy.tryAcquireTaskSlot', () => {
-  bench('acquire + release cycle ×1000 (no contention)', () => {
+group('MonitorBudgetPolicy.acquireTaskSlot', () => {
+  bench('acquire + release cycle ×1000 (no contention)', async () => {
     const policy = new MonitorBudgetPolicy(4, 30, 50_000);
     for (let i = 0; i < 1000; i++) {
-      policy.tryAcquireTaskSlot('monitor-1');
+      await policy.acquireTaskSlot('monitor-1');
       policy.releaseTaskSlot('monitor-1');
     }
   });
 
-  bench('primary monitor no-op bypass ×1000', () => {
+  bench('primary monitor no-op bypass ×1000', async () => {
     const policy = new MonitorBudgetPolicy(2, 30, 50_000);
     for (let i = 0; i < 1000; i++) {
-      policy.tryAcquireTaskSlot('monitor-0');
+      await policy.acquireTaskSlot('monitor-0');
     }
   });
 });

@@ -405,18 +405,44 @@ export class LiveSession {
         }
       }
     }
-    // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
-    // ToolActionBridge to broadcast them to the frontend, so do it directly.
-    if (event.agentId?.startsWith('iframe:')) {
-      const stamped = stampWindowHandle(event.action, windowHandle, event.requestId);
-      this.broadcast({
-        type: ServerEventType.ACTIONS,
-        actions: [stamped],
-        monitorId: event.monitorId,
-      });
-      // The getter, not the field: a pool that minted its own logger leaves the field null.
-      this.getSessionLogger()?.logAction(stamped);
+    this.deliverEmittedAction(event, windowHandle);
+  }
+
+  /**
+   * Send an emitted action to the frontend and the transcript — the only place that does.
+   *
+   * It used to be two places: this one for iframe apps, and a per-agent `ToolActionBridge`
+   * listening on the same emit for agents. The bridge ran after the registry had already
+   * applied the action, so it had no `priorHandle` to pass, and it resolved through a
+   * lookup that *registered* on a miss — so every `window.close` an agent emitted filed its
+   * handle straight back into `WindowHandleMap`, a ghost for a window that no longer
+   * existed. Here the handle is the one computed around the registry write, once.
+   *
+   * An agent's action is recorded on that agent (its turn's reload fingerprint and context
+   * tape) and addressed by its role. An agent id this pool does not know — a bare harness
+   * call, an agent disposed mid-emit — is not delivered, as the bridge never delivered it.
+   */
+  private deliverEmittedAction(event: ActionEvent, windowHandle: string | undefined): void {
+    let role: string | undefined;
+    let monitorId = event.monitorId;
+    if (event.agentId && !event.agentId.startsWith('iframe:')) {
+      const accepted = this.pool?.agentPool
+        .findAgent(event.agentId)
+        ?.acceptEmittedAction(event.action, event.monitorId);
+      if (!accepted) return;
+      role = accepted.role;
+      monitorId = accepted.monitorId;
     }
+    const addressed = role ? ({ ...event.action, agentId: role } as OSAction) : event.action;
+    const action = stampWindowHandle(addressed, windowHandle, event.requestId);
+    this.broadcast({
+      type: ServerEventType.ACTIONS,
+      actions: [action],
+      ...(role ? { agentId: role } : {}),
+      monitorId,
+    });
+    // The getter, not the field: a pool that minted its own logger leaves the field null.
+    this.getSessionLogger()?.logAction(action, role);
   }
 
   addConnection(connectionId: ConnectionId, ws: YaarWebSocket): void {

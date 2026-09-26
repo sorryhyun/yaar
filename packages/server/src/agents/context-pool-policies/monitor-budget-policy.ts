@@ -81,20 +81,6 @@ export class MonitorBudgetPolicy {
   }
 
   /**
-   * Try to acquire a task slot without blocking.
-   * Returns true if acquired, false if no slot available.
-   * Always returns true for the primary monitor.
-   */
-  tryAcquireTaskSlot(monitorId: string): boolean {
-    if (!this.isThrottled(monitorId)) return true;
-    if (this.runningCount < this.maxConcurrent) {
-      this.runningCount++;
-      return true;
-    }
-    return false;
-  }
-
-  /**
    * Release a task slot after a background monitor task completes.
    */
   releaseTaskSlot(monitorId: string): void {

@@ -108,7 +108,7 @@ export interface BridgeEvent {
  * Channel → listener arguments. Every channel carries exactly one payload object.
  */
 export interface ActionEmitterChannels {
-  /** An OS Action from a tool, picked up by `ToolActionBridge` and `LiveSession`. */
+  /** An OS Action from a tool, applied and delivered by `LiveSession.handleEmittedAction`. */
   action: [ActionEvent];
   /** An action the server sends on its own behalf, outside any agent turn. */
   'session-action': [SessionScopedEvent];

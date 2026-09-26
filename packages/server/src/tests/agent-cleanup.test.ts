@@ -6,6 +6,7 @@
  * (AgentSession, limiter, warm pool) to ensure limiter slots are never leaked.
  */
 import { mock, describe, it, expect, beforeEach } from 'bun:test';
+import { installMockAgentSession } from './helpers/mock-agent-session.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -17,11 +18,6 @@ const mockTryAcquire = mock(() => true);
 class RealAgentLimiter {
   private maxAgents: number;
   private currentCount = 0;
-  private waitingQueue: Array<{
-    resolve: () => void;
-    reject: (e: Error) => void;
-    timeoutId?: NodeJS.Timeout;
-  }> = [];
   constructor(maxAgents?: number) {
     this.maxAgents = maxAgents ?? 10;
   }
@@ -31,15 +27,8 @@ class RealAgentLimiter {
   getCurrentCount() {
     return this.currentCount;
   }
-  getWaitingCount() {
-    return this.waitingQueue.length;
-  }
   getStats() {
-    return {
-      maxAgents: this.maxAgents,
-      currentCount: this.currentCount,
-      waitingCount: this.waitingQueue.length,
-    };
+    return { maxAgents: this.maxAgents, currentCount: this.currentCount };
   }
   tryAcquire() {
     if (this.currentCount < this.maxAgents) {
@@ -48,50 +37,10 @@ class RealAgentLimiter {
     }
     return false;
   }
-  async acquire(timeoutMs?: number) {
-    if (this.tryAcquire()) return;
-    return new Promise<void>((resolve, reject) => {
-      const req = {
-        resolve: () => {
-          this.currentCount++;
-          resolve();
-        },
-        reject,
-      } as any;
-      if (timeoutMs && timeoutMs > 0) {
-        req.timeoutId = setTimeout(() => {
-          const idx = this.waitingQueue.indexOf(req);
-          if (idx !== -1) this.waitingQueue.splice(idx, 1);
-          reject(new Error(`Agent acquisition timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-      }
-      this.waitingQueue.push(req);
-    });
-  }
   release() {
-    if (this.currentCount <= 0) {
-      console.warn('[AgentLimiter] release() called when currentCount is 0');
-      return;
-    }
-    this.currentCount--;
-    if (this.waitingQueue.length > 0) {
-      const next = this.waitingQueue.shift();
-      if (next) {
-        if (next.timeoutId) clearTimeout(next.timeoutId);
-        next.resolve();
-      }
-    }
-  }
-  clearWaiting(error?: Error) {
-    const err = error ?? new Error('AgentLimiter shutting down');
-    for (const r of this.waitingQueue) {
-      if (r.timeoutId) clearTimeout(r.timeoutId);
-      r.reject(err);
-    }
-    this.waitingQueue = [];
+    if (this.currentCount > 0) this.currentCount--;
   }
   reset() {
-    this.clearWaiting();
     this.currentCount = 0;
   }
 }
@@ -101,18 +50,12 @@ mock.module('../agents/limiter.js', () => ({
   getAgentLimiter: () => ({
     tryAcquire: mockTryAcquire,
     release: mockRelease,
-    clearWaiting: mock(() => {}),
   }),
   resetAgentLimiter: mock(() => {}),
 }));
 
 mock.module('../providers/factory.js', () => ({
-  providerRegistry: {},
   getAvailableProviders: mock(async () => []),
-  createProvider: mock(async () => null),
-  getFirstAvailableProvider: mock(async () => null),
-  getProviderInfo: mock(() => undefined),
-  getAllProviderInfo: mock(() => []),
   initWarmPool: mock(async () => {}),
   acquireWarmProvider: mock(() => Promise.resolve(null)),
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
@@ -149,39 +92,12 @@ const mockInterrupt = mock(() => Promise.resolve() as Promise<void>);
 const mockIsRunning = mock(() => false);
 const mockInitialize = mock(() => Promise.resolve(true));
 
-mock.module('../agents/agent-session.js', () => {
-  class MockAgentSession {
-    cleanup = mockCleanup;
-    interrupt = mockInterrupt;
-    isRunning = mockIsRunning;
-    initialize = mockInitialize;
-    handleMessage = mock(async () => {});
-    getRawSessionId = mock(() => null);
-    getRecordedActions = mock(() => []);
-    setOutputCallback = mock(() => {});
-    getInstanceId = mock(() => `agent-${Date.now()}`);
-    getUsage = mock(() => ({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    }));
-    getConnectionId = mock(() => 'test-conn');
-    getCurrentRole = mock(() => null);
-    getCurrentMessageId = mock(() => null);
-    steer = mock(async () => false);
-    prewarm = mock(async () => {});
-  }
-  return {
-    AgentSession: MockAgentSession,
-    getAgentId: mock(() => undefined),
-    getCurrentConnectionId: mock(() => undefined),
-    getSessionId: mock(() => undefined),
-    getMonitorId: mock(() => '0'),
-    getWindowId: mock(() => undefined),
-    runWithAgentId: mock((_id: string, fn: () => unknown) => fn()),
-    runWithAgentContext: mock((_ctx: unknown, fn: () => unknown) => fn()),
-  };
+installMockAgentSession({
+  cleanup: mockCleanup,
+  interrupt: mockInterrupt,
+  isRunning: mockIsRunning,
+  initialize: mockInitialize,
+  getMonitorId: () => '0',
 });
 
 const { AgentPool } = await import('../agents/agent-pool.js');

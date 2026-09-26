@@ -624,12 +624,8 @@ export class WindowStateRegistry {
    * mutates the window (see `setAppProtocol`), so callers that only ask a question
    * should only read.
    */
-  getState(windowId: string): WindowState | undefined {
-    return this.resolve(windowId)?.[1];
-  }
-
   getWindow(windowId: string): WindowState | undefined {
-    return this.getState(windowId);
+    return this.resolve(windowId)?.[1];
   }
 
   /**
@@ -829,9 +825,9 @@ export class WindowStateRegistry {
    *
    * **`appProtocol` means "has ever registered", not "is listening now."** It is durable
    * window metadata: it survives an iframe remount, and nothing clears it short of the
-   * window closing. That is what {@link isAppProtocolWindow} wants — *is this window an
-   * app at all* — and it is deliberately **not** what a caller about to send a command
-   * wants. Whether a document is listening *right now* is `AppReadyRegistry`
+   * window closing. That is what a caller asking *is this window an app at all* wants —
+   * `getWindow(windowId)?.appProtocol` — and it is deliberately **not** what a caller
+   * about to send a command wants. Whether a document is listening *right now* is `AppReadyRegistry`
    * (`actionEmitter.isAppReady` / `waitForAppReady`), which is cleared on window close
    * and on session teardown because a document that has gone away cannot answer.
    * Reading this flag as readiness is how a command goes out to an iframe that has not
@@ -844,7 +840,7 @@ export class WindowStateRegistry {
    * leaving the previous one standing.
    */
   setAppProtocol(windowId: string, noReplay?: readonly string[]): void {
-    const win = this.getState(windowId);
+    const win = this.getWindow(windowId);
     if (win) {
       win.appProtocol = true;
       win.updatedAt = Date.now();
@@ -865,14 +861,14 @@ export class WindowStateRegistry {
   }
 
   hasWindow(windowId: string): boolean {
-    return this.getState(windowId) !== undefined;
+    return this.getWindow(windowId) !== undefined;
   }
 
   /**
    * Returns the locking agent's ID if locked by someone else, or null if not locked / locked by the same agent.
    */
   isLockedByOther(windowId: string, agentId?: string): string | null {
-    const win = this.getState(windowId);
+    const win = this.getWindow(windowId);
     if (!win) return null;
     if (!win.locked) return null;
     if (agentId && win.lockedBy === agentId) return null;
@@ -880,7 +876,7 @@ export class WindowStateRegistry {
   }
 
   getAppIdForWindow(windowId: string): string | undefined {
-    return this.getState(windowId)?.appId;
+    return this.getWindow(windowId)?.appId;
   }
 
   /**
@@ -891,12 +887,6 @@ export class WindowStateRegistry {
   getMonitorForWindow(windowId: string): string | undefined {
     const resolved = this.resolve(windowId);
     return resolved ? this.handleMap.getMonitorId(resolved[0]) : undefined;
-  }
-
-  isAppProtocolWindow(windowId: string): boolean {
-    const win = this.getState(windowId);
-    if (!win) return false;
-    return win.appProtocol === true && !!win.appId;
   }
 
   /**
@@ -949,10 +939,6 @@ export class WindowStateRegistry {
     this.stack = [];
     this.focused = null;
     this.handleMap.clear();
-  }
-
-  getWindowCount(): number {
-    return this.windows.size;
   }
 
   restoreFromActions(actions: OSAction[]): void {

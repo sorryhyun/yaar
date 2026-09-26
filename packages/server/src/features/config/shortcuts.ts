@@ -20,8 +20,8 @@ import { ServerEventType, type DesktopShortcut, type OSAction } from '@yaar/shar
  *
  * Uses the session-scoped 'desktop-shortcut' channel so it reaches the frontend
  * regardless of whether the caller is an AI agent or an iframe verb request.
- * (The generic 'action' channel is filtered by ToolActionBridge's agentId check,
- * which rejects iframe-originated actions like 'iframe:configurations'.)
+ * (The generic 'action' channel delivers only for an agent the session knows or an
+ * `iframe:` caller, and records the action on the agent's turn.)
  */
 function broadcastDesktopAction(action: OSAction): void {
   const sessionId = getSessionId();

@@ -1,24 +1,6 @@
 /**
- * App development helpers - path validation, naming.
+ * App development helpers - naming.
  */
-
-import { join, normalize, relative } from 'path';
-
-/**
- * Validate path to prevent directory traversal.
- */
-export function isValidPath(basePath: string, targetPath: string): boolean {
-  const normalizedTarget = normalize(join(basePath, targetPath));
-  const relativePath = relative(basePath, normalizedTarget);
-  return !relativePath.startsWith('..') && !relativePath.includes('..');
-}
-
-/**
- * Generate a sandbox ID using current timestamp.
- */
-export function generateSandboxId(): string {
-  return Date.now().toString();
-}
 
 /**
  * Convert app ID to display name.

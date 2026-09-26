@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
+import { installMockAgentSession } from './helpers/mock-agent-session.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // Same set as message-delivery.test.ts: enough to build a ContextPool and a LiveSession without a
@@ -31,12 +32,7 @@ function createMockProvider(): AITransport {
 }
 
 mock.module('../providers/factory.js', () => ({
-  providerRegistry: {},
   getAvailableProviders: mock(async () => []),
-  createProvider: mock(async () => null),
-  getFirstAvailableProvider: mock(async () => null),
-  getProviderInfo: mock(() => undefined),
-  getAllProviderInfo: mock(() => []),
   initWarmPool: mock(async () => {}),
   acquireWarmProvider: mock(async () => createMockProvider()),
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
@@ -103,40 +99,7 @@ mock.module('../agents/profiles/index.js', () => ({
   codexRoleToToml: mock(() => ''),
 }));
 
-mock.module('../agents/agent-session.js', () => {
-  class MockAgentSession {
-    initialize = mock(async () => true);
-    handleMessage = mock(async () => {});
-    isRunning = mock(() => false);
-    interrupt = mock(async () => {});
-    cleanup = mock(async () => {});
-    getRawSessionId = mock(() => null);
-    getRecordedActions = mock(() => []);
-    setOutputCallback = mock(() => {});
-    getInstanceId = mock(() => `agent-${Date.now()}`);
-    getUsage = mock(() => ({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    }));
-    getConnectionId = mock(() => 'test-conn');
-    getCurrentRole = mock(() => null);
-    getCurrentMessageId = mock(() => null);
-    steer = mock(async () => false);
-    prewarm = mock(async () => {});
-  }
-  return {
-    AgentSession: MockAgentSession,
-    getAgentId: mock(() => undefined),
-    getCurrentConnectionId: mock(() => undefined),
-    getSessionId: mock(() => undefined),
-    getMonitorId: mock(() => undefined),
-    getWindowId: mock(() => undefined),
-    runWithAgentId: mock((_id: string, fn: () => unknown) => fn()),
-    runWithAgentContext: mock((_ctx: unknown, fn: () => unknown) => fn()),
-  };
-});
+installMockAgentSession();
 
 // ── Imports under test (after mocks) ───────────────────────────────────────
 

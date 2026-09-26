@@ -91,7 +91,6 @@ export class AgentPool {
   private nextAgentId = 0;
   private logger: SessionLogger | null = null;
   private broadcastFn: (event: ServerEvent) => void;
-  private resolveWindowHandle: (rawId: string, monitorId?: string) => string;
 
   /** Persistent monitor agents, keyed by monitorId. */
   private monitorAgents = new Map<string, PooledAgent>();
@@ -167,12 +166,10 @@ export class AgentPool {
   constructor(
     sessionId: SessionId,
     broadcast: (event: ServerEvent) => void,
-    resolveWindowHandle?: (rawId: string, monitorId?: string) => string,
     acquireProvider?: () => Promise<AITransport | null>,
   ) {
     this.sessionId = sessionId;
     this.broadcastFn = broadcast;
-    this.resolveWindowHandle = resolveWindowHandle ?? ((id) => id);
     this.acquireProvider = acquireProvider ?? acquireWarmProvider;
   }
 
@@ -313,7 +310,6 @@ export class AgentPool {
         instanceId,
         this.sessionId, // liveSessionId for session-scoped broadcasting
         this.broadcastFn,
-        this.resolveWindowHandle,
       );
 
       const initialized = await session.initialize(preWarmedProvider);
@@ -426,13 +422,6 @@ export class AgentPool {
   }
 
   /**
-   * Return the number of active monitor agents (one per monitor).
-   */
-  getMonitorAgentCount(): number {
-    return this.monitorAgents.size;
-  }
-
-  /**
    * Return the monitor IDs that have monitor agents.
    */
   getMonitorAgentIds(): string[] {
@@ -524,6 +513,14 @@ export class AgentPool {
    */
   hasAgent(agentId: string): boolean {
     return this.agentIds.has(agentId);
+  }
+
+  /** The live agent with this instanceId, if it is one of this pool's. */
+  findAgent(instanceId: string): AgentSession | undefined {
+    for (const { agent } of this.allAgents()) {
+      if (agent.instanceId === instanceId) return agent.session;
+    }
+    return undefined;
   }
 
   /**

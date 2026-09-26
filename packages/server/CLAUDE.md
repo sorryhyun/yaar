@@ -101,11 +101,12 @@ src/
 │   │                     #   markdown parts; shared parts in profiles/prompts/, combined by compose.ts; plus sub-agent,
 │   │                     #   developer, turn-options, codex-roles, model-tiers, types, index (pure barrel).
 │   │                     #   App-agent prompt/tool sourcing: docs/reference/app_agent_prompt.md
-│   ├── session-policies/       # StreamToEventMapper, ToolActionBridge
+│   ├── session-policies/       # StreamToEventMapper
 │   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
 │   ├── types.ts          # AITransport interface, StreamMessage, TransportOptions
 │   ├── factory.ts        # Auto-detect provider, warm pool init
+│   ├── cli-probe.ts      # CLI availability/version probes (cached), shared by factory and providers
 │   ├── warm-pool.ts      # WarmPool singleton
 │   ├── notice.ts         # ProviderNotice + toNoticeMessage — the recoverable-failure channel
 │   ├── mock/             # MockTransport (YAAR_MOCK_AGENT=1) — scripted turns for make mobile-bench
@@ -120,7 +121,7 @@ src/
 │   ├── storage-archive.ts # extract/compress as verb results for both storage doors (storage/archive-ops.ts does the work)
 │   ├── storage-describe.ts # describeStoragePath() — describe for a path on disk, shared by both storage doors
 │   ├── apps/             # register.ts, app-resource.ts, protocol-resource.ts, agents-resource.ts, storage-resource.ts, db-resource.ts, paths.ts
-│   ├── agents.ts / apps.ts (barrel) / storage.ts / storage-bytes.ts / config.ts / history.ts / http.ts / mcp-gateway.ts
+│   ├── agents.ts / storage.ts / storage-bytes.ts / config.ts / history.ts / http.ts / mcp-gateway.ts
 │   └── fonts.ts / session.ts / skills.ts / system.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS; the one protocol era
@@ -247,7 +248,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 | Pattern | Location | Purpose |
 |---------|----------|---------|
-| Semaphore | `AgentLimiter` | Global agent limit. Production only calls `tryAcquire()` — the wait queue is unreachable, so `waitingCount` is structurally zero |
+| Semaphore | `AgentLimiter` | Global agent limit — non-blocking `tryAcquire()`/`release()`; a spawn over the limit is refused, never queued |
 | Pool | `ContextPool` | Unified agent reuse with dynamic roles |
 | Warm Pool | `providers/warm-pool.ts` | Pre-initialize providers at startup |
 | Context Tape | `ContextTape` | Track messages by source for injection |

@@ -11,13 +11,12 @@
 import { describe, it, expect } from 'bun:test';
 import { mapNotification } from '../providers/codex/message-mapper.js';
 
-/** Build an `item/mcpToolCall/completed` result and return its mapped content string. */
+/** Build an `item/completed` for an MCP tool call and return its mapped content string. */
 function mapResult(result: unknown): string {
-  const msg = mapNotification('item/mcpToolCall/completed', {
-    type: 'mcpToolCall',
-    server: 'srv',
-    tool: 'thing',
-    result,
+  const msg = mapNotification('item/completed', {
+    threadId: 't1',
+    turnId: 'turn1',
+    item: { type: 'mcpToolCall', id: 'item-1', server: 'srv', tool: 'thing', result },
   });
   expect(msg?.type).toBe('tool_result');
   return (msg as { content: string }).content;
