@@ -100,6 +100,13 @@
     "stalled": "Le serveur ne répond pas. Nouvelles tentatives en cours…",
     "retry": "Réessayer"
   },
+  "textSelection": {
+    "copy": "Copier",
+    "selectAll": "Tout sélectionner",
+    "askAi": "Demander à l'IA",
+    "copied": "Copié",
+    "copyFailed": "Copie impossible"
+  },
   "window": {
     "lockedBy": "Verrouillé par : {{agent}}",
     "poolAgent": "Agent du pool : {{agentId}} ({{status}})",

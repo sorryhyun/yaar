@@ -101,6 +101,13 @@
     "stalled": "The server isn't responding. Still retrying…",
     "retry": "Retry"
   },
+  "textSelection": {
+    "copy": "Copy",
+    "selectAll": "Select all",
+    "askAi": "Ask AI",
+    "copied": "Copied",
+    "copyFailed": "Couldn't copy"
+  },
   "window": {
     "lockedBy": "Locked by: {{agent}}",
     "poolAgent": "Pool agent: {{agentId}} ({{status}})",

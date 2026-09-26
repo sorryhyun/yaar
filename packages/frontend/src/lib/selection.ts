@@ -1,6 +1,7 @@
 /**
  * Selection handling for the shell's drag surfaces.
  */
+import { clearTextSelection } from './textSelection';
 
 /**
  * Start a shell drag: drop any live text selection, then suppress the browser's own.
@@ -14,9 +15,11 @@
  * inside a window, or double-clicking an unselectable spot like the gutter
  * between the titlebar buttons, both of which make Chrome select the whole
  * containing block — would have no click anywhere on screen that dismisses it.
- * Collapsing it explicitly here is what keeps "click away to deselect" true.
+ * Collapsing it explicitly here is what keeps "click away to deselect" true — for the
+ * phone's own highlight (`lib/textSelection`) as much as for the native selection.
  */
 export function beginShellDrag(e: { preventDefault: () => void }): void {
   globalThis.getSelection?.()?.removeAllRanges();
+  clearTextSelection();
   e.preventDefault();
 }

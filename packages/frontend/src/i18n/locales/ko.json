@@ -100,6 +100,13 @@
     "stalled": "서버가 응답하지 않습니다. 재연결을 계속 시도합니다…",
     "retry": "다시 시도"
   },
+  "textSelection": {
+    "copy": "복사",
+    "selectAll": "전체 선택",
+    "askAi": "AI에게 묻기",
+    "copied": "복사했습니다",
+    "copyFailed": "복사하지 못했습니다"
+  },
   "window": {
     "lockedBy": "잠금: {{agent}}",
     "poolAgent": "풀 에이전트: {{agentId}} ({{status}})",

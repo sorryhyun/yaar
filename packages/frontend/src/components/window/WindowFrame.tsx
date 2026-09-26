@@ -356,6 +356,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       {/* Content area */}
       <div
         className={styles.content}
+        data-window-content
         onMouseDown={(e) => {
           // Only when the press lands on the content box itself — its padding
           // ring, or the gap below the last component. Dragging from there has no

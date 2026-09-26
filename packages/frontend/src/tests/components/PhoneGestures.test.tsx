@@ -19,6 +19,7 @@ import {
 } from '@/lib/gestures';
 import { clearGestureVars, getGestureVar } from '@/lib/gesture-layer';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
+import { claimTouch, releaseTouch } from '@/lib/textSelection';
 
 /**
  * happy-dom has no TouchEvent constructor, and the handlers only read `touches` /
@@ -228,6 +229,19 @@ describe('PhoneGestures', () => {
     // does not take the drag over halfway through.
     touch(document.body, 'touchmove', 300, 240);
     expect(panState()).toBeNull();
+  });
+
+  it('lets go of a touch a long-press has claimed for selecting text', () => {
+    render(<PhoneGestures />);
+    touch(document.body, 'touchstart', 400, 300);
+    claimTouch();
+    touch(document.body, 'touchmove', 300, 300);
+    slowly();
+    touch(document.body, 'touchend', 250, 300);
+    releaseTouch();
+    settle();
+    expect(panState()).toBeNull();
+    expect(useDesktopStore.getState().activeMonitorId).toBe('a');
   });
 
   it('pans from over a window, which on a phone is most of the screen', () => {

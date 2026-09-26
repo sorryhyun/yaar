@@ -100,6 +100,13 @@
     "stalled": "Der Server antwortet nicht. Erneute Verbindungsversuche laufen…",
     "retry": "Erneut versuchen"
   },
+  "textSelection": {
+    "copy": "Kopieren",
+    "selectAll": "Alles auswählen",
+    "askAi": "KI fragen",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren fehlgeschlagen"
+  },
   "window": {
     "lockedBy": "Gesperrt von: {{agent}}",
     "poolAgent": "Pool-Agent: {{agentId}} ({{status}})",

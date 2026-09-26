@@ -84,6 +84,7 @@ import {
 } from '@/lib/shade-pull';
 import { clearGestureVars, gestureLayerRef, setGestureVar } from '@/lib/gesture-layer';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
+import { isTouchClaimed } from '@/lib/textSelection';
 import {
   cancelPaletteRaise,
   finishPaletteRaise,
@@ -461,6 +462,12 @@ export function PhoneGestures() {
       const d = drag.current;
       const touch = e.touches[0];
       if (!d || !touch) return;
+      // A finger that held still long enough to select a word is not starting a pan or a
+      // pull. Nothing has moved yet — the long-press slop is under `dragAxis`'s 10px.
+      if (isTouchClaimed()) {
+        drag.current = null;
+        return;
+      }
       const dx = touch.clientX - d.x;
       const dy = touch.clientY - d.y;
       if (!d.axis) {

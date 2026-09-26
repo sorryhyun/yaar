@@ -215,6 +215,27 @@
   color: var(--color-text);
 }
 
+/* A phone selects text itself (`lib/textSelection`): a native selection there brings
+   Chrome's toolbar, which a page cannot change. Fields keep the native one — the IME and
+   caret placement need it. */
+:global(html[data-form-factor='mobile']) .content {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+:global(html[data-form-factor='mobile'])
+  .content
+  :is(input, textarea, [contenteditable]:not([contenteditable='false'])) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.content::highlight(yaar-selection),
+.content ::highlight(yaar-selection) {
+  background-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  color: inherit;
+}
+
 /* Transparent overlay to capture clicks on non-focused iframe windows */
 .iframeFocusOverlay {
   position: absolute;

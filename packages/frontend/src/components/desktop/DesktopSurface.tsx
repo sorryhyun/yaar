@@ -60,6 +60,7 @@ import { beginShellDrag } from '@/lib/selection';
 import { DesktopStatusBar, PhoneStatusBadge } from './DesktopStatusBar';
 import { DesktopIcons } from './DesktopIcons';
 import { PhoneGestures } from './PhoneGestures';
+import { PhoneTextSelection } from './PhoneTextSelection';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 /** Whether `list` holds exactly the members of `set` — the rubber band's no-op check. */
@@ -464,6 +465,9 @@ export function DesktopSurface() {
           shade. Above the desktop so the gutters sit over the cards they have to
           catch touches in front of. */}
       <PhoneGestures />
+      {/* Long-press text selection in windows, with the shell's own menu instead of
+          Chrome's toolbar. Out here so its menu floats over the card it selected in. */}
+      <PhoneTextSelection />
       {/* The phone's status badge, over everything — outside the desktop so no card
           covers it and no pan slides it. The CLI has its own monitor bar, and a full-screen
           card has no title bar left to make room for it. */}

@@ -100,6 +100,13 @@
     "stalled": "O servidor não está respondendo. Tentando novamente…",
     "retry": "Tentar novamente"
   },
+  "textSelection": {
+    "copy": "Copiar",
+    "selectAll": "Selecionar tudo",
+    "askAi": "Perguntar à IA",
+    "copied": "Copiado",
+    "copyFailed": "Não foi possível copiar"
+  },
   "window": {
     "lockedBy": "Bloqueado por: {{agent}}",
     "poolAgent": "Agente do pool: {{agentId}} ({{status}})",
