@@ -22,6 +22,7 @@ mock.module('@yaar/server/providers/warm-pool', () => ({
 
 const { prepareWsData } = await import('@yaar/server/websocket/server');
 const { initSessionHub, getSessionHub } = await import('@yaar/server/session/session-hub');
+const { agentDirectory } = await import('@yaar/server/session/agent-directory');
 
 // ── prepareWsData ──────────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ describe('SessionHub session lifecycle', () => {
 
   it('removes a session from the hub even when cleanup() throws', async () => {
     const session = hub.getOrCreate('wedged-session', {});
-    hub.registerAgent('agent-1', 'wedged-session');
+    agentDirectory.register('agent-1', 'wedged-session');
     session.cleanup = () => Promise.reject(new Error('cleanup exploded'));
 
     // The failure still surfaces to the caller...

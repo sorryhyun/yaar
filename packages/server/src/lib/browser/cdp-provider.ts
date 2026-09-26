@@ -28,6 +28,9 @@ import type {
 import { CDPClient, fetchBrowserWsUrl } from './cdp.js';
 import { BrowserSessionStore } from './session-store.js';
 import { getBrowserIdleMinutes } from '../../config.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('browser');
 
 export const MAX_SESSIONS = 5;
 const CLEANUP_INTERVAL_MS = 60 * 1000; // check every minute
@@ -259,7 +262,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     for (const id of toClose) {
       const session = this.records.get(id)?.session;
       if (session) {
-        console.log(`[browser] Closing idle browser ${id} (window: ${session.windowId})`);
+        log.info('closing idle browser', { browserId: id, windowId: session.windowId });
         // Not a close: a collected session keeps its record and comes back the next
         // time someone asks for that id.
         await this.drop(id, { forgetRecord: false }).catch(() => {});
@@ -289,7 +292,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     this.recordFor(browserId).session = session;
     if (this.shield.initScript || this.shield.blockedUrls.length > 0) {
       session.applyShield(this.shield).catch((err) => {
-        console.error(`[browser] Failed to apply shield to session ${browserId}:`, err);
+        log.error('failed to apply shield', { browserId, err });
       });
     }
     if (!persist || !this.ownsChrome) return;
@@ -331,7 +334,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
     rec.restarts++;
     if (rec.restarts > MAX_CRASH_RESTARTS) {
-      console.error(`[browser] Session ${browserId} crashed ${rec.restarts - 1}x — giving up`);
+      log.error('session keeps crashing — giving up', { browserId, crashes: rec.restarts - 1 });
       await this.closeSession(browserId).catch(() => {});
       return;
     }
@@ -349,10 +352,10 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       // The crashed target is released rather than kept: if Chrome later reports it
       // destroyed, that is not this (now live) session closing.
       this.bindTarget(browserId, rec, target.id);
-      console.log(`[browser] Session ${browserId} revived → ${session.currentUrl}`);
+      log.info('session revived', { browserId, url: session.currentUrl });
       rec.restarts = 0;
     } catch (err) {
-      console.error(`[browser] Failed to revive session ${browserId}:`, err);
+      log.error('failed to revive session', { browserId, err });
     }
   }
 
@@ -386,7 +389,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
           session.currentTitle = state.title;
         }
       }
-      console.log(`[browser] Revived session ${browserId} → ${session.currentUrl}`);
+      log.info('revived session', { browserId, url: session.currentUrl });
       return session;
     })().finally(() => {
       const rec = this.records.get(browserId);
@@ -398,7 +401,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
     this.recordFor(browserId).reviving = attempt;
     return attempt.catch((err) => {
-      console.error(`[browser] Revive failed for ${browserId}:`, err);
+      log.error('revive failed', { browserId, err });
       return null;
     });
   }
@@ -444,7 +447,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         if (p.targetInfo.url === 'about:blank' && !p.targetInfo.openerId) return;
 
         this.handleNewTarget(p.targetInfo, port).catch((err) => {
-          console.error('[browser] Failed to adopt new tab:', err);
+          log.error('failed to adopt new tab', { err });
         });
       });
 
@@ -453,13 +456,13 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         if (typeof targetId === 'string') this.handleTargetGone(targetId);
       });
     } catch (err) {
-      console.error('[browser] Target discovery setup failed:', err);
+      log.error('target discovery setup failed', { err });
     }
   }
 
   private async handleNewTarget(targetInfo: NewTargetInfo, chromePort: number): Promise<void> {
     if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) {
-      console.log('[browser] Cannot adopt new tab — limit reached');
+      log.info('cannot adopt new tab — limit reached');
       return;
     }
 
@@ -523,9 +526,11 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
           title: session.currentTitle,
           openerBrowserId,
         });
-        console.log(
-          `[browser] Auto-adopted new tab [browser:${browserId}] → ${session.currentUrl} (opened by browser:${openerBrowserId})`,
-        );
+        log.info('auto-adopted new tab', {
+          browserId,
+          url: session.currentUrl,
+          openedBy: openerBrowserId,
+        });
       } finally {
         this.pendingSessions--;
       }
@@ -535,7 +540,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       if (!tracked && this.records.get(browserId) === rec) {
         void this.drop(browserId, { forgetRecord: true }).catch(() => {});
       }
-      console.error('[browser] Failed to adopt target:', err);
+      log.error('failed to adopt target', { err });
     }
   }
 
@@ -600,7 +605,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       });
       targets = (await resp.json()) as typeof targets;
     } catch (err) {
-      console.error('[browser] Failed to enumerate existing targets:', err);
+      log.error('failed to enumerate existing targets', { err });
       return;
     }
     if (!Array.isArray(targets)) return;
@@ -629,15 +634,13 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         session.currentUrl = url || 'about:blank';
         session.currentTitle = t.title || '';
         this.track(browserId, session, { persist: false });
-        console.log(
-          `[browser] Adopted existing tab [browser:${browserId}] → ${session.currentUrl}`,
-        );
+        log.info('adopted existing tab', { browserId, url: session.currentUrl });
       } catch (err) {
         // Unclaimed rather than released: a tab we failed to attach to is worth
         // another try on the next sync.
         if (this.records.get(browserId) === rec) this.records.delete(browserId);
         if (this.targets.get(t.id) === browserId) this.targets.delete(t.id);
-        console.error('[browser] Failed to adopt existing tab:', err);
+        log.error('failed to adopt existing tab', { err });
       } finally {
         this.pendingSessions--;
       }
@@ -652,7 +655,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     await Promise.all(
       [...this.liveSessions()].map(([, s]) =>
         s.applyShield(this.shield).catch((err) => {
-          console.error(`[browser] Failed to apply shield to session ${s.id}:`, err);
+          log.error('failed to apply shield', { browserId: s.id, err });
         }),
       ),
     );
@@ -693,7 +696,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       try {
         listener(event);
       } catch (err) {
-        console.error('[browser] Tab event listener failed:', err);
+        log.error('tab event listener failed', { err });
       }
     }
   }

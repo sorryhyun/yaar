@@ -488,9 +488,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // calls that took the slow path.
   const wantsVerbLog = Boolean(tokenEntry?.sessionId) && shouldLogVerb(resolvedUri, body.payload);
   const verbLog = () =>
-    wantsVerbLog
-      ? (getSessionHub().get(tokenEntry!.sessionId!)?.getPool()?.getSessionLogger() ?? null)
-      : null;
+    wantsVerbLog ? (getSessionHub().get(tokenEntry!.sessionId!)?.getSessionLogger() ?? null) : null;
   const verbLabel = `iframe:${tokenEntry?.appId ?? 'unknown'}`;
   verbLog()?.logToolUse(
     verbLabel,

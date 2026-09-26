@@ -73,7 +73,11 @@ function providerWith(fake: FakeClient): CodexProvider {
 function collect(provider: CodexProvider): { messages: StreamMessage[]; done: Promise<void> } {
   const messages: StreamMessage[] = [];
   const done = (async () => {
-    for await (const m of provider.query('hi', { systemPrompt: 'sp' })) messages.push(m);
+    for await (const m of provider.query('hi', {
+      systemPrompt: 'sp',
+      conversation: { kind: 'new' },
+    }))
+      messages.push(m);
   })();
   return { messages, done };
 }

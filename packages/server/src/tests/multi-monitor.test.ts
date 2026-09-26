@@ -7,6 +7,7 @@
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
 import { installMockAgentSession } from './helpers/mock-agent-session.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -14,7 +15,6 @@ function createMockProvider(): AITransport {
   return {
     name: 'mock',
     providerType: 'claude',
-    systemPrompt: '',
     dispose: mock(async () => {}),
     isAvailable: async () => true,
     query: mock(() => {}),
@@ -115,7 +115,7 @@ mock.module('../storage/storage-manager.js', () => ({
   storageGrep: mock(async () => ({ success: true, matches: [] })),
 }));
 
-mock.module('../providers/environment.js', () => ({
+mock.module('../agents/environment.js', () => ({
   buildEnvironmentSection: mock(async () => ''),
 }));
 
@@ -178,12 +178,13 @@ describe('Multi-monitor lifecycle', () => {
   let pool: InstanceType<typeof ContextPool>;
 
   beforeEach(async () => {
-    pool = new ContextPool(
-      'test-session' as SessionId,
-      createMockWindowState() as any,
-      createMockReloadCache() as any,
-      mock(() => {}), // broadcast callback
-    );
+    pool = new ContextPool({
+      sessionId: 'test-session' as SessionId,
+      host: createTestPoolHost(),
+      windowState: createMockWindowState() as any,
+      reloadCache: createMockReloadCache() as any,
+      broadcast: mock(() => {}),
+    });
     // Initialize creates the default default monitor agent
     await pool.initialize();
   });
@@ -247,12 +248,13 @@ describe('App agents are scoped to their monitor', () => {
   let pool: InstanceType<typeof ContextPool>;
 
   beforeEach(async () => {
-    pool = new ContextPool(
-      'test-session' as SessionId,
-      createMockWindowState() as any,
-      createMockReloadCache() as any,
-      mock(() => {}),
-    );
+    pool = new ContextPool({
+      sessionId: 'test-session' as SessionId,
+      host: createTestPoolHost(),
+      windowState: createMockWindowState() as any,
+      reloadCache: createMockReloadCache() as any,
+      broadcast: mock(() => {}),
+    });
     await pool.initialize();
     await pool.createMonitorAgent('1');
   });
@@ -348,12 +350,13 @@ describe('App events reach only their own monitor’s subscribers', () => {
     windowState.handleAction(appWindow('ai-chat'), '0');
     windowState.handleAction(appWindow('ai-chat'), '1');
 
-    pool = new ContextPool(
-      'test-session' as SessionId,
-      windowState as any,
-      createMockReloadCache() as any,
-      mock(() => {}),
-    );
+    pool = new ContextPool({
+      sessionId: 'test-session' as SessionId,
+      host: createTestPoolHost(),
+      windowState: windowState as any,
+      reloadCache: createMockReloadCache() as any,
+      broadcast: mock(() => {}),
+    });
     await pool.initialize();
     await pool.createMonitorAgent('1');
 
@@ -449,12 +452,13 @@ describe('wakeAgent wakes the emitting app’s own agent', () => {
     windowState.handleAction(appWindow('ai-chat'), '0');
     windowState.handleAction(appWindow('ai-chat'), '1');
 
-    pool = new ContextPool(
-      'test-session' as SessionId,
-      windowState as any,
-      createMockReloadCache() as any,
-      mock(() => {}),
-    );
+    pool = new ContextPool({
+      sessionId: 'test-session' as SessionId,
+      host: createTestPoolHost(),
+      windowState: windowState as any,
+      reloadCache: createMockReloadCache() as any,
+      broadcast: mock(() => {}),
+    });
     await pool.initialize();
     await pool.createMonitorAgent('1');
 

@@ -7,7 +7,7 @@
  */
 
 import type { ProviderType } from '../providers/types.js';
-import { buildEnvironmentSection } from '../providers/environment.js';
+import { buildEnvironmentSection } from './environment.js';
 import codexProviderSection from './profiles/prompts/provider-codex.md' with { type: 'text' };
 import { isAppRole, isSessionRole } from './roles.js';
 

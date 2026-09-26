@@ -21,17 +21,19 @@ import type {
   ProviderType,
 } from '../types.js';
 import type { AppServer } from './app-server.js';
-import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
+import { JsonRpcError, type JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
+import { isLostThreadError, jsonRpcErrorCode } from './errors.js';
 import { createInputChannel } from '../input-channel.js';
 import { TurnGate } from '../turn-gate.js';
-import { getOrchestratorPrompt } from '../../agents/profiles/orchestrator/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
 import { SUB_AGENT_MCP_SERVER } from '../../agents/profiles/sub-agent.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,
+  ThreadForkParams,
+  ThreadForkResponse,
   ThreadResumeParams,
   ThreadResumeResponse,
   TurnStartParams,
@@ -106,9 +108,6 @@ function codexServerFilter(allowedTools: string[] | undefined): (name: string) =
 export class CodexProvider implements AITransport {
   readonly name = 'codex';
   readonly providerType: ProviderType = 'codex';
-  // `config/system-prompt.txt` wins over the built-in prompt, as it does for Claude. Read once
-  // per instance: `needsNewThread` compares this string, so it must not vary between turns.
-  readonly systemPrompt = getOrchestratorPrompt();
 
   private appServer: AppServer | null;
   private client: JsonRpcWsClient | null = null;
@@ -198,7 +197,7 @@ export class CodexProvider implements AITransport {
 
       const threadCreated = await this.ensureThread(options);
       if (threadCreated) {
-        yield { type: 'text', sessionId: this.currentSession!.threadId };
+        yield { type: 'session', sessionId: this.currentSession!.threadId };
       }
 
       // Stamp monitorId so actions emitted during this turn carry the correct origin
@@ -274,17 +273,13 @@ export class CodexProvider implements AITransport {
       // it and silently starting a blank thread. `recovering` bounds this to a
       // single retry: if the resume itself fails, ensureThread falls back to a
       // fresh thread and this second failure surfaces as an error.
-      if (
-        err instanceof Error &&
-        !this.recovering &&
-        (err.message.includes('thread') || err.message.includes('invalid'))
-      ) {
+      if (!this.recovering && isLostThreadError(err)) {
         const lostThreadId = this.currentSession?.threadId;
         this.currentSession = null;
         this.recovering = true;
         try {
           const retryOptions: TransportOptions = lostThreadId
-            ? { ...options, resumeThread: true, sessionId: lostThreadId }
+            ? { ...options, conversation: { kind: 'resume', sessionId: lostThreadId } }
             : options;
           yield* this.query(prompt, retryOptions);
         } finally {
@@ -293,7 +288,11 @@ export class CodexProvider implements AITransport {
         return;
       }
 
-      yield { type: 'error', error: errMessage(err) };
+      yield {
+        type: 'error',
+        error: errMessage(err),
+        ...(err instanceof JsonRpcError ? { errorCode: jsonRpcErrorCode(err.code) } : {}),
+      };
     } finally {
       if (this.turnAbort === abort) this.turnAbort = null;
     }
@@ -483,8 +482,9 @@ export class CodexProvider implements AITransport {
 
   /**
    * Ensure the thread is set up based on transport options.
-   * Handles three cases: resume a saved thread, start new, or reuse existing.
-   * Returns true if a new thread was created (caller should yield sessionId).
+   * Handles four cases: resume a saved thread, fork the current one onto a changed setup,
+   * start new, or reuse existing. Returns true if the thread id changed (caller reports it
+   * as a `session` message).
    */
   private async ensureThread(options: TransportOptions): Promise<boolean> {
     const client = this.client!;
@@ -507,11 +507,12 @@ export class CodexProvider implements AITransport {
     // Only applies to a *cold* resume, which is the one YAAR performs (a thread id restored
     // from a previous run's session log, on the first turn). `thread/resume` on a thread
     // this app-server already has loaded rejoins it and ignores config overrides.
-    if (options.resumeThread && options.sessionId) {
-      log.info('resuming thread', { threadId: options.sessionId });
+    const { conversation } = options;
+    if (conversation.kind === 'resume') {
+      log.info('resuming thread', { threadId: conversation.sessionId });
       try {
         const fullParams: ThreadResumeParams = {
-          threadId: options.sessionId,
+          threadId: conversation.sessionId,
           ...(mcpConfig ? { config: mcpConfig } : {}),
         };
         const result = await client.request<ThreadResumeParams, ThreadResumeResponse>(
@@ -520,11 +521,11 @@ export class CodexProvider implements AITransport {
         );
         if (result.thread.turns.length === 0) {
           log.warn('resumed thread has no turns, starting fresh instead', {
-            threadId: options.sessionId,
+            threadId: conversation.sessionId,
           });
         } else {
           this.currentSession = {
-            threadId: options.sessionId,
+            threadId: conversation.sessionId,
             systemPrompt: options.systemPrompt,
             model: options.model,
             mcpScope,
@@ -536,14 +537,49 @@ export class CodexProvider implements AITransport {
       }
     }
 
-    // Case 2: Need new thread (no session, system prompt, model, or MCP scope changed)
-    const needsNewThread =
-      !this.currentSession ||
-      this.currentSession.systemPrompt !== options.systemPrompt ||
-      this.currentSession.model !== options.model ||
-      this.currentSession.mcpScope !== mcpScope;
+    // Case 2: the thread's setup changed (system prompt, model or MCP scope). The prompt
+    // carries the environment section — installed apps, settings — so installing an app is
+    // enough to get here. `thread/start` would drop the conversation with it; a fork carries
+    // the history into a thread opened with the new instructions, model and MCP servers
+    // (all three verified against app-server 0.157.1), which is what Claude's resume does.
+    const current = this.currentSession;
+    const changed =
+      !!current &&
+      (current.systemPrompt !== options.systemPrompt ||
+        current.model !== options.model ||
+        current.mcpScope !== mcpScope);
+    if (current && changed) {
+      try {
+        const fullParams: ThreadForkParams = {
+          threadId: current.threadId,
+          baseInstructions: options.systemPrompt,
+          ...(options.model ? { model: options.model } : {}),
+          ...(mcpConfig ? { config: mcpConfig } : {}),
+        };
+        const result = await client.request<ThreadForkParams, ThreadForkResponse>(
+          'thread/fork',
+          fullParams,
+        );
+        this.currentSession = {
+          threadId: result.thread.id,
+          systemPrompt: options.systemPrompt,
+          model: options.model,
+          mcpScope,
+        };
+        log.info('forked thread for new setup', {
+          from: current.threadId,
+          threadId: result.thread.id,
+        });
+        return true;
+      } catch (err) {
+        // A thread that never ran a turn has no rollout to fork ("no rollout found") — a
+        // prewarmed one, typically — and then there is no history to lose either.
+        log.info('fork failed, starting a new thread', { threadId: current.threadId, err });
+      }
+    }
 
-    if (needsNewThread) {
+    // Case 3: no thread yet, or one that could not be forked.
+    if (!current || changed) {
       const fullParams: ThreadStartParams = {
         experimentalRawEvents: false,
         baseInstructions: options.systemPrompt,
@@ -563,7 +599,7 @@ export class CodexProvider implements AITransport {
       return true;
     }
 
-    // Case 3: Reuse existing thread (same system prompt + model + MCP scope, continuing)
+    // Case 4: Reuse existing thread (same system prompt + model + MCP scope, continuing)
     return false;
   }
 }

@@ -38,14 +38,14 @@ describe('Claude failure channels → StreamMessage', () => {
     expect(mapped?.noticeLevel).toBe('warning');
     expect(mapped?.errorCode).toBe('rate_limit');
     expect(mapped?.content).toContain('Rate limited');
-    // The session id still rides along — the assistant frame is how the mapper
-    // learns it, and swallowing it here would break session resumption.
-    expect(mapped?.sessionId).toBe('s1');
+    // Session ids are the provider's to report (a `session` message per turn), not
+    // something every mapped frame carries.
+    expect(mapped?.sessionId).toBeUndefined();
   });
 
-  it('leaves a clean assistant frame as the session-tracking ping it was', () => {
+  it('maps a clean assistant frame to nothing — its content already streamed', () => {
     const mapped = mapClaudeMessage(sdk({ type: 'assistant', message: {}, session_id: 's1' }));
-    expect(mapped).toEqual({ type: 'text', sessionId: 's1' });
+    expect(mapped).toBeNull();
   });
 
   it('reports an interrupt-truncated assistant frame as an info notice', () => {

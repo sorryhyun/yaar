@@ -10,6 +10,9 @@ import { rm, readFile, readdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { isProcessAlive } from '@yaar/lib/process';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('browser');
 
 interface PidRecord {
   pid: number;
@@ -109,11 +112,11 @@ export async function cleanupStaleChrome(options: CleanupOptions = {}): Promise<
     // Integer check first: the PID is interpolated into the Windows lookup command.
     const livePid = Number.isInteger(record.pid) && record.pid > 0 && isProcessAlive(record.pid);
     if (livePid && !isRecordedChrome(record)) {
-      console.log(
-        `[browser] PID ${record.pid} from a stale PID file is no longer our Chrome — leaving it alone`,
-      );
+      log.info('PID from a stale PID file is no longer our Chrome — leaving it alone', {
+        pid: record.pid,
+      });
     } else if (livePid) {
-      console.log(`[browser] Killing stale Chrome process (PID ${record.pid})`);
+      log.info('killing stale Chrome process', { pid: record.pid });
       try {
         process.kill(record.pid, 'SIGKILL');
         killedPid = true;

@@ -9,7 +9,7 @@
  * The argument list below is the declaration of which parts it uses, in order.
  */
 
-import { loadCustomSystemPrompt } from '../../../providers/load-system-prompt.js';
+import { loadCustomSystemPrompt } from '../../load-system-prompt.js';
 import { composePrompt } from '../compose.js';
 
 import verbTools from '../prompts/verb-tools.md' with { type: 'text' };

@@ -30,7 +30,6 @@ function createMockProvider(): AITransport {
   return {
     name: 'mock',
     providerType: 'claude',
-    systemPrompt: '',
     dispose: mock(async () => {}),
     isAvailable: async () => true,
     query: mock(() => {}),
@@ -98,7 +97,7 @@ mock.module('../storage/storage-manager.js', () => ({
   storageGrep: mock(async () => ({ success: true, matches: [] })),
 }));
 
-mock.module('../providers/environment.js', () => ({
+mock.module('../agents/environment.js', () => ({
   buildEnvironmentSection: mock(async () => ''),
 }));
 

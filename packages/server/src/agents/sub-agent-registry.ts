@@ -41,9 +41,8 @@ const log = createLogger('SubAgentRegistry');
  * A sub-agent and the metadata its owning app spawned it with.
  *
  * The prompt lives here rather than on the provider because a persona's prompt is
- * *the persona*: it is replayed as `systemPromptOverride` on every turn, and the
- * provider's own `systemPrompt` (the generic YAAR one it was warmed with) is never
- * used. Keeping it on the record also means a busy check, a roster row, and a
+ * *the persona*: it is replayed as `systemPromptOverride` on every turn, so the
+ * generic orchestrator prompt a turn without an override gets is never used. Keeping it on the record also means a busy check, a roster row, and a
  * respawn all read the same object.
  */
 export interface SubAgent {

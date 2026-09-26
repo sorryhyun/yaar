@@ -21,7 +21,7 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import { ClientEventType, ServerEventType } from '@yaar/shared';
 import { monitorSource } from '../../agents/context.js';
 import { monitorRole } from '../../agents/roles.js';
-import type { TransportOptions } from '../../providers/types.js';
+import { namedSessionId, type TransportOptions } from '../../providers/types.js';
 import { boot, type Harness } from './harness/boot.js';
 
 let harness: Harness | undefined;
@@ -79,8 +79,8 @@ describe('S13 — monitor reset before the pool exists', () => {
 
     const turn = seen.find((t) => t.prompt.includes('hello'));
     expect(turn).toBeDefined();
-    expect(turn!.options.resumeThread).toBeFalsy();
-    expect(turn!.options.sessionId).not.toBe(PREVIOUS_THREAD);
+    expect(turn!.options.conversation.kind).not.toBe('resume');
+    expect(namedSessionId(turn!.options.conversation)).not.toBe(PREVIOUS_THREAD);
 
     const tape = h.session.getPool()?.contextTape.getMessages({ includeWindows: true }) ?? [];
     expect(tape.some((m) => m.content === 'PREVIOUS_MONITOR_TURN')).toBe(false);
@@ -113,8 +113,7 @@ describe('S13 — monitor reset before the pool exists', () => {
 
     const turn = seen.find((t) => t.prompt.includes('hello'));
     expect(turn).toBeDefined();
-    expect(turn!.options.resumeThread).toBe(true);
-    expect(turn!.options.sessionId).toBe('other-thread');
+    expect(turn!.options.conversation).toEqual({ kind: 'resume', sessionId: 'other-thread' });
   });
 
   it('drops the restored thread of a monitor that has not spoken yet', async () => {
@@ -151,7 +150,7 @@ describe('S13 — monitor reset before the pool exists', () => {
 
     const turn = seen.find((t) => t.prompt.includes('hello'));
     expect(turn).toBeDefined();
-    expect(turn!.options.resumeThread).toBeFalsy();
-    expect(turn!.options.sessionId).not.toBe('other-thread');
+    expect(turn!.options.conversation.kind).not.toBe('resume');
+    expect(namedSessionId(turn!.options.conversation)).not.toBe('other-thread');
   });
 });

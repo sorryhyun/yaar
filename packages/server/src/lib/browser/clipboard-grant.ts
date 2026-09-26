@@ -43,6 +43,9 @@
 import { CDPClient, fetchBrowserWsUrl } from './cdp.js';
 import { localTlsDesktopOrigin } from '../../http/local-tls.js';
 import { CHROME_DEBUG_PORT, isClipboardGrantEnabled, DESKTOP_ORIGIN_HOST } from '../../config.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('clipboard');
 
 /**
  * How often to check on the connection.
@@ -102,9 +105,7 @@ async function attempt(port: number, debugPort: number): Promise<void> {
   if (client && !client.isClosed) return; // still held — nothing to do
 
   if (client?.isClosed && grantedOrigin) {
-    console.warn(
-      '[clipboard] Lost the Chrome DevTools connection holding the clipboard grant — reconnecting.',
-    );
+    log.warn('lost the Chrome DevTools connection holding the clipboard grant — reconnecting');
     grantedOrigin = null;
   }
   client = null;
@@ -113,9 +114,9 @@ async function attempt(port: number, debugPort: number): Promise<void> {
   if (!wsUrl) {
     if (!announcedUnavailable) {
       announcedUnavailable = true;
-      console.log(
-        `[clipboard] No debuggable Chrome on 127.0.0.1:${debugPort} yet — ` +
-          'the desktop will ask for clipboard permission the usual way until one appears.',
+      log.info(
+        'no debuggable Chrome yet — the desktop will ask for clipboard permission the usual way until one appears',
+        { port: debugPort },
       );
     }
     return;
@@ -131,17 +132,13 @@ async function attempt(port: number, debugPort: number): Promise<void> {
     client = cdp;
     grantedOrigin = origin;
     announcedUnavailable = false;
-    console.log(`[clipboard] Granted clipboard access to ${origin} in the local Chrome.`);
+    log.info('granted clipboard access in the local Chrome', { origin });
   } catch (err) {
     // Never fatal: without it the user just sees the browser's own prompt, which is
     // exactly the behaviour every non-local browser gets anyway.
     client?.close();
     client = null;
-    console.warn(
-      `[clipboard] Could not pre-grant clipboard access to ${origin}: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    log.warn('could not pre-grant clipboard access', { origin, err });
   }
 }
 

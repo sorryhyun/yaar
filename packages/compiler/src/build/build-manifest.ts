@@ -14,180 +14,23 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * Bump this to force a full rebuild of all apps.
  *
  * Staleness is otherwise judged from an app's own src/ and app.json, so a change to
- * something the compiler *injects* — the design tokens, or an SDK script out of
- * @yaar/shared/iframe-scripts — leaves every hash identical and reaches no existing
- * dist/. Bumping is how such a change gets picked up. ('5': the yaar-ml shim loads
- * onnxruntime from /api/ml-runtime/ and runs it on a worker, so any app that bundled
- * the old main-thread copy has to be rebuilt. '6': that worker is also why the shim
- * now has to put the REMOTE token on the externalData URLs ORT fetches itself —
- * without a rebuild, every installed build still ships the copy that 401s. '7': the
- * design tokens gained the y-modal-title/msg/actions classes the new showAlert/
- * showConfirm/showPrompt dialogs render with — an old build calling them would get
- * unstyled markup.) '8': the dark palette moved to GitHub Dark Dimmed and
- * .y-btn-primary now fills with the new --yaar-accent-emphasis token — an old
- * build keeps the near-black canvas and paints its primary button with a token
- * its baked-in CSS never defines. '10': the capture SDK now composites live
- * canvas pixels into a full-window screenshot and honors app.register's new
- * onCapture provider — the app-protocol script that wires onCapture is not
- * hot-upgraded, so old builds must be recompiled to pick it up. '11': @bundled/
- * dompurify entered the catalog and eight apps moved their untrusted-HTML sinks
- * onto it. Those apps' own hashes changed, so they would rebuild regardless —
- * the bump is here to guarantee no installed dist/ predating the sanitization
- * work survives on a machine whose hashes happen to match, since a stale copy of
- * one of these apps is an unsanitized innerHTML sink rather than a cosmetic lag.
- * '13': the yaar-ml shim now pins ORT's log level to 'error', silencing the
- * EP-partition warning every WebGPU session emits. The level is baked into the
- * bundled shim, so an app that does not rebuild keeps printing it. '14': the
- * HTML wrapper now carries the extracted manifest as `window.__yaar_manifest__`,
- * and `defineApp` reads its `params`/`returns`/`schema` from it. An app built
- * before this has no such script, so a Zod schema would reach agents as an
- * opaque object; the injected copy is also what keeps the manifest the iframe
- * serves identical to `dist/protocol.json` rather than merely agreeing with it.
- * '15': `app.register()` was removed — registration moved to `defineApp`'s
- * private `__registerApp` entry, and the public name now throws. Both halves of
- * that pair are baked into a dist (the injected app-protocol script and the
- * bundled `defineApp` shim), so an old build is self-consistent and would keep
- * running its removed registration path indefinitely. Forcing the rebuild is
- * what makes an unmigrated app fail loudly, with the extractor naming the fix,
- * instead of quietly outliving the removal.) '16': the prune pass — `showAlert`
- * left `@bundled/yaar`, and `clsx`/`konva`/`p5` left the bundled-library
- * registry, all four at zero consumers. Nothing installed imports them, so the
- * bump buys no migration; it exists so no dist/ survives carrying a bundled copy
- * of surface the repo no longer resolves, which is the state that makes a later
- * "why does this still build?" report unanswerable. '17': the `--yaar-wash-*`
- * tokens plus the `y-wash-*`/`y-dot*`/`y-progress*` utilities entered the
- * injected stylesheet, and the chrome's own baked `rgba()` tints moved onto
- * them. The tokens CSS is inlined into every dist/index.html, so an app that
- * does not rebuild keeps the pre-wash sheet: the new classes would resolve to
- * nothing and the chrome would stay dark-tinted under `.y-light`. '18': the
- * micro-helper additions to `@bundled/yaar` (`safeParseOr`, `tryToast`,
- * `escapeHtml`, `downloadBlob`/`blobToDataUrl`, the `format*` trio). Additive,
- * so no unrebuilt app is broken by it — and the SDK is bundled *into* each app,
- * so a bundle's helper set is otherwise a function of when that app last
- * happened to be stale. The bump makes every dist/ carry one SDK vintage, which
- * is what keeps "does this build have `formatBytes`?" answerable from the
- * manifest instead of from the app's edit history. '20': repeated subschemas fold
- * into one protocol-level `$defs` (`protocol/dedupe-schemas.ts`, plus zod's own
- * `reused: 'ref'` in the fold). This is the case the bump exists for in its purest
- * form — the pass changes what the *compiler emits*, not what the app's source
- * says, so every hash stays identical and no existing `dist/protocol.json` would
- * ever be reached. Without it the shrink applies only to apps that happen to be
- * edited afterwards, which is the opposite of the point: the app it was written
- * for (studio-3d, whose manual crossed the CLI's inline-delivery cliff) is a
- * user-installed app nobody is about to edit.
+ * something the compiler *injects or emits* — the design tokens stylesheet, an SDK script
+ * out of @yaar/shared/iframe-scripts, the bundled `@bundled/yaar` shim, the protocol
+ * extraction — leaves every hash identical and reaches no existing dist/. The apps that
+ * need such a fix are exactly the installed ones nobody is about to edit, so without a
+ * bump it would only reach whichever apps happened to go stale.
  *
- * '21': the injected storage SDK resolves every spelling of a storage reference
- * (`storage-sdk.ts`), and `@bundled/yaar` exports `storagePath`. Same reason as '18'
- * and '20' together — the SDK script is injected into each `dist/`, so which dialects
- * an app understands would otherwise be a function of when it last happened to be
- * stale, and the four apps this fixes (a namespaced URI silently mishandled, a
- * token-less `/api/storage` URL) are exactly the ones nobody is about to edit.
+ * "The server injects a newer copy at serve time" is usually not enough, for two reasons:
+ * - `installGuard` lets the first copy win, and the one baked into dist/ runs first, so it
+ *   shadows the injected upgrade even for a same-origin app.
+ * - An origin-isolated app gets nothing injected at all; its dist/ copy is the only one.
  *
- * '22': `sharedStorage` names `shared/self/…` and lets the server resolve it, instead of
- * building `shared/{declaredId}/` in the iframe. The bump is load-bearing rather than
- * tidy here: the old naming is *baked into every existing `dist/`*, and it is what makes
- * a devtools preview publish into the shipped app's commons directory on top of real user
- * files. An app whose source nobody edits would keep doing that forever, and the apps
- * being previewed are precisely the ones that have not been edited yet.
+ * Not needed for an onnxruntime-web upgrade: the manifest records `ortVersion` and
+ * `isAppStale` compares it.
  *
- * '23': the contextmenu/shortcut-forwarding script joined the baked-in SDK set. Same
- * reasoning as '20' and '22' — it is baked into `dist/`, so without a bump whether an
- * origin-isolated app forwards Shift+Tab would depend on when it was last stale, and
- * the installed apps nobody is about to edit are exactly the ones that swallow it.
- *
- * '24': the app-protocol script grew two things every app needs and none can opt into
- * by editing its own source — a link guard (a plain `<a href>` in app-rendered HTML was
- * navigating the app's own frame away, taking the protocol bridge with it, with nothing
- * thrown and nothing logged) and structured-clone recovery for replies (a value read off
- * a solid-js store is a Proxy, so returning store state from a state getter or command
- * always failed with a message naming no field). Both are baked into `dist/`, and the
- * apps that render foreign HTML or hand back store state are not the ones being edited.
- *
- * '25': the windows SDK now overrides `window.open`, so an app's popups open as YAAR
- * windows instead of leaving for a browser tab. The whole point is that an app gets this
- * *without* an edit — the apps reaching for `window.open` are the ones written against
- * the open web, or written before `windows.openUrl` existed — and the baked-in copy in
- * `dist/` wins over the injected one (both are install-once, and the baked one runs
- * first). Without a bump the fix would reach only apps that happened to go stale.
- *
- * '26': the link guard moved into the windows SDK and stopped exempting
- * `target="_blank"`, middle clicks and ctrl/cmd-clicks — the exemptions that covered
- * most real external links, and the reason apps kept hand-rolling a stricter guard.
- * Same reasoning as '25': the apps this fixes are precisely the ones nobody is about
- * to edit, and the baked-in copy wins over the injected one. The bump also gets every
- * app the `window.__yaar_links__` block, which is what arms the guard.
- *
- * '28': `appStorage.read` reads through the raw storage door instead of the verb layer,
- * whose envelope JSON-parses any text that will parse — so a valid .json file read back
- * as one minified line, and any app that wrote a read back (an edit round trip)
- * flattened the file on disk. The SDK is compiled into `dist/`, so only a bump carries
- * the fix to apps nobody is about to edit.
- *
- * '29': `appStorage.readJsonOr` sends `missingOk`, so an optional config file that isn't
- * there yet is answered with `null` instead of a failure the session counts. Same reason
- * as the two above — the declaration lives in the compiled-in SDK, so an app keeps
- * manufacturing one `File not found` per optional file per mount until it is rebuilt,
- * and the apps that read the most preferences are the ones nobody is about to edit.
- *
- * '30': `yaar-ml` runs wasm-only sessions on the full-CPU ORT flavor. The native-WebGPU
- * (asyncify) artifact every session used to load has fp64 kernels compiled out, so a
- * graph that computes in f64 — transcribe's nemo128 mel preprocessor casts the waveform
- * to double for its STFT — failed session creation with "Could not find an
- * implementation for Cast(13)". The routing lives in the compiled-in shim, so every
- * yaar-ml app carries the broken copy until rebuilt.
- *
- * '31': the injected stylesheet styles every scrollbar in the document, and `.y-scroll`
- * dropped the `scrollbar-color` that was switching Chromium's pseudo-element styling off
- * for it. The stylesheet is inlined into `dist/`, so without a bump only apps that
- * happened to go stale would pick up the new scrollbar.
- *
- * '32': the injected stylesheet gained the narrow-window and touch rules for the app bar
- * and the `y-nav-*` family (full-bleed drawer, backdrop, 44px targets), and `@bundled/yaar`
- * gained `isNarrow`/`isTouch` and the collapsible panel's `drawer` mode. The stylesheet is
- * inlined into `dist/`, so an unrebuilt app keeps a desktop-only sheet on a phone.
- *
- * '33': the capture helper sizes its canvas by `captureScale` instead of rendering one
- * image pixel per CSS pixel, so a window on the phone shell screenshots at ~2.4x rather
- * than ~400px wide. The injected copy hot-upgrades the baked one, so a same-origin app
- * gets this without a rebuild — but an origin-isolated app is not same-origin, nothing
- * is injected into it, and the copy in `dist/` is the only one it has.
- *
- * '34': the `yaar-ml` shim puts the ORT version on every `/api/ml-runtime/` URL (`?v=`).
- * Those artifacts are served `immutable` under version-less names, so an app built
- * before this keeps asking for the bare URL and runs whichever ORT the browser cached
- * first. From here on an ORT bump does not need a bump here: the manifest records
- * `ortVersion`, and `isAppStale` compares it.
- *
- * '35': the contextmenu script forwards a sideways touch drag the app has no use for
- * (`APP_MSG.touchPan`), so the phone shell's monitor pan works over an app card and not
- * only from the screen-edge gutters. `installGuard` lets the first copy win, so the
- * baked one in an unrebuilt `dist/` shadows the injected upgrade even same-origin.
- *
- * '36': that touch relay's `touchmove` listener is passive. Non-passive, it made every
- * touch scroll in an app wait for the app's main thread, and all isolated apps share one
- * main thread, so any busy app froze touch scrolling in every app until it finished.
- * Same shadowing as '35': the baked copy is the one that runs.
- *
- * '37': the contextmenu script forwards Shift+Left/Right out of an app that let it go by
- * (nothing preventDefault()ed it, no text field was selecting with it), so the desktop's
- * monitor stepping works while an app window has focus. Same shadowing as '35'.
- *
- * '38': the device SDK (`yaar.device` — form factor and orientation, #121) is baked in.
- * It is new rather than changed, so nothing shadows it; the bump is for the isolated
- * apps, which get no injected copy and would go without it until rebuilt.
- *
- * '39': the device SDK reports `fullscreen` and gains `setFullscreen`. Same shadowing as
- * '35': `installGuard` lets the baked copy win over the injected upgrade.
- *
- * '40': the touch relay forwards an upward drag from content already at its bottom too,
- * so a pull up from over an app card raises the phone's palette sheet. Same shadowing as
- * '35'.
- *
- * '41': the text-selection script (#123) is baked in — on a phone, app content goes
- * `user-select: none` and a long-press selects with the shell's own handles and menu
- * instead of Chrome's toolbar — and the contextmenu script's touch relay lets go of a
- * touch that long-press claimed. New for the isolated apps, as '38'; shadowed for the
- * relay, as '35'.
+ * The reason for every bump up to '41' used to be recorded here; that changelog is at
+ * `git show f85e4670:packages/compiler/src/build/build-manifest.ts`. Put the reason for a
+ * new bump in its commit message instead.
  */
 export const COMPILER_VERSION = '41';
 

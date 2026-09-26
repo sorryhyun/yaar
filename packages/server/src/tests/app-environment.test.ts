@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { buildAppSections } from '../providers/environment.js';
+import { buildAppSections } from '../agents/environment.js';
 import type { AppInfo } from '../features/apps/discovery.js';
 
 function app(id: string, over: Partial<AppInfo> = {}): AppInfo {

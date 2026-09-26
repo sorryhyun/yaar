@@ -309,6 +309,13 @@ export class StreamToEventMapper {
   }
 
   async map(message: StreamMessage): Promise<void> {
+    // Bookkeeping, not output: ahead of the flushes, because a conversation id says
+    // nothing about where a text or thinking block ends.
+    if (message.type === 'session') {
+      if (message.sessionId) await this.onSessionId?.(message.sessionId);
+      return;
+    }
+
     // Flush pending thinking before processing non-thinking messages
     if (message.type !== 'thinking') {
       await this.flushThinking();
@@ -338,9 +345,6 @@ export class StreamToEventMapper {
       // the answer, not part of it. See `providers/claude/errors.ts` for why the
       // recoverable failures must not be reported as `error`.
       case 'notice': {
-        if (message.sessionId && this.onSessionId) {
-          await this.onSessionId(message.sessionId);
-        }
         // The one notice that outlives the session: an escape guard firing,
         // with the text that triggered it. A tripped call is cancelled, so no
         // `tool_use` entry is ever written and this is its only trace.
@@ -372,9 +376,6 @@ export class StreamToEventMapper {
       }
 
       case 'text':
-        if (message.sessionId && this.onSessionId) {
-          await this.onSessionId(message.sessionId);
-        }
         if (message.content) {
           this.onOutput?.(message.content.length);
           // Separate consecutive text blocks in the cumulative response. A new block
@@ -630,9 +631,6 @@ export class StreamToEventMapper {
       }
 
       case 'complete':
-        if (message.sessionId && this.onSessionId) {
-          await this.onSessionId(message.sessionId);
-        }
         if (this.state.responseText) {
           this.logger?.logAssistantMessage(this.state.responseText, this.role, this.source);
           await this.logger?.updateLastActivity();

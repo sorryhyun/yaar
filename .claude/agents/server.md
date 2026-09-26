@@ -53,7 +53,7 @@ SessionHub (singleton registry)
 ### Provider System
 
 Implementing `AITransport` interface:
-- `systemPrompt`, `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`
+- `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`
 - `interrupt()`, `dispose()`, optional `steer(content)` for mid-turn steering
 - Factory in `providers/factory.ts` with `providerRegistry` map (re-exports warm-pool helpers)
 - Claude uses `@anthropic-ai/claude-agent-sdk` (default model: `claude-sonnet-5`, Task + WebSearch tools)

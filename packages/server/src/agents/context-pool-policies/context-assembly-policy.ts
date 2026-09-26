@@ -56,8 +56,8 @@ function formatDevice(device: MonitorDevice): string {
 
 export class ContextAssemblyPolicy {
   /**
-   * @param deviceOf The screen behind a monitor. Absent (tests, or a pool with no
-   *   session) means every monitor is a desktop.
+   * @param deviceOf The screen behind a monitor. Absent (tests) means every monitor is a
+   *   desktop.
    */
   constructor(private readonly deviceOf?: (monitorId: string) => MonitorDevice | undefined) {}
 

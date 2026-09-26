@@ -32,6 +32,9 @@ import {
   writePidFile,
   type ChromeInstance,
 } from './chrome.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('browser');
 
 export class HeadlessServerBrowser extends CdpBrowserProvider {
   private chrome: ChromeInstance | null = null;
@@ -87,7 +90,7 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
       });
       await writePidFile(instance);
       this.chrome = instance;
-      console.log(`[browser] Chrome launched on port ${instance.port}`);
+      log.info('Chrome launched', { port: instance.port });
       return instance;
     })();
     // A failed launch must not be cached: the next caller gets a fresh attempt.
@@ -103,7 +106,7 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
       await cleanupChrome(this.chrome);
       this.chrome = null;
       this.initPromise = null;
-      console.log('[browser] Chrome process closed');
+      log.info('Chrome process closed');
     }
   }
 

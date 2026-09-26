@@ -75,7 +75,9 @@ async function runTurn(
     systemPrompt: 'sp',
     agentId: 'agent-1',
     ...(options.allowedTools ? { allowedTools: options.allowedTools } : {}),
-    ...(options.resumeThreadId ? { resumeThread: true, sessionId: options.resumeThreadId } : {}),
+    conversation: options.resumeThreadId
+      ? { kind: 'resume', sessionId: options.resumeThreadId }
+      : { kind: 'new' },
   })) {
     // drain
   }

@@ -14,15 +14,16 @@ import {
 import { randomUUID } from 'crypto';
 import { errMessage } from '@yaar/lib/errors';
 import { isCliAvailable } from '../cli-probe.js';
-import type {
-  AITransport,
-  EscapeGuardRecord,
-  ExternalTurnHandlers,
-  InterruptReceipt,
-  RemoteControlInfo,
-  StreamMessage,
-  TransportOptions,
-  ProviderType,
+import {
+  namedSessionId,
+  type AITransport,
+  type EscapeGuardRecord,
+  type ExternalTurnHandlers,
+  type InterruptReceipt,
+  type RemoteControlInfo,
+  type StreamMessage,
+  type TransportOptions,
+  type ProviderType,
 } from '../types.js';
 import { mapClaudeMessage, ToolBlockBuffer, TurnUsageTracker } from './message-mapper.js';
 import { createInputChannel, type InputChannel } from '../input-channel.js';
@@ -33,7 +34,6 @@ import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tr
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
-import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator/index.js';
 import { type ImageMediaType, parseDataUrl } from '@yaar/lib/image';
 import { createLogger } from '../../observability/log.js';
 
@@ -64,10 +64,7 @@ interface OutgoingUserMessage {
 }
 
 /** The turn-supplied half of an SDK options request; the provider fills the rest. */
-type TurnOptionsRequest = Omit<
-  SDKOptionsRequest,
-  'defaultSystemPrompt' | 'abortController' | 'onEscapeGuard'
->;
+type TurnOptionsRequest = Omit<SDKOptionsRequest, 'abortController' | 'onEscapeGuard'>;
 
 /** The SDK rejects with this when its abort controller fires — an expected stop, not a failure. */
 function isAbortError(error: unknown): boolean {
@@ -146,9 +143,38 @@ const FINGERPRINT_SEP = '\u0000';
  * A turn hit a `resume` the CLI no longer knows — the logged thread was pruned,
  * or the id came from another machine. Both turn paths retry without resume;
  * they differ in what they must tear down first, so only the test is shared.
+ *
+ * By message, because there is nothing else to go on: the CLI reports it as a
+ * generic `error_during_execution` result whose `errors[]` carries the sentence,
+ * and neither `SDKResultMessage` nor `TerminalReason` has a member for it. Kept
+ * to this one function so the day the SDK grows one, there is one place to switch.
  */
 function isStaleSessionError(mapped: StreamMessage): boolean {
   return mapped.type === 'error' && !!mapped.error?.includes('No conversation found');
+}
+
+/** The conversation id an SDK frame names. Nearly every frame names one. */
+function frameSessionId(msg: unknown): string | undefined {
+  if (msg && typeof msg === 'object' && 'session_id' in msg && typeof msg.session_id === 'string') {
+    return msg.session_id || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Puts a turn's conversation id on the stream as a `session` message — on the
+ * first frame that names one, and again only if a later frame names another.
+ * One per turn rather than one per frame: `session_id` rides every streamed
+ * token, and the consumer persists what it is handed.
+ */
+class SessionReporter {
+  private reported: string | undefined;
+
+  report(sessionId: string | undefined): StreamMessage | null {
+    if (!sessionId || sessionId === this.reported) return null;
+    this.reported = sessionId;
+    return { type: 'session', sessionId };
+  }
 }
 
 /**
@@ -187,7 +213,6 @@ interface PersistentSession {
 export class ClaudeSessionProvider implements AITransport {
   readonly name = 'claude';
   readonly providerType: ProviderType = 'claude';
-  readonly systemPrompt: string;
 
   private sessionId: string | null = null;
   private persistentSession: PersistentSession | null = null;
@@ -207,10 +232,6 @@ export class ClaudeSessionProvider implements AITransport {
   /** Prompts YAAR pushed, so the prompt hook leaves them alone. Oldest first. */
   private ownPrompts: string[] = [];
 
-  constructor() {
-    this.systemPrompt = getSystemPrompt();
-  }
-
   async isAvailable(): Promise<boolean> {
     return isCliAvailable(...getClaudeSpawnArgs());
   }
@@ -225,7 +246,6 @@ export class ClaudeSessionProvider implements AITransport {
     const sdkOptions = buildSDKOptions({
       resumeSession,
       options,
-      defaultSystemPrompt: this.systemPrompt,
       abortController: new AbortController(),
       onEscapeGuard: (record) => this.escapeGuardQueue.push(record),
     });
@@ -308,12 +328,11 @@ export class ClaudeSessionProvider implements AITransport {
    * Adopt the session id the SDK reports, unless the caller pinned one — a
    * pinned id is the conversation we were told to speak into, not one to learn.
    */
-  private captureSessionId(msg: unknown, pinnedSessionId: string | undefined): void {
-    if (msg && typeof msg === 'object' && 'session_id' in msg && msg.session_id) {
-      if (!pinnedSessionId) {
-        this.sessionId = msg.session_id as string;
-      }
-    }
+  private captureSessionId(
+    sessionId: string | undefined,
+    pinnedSessionId: string | undefined,
+  ): void {
+    if (sessionId && !pinnedSessionId) this.sessionId = sessionId;
   }
 
   getSessionId(): string | null {
@@ -372,10 +391,10 @@ export class ClaudeSessionProvider implements AITransport {
 
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
     // Determine which session to resume
-    // Priority: options.sessionId > this.sessionId (warmed up)
-    const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
+    // Priority: the conversation the turn names > this.sessionId (warmed up)
+    const resumeSession = namedSessionId(options.conversation) ?? this.sessionId ?? undefined;
     log.debug('query', {
-      optionsSessionId: options.sessionId,
+      conversation: options.conversation.kind,
       providerSessionId: this.sessionId,
       resumeSession,
     });
@@ -446,7 +465,7 @@ export class ClaudeSessionProvider implements AITransport {
   /** Prompt/tools/model identity of a turn — decides persistent-stream reuse. */
   private turnFingerprint(options: TransportOptions): string {
     return [
-      options.systemPrompt ?? this.systemPrompt,
+      options.systemPrompt,
       (options.allowedTools ?? []).join(','),
       options.agentId ?? '',
       options.model ?? '',
@@ -466,6 +485,7 @@ export class ClaudeSessionProvider implements AITransport {
     options: TransportOptions,
   ): AsyncIterable<StreamMessage> {
     const fingerprint = this.turnFingerprint(options);
+    const pinnedSessionId = namedSessionId(options.conversation);
     const existing = this.persistentSession;
     // A turn that targets a conversation this stream doesn't carry (e.g.
     // restoring a logged thread) needs a fresh process opened with resume. A
@@ -473,9 +493,9 @@ export class ClaudeSessionProvider implements AITransport {
     const wrongConversation = existing
       ? existing.turnsProcessed === 0
         ? resumeSession !== existing.openedWithResume
-        : options.sessionId !== undefined &&
+        : pinnedSessionId !== undefined &&
           this.sessionId !== null &&
-          options.sessionId !== this.sessionId
+          pinnedSessionId !== this.sessionId
       : false;
     if (
       existing &&
@@ -503,6 +523,7 @@ export class ClaudeSessionProvider implements AITransport {
     // Per-turn too: block indices restart with each assistant message.
     const tripwire = new EscapeTripwire();
     let escapeRetries = 0;
+    const sessions = new SessionReporter();
     // Set between "we interrupted" and "the interrupted turn's terminal arrived",
     // which is the one result message this turn must swallow rather than yield.
     let awaitingEscapeRetry = false;
@@ -546,7 +567,10 @@ export class ClaudeSessionProvider implements AITransport {
         // schedule, between reads.
         yield* this.drainEscapeGuards();
 
-        this.captureSessionId(msg, options.sessionId);
+        const frameSession = frameSessionId(msg);
+        this.captureSessionId(frameSession, pinnedSessionId);
+        const sessionReport = sessions.report(frameSession);
+        if (sessionReport) yield sessionReport;
 
         // Cancel a tool call whose arguments are being written as escape
         // sequences, before the rest of them are generated. The correction is
@@ -705,10 +729,14 @@ export class ClaudeSessionProvider implements AITransport {
   private async *mapExternal(frames: AsyncIterable<unknown>): AsyncIterable<StreamMessage> {
     const usage = new TurnUsageTracker();
     const toolBlocks = new ToolBlockBuffer();
+    const sessions = new SessionReporter();
     for await (const msg of frames) {
       yield* this.drainEscapeGuards();
       // The conversation is the one this stream carries; nothing pins a different one.
-      this.captureSessionId(msg, undefined);
+      const frameSession = frameSessionId(msg);
+      this.captureSessionId(frameSession, undefined);
+      const sessionReport = sessions.report(frameSession);
+      if (sessionReport) yield sessionReport;
       const mapped = mapClaudeMessage(msg as SDKMessage, usage, toolBlocks);
       if (mapped) yield mapped;
     }
@@ -722,7 +750,7 @@ export class ClaudeSessionProvider implements AITransport {
   async prewarm(options: TransportOptions): Promise<void> {
     if (this.persistentSession) return;
     this.lastOptions = options;
-    const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
+    const resumeSession = namedSessionId(options.conversation) ?? this.sessionId ?? undefined;
     const sdkOptions = this.getSDKOptions({ resumeSession, options });
     this.openPersistentSession(sdkOptions, this.turnFingerprint(options), resumeSession);
     await this.persistentSession!.mcpReady;

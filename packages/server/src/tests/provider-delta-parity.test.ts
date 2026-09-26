@@ -46,14 +46,15 @@ describe('provider delta parity — Claude', () => {
 
   it('does not repeat streamed text when the assistant snapshot arrives', () => {
     // The SDK sends the assembled `assistant` message after the deltas. It must
-    // map to a session-tracking ping with no content, or the turn doubles.
+    // map to nothing, or the turn doubles. (Its `session_id` is the provider's to
+    // report, once per turn, as a `session` message.)
     const snapshot = mapClaudeMessage({
       type: 'assistant',
       session_id: 'ses-1',
       message: { content: [{ type: 'text', text: 'Hello world' }] },
     } as unknown as SDKMessage);
 
-    expect(snapshot).toEqual({ type: 'text', sessionId: 'ses-1' });
+    expect(snapshot).toBeNull();
     expect(textContent([snapshot])).toEqual([]);
   });
 
@@ -73,7 +74,7 @@ describe('provider delta parity — Claude', () => {
       subtype: 'success',
       session_id: 'ses-1',
     } as unknown as SDKMessage);
-    expect(done).toEqual({ type: 'complete', sessionId: 'ses-1' });
+    expect(done).toEqual({ type: 'complete' });
   });
 });
 

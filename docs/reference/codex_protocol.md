@@ -550,7 +550,8 @@ Implications:
 - System prompt is set via `baseInstructions` in `thread/start`
 - Changing personality mid-conversation requires a new thread
 - Per-turn instruction changes are ignored
-- YAAR detects system prompt changes and creates new threads automatically
+- YAAR detects system prompt changes and forks the thread (`thread/fork` with the new
+  `baseInstructions`), which keeps the history; see `claude_codex.md`
 
 ---
 

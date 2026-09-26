@@ -26,8 +26,6 @@ export interface SDKOptionsRequest {
   resumeSession?: string;
   /** The turn's transport options — supplies prompt/model/agent/tool identity. */
   options: TransportOptions;
-  /** Provider's own prompt, used when the turn supplies none. */
-  defaultSystemPrompt: string;
   /** The controller to bind to the process this turn's stream spawns. */
   abortController: AbortController;
   /**
@@ -44,7 +42,6 @@ export interface SDKOptionsRequest {
 export function buildSDKOptions({
   resumeSession,
   options,
-  defaultSystemPrompt,
   abortController,
   onEscapeGuard,
 }: SDKOptionsRequest): SDKOptions {
@@ -99,7 +96,7 @@ export function buildSDKOptions({
     env: buildClaudeEnv(),
     abortController,
     ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
-    systemPrompt: systemPrompt ?? defaultSystemPrompt,
+    systemPrompt,
     // `||`, not `??`: an empty model string falls back to the default, as it
     // did when callers patched the model in with `if (options.model)`. A turn with
     // no model is never the monitor's, so fable mode lifts the default to Opus.

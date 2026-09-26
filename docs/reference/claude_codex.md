@@ -28,6 +28,7 @@ YAAR Server Process
 └── CodexProvider (one per agent)
     └── Own WebSocket connection (JSON-RPC)
         ├── thread/start → new thread
+        ├── thread/fork   → same history, new instructions/model/MCP servers
         ├── thread/resume → resume saved thread
         └── turn/start   → run a turn
 ```
@@ -62,6 +63,9 @@ const { thread } = await appServer.threadStart({ baseInstructions: systemPrompt 
 // Resume a saved thread
 await appServer.threadResume({ threadId: savedThreadId });
 
+// Carry the history onto a changed setup
+const { thread: forked } = await appServer.threadFork({ threadId, baseInstructions: newPrompt });
+
 // Run a turn in a thread
 await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] });
 ```
@@ -69,6 +73,11 @@ await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] })
 - Threads are explicitly created and managed via JSON-RPC
 - `thread/start` creates a fresh thread with base instructions
 - `thread/resume` reconnects to a previously saved thread
+- A thread's instructions, model and MCP servers are fixed when it is opened. When any of the
+  three changes between turns — and the system prompt carries the environment section, so
+  installing an app is enough — the provider **forks** the current thread onto the new setup,
+  keeping the history, as Claude's resume does. Only a thread with nothing to fork (no turn
+  yet: app-server answers `no rollout found`) is replaced with `thread/start`
 - Each turn is a separate RPC call within a thread
 
 ### Comparison
@@ -334,7 +343,15 @@ limit) is not logged as unhandled. Covered by `tests/codex-error-notices.test.ts
 Process and connection resilience:
 
 - If the AppServer exits unexpectedly, `ensureCodexAppServer()` restarts it on next provider creation
-- If a thread becomes invalid, the session is invalidated and the query retries with a new thread
+- If app-server no longer holds the thread (evicted while idle), the query retries once with
+  `thread/resume` on the same id, so the conversation survives; only if that resume fails does
+  it fall back to a new thread. "No longer holds" is `isLostThreadError` in `codex/errors.ts`:
+  a `JsonRpcError` (a refusal app-server actually sent — never a client-side timeout or a closed
+  socket) whose text is app-server's own `thread not found` / `thread not loaded` / `invalid
+  thread id`. By text, because the protocol gives the case no code of its own: `generated/`
+  defines no error codes, and the generic JSON-RPC one would match any malformed request
+- Any other refused request ends the turn with `errorCode` set to the JSON-RPC 2.0 code's name
+  (`jsonrpc_invalid_params`, `jsonrpc_internal_error`, …; `jsonRpcErrorCode` in `codex/errors.ts`)
 - Each provider checks `client.isConnected` before queries; stale connections are detected via `isAvailable()`
 
 ## Shared Process Architecture (Codex-specific)

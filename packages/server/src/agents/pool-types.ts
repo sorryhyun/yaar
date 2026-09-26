@@ -6,6 +6,7 @@
  *   their union, implemented by `ContextPool`. A processor depends on its own tier.
  * - `AgentPoolStats` / `MonitorBudgetStats` / `PoolStats` — the stats contract read by
  *   `yaar://agents`, `yaar://windows/`, and `yaar://` (session read).
+ * - `PoolHost` — what the pools need from the `LiveSession` that owns them.
  */
 
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
@@ -13,6 +14,7 @@ import type { ContextTape } from './context.js';
 import type { AgentPool } from './agent-pool.js';
 import type { InteractionTimeline } from './interaction-timeline.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
+import type { LayoutContext } from '../session/layout-context.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { ExternalTurn, ProviderType, TokenUsage } from '../providers/types.js';
 import type { SessionId } from '../session/types.js';
@@ -141,6 +143,39 @@ export type PoolStats = AgentPoolStats & {
 };
 
 /**
+ * What `ContextPool` and `AgentPool` need from the session that owns them, and nothing else.
+ *
+ * They used to look their session up by id through `getSessionHub()`, which was a runtime
+ * import from `agents/` back into `session/` (`session-hub` → `live-session` →
+ * `context-pool` → `session-hub`). It was also a lookup by *id*, and an id can outlive the
+ * session it names — once a session is evicted the hub answers for its replacement, or for
+ * nothing. The owner hands itself in instead, narrowed to these members.
+ */
+export interface PoolHost {
+  /** The screen behind each monitor, for the prompt; and the per-agent deltas a dispose drops. */
+  readonly layout: Pick<
+    LayoutContext,
+    'getFormFactor' | 'getViewport' | 'getOrientation' | 'removeAgent'
+  >;
+  /** Put a new agent in the process-wide agent → session index (`agent-directory.ts`). */
+  registerAgent(instanceId: string): void;
+  unregisterAgent(instanceId: string): void;
+  /**
+   * The session's transcript. The host owns it — creates or adopts it, and disposes it,
+   * once — so a pool and its agents ask for it rather than holding their own reference.
+   * Null until {@link openSessionLogger} has run and after the session is torn down.
+   */
+  getSessionLogger(): SessionLogger | null;
+  /**
+   * Make sure the transcript exists, stamped with the provider now known to be serving it,
+   * and return its log id (the `session_logs/` directory name). Idempotent: a session that
+   * already holds one — the boot logger, or its own from an earlier call — keeps it, so
+   * there is one directory per session.
+   */
+  openSessionLogger(providerName: string): Promise<string>;
+}
+
+/**
  * What running one agent turn needs, and nothing else.
  *
  * Every task processor used to receive the entire pool — the agent registry, all six
@@ -155,7 +190,8 @@ export type PoolStats = AgentPoolStats & {
 export interface TurnContext {
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
-  readonly sharedLogger: SessionLogger | null;
+  /** The session's transcript — see {@link PoolHost.getSessionLogger}. */
+  getSessionLogger(): SessionLogger | null;
   readonly providerType: ProviderType | null;
   readonly contextAssembly: ContextAssemblyPolicy;
   readonly reloadPolicy: ReloadCachePolicy;

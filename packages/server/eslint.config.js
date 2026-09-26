@@ -50,11 +50,6 @@ export default tseslint.config(
     //                     the one thing the file exists to prevent.
     //  - dev-bundle-worker — a worker whose stdout IS its result channel (the parent parses
     //                     the JSON it prints); routing that through a logger breaks it.
-    //  - lib/browser/** — Chrome/CDP plumbing that predates the logger and is the last
-    //                     console.* user under lib/ (the generic half of lib/ moved to
-    //                     @yaar/lib, which has no logger to reach for). Migrating it is a
-    //                     decision about that subsystem, not a cleanup — deliberately left
-    //                     alone; the rest of lib/ gets no exemption.
     //  - codex/version.ts — dependency-free on purpose; `scripts/codegen/codex-types.js`
     //                     imports it directly. Its `warn` parameter is the seam.
     files: [
@@ -63,7 +58,6 @@ export default tseslint.config(
       'src/exe-entry.ts',
       'src/exe-bundle-entry.ts',
       'src/http/dev-bundle-worker.ts',
-      'src/lib/browser/**/*.ts',
       'src/providers/codex/version.ts',
     ],
     rules: {

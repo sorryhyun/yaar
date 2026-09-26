@@ -22,6 +22,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { AgentPool } from '../agents/agent-pool.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 import { subAgentKey } from '../agents/agent-roster.js';
 import {
   buildSubAgentProfile,
@@ -34,6 +35,7 @@ import { getContextRestoreMessages } from '../logging/context-restore.js';
 import { parseSessionMessages } from '../logging/session-reader.js';
 import { monitorSource } from '../agents/context.js';
 import { assembleSystemPromptForRole } from '../agents/system-prompt.js';
+import { getOrchestratorPrompt } from '../agents/profiles/orchestrator/index.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import { principalRole } from '../agents/roles.js';
 import {
@@ -65,7 +67,6 @@ function fakeProvider(recorded: Recorded[]): AITransport {
   return {
     name: 'fake',
     providerType: 'claude',
-    systemPrompt: 'THE GENERIC YAAR PROMPT — a persona must never be handed this.',
     async isAvailable() {
       return true;
     },
@@ -207,10 +208,10 @@ describe('persona tool-lessness (through the real SDK options builder)', () => {
     buildSDKOptions({
       options: {
         systemPrompt: 'You are Alice.',
+        conversation: { kind: 'new' },
         agentId: 'agent-1-123',
         ...(allowedTools ? { allowedTools } : {}),
       },
-      defaultSystemPrompt: 'generic',
       abortController: new AbortController(),
       onEscapeGuard: () => {},
     });
@@ -270,6 +271,7 @@ describe('persona lifecycle in AgentPool', () => {
     pool = new AgentPool(
       'ses-personas' as SessionId,
       () => {},
+      createTestPoolHost(),
       async () => fakeProvider(recorded),
     );
   });
@@ -329,8 +331,8 @@ describe('persona lifecycle in AgentPool', () => {
     expect(recorded[0].prompt).toBe('Bob said hello.');
     expect(recorded[0].options.systemPrompt).toBe('You are Alice. You are curt.');
     expect(recorded[0].options.allowedTools).toEqual([]);
-    // Never the provider's own generic prompt.
-    expect(recorded[0].options.systemPrompt).not.toContain('GENERIC YAAR');
+    // Never the generic orchestrator prompt a turn with no override gets.
+    expect(recorded[0].options.systemPrompt).not.toContain(getOrchestratorPrompt().slice(0, 200));
   });
 
   it("records the turn's final text for a subscriber that missed the done frame", async () => {
@@ -603,6 +605,7 @@ describe('persona interrupt', () => {
     const pool = new AgentPool(
       SESSION,
       () => {},
+      createTestPoolHost(),
       async () => ({
         ...fakeProvider(recorded),
         async interrupt() {

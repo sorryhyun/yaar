@@ -20,6 +20,7 @@
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
 import { installMockAgentSession } from './helpers/mock-agent-session.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // Same set as multi-monitor.test.ts: enough to build a ContextPool and a
@@ -31,7 +32,6 @@ function createMockProvider(): AITransport {
   return {
     name: 'mock',
     providerType: 'claude',
-    systemPrompt: '',
     dispose: mock(async () => {}),
     isAvailable: async () => true,
     query: mock(() => {}),
@@ -101,7 +101,7 @@ mock.module('../storage/storage-manager.js', () => ({
   storageGrep: mock(async () => ({ success: true, matches: [] })),
 }));
 
-mock.module('../providers/environment.js', () => ({
+mock.module('../agents/environment.js', () => ({
   buildEnvironmentSection: mock(async () => ''),
 }));
 
@@ -268,12 +268,13 @@ describe('F-11 — a window-scoped task derives its monitor from the window', ()
     // A plain window living on monitor 1 — key "1/notes".
     windowState.handleAction(plainWindow('notes'), '1');
 
-    pool = new ContextPool(
-      SESSION,
-      windowState as never,
-      createMockReloadCache() as never,
-      mock(() => {}),
-    );
+    pool = new ContextPool({
+      sessionId: SESSION,
+      host: createTestPoolHost(),
+      windowState: windowState as never,
+      reloadCache: createMockReloadCache() as never,
+      broadcast: mock(() => {}),
+    });
     await pool.initialize(); // creates monitor 0's agent
     await pool.createMonitorAgent('1');
   });
@@ -323,12 +324,13 @@ describe('F-12 — a monitor that cannot be resolved is an error, not a default'
   let pool: InstanceType<typeof ContextPool>;
 
   beforeEach(async () => {
-    pool = new ContextPool(
-      SESSION,
-      new WindowStateRegistry() as never,
-      createMockReloadCache() as never,
-      mock(() => {}),
-    );
+    pool = new ContextPool({
+      sessionId: SESSION,
+      host: createTestPoolHost(),
+      windowState: new WindowStateRegistry() as never,
+      reloadCache: createMockReloadCache() as never,
+      broadcast: mock(() => {}),
+    });
     await pool.initialize();
   });
 

@@ -20,6 +20,7 @@
 
 import { join } from 'path';
 import { ContextPool } from '../agents/context-pool.js';
+import type { PoolHost } from '../agents/pool-types.js';
 import { belongsToMonitor, type ContextMessage } from '../agents/context.js';
 import { monitorRole } from '../agents/roles.js';
 import { WindowStateRegistry } from './window-state.js';
@@ -41,6 +42,7 @@ import {
 import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
+import { agentDirectory } from './agent-directory.js';
 import type { ActionEvent } from './emitter-channels.js';
 import { sessionEventRouter, type SessionEventSink } from './session-event-router.js';
 import { ClientEventRouter } from './client-event-router.js';
@@ -66,7 +68,7 @@ import { subscriptionRegistry } from '../http/subscriptions.js';
 import { windowSharedStore } from '../http/window-shared.js';
 import { revokeTokensForWindow } from '../http/iframe-tokens.js';
 import { storageDocumentUri } from '../features/window/helpers.js';
-import type { SessionLogger } from '../logging/index.js';
+import { createSession, SessionLogger } from '../logging/index.js';
 import {
   normalizeAgentKey,
   mapActionToSubscriptionEvent,
@@ -78,6 +80,11 @@ export interface LiveSessionOptions {
   restoreActions?: OSAction[];
   contextMessages?: ContextMessage[];
   savedThreadIds?: Record<string, string>;
+  /**
+   * A transcript to adopt instead of minting one — the boot logger, which `lifecycle.ts`
+   * creates eagerly and the WebSocket layer hands to the first session only. Adopted means
+   * owned: this session disposes it.
+   */
   sessionLogger?: SessionLogger;
   /** Provider seam, defaulting to the global warm pool. See `ContextPool.acquireProvider`. */
   acquireProvider?: () => Promise<AITransport | null>;
@@ -178,9 +185,15 @@ export class LiveSession {
   launchHooksExecuted = false;
 
   /**
-   * Created at server startup, passed via options. Owned by LiveSession so that user
-   * interactions are logged even before the pool is initialized (i.e., before the user
-   * sends their first message).
+   * This session's transcript, and the only reference to it that anything holds. Adopted
+   * from options (the boot logger) or minted by {@link openSessionLogger} when the pool
+   * first needs one; disposed once, in {@link cleanup}. Owned here rather than by the pool
+   * so that user interactions are logged even before the pool exists (the boot logger
+   * case). The pool and its agents reach it through their `PoolHost`, never a copy.
+   *
+   * It used to be held five ways — here, `ContextPool`, `AgentPool`, every `AgentSession`,
+   * and the boot options — and `cleanup` had to dispose "whichever is active" because two
+   * of those might or might not be the same instance.
    */
   private sessionLogger: SessionLogger | null = null;
 
@@ -504,7 +517,33 @@ export class LiveSession {
   }
 
   getSessionLogger(): SessionLogger | null {
-    return this.pool?.getSessionLogger() ?? this.sessionLogger;
+    return this.sessionLogger;
+  }
+
+  /**
+   * Adopt-or-mint the transcript, stamped with the provider now known to serve it. See
+   * `PoolHost.openSessionLogger`: an existing logger is kept, so a session writes one
+   * `session_logs/` directory from its first message until {@link cleanup}.
+   */
+  private async openSessionLogger(providerName: string): Promise<string> {
+    if (this.sessionLogger) {
+      this.sessionLogger.updateProvider(providerName);
+      return this.sessionLogger.getSessionId();
+    }
+    const sessionInfo = await createSession(providerName);
+    this.sessionLogger = new SessionLogger(sessionInfo);
+    return sessionInfo.sessionId;
+  }
+
+  /** What the pool is given of this session. See `PoolHost`. */
+  private poolHost(): PoolHost {
+    return {
+      layout: this.layoutContext,
+      registerAgent: (instanceId) => agentDirectory.register(instanceId, this.sessionId),
+      unregisterAgent: (instanceId) => agentDirectory.unregister(instanceId),
+      getSessionLogger: () => this.sessionLogger,
+      openSessionLogger: (providerName) => this.openSessionLogger(providerName),
+    };
   }
 
   /**
@@ -609,22 +648,21 @@ export class LiveSession {
 
     await this.reloadCache.load();
 
-    this.pool = new ContextPool(
-      this.sessionId,
-      this.windowState,
-      this.reloadCache,
-      this.broadcast.bind(this),
-      this.restoredContext,
-      this.savedThreadIds,
-      this.acquireProvider,
-    );
+    this.pool = new ContextPool({
+      sessionId: this.sessionId,
+      host: this.poolHost(),
+      windowState: this.windowState,
+      reloadCache: this.reloadCache,
+      broadcast: this.broadcast.bind(this),
+      restoredContext: this.restoredContext,
+      savedThreadIds: this.savedThreadIds,
+      acquireProvider: this.acquireProvider,
+    });
 
     // The window-close teardown (including `pool.handleWindowClose`) is wired in the
     // constructor — see there for why it cannot wait for the pool to exist.
 
-    // Pass the session-owned logger (if already created by early user interactions)
-    // so the pool reuses the same log directory instead of creating a second one.
-    const success = await this.pool.initialize(this.sessionLogger ?? undefined);
+    const success = await this.pool.initialize();
     this.initialized = success;
     return success;
   }
@@ -811,13 +849,8 @@ export class LiveSession {
     // so awaiting tools unblock immediately instead of waiting for timeouts.
     actionEmitter.clearPendingForSession(this.sessionId);
 
-    // Flush buffered session logs before tearing down the pool.
-    // The pool logger and sessionLogger may be the same instance (if the pool
-    // reused the session-owned logger), so dispose whichever is active.
-    const poolLogger = this.pool?.getSessionLogger();
-    if (poolLogger && poolLogger !== this.sessionLogger) {
-      await poolLogger.dispose();
-    }
+    // Flush buffered session logs before tearing down the pool. This is the only
+    // reference, so nulling it also stops any later turn writing through a disposed log.
     await this.sessionLogger?.dispose();
     this.sessionLogger = null;
 

@@ -23,6 +23,7 @@
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
 import { installMockAgentSession } from './helpers/mock-agent-session.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // The set shared with multi-monitor.test.ts / monitor-identity.test.ts: enough to
@@ -33,7 +34,6 @@ function createMockProvider(): AITransport {
   return {
     name: 'mock',
     providerType: 'claude',
-    systemPrompt: '',
     dispose: mock(async () => {}),
     isAvailable: async () => true,
     query: mock(() => {}),
@@ -103,7 +103,7 @@ mock.module('../storage/storage-manager.js', () => ({
   storageGrep: mock(async () => ({ success: true, matches: [] })),
 }));
 
-mock.module('../providers/environment.js', () => ({
+mock.module('../agents/environment.js', () => ({
   buildEnvironmentSection: mock(async () => ''),
 }));
 
@@ -200,12 +200,13 @@ describe('a window message answered on a fresh app agent', () => {
     const windowState = new WindowStateRegistry();
     windowState.handleAction(appWindow(APP), MONITOR);
 
-    pool = new ContextPool(
-      SESSION,
-      windowState as never,
-      createMockReloadCache() as never,
-      mock(() => {}),
-    );
+    pool = new ContextPool({
+      sessionId: SESSION,
+      host: createTestPoolHost(),
+      windowState: windowState as never,
+      reloadCache: createMockReloadCache() as never,
+      broadcast: mock(() => {}),
+    });
     await pool.initialize();
   });
 

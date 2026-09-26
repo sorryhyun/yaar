@@ -7,6 +7,7 @@
 
 import type {
   AITransport,
+  Conversation,
   ExternalTurn,
   ExternalTurnHandlers,
   InterruptReceipt,
@@ -32,6 +33,7 @@ import { StreamToEventMapper, type TurnEnd } from './session-policies/stream-to-
 import { runInAgentContext } from './agent-context.js';
 import { principalRole } from './roles.js';
 import { assembleSystemPromptForRole } from './system-prompt.js';
+import { getOrchestratorPrompt } from './profiles/orchestrator/index.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AgentSession');
@@ -113,7 +115,12 @@ export class AgentSession {
   private interrupted = false;
   /** True while the running turn is one claude.ai started (`HandleMessageOptions.external`). */
   private followingExternal = false;
-  private sessionLogger: SessionLogger | null = null;
+  /**
+   * The session's transcript, asked for rather than held: the `LiveSession` owns it and
+   * disposes it once, so an agent keeping its own reference is a fifth copy that can
+   * outlive the owner's dispose.
+   */
+  private readonly sessionLogger: () => SessionLogger | null;
   private instanceId: string;
   private hasProcessedFirstUserTurn = false;
   private currentMessageId: string | null = null;
@@ -151,7 +158,7 @@ export class AgentSession {
   constructor(
     connectionId: ConnectionId,
     sessionId?: string,
-    sharedLogger?: SessionLogger,
+    getSessionLogger?: () => SessionLogger | null,
     instanceId?: string,
     liveSessionId?: SessionId,
     broadcast?: (event: ServerEvent) => void,
@@ -161,7 +168,7 @@ export class AgentSession {
     this.broadcastFn = broadcast ?? (() => {});
     this.sessionId = sessionId ?? null;
     this.instanceId = instanceId ?? genId('agent');
-    this.sessionLogger = sharedLogger ?? null;
+    this.sessionLogger = getSessionLogger ?? (() => null);
   }
 
   isRunning(): boolean {
@@ -301,7 +308,8 @@ export class AgentSession {
    * status event went out with no `sessionId` on it — the exact hazard `ContextPool` names
    * at its own emit, where the client adopting the wrong id left every app it launched
    * holding a token for a session the hub does not hold. Two owners for one fact is one
-   * too many, and the pool is the owner: it knows both ids and mints the log once.
+   * too many. The pool is the owner of the status event, since it knows both ids; the log
+   * is minted once by the `LiveSession`, when the pool first asks for it.
    *
    * It also used to fall back to the global `acquireWarmProvider()` when handed none,
    * which walked straight past the pool's injected `acquireProvider` seam — a test's
@@ -311,13 +319,25 @@ export class AgentSession {
     this.provider = provider;
   }
 
+  /**
+   * The base prompt for turns that bring no profile prompt of their own — the
+   * orchestrator's, or `config/system-prompt.txt` when that exists.
+   *
+   * Read once per session and kept. Codex compares the assembled prompt string between
+   * turns and forks its thread when it differs, so the base must not vary from one turn
+   * to the next. Resolved on first use rather than at
+   * construction: most agents (app, session, sub-agent) always override it.
+   */
+  private orchestratorPrompt: string | null = null;
+
   /** Full system prompt for a turn: profile base + scope + environment + memory. */
   private async assembleSystemPrompt(
     role: string,
     monitorId?: string,
     systemPromptOverride?: string,
   ): Promise<string> {
-    const basePrompt = systemPromptOverride ?? this.provider!.systemPrompt;
+    const basePrompt =
+      systemPromptOverride ?? (this.orchestratorPrompt ??= getOrchestratorPrompt());
     return assembleSystemPromptForRole(basePrompt, role, this.provider!.providerType, monitorId);
   }
 
@@ -343,6 +363,7 @@ export class AgentSession {
           options.monitorId,
           options.systemPromptOverride,
         ),
+        conversation: { kind: 'new' },
         agentId: this.instanceId,
         allowedTools: options.allowedTools,
         model: options.model,
@@ -431,7 +452,7 @@ export class AgentSession {
     const fullContent = content;
 
     // Log user message with role identifier and source
-    this.sessionLogger?.logUserMessage(fullContent, role, options.source);
+    this.sessionLogger()?.logUserMessage(fullContent, role, options.source);
     onContextMessage?.('user', fullContent);
 
     // Hoisted so `catch`/`finally` can close the observed turn. The stream's
@@ -442,14 +463,12 @@ export class AgentSession {
 
     try {
       // For resume, use the saved thread ID (only on first message).
-      // Otherwise, resume our own session if we've already sent a message.
-      let sessionIdToUse: string | undefined;
-      let resumeThread = false;
+      // Otherwise, continue our own session if we've already sent a message.
+      let conversation: Conversation = { kind: 'new' };
       if (options.resumeSessionId && !this.hasProcessedFirstUserTurn) {
-        sessionIdToUse = options.resumeSessionId;
-        resumeThread = true;
+        conversation = { kind: 'resume', sessionId: options.resumeSessionId };
       } else if (this.hasProcessedFirstUserTurn && this.sessionId) {
-        sessionIdToUse = this.sessionId;
+        conversation = { kind: 'continue', sessionId: this.sessionId };
       }
 
       const transportOptions: TransportOptions = {
@@ -458,8 +477,7 @@ export class AgentSession {
           options.monitorId,
           options.systemPromptOverride,
         ),
-        sessionId: sessionIdToUse,
-        resumeThread,
+        conversation,
         images: images.length > 0 ? images : undefined,
         monitorId: options.monitorId,
         agentId: stableAgentId,
@@ -479,7 +497,7 @@ export class AgentSession {
         providerName: this.provider.name,
         state: streamState,
         sendEvent: this.sendEvent.bind(this),
-        logger: this.sessionLogger,
+        logger: this.sessionLogger(),
         source: options.source,
         onContextMessage,
         onSessionId: async (sessionId: string) => {
@@ -490,7 +508,7 @@ export class AgentSession {
           const canonical = options.canonicalAgent;
           if (canonical) {
             try {
-              this.sessionLogger?.logThreadId(canonical, sessionId);
+              this.sessionLogger()?.logThreadId(canonical, sessionId);
             } catch (err) {
               log.warn('failed to persist thread id', { canonical, err });
             }

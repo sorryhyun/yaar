@@ -110,7 +110,6 @@ function asText(result: unknown): string {
 export class ScriptedProvider implements AITransport {
   readonly name = 'scripted';
   readonly providerType = 'claude' as const;
-  readonly systemPrompt = '';
 
   private toolUseCounter = 0;
 

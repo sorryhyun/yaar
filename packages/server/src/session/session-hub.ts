@@ -7,6 +7,7 @@
 
 import { LiveSession, type LiveSessionOptions } from './live-session.js';
 import { forgetSessionPresence } from './client-presence.js';
+import { agentDirectory } from './agent-directory.js';
 import { clearSessionJars } from '../features/http/cookie-jar.js';
 import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
@@ -26,7 +27,6 @@ export class SessionHub {
   private sessions = new Map<SessionId, LiveSession>();
   private defaultSessionId: SessionId | null = null;
   private evictionTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
-  private agentToSession = new Map<string, SessionId>();
   private waiters = new Map<SessionId, Array<(session: LiveSession) => void>>();
   /** Ids this process has held and lost. A reconnect on one of these is a replacement, not a rejoin. */
   private evictedIds = new Set<SessionId>();
@@ -70,14 +70,6 @@ export class SessionHub {
       });
     }, delayMs);
     this.evictionTimers.set(sessionId, timer);
-  }
-
-  registerAgent(agentId: string, sessionId: SessionId): void {
-    this.agentToSession.set(agentId, sessionId);
-  }
-
-  unregisterAgent(agentId: string): void {
-    this.agentToSession.delete(agentId);
   }
 
   cancelEviction(sessionId: SessionId): void {
@@ -168,8 +160,9 @@ export class SessionHub {
     return this.sessions.get(sessionId);
   }
 
+  /** The index is written by the pools, not the hub — see `agent-directory.ts`. */
   findSessionByAgent(agentId: string): SessionId | undefined {
-    return this.agentToSession.get(agentId);
+    return agentDirectory.sessionOf(agentId);
   }
 
   findMonitorForAgent(agentId: string): string | undefined {
@@ -261,10 +254,7 @@ export class SessionHub {
     try {
       await session.cleanup();
     } finally {
-      // Clean up reverse agent index for this session
-      for (const [aid, sid] of this.agentToSession) {
-        if (sid === sessionId) this.agentToSession.delete(aid);
-      }
+      agentDirectory.forgetSession(sessionId);
       this.sessions.delete(sessionId);
       this.evictedIds.add(sessionId);
       forgetSessionPresence(sessionId);

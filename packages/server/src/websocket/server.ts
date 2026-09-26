@@ -144,7 +144,8 @@ export function createWsHandlers(options: WebSocketServerOptions) {
   // here and to no other. Every new session used to be handed it: a second tab whose stale
   // id the hub did not know, or the replacement for an evicted session, wrote into the boot
   // session's log directory — and kept writing after that session's cleanup had disposed
-  // it. A session created without one has its pool mint its own (`ContextPool.initialize`).
+  // it. A session created without one mints its own when its pool first needs one
+  // (`LiveSession.openSessionLogger`).
   let bootLogger = options.sessionLogger;
   return {
     async open(ws: ServerWebSocket<WsData>) {

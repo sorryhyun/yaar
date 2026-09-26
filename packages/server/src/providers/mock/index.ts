@@ -129,7 +129,6 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class MockTransport implements AITransport {
   readonly name = 'mock';
-  readonly systemPrompt = '';
   private interrupted = false;
   private turns = 0;
   private readonly sessionId = `mock-${crypto.randomUUID()}`;
@@ -148,7 +147,7 @@ export class MockTransport implements AITransport {
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
     this.interrupted = false;
     const turn = ++this.turns;
-    yield { type: 'text', sessionId: this.sessionId };
+    yield { type: 'session', sessionId: this.sessionId };
 
     const directive = parsePerfDirective(prompt);
     if (!directive) {
@@ -199,7 +198,6 @@ export class MockTransport implements AITransport {
   private complete(prompt: string, outputChars: number): StreamMessage {
     return {
       type: 'complete',
-      sessionId: this.sessionId,
       usage: {
         inputTokens: Math.ceil(prompt.length / 4),
         outputTokens: Math.ceil(outputChars / 4),

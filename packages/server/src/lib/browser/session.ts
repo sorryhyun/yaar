@@ -19,6 +19,7 @@ import type {
   BrowserScrollToBottomResult,
 } from '@yaar/shared';
 import type { PageState, PageContent } from './types.js';
+import { createLogger } from '../../observability/log.js';
 import {
   PAGE_STATE,
   VIEWPORT_TEXT,
@@ -38,6 +39,8 @@ import {
   CARET_RECT,
   SETTLE,
 } from './page-scripts.js';
+
+const log = createLogger('browser');
 
 const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
@@ -328,7 +331,11 @@ export class BrowserSession extends EventEmitter {
     // These block ALL CDP commands until handled, causing tool hangs.
     cdp.on('Page.javascriptDialogOpening', (params: unknown) => {
       const p = params as { message?: string; type?: string };
-      console.log(`[browser] Auto-dismissing JS dialog: ${p.type} "${p.message}"`);
+      log.info('auto-dismissing JS dialog', {
+        browserId: this.id,
+        type: p.type,
+        message: p.message,
+      });
       cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
     });
 
@@ -381,7 +388,7 @@ export class BrowserSession extends EventEmitter {
     if (cdp !== this.cdp) return;
     if (this.closed || this.crashed) return;
     this.crashed = true;
-    console.log(`[browser] Session ${this.id} lost its tab (${reason})`);
+    log.info('session lost its tab', { browserId: this.id, reason });
     this.emit('crashed', { reason });
   }
 
@@ -658,7 +665,7 @@ export class BrowserSession extends EventEmitter {
       );
     }
     const state = await this.getPageState();
-    console.log(`[browser:nav] ${state.title} (${waitUntil})`);
+    log.info('navigated', { browserId: this.id, title: state.title, waitUntil });
     this.notifyUpdate();
     return state;
   }

@@ -96,8 +96,16 @@ export interface StreamMessage {
    * in the UI while the provider carried on working. `content` holds the text,
    * `noticeLevel` how loudly to say it, `errorCode` the provider's own
    * discriminant. A provider that surfaces none of this (Codex) never emits one.
+   *
+   * `session` names the provider conversation the turn is speaking into — a
+   * Claude session id, a Codex thread id — in `sessionId`, and carries nothing
+   * else. It is bookkeeping, not output: `StreamToEventMapper` hands it to
+   * `onSessionId` and emits nothing. A provider reports it when it learns the id
+   * (Codex: a thread it just opened; Claude: the first SDK frame of a turn that
+   * names one) and again whenever it changes, so a consumer keeps the latest.
    */
   type:
+    | 'session'
     | 'text'
     | 'thinking'
     | 'tool_use_start'
@@ -117,6 +125,7 @@ export interface StreamMessage {
    * `tool_result` will carry whole, to be appended rather than to replace.
    */
   content?: string;
+  /** The provider conversation id. Present on `session` messages, and only there. */
   sessionId?: string;
   toolName?: string;
   toolInput?: unknown;
@@ -194,11 +203,36 @@ export interface StreamMessage {
   contextWindow?: number;
 }
 
+/**
+ * Which provider conversation a turn speaks into.
+ *
+ * `new` — this agent has no conversation yet. Nothing is named, so the provider
+ *   carries on with the one it already holds (a prewarmed Claude stream, a Codex
+ *   thread an earlier query opened) or opens one.
+ * `continue` — the conversation this agent has been speaking into, as the
+ *   provider last reported it (a `session` stream message). Claude resumes it on
+ *   any stream it (re)opens, and reopens when the open stream carries another
+ *   conversation; it has to be told, because a named id is never adopted as the
+ *   provider's own — after a `resume` turn this is how the restored conversation
+ *   carries forward. Codex ignores it: the thread it holds is that conversation.
+ * `resume` — a conversation restored from a previous run's session log, on the
+ *   agent's first turn. Claude treats it like `continue`; Codex reopens it cold
+ *   with `thread/resume`, and falls back to a fresh thread if that fails.
+ */
+export type Conversation =
+  | { kind: 'new' }
+  | { kind: 'continue'; sessionId: string }
+  | { kind: 'resume'; sessionId: string };
+
+/** The conversation id a turn names, or undefined for a `new` one. */
+export function namedSessionId(conversation: Conversation): string | undefined {
+  return conversation.kind === 'new' ? undefined : conversation.sessionId;
+}
+
 export interface TransportOptions {
   systemPrompt: string;
   model?: string;
-  sessionId?: string; // For session resumption
-  resumeThread?: boolean; // When true with sessionId, resume via thread/resume
+  conversation: Conversation;
   images?: string[]; // Base64 data URLs for images (e.g., user drawings)
   monitorId?: string; // Which monitor originated this query (for action routing)
   agentId?: string; // Agent instance ID (for MCP header-based routing)
@@ -234,7 +268,6 @@ export interface InterruptReceipt {
 export interface AITransport {
   readonly name: string;
   readonly providerType: ProviderType;
-  readonly systemPrompt: string;
 
   isAvailable(): Promise<boolean>;
   query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage>;

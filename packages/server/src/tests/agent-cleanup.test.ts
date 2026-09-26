@@ -7,6 +7,7 @@
  */
 import { mock, describe, it, expect, beforeEach } from 'bun:test';
 import { installMockAgentSession } from './helpers/mock-agent-session.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -134,6 +135,7 @@ describe('AgentPool limiter slot release on error', () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
 
     // Create an ephemeral agent (goes through createAgentCore -> limiter.tryAcquire)
@@ -157,6 +159,7 @@ describe('AgentPool limiter slot release on error', () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
 
     // Create three main agents on different monitors
@@ -193,6 +196,7 @@ describe('AgentPool limiter slot release on error', () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
 
     await pool.createMonitorAgent('0');
@@ -213,6 +217,7 @@ describe('AgentPool limiter slot release on error', () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
 
     // No caller in the pool's chain catches a throw out of agent construction, so the
@@ -232,6 +237,7 @@ describe('AgentPool limiter slot release on error', () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
     mockTryAcquire.mockReturnValueOnce(false);
 
@@ -245,7 +251,12 @@ describe('AgentPool limiter slot release on error', () => {
 
   it('takes no slot and reports an error when no provider is available', async () => {
     const broadcast = mock((_event: unknown) => {});
-    const pool = new AgentPool('test-session' as SessionId, broadcast, async () => null);
+    const pool = new AgentPool(
+      'test-session' as SessionId,
+      broadcast,
+      createTestPoolHost(),
+      async () => null,
+    );
 
     expect(await pool.createEphemeral()).toBeNull();
     expect(mockTryAcquire).not.toHaveBeenCalled();
@@ -258,6 +269,7 @@ describe('AgentPool credential hygiene', () => {
     const pool = new AgentPool(
       'test-session' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
 
     const agent = await pool.createEphemeral();
@@ -284,10 +296,12 @@ describe('AgentPool agent identity', () => {
     const poolA = new AgentPool(
       'session-a' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
     const poolB = new AgentPool(
       'session-b' as SessionId,
       mock(() => {}),
+      createTestPoolHost(),
     );
 
     const ids = new Set<string>();

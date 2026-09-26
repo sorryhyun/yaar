@@ -31,7 +31,6 @@ const fakeProvider = (providerType: ProviderType): AITransport =>
   ({
     providerType,
     name: providerType,
-    systemPrompt: '',
     isAvailable: async () => true,
     dispose: async () => {},
     interrupt: async () => {},

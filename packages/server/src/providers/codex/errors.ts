@@ -18,7 +18,62 @@
  */
 
 import type { ProviderNotice } from '../notice.js';
+import { JsonRpcError } from './jsonrpc-ws-client.js';
 import type { CodexErrorInfo, TurnError } from './types.js';
+
+/**
+ * JSON-RPC 2.0's reserved error codes, named for `StreamMessage.errorCode`.
+ *
+ * These are the only error codes there are to key on: `generated/` defines none
+ * of its own, so app-server refuses a request with one of these and says which
+ * case it was in the sentence. Prefixed so a consumer cannot confuse them with a
+ * `CodexErrorInfo` code, which describes a failed *turn* rather than a refused request.
+ */
+export type JsonRpcErrorCode =
+  | 'jsonrpc_parse_error'
+  | 'jsonrpc_invalid_request'
+  | 'jsonrpc_method_not_found'
+  | 'jsonrpc_invalid_params'
+  | 'jsonrpc_internal_error'
+  | 'jsonrpc_server_error'
+  | 'jsonrpc_error';
+
+export function jsonRpcErrorCode(code: number): JsonRpcErrorCode {
+  switch (code) {
+    case -32700:
+      return 'jsonrpc_parse_error';
+    case -32600:
+      return 'jsonrpc_invalid_request';
+    case -32601:
+      return 'jsonrpc_method_not_found';
+    case -32602:
+      return 'jsonrpc_invalid_params';
+    case -32603:
+      return 'jsonrpc_internal_error';
+  }
+  // The spec reserves -32000..-32099 for implementation-defined server errors.
+  if (code <= -32000 && code >= -32099) return 'jsonrpc_server_error';
+  return 'jsonrpc_error';
+}
+
+/** App-server's own wording for a thread it does not hold: `thread not found: <id>`, … */
+const LOST_THREAD = /\bthread not (?:found|loaded)\b|\binvalid thread id\b/i;
+
+/**
+ * Whether a refused request means app-server no longer holds our thread — evicted
+ * while the agent sat idle, or never loaded by this app-server process — so the
+ * turn should resume it from its rollout rather than fail.
+ *
+ * By message, because the protocol gives this case no code of its own (see
+ * {@link JsonRpcErrorCode}): the generic code it arrives with would match every
+ * other malformed request too. Narrowed to a {@link JsonRpcError}, i.e. an answer
+ * app-server actually gave. The test this replaced — `'thread'` or `'invalid'`
+ * anywhere in any error — also took the client's own `Request timed out:
+ * thread/start` for a lost thread.
+ */
+export function isLostThreadError(err: unknown): boolean {
+  return err instanceof JsonRpcError && LOST_THREAD.test(err.rpcMessage);
+}
 
 /**
  * One sentence per string variant of `CodexErrorInfo`.

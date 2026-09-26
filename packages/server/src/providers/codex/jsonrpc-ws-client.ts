@@ -43,6 +43,29 @@ interface PendingRequest {
   timeoutId?: ReturnType<typeof setTimeout>;
 }
 
+/**
+ * A request the server answered with a JSON-RPC error object.
+ *
+ * Its own class so a caller can tell "app-server refused this" apart from the
+ * client's own failures — a timeout, a closed socket — which reject with a plain
+ * `Error`, and classify the refusal by `code` rather than by reading the sentence.
+ * The message keeps the `… (code: N)` spelling the plain error it replaced had.
+ */
+export class JsonRpcError extends Error {
+  override readonly name = 'JsonRpcError';
+
+  constructor(
+    /** The method whose request was refused. */
+    readonly method: string,
+    readonly code: number,
+    /** The server's own message, without the code suffix. */
+    readonly rpcMessage: string,
+    readonly data?: unknown,
+  ) {
+    super(`${rpcMessage} (code: ${code})`);
+  }
+}
+
 /** No-op 'error' subscriber; see the JsonRpcWsClient constructor. */
 const NOOP = (): void => {};
 
@@ -319,10 +342,8 @@ export class JsonRpcWsClient extends EventEmitter {
       }
 
       if ('error' in message) {
-        const errorResponse = message as JsonRpcErrorResponse;
-        pending.reject(
-          new Error(`${errorResponse.error.message} (code: ${errorResponse.error.code})`),
-        );
+        const { error } = message as JsonRpcErrorResponse;
+        pending.reject(new JsonRpcError(pending.method, error.code, error.message, error.data));
       } else {
         const response = message as JsonRpcResponse;
         pending.resolve(response.result);

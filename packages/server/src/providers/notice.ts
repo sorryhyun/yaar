@@ -31,13 +31,12 @@ export interface ProviderNotice {
   text: string;
 }
 
-/** Lift a notice onto the wire, carrying the session id along when there is one. */
-export function toNoticeMessage(notice: ProviderNotice, sessionId?: string): StreamMessage {
+/** Lift a notice onto the wire. */
+export function toNoticeMessage(notice: ProviderNotice): StreamMessage {
   return {
     type: 'notice',
     content: notice.text,
     noticeLevel: notice.level,
     errorCode: notice.code,
-    ...(sessionId ? { sessionId } : {}),
   };
 }

@@ -42,7 +42,6 @@
 import { AgentSession } from './agent-session.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
-import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
 import { genId } from '@yaar/lib/ids';
 import { revokeAgentToken } from '../mcp/agent-tokens.js';
@@ -60,10 +59,9 @@ import { AppAgentRegistry } from './app-agent-registry.js';
 import { SubAgentRegistry } from './sub-agent-registry.js';
 import { ServerEventType, type ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
-import type { SessionLogger } from '../logging/index.js';
 import type { AITransport, TokenUsage } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
-import type { AgentPoolStats } from './pool-types.js';
+import type { AgentPoolStats, PoolHost } from './pool-types.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AgentPool');
@@ -89,7 +87,6 @@ function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 export class AgentPool {
   private sessionId: SessionId;
   private nextAgentId = 0;
-  private logger: SessionLogger | null = null;
   private broadcastFn: (event: ServerEvent) => void;
 
   /** Persistent monitor agents, keyed by monitorId. */
@@ -163,18 +160,19 @@ export class AgentPool {
    */
   private readonly acquireProvider: () => Promise<AITransport | null>;
 
+  /** The owning session, narrowed — see `PoolHost`. */
+  private readonly host: PoolHost;
+
   constructor(
     sessionId: SessionId,
     broadcast: (event: ServerEvent) => void,
+    host: PoolHost,
     acquireProvider?: () => Promise<AITransport | null>,
   ) {
     this.sessionId = sessionId;
     this.broadcastFn = broadcast;
+    this.host = host;
     this.acquireProvider = acquireProvider ?? acquireWarmProvider;
-  }
-
-  setLogger(logger: SessionLogger): void {
-    this.logger = logger;
   }
 
   // ── Roster tracking ──────────────────────────────────────────────────
@@ -185,7 +183,7 @@ export class AgentPool {
 
   private trackAgent(instanceId: string): void {
     this.agentIds.add(instanceId);
-    getSessionHub().registerAgent(instanceId, this.sessionId);
+    this.host.registerAgent(instanceId);
     notifyAgentsChanged(this.sessionId);
   }
 
@@ -197,7 +195,7 @@ export class AgentPool {
    */
   private untrackAgent(instanceId: string): boolean {
     if (!this.agentIds.delete(instanceId)) return false;
-    getSessionHub().unregisterAgent(instanceId);
+    this.host.unregisterAgent(instanceId);
     notifyAgentsChanged(this.sessionId);
     return true;
   }
@@ -254,9 +252,8 @@ export class AgentPool {
     // agent to answer for, which is a coincidence rather than a design.
     revokeAgentToken(agent.instanceId);
     // The layout deltas are keyed by agent id and were never dropped, so the map only
-    // ever grew. Through the hub because the session owns the LayoutContext and a pool
-    // that outlives its session has nothing to clear.
-    getSessionHub().get(this.sessionId)?.layoutContext.removeAgent(agent.instanceId);
+    // ever grew. Through the host because the session owns the LayoutContext.
+    this.host.layout.removeAgent(agent.instanceId);
     // Before cleanup: the agent's counter goes away with it.
     this.retiredUsage = addUsage(this.retiredUsage, agent.session.getUsage());
     if (interruptIfRunning && agent.session.isRunning()) {
@@ -296,7 +293,7 @@ export class AgentPool {
       // `agent-${id}-${Date.now()}` was not unique across pools: the counter restarts
       // at 0 in every pool, so two sessions creating their first agent in the same
       // millisecond minted the same id — and the three registries keyed by it are all
-      // process-global. `SessionHub.registerAgent` silently overwrites (so
+      // process-global. The agent directory silently overwrites (so
       // `findSessionByAgent` routes one session's agent to the other), the
       // `InterruptGate` gates both from either one's stop, and `getAgentToken` hands
       // both the same MCP credential. The counter stays for readable logs; `genId` is
@@ -306,7 +303,7 @@ export class AgentPool {
       const session = new AgentSession(
         this.sessionId, // connectionId (legacy, used as fallback)
         undefined,
-        this.logger ?? undefined,
+        () => this.host.getSessionLogger(),
         instanceId,
         this.sessionId, // liveSessionId for session-scoped broadcasting
         this.broadcastFn,
@@ -741,7 +738,7 @@ export class AgentPool {
     // Backstop for an id tracked but held by no collection — the leak class the spawn
     // reservations exist to prevent. `disposeAgent` has already untracked the rest.
     for (const id of this.agentIds) {
-      getSessionHub().unregisterAgent(id);
+      this.host.unregisterAgent(id);
     }
     this.agentIds.clear();
     notifyAgentsChanged(this.sessionId);

@@ -21,7 +21,7 @@
  */
 
 import { platform } from 'os';
-import type { ProviderType } from './types.js';
+import type { ProviderType } from '../providers/types.js';
 import { listApps, loadAllAppHints, type AppInfo } from '../features/apps/discovery.js';
 import { readSettings, getLanguageLabel } from '../storage/settings.js';
 import { IS_BUNDLED_EXE } from '../config.js';

@@ -46,6 +46,9 @@ import { watch, type FSWatcher } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CDPClient } from './cdp.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('browser');
 
 /** A download Chrome finished writing, still sitting in the capture directory. */
 export interface CapturedDownload {
@@ -165,7 +168,7 @@ export class DownloadCapture {
         this.armed = true;
       } catch (err) {
         this.armed = false;
-        console.warn('[browser] downloads unavailable — Chrome refused setDownloadBehavior:', err);
+        log.warn('downloads unavailable — Chrome refused setDownloadBehavior', { err });
         return;
       }
     }

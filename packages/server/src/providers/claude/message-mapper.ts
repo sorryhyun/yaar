@@ -199,9 +199,11 @@ export function mapClaudeMessage(
     log.debug('sdk message', { type: `${msgType}${subtypeStr}` });
   }
 
-  // SDK message types: system, assistant, user, result, stream_event
+  // SDK message types: system, assistant, user, result, stream_event.
+  // Session ids are not mapped here: nearly every frame carries one, and the
+  // provider reports it once per turn as a `session` message (`session-provider.ts`).
   if (msg.type === 'system' && msg.subtype === 'init') {
-    return { type: 'text', sessionId: msg.session_id };
+    return null;
   }
 
   // Subagent lifecycle events
@@ -255,7 +257,7 @@ export function mapClaudeMessage(
   // Every remaining `system` subtype that says something went wrong. Placed after
   // the `init`/`task_*` branches above, which claim their subtypes and return.
   const sysNotice = systemNotice(msg);
-  if (sysNotice) return toNoticeMessage(sysNotice, (msg as { session_id?: string }).session_id);
+  if (sysNotice) return toNoticeMessage(sysNotice);
 
   if (msg.type === 'assistant') {
     // An assistant frame can carry a typed failure (`error`) or an interrupt-
@@ -264,10 +266,9 @@ export function mapClaudeMessage(
     // would end it in the UI while the CLI went on to answer. When the failure
     // really is fatal, the `result` terminal below says so.
     const notice = assistantNotice(msg);
-    if (notice) return toNoticeMessage(notice, msg.session_id);
+    if (notice) return toNoticeMessage(notice);
     // Don't return content here - it was already streamed via stream_event.
-    // Only return sessionId for session tracking.
-    return { type: 'text', sessionId: msg.session_id };
+    return null;
   }
 
   if (msg.type === 'stream_event') {
@@ -327,12 +328,11 @@ export function mapClaudeMessage(
         type: 'error',
         error: text,
         errorCode: code,
-        sessionId: result.session_id,
         ...accounting,
       };
     }
 
-    return { type: 'complete', sessionId: result.session_id, ...accounting };
+    return { type: 'complete', ...accounting };
   }
 
   if (msg.type === 'user') {
@@ -342,7 +342,7 @@ export function mapClaudeMessage(
   // Subscription-level rate limiting — its own top-level message type, not a
   // `system` subtype, and only forwarded when the limit actually rejected a call.
   const rateNotice = rateLimitNotice(msg);
-  if (rateNotice) return toNoticeMessage(rateNotice, (msg as { session_id?: string }).session_id);
+  if (rateNotice) return toNoticeMessage(rateNotice);
 
   return null;
 }

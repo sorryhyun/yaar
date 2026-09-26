@@ -21,6 +21,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 import { AgentPool } from '../agents/agent-pool.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 import { getAgentLimiter } from '../agents/limiter.js';
 import { APP_AGENT_IDLE_MS } from '../config.js';
 import type { AITransport, StreamMessage } from '../providers/types.js';
@@ -30,7 +31,6 @@ function fakeProvider(): AITransport {
   return {
     name: 'fake',
     providerType: 'claude',
-    systemPrompt: '',
     async isAvailable() {
       return true;
     },
@@ -64,6 +64,7 @@ describe('app-agent idle reaper', () => {
     pool = new AgentPool(
       'ses-idle-reap' as SessionId,
       () => {},
+      createTestPoolHost(),
       async () => fakeProvider(),
     );
   });

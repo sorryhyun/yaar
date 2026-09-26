@@ -71,8 +71,8 @@ const HARNESS_DEADLINES: Deadlines = {
 
 /**
  * A logger that writes nowhere, handed in through the option the server already has for
- * one. Passing it is what keeps `ContextPool.initialize` from calling `createSession()`
- * and minting a `session_logs/` directory per test.
+ * one. Passing it is what keeps `LiveSession.openSessionLogger` from calling
+ * `createSession()` and minting a `session_logs/` directory per test.
  */
 function createLoggerDouble(): SessionLogger {
   const noop = () => {};

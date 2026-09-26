@@ -58,7 +58,7 @@ import type {
   ProviderType,
   RemoteControlInfo,
 } from '../providers/types.js';
-import { createSession, SessionLogger } from '../logging/index.js';
+import type { SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
 import { genId } from '@yaar/lib/ids';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
@@ -76,16 +76,28 @@ import { MonitorTaskProcessor } from './monitor-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
 import { SessionTaskProcessor } from './session-task-processor.js';
 import { WindowEventCoordinator } from './window-event-coordinator.js';
-import type { PoolContext, PoolStats, Task } from './pool-types.js';
+import type { PoolContext, PoolHost, PoolStats, Task } from './pool-types.js';
 
 import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
-import { getSessionHub } from '../session/session-hub.js';
 
 const log = createLogger('ContextPool');
 
 // Re-export Task for barrel compatibility
 export type { Task } from './pool-types.js';
+
+export interface ContextPoolOptions {
+  sessionId: SessionId;
+  /** The owning session, narrowed — see `PoolHost`. */
+  host: PoolHost;
+  windowState: WindowStateRegistry;
+  reloadCache: ReloadCache;
+  broadcast: (event: ServerEvent) => void;
+  restoredContext?: ContextMessage[];
+  savedThreadIds?: Record<string, string>;
+  /** Provider seam, defaulting to the global warm pool — see `ContextPool.acquireProvider`. */
+  acquireProvider?: () => Promise<AITransport | null>;
+}
 
 /** Implements PoolContext so processors can access shared state and policies. */
 export class ContextPool implements PoolContext {
@@ -109,20 +121,10 @@ export class ContextPool implements PoolContext {
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
-  readonly contextAssembly = new ContextAssemblyPolicy((monitorId) => {
-    const layout = getSessionHub().get(this.sessionId)?.layoutContext;
-    return layout
-      ? {
-          formFactor: layout.getFormFactor(monitorId),
-          viewport: layout.getViewport(monitorId),
-          orientation: layout.getOrientation(monitorId),
-        }
-      : undefined;
-  });
+  readonly contextAssembly: ContextAssemblyPolicy;
   readonly reloadPolicy: ReloadCachePolicy;
   readonly budgetPolicy = new MonitorBudgetPolicy();
   readonly windowSubscriptionPolicy = new WindowSubscriptionPolicy();
-  sharedLogger: SessionLogger | null = null;
   savedThreadIds?: Record<string, string>;
   providerType: ProviderType | null = null;
 
@@ -175,19 +177,28 @@ export class ContextPool implements PoolContext {
    */
   private readonly acquireProvider: () => Promise<AITransport | null>;
 
-  constructor(
-    sessionId: SessionId,
-    windowState: WindowStateRegistry,
-    reloadCache: ReloadCache,
-    broadcast: (event: ServerEvent) => void,
-    restoredContext: ContextMessage[] = [],
-    savedThreadIds?: Record<string, string>,
-    acquireProvider?: () => Promise<AITransport | null>,
-  ) {
+  private readonly host: PoolHost;
+
+  constructor({
+    sessionId,
+    host,
+    windowState,
+    reloadCache,
+    broadcast,
+    restoredContext = [],
+    savedThreadIds,
+    acquireProvider,
+  }: ContextPoolOptions) {
     this.sessionId = sessionId;
+    this.host = host;
     this.broadcastFn = broadcast;
     this.acquireProvider = acquireProvider ?? acquireWarmProvider;
     this.windowState = windowState;
+    this.contextAssembly = new ContextAssemblyPolicy((monitorId) => ({
+      formFactor: host.layout.getFormFactor(monitorId),
+      viewport: host.layout.getViewport(monitorId),
+      orientation: host.layout.getOrientation(monitorId),
+    }));
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
     this.contextTape = new ContextTape();
@@ -195,7 +206,7 @@ export class ContextPool implements PoolContext {
       this.contextTape.restore(restoredContext);
       log.info('restored context from previous session', { messages: restoredContext.length });
     }
-    this.agentPool = new AgentPool(sessionId, broadcast, this.acquireProvider);
+    this.agentPool = new AgentPool(sessionId, broadcast, host, this.acquireProvider);
 
     this.monitorProcessor = new MonitorTaskProcessor(this);
     this.appProcessor = new AppTaskProcessor(this);
@@ -264,7 +275,7 @@ export class ContextPool implements PoolContext {
     });
   }
 
-  async initialize(existingLogger?: SessionLogger): Promise<boolean> {
+  async initialize(): Promise<boolean> {
     const provider = await this.acquireProvider();
     if (!provider) {
       await this.sendEvent({
@@ -275,19 +286,11 @@ export class ContextPool implements PoolContext {
     }
 
     this.providerType = provider.providerType;
-    if (existingLogger) {
-      this.sharedLogger = existingLogger;
-      this.logSessionId = existingLogger.getSessionId();
-      existingLogger.updateProvider(provider.name);
-    } else {
-      const sessionInfo = await createSession(provider.name);
-      this.sharedLogger = new SessionLogger(sessionInfo);
-      this.logSessionId = sessionInfo.sessionId;
-    }
-    this.agentPool.setLogger(this.sharedLogger);
+    // The host owns the log; the pool only says when it is needed. The provider was
+    // acquired above because the log needs its name before the first agent (which
+    // writes to the log) can exist.
+    this.logSessionId = await this.host.openSessionLogger(provider.name);
 
-    // The provider was acquired above because the log needs its name before the first
-    // agent (which is handed the log) can exist.
     if (!(await this.spawnMonitorAgent('0', provider)).ok) return false;
     await this.announceConnected(provider.name);
     return true;
@@ -752,7 +755,7 @@ export class ContextPool implements PoolContext {
   }
 
   getSessionLogger(): SessionLogger | null {
-    return this.sharedLogger;
+    return this.host.getSessionLogger();
   }
 
   /**
@@ -954,7 +957,6 @@ export class ContextPool implements PoolContext {
   async cleanup(): Promise<void> {
     this.resetting = true;
     await this.teardown();
-    this.sharedLogger = null;
     this.resetting = false;
   }
 }

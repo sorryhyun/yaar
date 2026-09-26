@@ -22,6 +22,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 
 import { AgentPool } from '../agents/agent-pool.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 import { ClaudeSessionProvider } from '../providers/claude/session-provider.js';
 import { TurnRouter } from '../providers/claude/turn-router.js';
 import { TurnGate } from '../providers/turn-gate.js';
@@ -238,7 +239,6 @@ function fakeProvider(): AITransport {
   return {
     name: 'fake',
     providerType: 'claude',
-    systemPrompt: 'unused',
     async isAvailable() {
       return true;
     },
@@ -258,6 +258,7 @@ describe('AgentPool.interruptAll()', () => {
     const pool = new AgentPool(
       'ses-interrupt-pool' as SessionId,
       () => {},
+      createTestPoolHost(),
       async () => fakeProvider(),
     );
     try {

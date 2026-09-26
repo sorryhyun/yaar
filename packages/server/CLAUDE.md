@@ -80,7 +80,8 @@ src/
 │   ├── app-window-coordinator.ts    # AppWindowCoordinator — app readiness, command replay, app-channel/bridge-event routing
 │   ├── desktop-request.ts           # DesktopRequest — the ask-the-desktop-and-wait prelude every server→client question shares
 │   ├── app-ready-registry.ts        # AppReadyRegistry — which iframes are registered *right now*, per (session, window)
-│   └── interrupt-gate.ts            # InterruptGate — agent ids whose stopped turn is still emitting
+│   ├── interrupt-gate.ts            # InterruptGate — agent ids whose stopped turn is still emitting
+│   └── agent-directory.ts           # agent id → session id; a leaf, so LiveSession writes it without importing SessionHub
 ├── websocket/            # WebSocket server + connection registry
 ├── agents/               # Agent lifecycle, pooling, context management
 │   ├── agent-pool.ts     # AgentPool — creation, disposal, and the global slot each agent holds
@@ -292,7 +293,7 @@ spy on exactly that. The exemptions to `no-console` are listed with their reason
 
 ## Providers
 
-**AITransport interface:** `systemPrompt`, `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`, `interrupt()`, `dispose()`.
+**AITransport interface:** `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`, `interrupt()`, `dispose()`.
 
 **Warm Pool:** Providers pre-initialized at startup. `initWarmPool()` at boot, `acquireWarmProvider()` gets a ready instance, pool auto-replenishes in background.
 

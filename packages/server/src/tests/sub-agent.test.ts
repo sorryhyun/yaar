@@ -26,6 +26,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { AgentPool } from '../agents/agent-pool.js';
+import { createTestPoolHost } from './helpers/test-pool-host.js';
 import type { SubAgent } from '../agents/sub-agent-registry.js';
 import {
   buildSubAgentProfile,
@@ -59,7 +60,6 @@ function fakeProvider(recorded: Recorded[]): AITransport {
   return {
     name: 'fake',
     providerType: 'claude',
-    systemPrompt: 'THE GENERIC YAAR PROMPT — a sub-agent must never be handed this.',
     async isAvailable() {
       return true;
     },
@@ -137,10 +137,10 @@ describe('sub-agent reach (through the real SDK options builder)', () => {
     buildSDKOptions({
       options: {
         systemPrompt: 'You are Alice.',
+        conversation: { kind: 'new' },
         agentId: 'agent-1-123',
         ...(allowedTools ? { allowedTools } : {}),
       },
-      defaultSystemPrompt: 'generic',
       abortController: new AbortController(),
       onEscapeGuard: () => {},
     });
@@ -345,6 +345,7 @@ describe('tool-bearing sub-agents in AgentPool', () => {
     pool = new AgentPool(
       'ses-subagent' as SessionId,
       () => {},
+      createTestPoolHost(),
       async () => fakeProvider(recorded),
     );
   });

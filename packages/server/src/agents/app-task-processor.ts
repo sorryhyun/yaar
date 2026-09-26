@@ -301,7 +301,8 @@ export class AppTaskProcessor {
           appResponseText = text;
         },
         onBeforeRun: async () => {
-          await this.ctx.sharedLogger?.registerAgent(agentRole, monitorRole(monitorId), windowId);
+          const logger = this.ctx.getSessionLogger();
+          await logger?.registerAgent(agentRole, monitorRole(monitorId), windowId);
           await this.sendWindowStatus(windowId, agentRole, 'assigned');
           await this.sendWindowStatus(windowId, agentRole, 'active');
         },
