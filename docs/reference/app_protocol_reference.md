@@ -477,7 +477,7 @@ Two rules make it safe to reach for:
 
 A delivered payload — woken or subscribed — is injected into the agent's prompt, so it is capped at 16,384 serialized chars. An object over the cap is cut by structure, not by position: every key survives, long strings are shortened to one shared length (each ending `…[cut, N chars]`), and a line after the JSON names the cut fields. Only when strings alone cannot make room do arrays lose their tails (`…[cut, N more items]`). A plain-string payload keeps its head, marked `… [truncated, N chars]`. Past the cap, emit a handle the agent can read in full with a command instead.
 
-**Source:** `packages/server/src/agents/window-event-coordinator.ts` (`wakeOwnAppAgent`); the cap is `fitPayload` in `context-pool-policies/window-subscription-policy.ts`.
+**Source:** `packages/server/src/agents/window-event-coordinator.ts` (`wakeOwnAppAgent`); the cap is `fitPayload` in `packages/server/src/agents/context-pool-policies/window-subscription-policy.ts`.
 
 ### `app.onDrop(handlers)`
 
