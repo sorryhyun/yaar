@@ -314,4 +314,31 @@ describe('agent stream turn boundaries', () => {
     expect(frames().map((f) => f.kind)).toEqual(['start', 'error']);
     expect(frames().at(-1)?.data).toMatchObject({ error: 'boom' });
   });
+
+  it.each([
+    ['claude', 'error_max_turns', 'max_turns'],
+    ['claude', 'prompt_too_long', 'context_exceeded'],
+    ['claude', 'malformed_tool_use_exhausted', 'tool_limit'],
+    ['codex', 'contextWindowExceeded', 'context_exceeded'],
+  ] as const)('names why a %s turn hit a limit: %s → %s', async (provider, errorCode, reason) => {
+    subscribeAll();
+    const mapper = makeMapper(provider);
+
+    mapper.start();
+    await mapper.map({ type: 'error', error: 'limit', errorCode } as StreamMessage);
+    await flush();
+
+    expect(frames().at(-1)?.data).toEqual({ error: 'limit', code: errorCode, reason });
+  });
+
+  it('keeps an unmapped provider code and adds no reason', async () => {
+    subscribeAll();
+    const mapper = makeMapper('codex');
+
+    mapper.start();
+    await mapper.map({ type: 'error', error: 'nope', errorCode: 'unauthorized' } as StreamMessage);
+    await flush();
+
+    expect(frames().at(-1)?.data).toEqual({ error: 'nope', code: 'unauthorized' });
+  });
 });

@@ -140,7 +140,10 @@ so N sub-agents generate concurrently. It **rejects rather than queues** when th
 mid-turn: the error carries `structuredContent: { busy: true, personaId }` so the caller can
 branch without parsing the sentence. The answer arrives on `streamUri` — frame kinds `start`,
 `text`, `thinking`, `tool`, `usage`, `done` (carries the turn's final text), `error` — which
-requires `"streams": ["agents"]` in `app.json`. `read` is the reconnect fallback.
+requires `"streams": ["agents"]` in `app.json`. `read` is the reconnect fallback. An `error`
+frame carries `{ error, code?, reason? }`: `code` is the provider's own discriminant, `reason`
+the provider-neutral one where it applies — `context_exceeded`, `max_turns`, `tool_limit`, or
+`timeout` (the same value `read` reports as `turn.errorReason`).
 
 **Errors** are plain refusals, not retryable 503s: a malformed `personaId` or an over-long
 prompt is answered before the pool is touched. `at-capacity` means the app's own `max` is

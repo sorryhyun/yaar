@@ -31,6 +31,7 @@ import {
 } from './agent-roster.js';
 import { SpawnReservations } from './spawn-reservations.js';
 import type { TurnEnd } from './session-policies/stream-to-event-mapper.js';
+import type { AgentTurnErrorReason } from '../streams/agent-stream.js';
 import { errMessage } from '@yaar/lib/errors';
 import { createLogger } from '../observability/log.js';
 
@@ -95,7 +96,8 @@ export interface SubAgent {
  * One sub-agent turn, as `read` reports it. `error` and `errorCode` are set only when
  * `state` is `error`; `errorCode` is the provider's own discriminant (e.g. Claude's
  * `error_max_turns`, Codex's `contextWindowExceeded`) and is absent for a turn that
- * failed by a throw rather than a provider verdict.
+ * failed by a throw rather than a provider verdict. `errorReason` is the same failure
+ * in the provider-neutral vocabulary the stream's `error` frame carries as `reason`.
  */
 export interface SubAgentTurn {
   taskId: string;
@@ -104,6 +106,7 @@ export interface SubAgentTurn {
   endedAt?: number;
   error?: string;
   errorCode?: string;
+  errorReason?: AgentTurnErrorReason;
 }
 
 /**
@@ -317,7 +320,11 @@ export class SubAgentRegistry {
         state: outcome.status,
         endedAt: Date.now(),
         ...(outcome.status === 'error'
-          ? { error: outcome.error, ...(outcome.code ? { errorCode: outcome.code } : {}) }
+          ? {
+              error: outcome.error,
+              ...(outcome.code ? { errorCode: outcome.code } : {}),
+              ...(outcome.reason ? { errorReason: outcome.reason } : {}),
+            }
           : {}),
       };
     };

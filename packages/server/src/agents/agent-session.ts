@@ -39,6 +39,18 @@ import { createLogger } from '../observability/log.js';
 const log = createLogger('AgentSession');
 
 /**
+ * Whether a turn's throw was a deadline expiring rather than a failure.
+ *
+ * By message, because the deadlines that can end a turn are each a plain `Error` —
+ * the Codex RPC client's `Request timed out`, Claude's `withDeadline` — plus the
+ * platform's own `TimeoutError` from `AbortSignal.timeout`.
+ */
+function isDeadlineError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'TimeoutError' || /\btimed? ?out\b/i.test(err.message);
+}
+
+/**
  * Options for handling a message with dynamic role assignment.
  */
 export interface HandleMessageOptions {
@@ -589,7 +601,7 @@ export class AgentSession {
       // Terminal for stream observers too — a throw ends the turn as surely as a
       // provider `error` message does. Latched, so the `finish` below won't add
       // a second close after it.
-      mapper?.fail(errMessage(err));
+      mapper?.fail(errMessage(err), isDeadlineError(err) ? 'timeout' : undefined);
       await this.sendEvent({
         type: ServerEventType.ERROR,
         error: errMessage(err),

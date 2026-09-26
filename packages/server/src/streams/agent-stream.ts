@@ -42,6 +42,43 @@ export type AgentStreamKind =
 export type AgentTurnStatus = 'completed' | 'interrupted';
 
 /**
+ * Why a turn failed, for the failures an observer can act on without reading prose.
+ *
+ * A worker that hit its context window needs a smaller task; one that hit its turn
+ * limit needs the same task split; one that timed out may just need a retry. The
+ * provider codes already say which, but each provider spells them differently — this
+ * is the one vocabulary a consumer branches on. Absent for every other failure.
+ */
+export type AgentTurnErrorReason = 'context_exceeded' | 'max_turns' | 'tool_limit' | 'timeout';
+
+/** The terminal `error` frame. Pairs with `done`: a turn ends in exactly one of the two. */
+export interface AgentErrorFrameData {
+  error: string;
+  /** The provider's own discriminant (`StreamMessage.errorCode`), verbatim. */
+  code?: string;
+  reason?: AgentTurnErrorReason;
+}
+
+/**
+ * Provider error codes, by the reason they mean. Claude's are `terminal_reason` and
+ * `result.subtype` values (`claude/errors.ts`), Codex's are `CodexErrorInfo` variants
+ * (`codex/errors.ts`), and `timeout` is what `AgentSession` stamps on a turn that threw
+ * a deadline.
+ */
+const REASON_BY_CODE: Readonly<Record<string, AgentTurnErrorReason>> = {
+  prompt_too_long: 'context_exceeded',
+  contextWindowExceeded: 'context_exceeded',
+  max_turns: 'max_turns',
+  error_max_turns: 'max_turns',
+  malformed_tool_use_exhausted: 'tool_limit',
+  timeout: 'timeout',
+};
+
+export function turnErrorReason(code: string | undefined): AgentTurnErrorReason | undefined {
+  return code ? REASON_BY_CODE[code] : undefined;
+}
+
+/**
  * A non-terminal provider notice — a retry, a denial, a refusal, a hit limit.
  *
  * Distinct from the `error` frame, which is terminal and pairs with `done` as a

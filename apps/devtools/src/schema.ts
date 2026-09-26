@@ -117,6 +117,13 @@ export const WorkerFrameDataSchema = z.looseObject({
   text: z.optional(z.string()),
   error: z.optional(z.string()),
   /**
+   * On an `error` frame: why the turn stopped, when it was a limit rather than a
+   * failure — 'context_exceeded' | 'max_turns' | 'tool_limit' | 'timeout'. A string,
+   * not an enum, so a reason added server-side reads as "no advice" instead of
+   * failing the parse and dropping the whole terminal frame.
+   */
+  reason: z.optional(z.string()),
+  /**
    * Set by the server when this frame's payload exceeded the wire cap, in which
    * case every other field here is *gone* — not empty. Never treat one as an
    * empty turn; see the `done` case in services/worker.ts.

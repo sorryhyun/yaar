@@ -63,7 +63,7 @@ const DESCRIBE = {
     'principal. Spawned without "tools" one receives text and returns text; spawned with them ' +
     'it may call each declared tool, which is dispatched to YOUR OWN iframe as the command ' +
     'persona:{toolName} (with personaId in params) and answers with whatever your handler returns. ' +
-    'read one to learn how its last turn ended (turn.state, and turn.error/errorCode on a failure), ' +
+    'read one to learn how its last turn ended (turn.state, and turn.error/errorCode/errorReason on a failure), ' +
     'its lifetime token usage, its contextWindow, and its lastResponse.',
   verbs: ['read', 'list', 'invoke', 'delete'],
   invokeSchema: {

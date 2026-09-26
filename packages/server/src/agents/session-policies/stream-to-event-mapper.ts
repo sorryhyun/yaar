@@ -9,7 +9,10 @@ import { VERB_TOOL_NAMES } from '../../handlers/index.js';
 import { publishFrame } from '../../streams/stream-hub.js';
 import {
   buildAgentStreamUri,
+  turnErrorReason,
+  type AgentErrorFrameData,
   type AgentStreamKind,
+  type AgentTurnErrorReason,
   type AgentTurnStatus,
 } from '../../streams/agent-stream.js';
 import { recordSourceDelta } from '../../streams/stream-diagnostics.js';
@@ -23,11 +26,12 @@ const log = createLogger('StreamToEventMapper');
  * The same latch that publishes the stream's terminal frame decides it, so a caller
  * that keeps this never disagrees with what a live subscriber was told. `code` is the
  * provider's own discriminant for the error (`StreamMessage.errorCode`), absent when
- * the turn failed by a throw rather than a provider verdict.
+ * the turn failed by a throw rather than a provider verdict (a deadline excepted —
+ * that throw is stamped `timeout`). `reason` is {@link turnErrorReason} of it.
  */
 export type TurnEnd =
   | { status: AgentTurnStatus }
-  | { status: 'error'; error: string; code?: string };
+  | { status: 'error'; error: string; code?: string; reason?: AgentTurnErrorReason };
 
 export interface StreamMappingState {
   responseText: string;
@@ -298,8 +302,10 @@ export class StreamToEventMapper {
   fail(error: string, code?: string): void {
     if (this.turnClosed) return;
     this.turnClosed = true;
-    this.emitStreamFrame('error', { error });
-    this.onTurnEnd?.({ status: 'error', error, ...(code ? { code } : {}) });
+    const reason = turnErrorReason(code);
+    const detail = { ...(code ? { code } : {}), ...(reason ? { reason } : {}) };
+    this.emitStreamFrame('error', { error, ...detail } satisfies AgentErrorFrameData);
+    this.onTurnEnd?.({ status: 'error', error, ...detail });
   }
 
   async map(message: StreamMessage): Promise<void> {

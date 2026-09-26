@@ -900,6 +900,18 @@ function proposalsOfTask(taskId: number): EditProposalSummary[] {
     .map(summarizeProposal);
 }
 
+/**
+ * What to do about a turn the server says hit a limit — the `reason` on its `error`
+ * frame. Written for the agent reading the settled result, not the user.
+ */
+const LIMIT_ADVICE: Record<string, string> = {
+  context_exceeded:
+    'The worker ran out of context: re-run what it did not cover (`filesNotRead`, when set) in smaller slices.',
+  max_turns: 'The worker hit its turn limit: split the task and re-run the parts it did not cover.',
+  tool_limit: 'The worker hit a tool-call limit: split the task into narrower pieces.',
+  timeout: 'The worker’s turn timed out: retry it once before splitting it.',
+};
+
 /** Fold one stream frame into a slot's state; settle its turn on a terminal. */
 function onFrame(slot: WorkerSlot, frame: StreamFrame): void {
   const parsed = z.safeParse(WorkerFrameDataSchema, frame.data ?? {});
@@ -954,11 +966,13 @@ function onFrame(slot: WorkerSlot, frame: StreamFrame): void {
       break;
     }
     case 'error': {
-      const message =
+      const base =
         data.error ??
         (data.truncated
           ? 'The worker’s turn failed with an error too large to fit one stream frame.'
           : 'stream error');
+      const advice = data.reason ? LIMIT_ADVICE[data.reason] : undefined;
+      const message = advice ? `${base} ${advice}` : base;
       batch(() => {
         appendEntry(slot, 'error', message);
         slot.setDraft('');
