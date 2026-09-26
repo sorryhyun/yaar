@@ -1,6 +1,6 @@
 {
   "name": "@yaar/lib",
-  "version": "0.20.4",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "description": "Bytes-in/bytes-out and process-shaped utilities with no YAAR domain knowledge",
