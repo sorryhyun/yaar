@@ -4,12 +4,18 @@
  * rather than leave it to the aspect ratio (#121).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { readOrientation, resetSettledViewport, settledViewport } from '@/lib/device';
+import { readOrientation, resetSettledViewport, settledViewport, softKeyboard } from '@/lib/device';
 
 const g = globalThis as Record<string, unknown>;
-const saved = ['innerWidth', 'innerHeight', 'matchMedia', 'document', 'screen', 'orientation'].map(
-  (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
-);
+const saved = [
+  'innerWidth',
+  'innerHeight',
+  'matchMedia',
+  'document',
+  'screen',
+  'orientation',
+  'visualViewport',
+].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
 
 function set(key: string, value: unknown) {
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
@@ -63,6 +69,56 @@ describe('settledViewport', () => {
     settledViewport();
     screenAt(1440, 500, { coarse: false, focus: 'TEXTAREA' });
     expect(settledViewport()).toEqual({ w: 1440, h: 500 });
+  });
+});
+
+describe('softKeyboard', () => {
+  beforeEach(() => resetSettledViewport());
+  afterEach(() => {
+    for (const [key, desc] of saved) {
+      if (desc) Object.defineProperty(globalThis, key, desc);
+      else delete g[key];
+    }
+  });
+
+  // A screenshot taken while it is up is squished, and has to say why (#125).
+  it('reports the height the keyboard left, beside the height it hid', () => {
+    screenAt(360, 780);
+    expect(softKeyboard()).toBeUndefined();
+    screenAt(360, 402, { focus: 'IFRAME' });
+    expect(softKeyboard()).toEqual({ visible: { w: 360, h: 402 }, full: { w: 360, h: 780 } });
+    screenAt(360, 780);
+    expect(softKeyboard()).toBeUndefined();
+  });
+
+  it('sees an iOS keyboard, which shrinks only the visual viewport', () => {
+    screenAt(390, 844);
+    set('visualViewport', { height: 844, scale: 1 });
+    expect(softKeyboard()).toBeUndefined();
+    screenAt(390, 844, { focus: 'INPUT' });
+    set('visualViewport', { height: 508, scale: 1 });
+    expect(softKeyboard()).toEqual({ visible: { w: 390, h: 508 }, full: { w: 390, h: 844 } });
+    expect(settledViewport()).toEqual({ w: 390, h: 844 });
+  });
+
+  it('does not take a pinch zoom for a keyboard', () => {
+    screenAt(390, 844);
+    settledViewport();
+    screenAt(390, 844, { focus: 'INPUT' });
+    set('visualViewport', { height: 422, scale: 2 });
+    expect(softKeyboard()).toBeUndefined();
+  });
+
+  it('is never claimed with a mouse, or with nothing being typed', () => {
+    screenAt(1440, 900, { coarse: false });
+    settledViewport();
+    screenAt(1440, 500, { coarse: false, focus: 'TEXTAREA' });
+    expect(softKeyboard()).toBeUndefined();
+
+    screenAt(412, 900);
+    settledViewport();
+    screenAt(412, 450);
+    expect(softKeyboard()).toBeUndefined();
   });
 });
 

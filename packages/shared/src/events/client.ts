@@ -144,6 +144,24 @@ export interface RenderingFeedbackEvent {
    * region empty and be believed. Absent when the capture drew everything.
    */
   captureDegraded?: string[];
+  /**
+   * The soft keyboard was up in the phone shell that took a `renderer: 'capture'`
+   * image, so the window was captured at the height left above it.
+   *
+   * The shell asks for `interactive-widget=resizes-content`, so a full-screen card
+   * shrinks to fit above the keyboard. Its screenshot comes out squished, and without
+   * this an agent reads that as a layout bug in its own app and sets out to "fix" it.
+   * Sent by the capturing tab, not looked up from the monitor, because the tab that
+   * answers may not be the phone (a companion desktop has no keyboard). Absent when
+   * the keyboard was down.
+   */
+  keyboard?: SoftKeyboard;
+}
+
+/** A soft keyboard that is up: what is left visible above it, and the screen without it. */
+export interface SoftKeyboard {
+  visible: { w: number; h: number };
+  full: { w: number; h: number };
 }
 
 export interface ComponentActionEvent {

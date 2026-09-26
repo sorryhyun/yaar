@@ -30,6 +30,7 @@ import type {
   AppProtocolRequest,
   AppProtocolResponse,
   OSAction,
+  SoftKeyboard,
   WindowCaptureAction,
 } from '@yaar/shared';
 import type { ContentBlock, ReadOptions, Verb, VerbResult } from '../../handlers/uri-registry.js';
@@ -188,7 +189,7 @@ const CAPTURED = 'Y2FwdHVyZWQtcGl4ZWxz';
  * which is the difference between a test that asserts a screenshot and one that asserts a
  * timeout that happens to look the same from the outside.
  */
-function answerCaptures(h: Harness): void {
+function answerCaptures(h: Harness, extra: { keyboard?: SoftKeyboard } = {}): void {
   h.client.onFrame(ServerEventType.ACTIONS, async (frame) => {
     for (const action of frame.actions) {
       if (action.type !== 'window.capture') continue;
@@ -201,6 +202,7 @@ function answerCaptures(h: Harness): void {
         renderer: 'capture',
         success: true,
         imageData: CAPTURED,
+        ...extra,
       });
     }
   });
@@ -802,6 +804,40 @@ describe('S10 — a bare read of an app window is __content + __screenshot', () 
     const result = await callInTurn('read', 'yaar://windows/memo/state/__screenshot');
 
     expect(result.content).toEqual([{ type: 'image', data: CAPTURED, mimeType: 'image/webp' }]);
+  });
+});
+
+describe('S10 — a screenshot squished by the soft keyboard says so (#125)', () => {
+  const keyboard = { visible: { w: 360, h: 402 }, full: { w: 360, h: 780 } };
+
+  it('__screenshot leads with the keyboard, before the picture it explains', async () => {
+    const { callInTurn, h } = await bootTwoAppWindows();
+    answerCaptures(h, { keyboard });
+
+    const result = await callInTurn('read', 'yaar://windows/memo/state/__screenshot');
+
+    expect(result.content.map((block) => block.type)).toEqual(['text', 'image']);
+    const note = textOf(result);
+    expect(note).toContain('360×402 of its 360×780');
+    expect(note).toContain('not a layout bug');
+  });
+
+  it('a bare read carries it in the metadata', async () => {
+    const { callInTurn, h } = await bootTwoAppWindows();
+    answerCaptures(h, { keyboard });
+
+    const meta = resourceJsonOf(await callInTurn('read', 'yaar://windows/memo'));
+
+    expect(String(meta.keyboard)).toContain('soft keyboard was open');
+  });
+
+  it('says nothing when the keyboard was down', async () => {
+    const { callInTurn, h } = await bootTwoAppWindows();
+    answerCaptures(h);
+
+    const meta = resourceJsonOf(await callInTurn('read', 'yaar://windows/memo'));
+
+    expect(meta.keyboard).toBeUndefined();
   });
 });
 

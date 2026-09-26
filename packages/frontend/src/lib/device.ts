@@ -8,8 +8,11 @@
  * monitor agent was given for its turn was the keyboard-shrunk one (697×330 landscape
  * reported as 697×132), and a short, wide rectangle said nothing about which way the
  * phone was turned.
+ *
+ * The keyboard itself is reported only where it is the answer: next to a screenshot,
+ * which is taken at whatever height the keyboard left.
  */
-import type { Orientation } from '@yaar/shared';
+import type { Orientation, SoftKeyboard } from '@yaar/shared';
 
 export type { Orientation };
 
@@ -46,26 +49,56 @@ function focusTakesTyping(el: Element | null): boolean {
 let settled: { w: number; h: number } | null = null;
 
 /**
- * The viewport with the soft keyboard down.
+ * The height actually left to look at. iOS Safari leaves `innerHeight` alone under a
+ * keyboard and shrinks only the visual viewport, so that is the one to ask where it
+ * exists — scaled back by the pinch zoom, which shrinks it too while taking no screen.
+ */
+function visibleHeight(layoutHeight: number): number {
+  const vv = globalThis.visualViewport;
+  if (!vv) return layoutHeight;
+  return Math.min(layoutHeight, Math.round(vv.height * (vv.scale || 1)));
+}
+
+/**
+ * The screen with the soft keyboard down, and — while it is up — the keyboard.
  *
  * A keyboard only ever takes height, only on a touch screen, and only while focus is on
- * something that takes typing — so a report that shrank in height alone, under all three,
+ * something that takes typing — so a reading that shrank in height alone, under all three,
  * keeps the last full height instead. Anything else (a rotation, a desktop window being
  * resized, a split screen with nothing focused) is a real change and replaces it. The
  * memory is per tab, which is the scope a viewport report has.
  */
-export function settledViewport(): { w: number; h: number } {
+function readScreen(): { viewport: { w: number; h: number }; keyboard?: SoftKeyboard } {
   const now = { w: globalThis.innerWidth, h: globalThis.innerHeight };
+  const visible = { w: now.w, h: visibleHeight(now.h) };
   const keyboardLikely =
     settled !== null &&
     now.w === settled.w &&
-    now.h < settled.h &&
+    visible.h < settled.h &&
     typeof globalThis.matchMedia === 'function' &&
     globalThis.matchMedia('(pointer: coarse)').matches &&
     focusTakesTyping(globalThis.document?.activeElement ?? null);
-  if (keyboardLikely && settled) return settled;
+  if (keyboardLikely && settled) return { viewport: settled, keyboard: { visible, full: settled } };
   settled = now;
-  return now;
+  return { viewport: now };
+}
+
+/**
+ * The viewport with the soft keyboard down — what the server sizes windows for, since
+ * the keyboard is up exactly while a prompt is being typed. See `readScreen`.
+ */
+export function settledViewport(): { w: number; h: number } {
+  return readScreen().viewport;
+}
+
+/**
+ * The soft keyboard, if it is up right now: the size left visible above it and the size
+ * without it. The same judgement `settledViewport` makes to *hide* the keyboard, turned
+ * around to report it — a screenshot of a card squished by the keyboard has to say so,
+ * or it reads as a broken layout (#125).
+ */
+export function softKeyboard(): SoftKeyboard | undefined {
+  return readScreen().keyboard;
 }
 
 /** Test hook: forget the remembered full-height viewport. */

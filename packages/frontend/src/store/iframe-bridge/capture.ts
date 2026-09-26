@@ -1,9 +1,11 @@
 /**
  * Window capture — asks an iframe to draw itself, sends the result straight down the socket.
  */
-import { APP_MSG } from '@yaar/shared';
+import { APP_MSG, type SoftKeyboard } from '@yaar/shared';
 import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
+import { softKeyboard } from '@/lib/device';
+import { getDesktopState } from './store-access';
 import {
   explainMissingWindow,
   findIframeIn,
@@ -99,6 +101,7 @@ export async function captureWindow(windowId: string, requestId: string) {
       error?: string;
       captureFailure?: string;
       captureDegraded?: string[];
+      keyboard?: SoftKeyboard;
     },
   ) => {
     sendEvent(wsManager, {
@@ -134,9 +137,13 @@ export async function captureWindow(windowId: string, requestId: string) {
     const result = await tryIframeSelfCapture(iframe);
     if (result.imageData) {
       const base64 = result.imageData.replace(/^data:image\/[^;]+;base64,/, '');
+      // Only the phone shell fits a window above the keyboard; a desktop-layout window
+      // keeps its bounds whatever the keyboard does, so its picture needs no excuse.
+      const keyboard = getDesktopState().formFactor === 'mobile' ? softKeyboard() : undefined;
       sendFeedback(true, {
         imageData: base64,
         ...(result.degraded ? { captureDegraded: result.degraded } : {}),
+        ...(keyboard ? { keyboard } : {}),
       });
     } else {
       sendFeedback(false, {

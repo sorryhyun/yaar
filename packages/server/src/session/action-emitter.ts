@@ -30,6 +30,7 @@ import {
   type UserPromptInputField,
   type UserClipboardAction,
   type ClipboardResponseEvent,
+  type SoftKeyboard,
 } from '@yaar/shared';
 import type { ActionEmitterChannels, ActionEvent, AppReadyEvent } from './emitter-channels.js';
 import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
@@ -83,6 +84,8 @@ export interface RenderingFeedback {
   captureFailure?: string;
   /** What a successful capture left out. See RenderingFeedbackEvent.captureDegraded. */
   captureDegraded?: string[];
+  /** The soft keyboard the capture was squished by. See RenderingFeedbackEvent.keyboard. */
+  keyboard?: SoftKeyboard;
 }
 
 /**

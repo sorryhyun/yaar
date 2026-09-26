@@ -461,6 +461,7 @@ export class ClientEventController {
       imageData: event.imageData,
       captureFailure: event.captureFailure,
       captureDegraded: event.captureDegraded,
+      keyboard: event.keyboard,
     });
   }
 

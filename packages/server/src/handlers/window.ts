@@ -24,6 +24,7 @@
  * with no protocol has to list, and what a bare read of an app window is composed of.
  */
 
+import type { SoftKeyboard } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler, ReadOptions } from './uri-registry.js';
 import { hasLineFilter } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
@@ -228,6 +229,23 @@ function describeCaptureDegraded(notes: string[]): string {
   );
 }
 
+/**
+ * The sentence that has to sit next to a screenshot taken with the soft keyboard up.
+ *
+ * On a phone the window is resized to fit above the keyboard, so its picture is squished —
+ * and a squished picture of an app, with nothing saying why, is read as that app's layout
+ * being broken. The agent that reads it then "fixes" CSS that was fine (#125).
+ */
+function describeKeyboard(keyboard: SoftKeyboard): string {
+  const { visible, full } = keyboard;
+  return (
+    `The phone's soft keyboard was open when this was captured: only ${visible.w}×${visible.h} ` +
+    `of its ${full.w}×${full.h} screen was visible above it, and the window was shrunk to ` +
+    'fit. A squished or cut-off layout here is the keyboard, not a layout bug — do not ' +
+    'change the app for it.'
+  );
+}
+
 export function registerWindowHandlers(
   registry: ResourceRegistry,
   getWindowState: () => WindowStateRegistry,
@@ -340,6 +358,7 @@ export function registerWindowHandlers(
     captureFailure?: string;
     captureError?: string;
     captureDegraded?: string[];
+    keyboard?: SoftKeyboard;
   }> {
     const outcome = await actionEmitter.emitActionWithFeedback(
       { type: 'window.capture', windowId: win.id },
@@ -356,6 +375,7 @@ export function registerWindowHandlers(
       return {
         imageData: feedback.imageData,
         ...(degraded && degraded.length > 0 ? { captureDegraded: degraded } : {}),
+        ...(feedback.keyboard ? { keyboard: feedback.keyboard } : {}),
       };
     }
     if (!feedback) return { captureFailure: 'no-response' };
@@ -400,7 +420,8 @@ export function registerWindowHandlers(
 
     if (key === '__screenshot') {
       const askedAt = Date.now();
-      const { imageData, captureFailure, captureError, captureDegraded } = await captureWindow(win);
+      const { imageData, captureFailure, captureError, captureDegraded, keyboard } =
+        await captureWindow(win);
       if (!imageData) {
         // A capture is a round trip into the page, so "no image" can equally mean the
         // page was not running. Say which, where the desktop told us — and pass the
@@ -414,15 +435,14 @@ export function registerWindowHandlers(
         );
       }
       const image = { type: 'image' as const, data: imageData, mimeType: 'image/webp' };
-      // The caveat leads, because it changes how the image below should be read.
-      return captureDegraded
-        ? {
-            content: [
-              { type: 'text' as const, text: describeCaptureDegraded(captureDegraded) },
-              image,
-            ],
-          }
-        : { content: [image] };
+      // The caveats lead, because they change how the image below should be read.
+      const caveats = [
+        ...(captureDegraded ? [describeCaptureDegraded(captureDegraded)] : []),
+        ...(keyboard ? [describeKeyboard(keyboard)] : []),
+      ];
+      return {
+        content: [...caveats.map((text) => ({ type: 'text' as const, text })), image],
+      };
     }
 
     return null;
@@ -1037,7 +1057,7 @@ export function registerWindowHandlers(
       // depended on whether the frontend answered in time — and the half that was dropped was
       // addressable by nothing. `__content` is that half, and this says where it went.
       if (win.content.renderer === 'iframe') {
-        const { imageData, captureFailure, captureError, captureDegraded } =
+        const { imageData, captureFailure, captureError, captureDegraded, keyboard } =
           await captureWindow(win);
         if (imageData) {
           const { content: _content, ...infoWithoutContent } = windowInfo;
@@ -1054,6 +1074,7 @@ export function registerWindowHandlers(
                       // A degraded capture is reported next to the picture it
                       // qualifies, not swallowed by the success that carried it.
                       ...(captureDegraded ? { captureDegraded } : {}),
+                      ...(keyboard ? { keyboard: describeKeyboard(keyboard) } : {}),
                     },
                     null,
                     2,
