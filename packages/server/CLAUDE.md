@@ -102,7 +102,7 @@ src/
 │   │                     #   developer, turn-options, codex-roles, model-tiers, types, index (pure barrel).
 │   │                     #   App-agent prompt/tool sourcing: docs/reference/app_agent_prompt.md
 │   ├── session-policies/       # StreamToEventMapper
-│   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
+│   └── context-pool-policies/  # MonitorQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
 │   ├── types.ts          # AITransport interface, StreamMessage, TransportOptions
 │   ├── factory.ts        # Auto-detect provider, warm pool init
@@ -207,7 +207,7 @@ SessionHub (singleton registry)
         ├── ContextTape (hierarchical message history)
         │   ├── [main] user/assistant messages
         │   └── [window:id] branch messages
-        └── Policies (MonitorQueue per monitor, WindowQueue, ContextAssembly, ...)
+        └── Policies (MonitorQueue per monitor, ContextAssembly, ...)
 ```
 
 `LiveSession` is the aggregate root. It owns four collaborators, each reached only through it and given narrow callbacks rather than the session itself:

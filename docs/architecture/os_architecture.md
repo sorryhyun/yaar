@@ -12,7 +12,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
 | Process types | Session (root), monitor (init), app (daemon), ephemeral (one-shot), sub-agent (thread) | `yaar://agents/{instanceId}` | `agents/profiles/` |
 | Threading model | The agent tree (key extends owner's, disposal cascades) | — | [`agent_tree.md`](./agent_tree.md) |
-| Scheduler | `MonitorQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
+| Scheduler | `MonitorQueuePolicy`, `MonitorBudgetPolicy`, `AppTaskProcessor`'s per-app queues | — | `agents/context-pool-policies/`, `agents/app-task-processor.ts` |
 | Syscalls | 5 URI verbs + system tools (5 MCP namespaces) | — | `mcp/server.ts` |
 | Instruction set | System prompt (~94 lines) | — | `agents/system-prompt.ts` |
 | Boot | `initializeSubsystems()` | — | `lifecycle.ts` |
@@ -68,11 +68,11 @@ Global process limit: `AgentLimiter` enforces `MAX_AGENTS` (default 10).
 
 ## Scheduler
 
-Three policies in `agents/context-pool-policies/` control task dispatch:
+Two policies in `agents/context-pool-policies/`, and one queue kept by `AppTaskProcessor`, control task dispatch:
 
 **`MonitorQueuePolicy`** — Per-monitor FIFO queue. Tasks run sequentially (one at a time per monitor). Like a single-core scheduler per virtual desktop.
 
-**`WindowQueuePolicy`** — Per-window FIFO queues. Different windows run in parallel; within one window, tasks serialize. Like multi-core scheduling across independent subsystems.
+**App queues** (`AppTaskProcessor`) — One bounded FIFO per app agent (per app per monitor), held in the same record as that agent's running turn. Different apps run in parallel; within one app, tasks serialize. Like multi-core scheduling across independent subsystems.
 
 **`MonitorBudgetPolicy`** — Rate-limits background monitors (not monitor `0`). Three dimensions:
 - Concurrent task semaphore (default: 2)
@@ -240,7 +240,7 @@ See [`claude_codex.md`](../reference/claude_codex.md) for behavioral differences
 ├──────────────────────┬──────────────────────────────┤
 │   Scheduler          │     Agents (Processes)       │
 │  MonitorQueuePolicy  │  Main · App · Ephemeral ·    │
-│  WindowQueuePolicy   │  Task subagents              │
+│  App queues          │  Task subagents              │
 │  MonitorBudgetPolicy │                              │
 ├──────────────────────┴──────────────────────────────┤
 │           AITransport (Device Drivers)              │

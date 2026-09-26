@@ -73,7 +73,6 @@ const { HeadlessServerBrowser } = await import('../lib/browser/pool.js');
 
 function internals(pool: InstanceType<typeof HeadlessServerBrowser>) {
   return pool as unknown as {
-    sessions: Map<string, unknown>;
     chrome: unknown;
     cleanupIdle: () => Promise<void>;
     cleanupTimer: ReturnType<typeof setInterval> | null;
@@ -416,6 +415,55 @@ describe('HeadlessServerBrowser', () => {
     // had to know anything happened.
     expect(pool.getSession('news')).toBe(session);
     expect(session.isCrashed).toBe(false);
+  });
+
+  it('does not report a revived session closed when its crashed target dies', async () => {
+    mockCdpOn.mockClear();
+    let n = 0;
+    mockFetch.mockImplementation((input: unknown) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            String(input).includes('/json/new')
+              ? { id: `tab-${n++}`, webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/x' }
+              : { webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/browser/abc' },
+          ),
+      }),
+    );
+    try {
+      const { session } = await pool.createSession('news'); // target tab-0
+      const revived = new Promise<void>((resolve) => session.once('revived', () => resolve()));
+      session.emit('crashed', { reason: 'test' });
+      await revived;
+      await settleStore(); // `revived` fires inside reattach; the rebind to tab-1 follows it
+
+      const destroyed = (mockCdpOn.mock.calls as unknown as [string, (p: unknown) => void][])
+        .filter(([name]) => name === 'Target.targetDestroyed')
+        .at(-1)![1];
+      const events: string[] = [];
+      pool.onTabEvent((e) => events.push(`${e.type}:${e.browserId}`));
+
+      // The tab the crash left behind is nobody's any more.
+      destroyed({ targetId: 'tab-0' });
+      expect(events).toEqual([]);
+      expect(pool.getSession('news')).toBe(session);
+
+      // The tab actually serving the session still is.
+      destroyed({ targetId: 'tab-1' });
+      expect(events).toEqual(['closed:news']);
+    } finally {
+      mockFetch.mockImplementation(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: 'tab-mock',
+              webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/mock',
+            }),
+        }),
+      );
+    }
   });
 
   it('follows navigations the tab makes on its own (a human in the live view)', async () => {

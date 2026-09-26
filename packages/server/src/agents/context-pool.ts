@@ -66,7 +66,6 @@ import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import {
   MonitorQueuePolicy,
-  WindowQueuePolicy,
   ContextAssemblyPolicy,
   ReloadCachePolicy,
   MonitorBudgetPolicy,
@@ -74,7 +73,7 @@ import {
 } from './context-pool-policies/index.js';
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import { MonitorTaskProcessor } from './monitor-task-processor.js';
-import { AppTaskProcessor, appProcessingKey } from './app-task-processor.js';
+import { AppTaskProcessor } from './app-task-processor.js';
 import { SessionTaskProcessor } from './session-task-processor.js';
 import { WindowEventCoordinator } from './window-event-coordinator.js';
 import type { PoolContext, PoolStats, Task } from './pool-types.js';
@@ -121,7 +120,6 @@ export class ContextPool implements PoolContext {
       : undefined;
   });
   readonly reloadPolicy: ReloadCachePolicy;
-  readonly windowQueuePolicy = new WindowQueuePolicy();
   readonly budgetPolicy = new MonitorBudgetPolicy();
   readonly windowSubscriptionPolicy = new WindowSubscriptionPolicy();
   sharedLogger: SessionLogger | null = null;
@@ -697,7 +695,7 @@ export class ContextPool implements PoolContext {
     const appId = this.windowState.getAppIdForWindow(windowId);
     const monitorId = this.windowState.getMonitorForWindow(windowId);
     if (!appId || !monitorId || isPreviewAppId(appId)) return false;
-    return this.windowQueuePolicy.isProcessing(appProcessingKey(monitorId, appId));
+    return this.appProcessor.isTurnRunning(monitorId, appId);
   }
 
   /**
@@ -750,14 +748,14 @@ export class ContextPool implements PoolContext {
   async interruptAll(): Promise<void> {
     const dropped: Task[] = [];
     this.monitors.forEach((s) => dropped.push(...s.queue.clear().map((i) => i.task)));
-    dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
+    dropped.push(...this.appProcessor.clearQueues());
     this.reportDropped(dropped, 'the agents were stopped');
     await this.agentPool.interruptAll();
   }
 
   getStats(): PoolStats {
     const poolStats = this.agentPool.getStats();
-    const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
+    const windowQueueSizes = this.appProcessor.getQueueSizes();
     return {
       ...poolStats,
       monitorQueueSize: Array.from(this.monitors.values()).reduce(
@@ -782,7 +780,7 @@ export class ContextPool implements PoolContext {
     // monitor's timeline, and dropping the record now would resurrect it as a fresh one
     // that outlives the teardown.
     this.monitors.forEach((s) => dropped.push(...s.queue.clear().map((i) => i.task)));
-    dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
+    dropped.push(...this.appProcessor.clearQueues());
     this.reportDropped(dropped, 'the agent pool was reset');
 
     // 2. Reject blocked budget waiters so they unblock and exit. (The AgentLimiter never

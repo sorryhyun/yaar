@@ -10,7 +10,7 @@
  */
 
 import { ServerEventType } from '@yaar/shared';
-import type { AppPoolContext, Task } from './pool-types.js';
+import type { AppPoolContext, QueuedTask, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
 import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
@@ -25,46 +25,45 @@ import {
   type ContextLostReason,
 } from './app-state-handoff.js';
 import { captureDeclaredAppState } from '../features/window/app-protocol.js';
+import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AppTaskProcessor');
 
 /**
- * The window queue's key for a (monitor, app) pair — what `WindowQueuePolicy` files
- * this app's queue and its is-processing flag under.
+ * Everything this class tracks about one app on one monitor, keyed by {@link appAgentKey}.
  *
- * A third spelling of the same pair, beside {@link appAgentKey} (the pool's map key)
- * and {@link appRolePrefix} (the per-turn role, in `roles.ts`). The three keyspaces
- * are deliberately distinct — this one shares a namespace with plain-window queue
- * keys — but each has exactly one owner now, because all three were hand-rebuilt at
- * call sites and two of them had already drifted: this key and the role prefix put
- * the monitor and the app in **opposite orders**, which reads as a typo right up
- * until you swap them and the queue silently stops matching.
+ * One record rather than a map per field, because the fields used to be six maps under
+ * two spellings of the same (monitor, app) pair — this key, and a queue key of its own
+ * that `WindowQueuePolicy` filed the queue and the is-processing flag under — and each
+ * teardown path cleared a different subset: `clearMonitor` reached two of the six, and
+ * the processing flags were never deleted at all. A slot goes in one `delete`.
  */
-export function appProcessingKey(monitorId: string, appId: string): string {
-  return `app-${monitorId}-${appId}`;
-}
-
-export class AppTaskProcessor {
-  /** Track the most recent windowId per `{monitorId}::{appId}` (for tool resolution). */
-  private activeWindows = new Map<string, string>();
-  /** Cached agent profiles per appId (a profile depends only on the app). */
-  private profiles = new Map<string, AgentProfile>();
-  /** Fingerprints captured immediately before an app agent is released. */
-  private handoffState = new AppStateHandoffStore();
+interface AppSlot {
   /**
-   * The main turn running under a processing key, so a window close can wait it out
-   * instead of racing it. Resolves — never rejects — once `handleAppTask`'s `finally`
-   * has run, which is the moment the app is genuinely idle. See
-   * {@link handleWindowClose}.
-   *
-   * Only the turns the processing flag governs are tracked; a parallel (`actionId`)
-   * task never set that flag and never blocked one. `AgentSession` serializes those
-   * against the main turn on its own.
+   * Main turns waiting for the running one. Bounded, on the same limit as a monitor's
+   * queue: unbounded, an app agent wedged mid-turn (a provider that never returns, an
+   * iframe that never answers) collected every later click in that window with no
+   * ceiling and no refusal. The refusal goes through `enqueueOrReject`.
    */
-  private inflight = new Map<string, Promise<void>>();
+  queue: QueuedTask[];
   /**
-   * Processing keys whose agent must be retired the moment its turn stops.
+   * The main turn running now, if any — its presence *is* "the app is busy". Resolves,
+   * never rejects, once `handleAppTask`'s `finally` has begun, so a window close can wait
+   * the turn out instead of racing it. See {@link AppTaskProcessor.handleWindowClose}.
+   *
+   * Only main turns are tracked; a parallel (`actionId`) task never set this and never
+   * blocked one. `AgentSession` serializes those against the main turn on its own.
+   *
+   * Cleared at the very end of the turn's teardown, after any pending release — not
+   * before it. The busy flag and the waitable turn used to be two maps, emptied at two
+   * different moments, and a close landing between them (while the teardown was still
+   * retiring the agent) found a busy app with no turn to wait for, cleared the flag
+   * itself, and let the next message start a turn beside the drain.
+   */
+  turn?: Promise<void>;
+  /**
+   * The agent must be retired the moment its turn stops.
    *
    * A close that lands mid-turn cannot dispose the agent where it stands — the turn is
    * still running on it — and it cannot dispose it after `await`ing the turn either,
@@ -72,16 +71,26 @@ export class AppTaskProcessor {
    * same agent. So the close leaves the request here and the turn's teardown honours it,
    * inside the processing lock, between the last message and the first queued one.
    */
-  private pendingRelease = new Set<string>();
+  pendingRelease: boolean;
+  /** The most recently interacted window (for tool resolution). */
+  activeWindow?: string;
   /**
-   * App-agent keys whose agent was reclaimed without the app tier asking, and the reason,
-   * until the successor's first turn has been told.
+   * Why the agent was reclaimed without the app tier asking, until the successor's first
+   * turn has been told.
    *
-   * Keyed by (monitor, app) rather than by window because that is what an app agent is:
-   * one window closing and another opening is the same agent, and the successor owes the
+   * Per (monitor, app) rather than per window because that is what an app agent is: one
+   * window closing and another opening is the same agent, and the successor owes the
    * notice to whichever window speaks to it first.
    */
-  private contextLost = new Map<string, ContextLostReason>();
+  contextLost?: ContextLostReason;
+}
+
+export class AppTaskProcessor {
+  private slots = new Map<string, AppSlot>();
+  /** Cached agent profiles per appId (a profile depends only on the app). */
+  private profiles = new Map<string, AgentProfile>();
+  /** Fingerprints captured immediately before an app agent is released. */
+  private handoffState = new AppStateHandoffStore();
 
   constructor(private readonly ctx: AppPoolContext) {
     // Every per-app reclamation, including the ones no app task caused — see
@@ -92,8 +101,34 @@ export class AppTaskProcessor {
     this.ctx.agentPool.appAgents.onReclaimed((monitorId, appId, reason) => {
       if (reason === 'monitor-closed') return;
       this.forgetHandoffState(monitorId, appId);
-      if (reason !== 'release') this.contextLost.set(appAgentKey(monitorId, appId), reason);
+      if (reason !== 'release') this.slot(monitorId, appId).contextLost = reason;
     });
+  }
+
+  private slot(monitorId: string, appId: string): AppSlot {
+    const key = appAgentKey(monitorId, appId);
+    let slot = this.slots.get(key);
+    if (!slot) {
+      slot = { queue: [], pendingRelease: false };
+      this.slots.set(key, slot);
+    }
+    return slot;
+  }
+
+  /** Drop a slot that no longer holds anything, so a closed app leaves nothing behind. */
+  private pruneSlot(monitorId: string, appId: string): void {
+    const key = appAgentKey(monitorId, appId);
+    const slot = this.slots.get(key);
+    if (
+      slot &&
+      slot.queue.length === 0 &&
+      !slot.turn &&
+      !slot.pendingRelease &&
+      !slot.activeWindow &&
+      !slot.contextLost
+    ) {
+      this.slots.delete(key);
+    }
   }
 
   /**
@@ -130,14 +165,14 @@ export class AppTaskProcessor {
     // windows. Both reach the same window here, and the difference used to survive all
     // the way out to `WINDOW_AGENT_STATUS`, which then named a window the client had
     // never heard of: the app agent ran, and the window's badge never lit. It also split
-    // `activeWindows`, the context tape's window source, and the reload fingerprint
+    // the active window, the context tape's window source, and the reload fingerprint
     // across two spellings of one window.
     const windowId =
       this.ctx.windowState.handleMap.resolve(task.windowId, monitorId) ?? task.windowId;
 
-    this.activeWindows.set(appAgentKey(monitorId, appId), windowId);
+    const slot = this.slot(monitorId, appId);
+    slot.activeWindow = windowId;
 
-    const processingKey = appProcessingKey(monitorId, appId);
     const isParallel = !!task.actionId;
 
     // If the app agent is already busy, try to steer (inject mid-turn message).
@@ -148,7 +183,7 @@ export class AppTaskProcessor {
     // release happens when it reaches the front. Deliberately not an interrupt: the
     // flag says the *next* request needs no history, not that the running one should
     // be abandoned.
-    if (!isParallel && this.ctx.windowQueuePolicy.isProcessing(processingKey)) {
+    if (!isParallel && slot.turn) {
       const steered =
         !task.fresh && (await this.ctx.agentPool.appAgents.steer(monitorId, appId, task.content));
       if (steered) {
@@ -158,7 +193,9 @@ export class AppTaskProcessor {
         await this.ctx.sendEvent({
           type: ServerEventType.MESSAGE_ACCEPTED,
           messageId: task.messageId,
-          agentId: processingKey,
+          agentId:
+            this.ctx.agentPool.appAgents.get(monitorId, appId)?.currentRole ??
+            appRolePrefix(monitorId, appId),
         });
         return;
       }
@@ -169,12 +206,12 @@ export class AppTaskProcessor {
       await enqueueOrReject({
         sendEvent: (event) => this.ctx.sendEvent(event),
         queue: {
-          canEnqueue: () => this.ctx.windowQueuePolicy.canEnqueue(processingKey),
-          enqueue: () => this.ctx.windowQueuePolicy.enqueue(processingKey, task),
+          canEnqueue: () => slot.queue.length < MAX_QUEUE_SIZE,
+          enqueue: () => slot.queue.push({ task, timestamp: Date.now() }),
         },
         task,
         monitorId,
-        maxQueueSize: this.ctx.windowQueuePolicy.maxSize,
+        maxQueueSize: MAX_QUEUE_SIZE,
         why: 'Please wait for current operations to complete.',
         onQueued: (position) =>
           log.info('queued app task', { messageId: task.messageId, appId, monitorId, position }),
@@ -182,22 +219,15 @@ export class AppTaskProcessor {
       return;
     }
 
-    // The flag is the main turn's alone. A parallel (`actionId`) task neither checks it
+    // `slot.turn` is the main turn's alone. A parallel (`actionId`) task neither checks it
     // above nor owns it here: one that set and cleared it would, finishing mid-turn,
     // mark the app idle under a main turn still running — and the next message would
-    // start a second main turn on the same agent and overwrite `inflight`.
-    //
-    // Published in the same synchronous block as the flag, so there is no instant in
-    // which the app reads as busy with no turn to wait for.
+    // start a second main turn on the same agent.
     let settleTurn: () => void = () => {};
     if (!isParallel) {
-      this.ctx.windowQueuePolicy.setProcessing(processingKey, true);
-      this.inflight.set(
-        processingKey,
-        new Promise<void>((resolve) => {
-          settleTurn = resolve;
-        }),
-      );
+      slot.turn = new Promise<void>((resolve) => {
+        settleTurn = resolve;
+      });
     }
 
     const rolePrefix = appRolePrefix(monitorId, appId);
@@ -320,25 +350,23 @@ export class AppTaskProcessor {
         },
       });
     } finally {
-      // Order matters: settle *before* draining. A close waiting on this turn resumes on
-      // the microtask after the `await` below, by which point the flag is already the
-      // next turn's to own — so the waiter finds the app idle-or-busy correctly instead
-      // of clearing a flag `processQueue` has just set.
       settleTurn();
       // Everything below is the main turn's teardown. A parallel task that ran it would
-      // clear the flag under a main turn still running, or honour a close's pending
+      // clear the busy mark under a main turn still running, or honour a close's pending
       // release by disposing the agent that turn is standing on.
       if (!isParallel) {
-        this.inflight.delete(processingKey);
         // A close that landed mid-turn asked for this agent to be retired. Here, and not
         // where the close ran: this is inside the processing lock and ahead of the drain,
         // so the queued messages below are answered by the *replacement* agent rather
-        // than starting a turn on one that is about to be disposed underneath them.
-        if (this.pendingRelease.delete(processingKey)) {
+        // than starting a turn on one that is about to be disposed underneath them. A
+        // loop, because the app still reads as busy while the release runs, so a close
+        // arriving during it leaves its request here too.
+        while (slot.pendingRelease) {
+          slot.pendingRelease = false;
           await this.releaseAgent(monitorId, appId);
         }
-        this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
-        await this.processQueue(processingKey);
+        slot.turn = undefined;
+        await this.processQueue(slot);
       }
     }
   }
@@ -391,7 +419,7 @@ export class AppTaskProcessor {
 
   /** The most recently active windowId for an app on a monitor. */
   getActiveWindowId(monitorId: string, appId: string): string | undefined {
-    return this.activeWindows.get(appAgentKey(monitorId, appId));
+    return this.slots.get(appAgentKey(monitorId, appId))?.activeWindow;
   }
 
   /**
@@ -402,8 +430,8 @@ export class AppTaskProcessor {
    * `lastWindow` is decided by `WindowEventCoordinator`, which asks the window registry
    * one question and spends the answer on both tiers it reclaims (this agent and the
    * app's sub-agents). Asked here as well it would be a second copy of a subtle
-   * predicate — the registry, not `activeWindows`, and scoped to this monitor — free to
-   * drift from the one that governs the personas.
+   * predicate — the registry, not the slot's active window, and scoped to this monitor —
+   * free to drift from the one that governs the personas.
    */
   async handleWindowClose(
     windowId: string,
@@ -414,13 +442,13 @@ export class AppTaskProcessor {
     // The window is already gone from the registry by the time this runs, so the
     // caller passes the monitor it belonged to.
     const owner = monitorId ?? this.ownerMonitor(windowId);
-    const key = appAgentKey(owner, appId);
-    const processingKey = appProcessingKey(owner, appId);
+    const slot = this.slots.get(appAgentKey(owner, appId));
 
     // Clear any queued tasks for this app on this monitor. Each is a click or message the
     // user made in a window that has since closed — it will not run, and saying so is the
     // difference between a cancelled action and one that appears to still be pending.
-    for (const { task } of this.ctx.windowQueuePolicy.clearQueue(processingKey)) {
+    const dropped = slot?.queue.splice(0) ?? [];
+    for (const { task } of dropped) {
       await this.ctx.sendEvent({
         type: ServerEventType.ERROR,
         error: `Message dropped: window ${windowId} was closed before it ran.`,
@@ -429,9 +457,7 @@ export class AppTaskProcessor {
       });
     }
 
-    if (this.activeWindows.get(key) === windowId) {
-      this.activeWindows.delete(key);
-    }
+    if (slot?.activeWindow === windowId) slot.activeWindow = undefined;
 
     const agent = this.ctx.agentPool.appAgents.get(owner, appId);
     if (agent?.session.isRunning()) {
@@ -457,20 +483,18 @@ export class AppTaskProcessor {
     // delivered the answer the close was supposed to cancel.
     //
     // So: hand the rest to the turn. Its own `finally` retires the agent if we ask, then
-    // clears the flag, then drains — and anything arriving meanwhile queues behind it
+    // clears the busy mark, then drains — and anything arriving meanwhile queues behind it
     // (bounded and refused out loud by `enqueueOrReject`) rather than racing any of it.
-    // Only a key with no turn behind it is finished here — a flag set by a task that
-    // never reached one.
-    const turn = this.inflight.get(processingKey);
-    if (turn) {
-      if (lastWindow) this.pendingRelease.add(processingKey);
-      await turn;
-    } else {
-      if (lastWindow) await this.releaseAgent(owner, appId);
-      this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
+    // With no turn running, the app is idle and the release is ours to do.
+    if (slot?.turn) {
+      if (lastWindow) slot.pendingRelease = true;
+      await slot.turn;
+    } else if (lastWindow) {
+      await this.releaseAgent(owner, appId);
     }
 
     this.handoffState.forget(windowId);
+    this.pruneSlot(owner, appId);
   }
 
   /**
@@ -487,28 +511,55 @@ export class AppTaskProcessor {
     this.profiles.delete(appId);
   }
 
+  /** Whether a main turn is running for this app on this monitor. */
+  isTurnRunning(monitorId: string, appId: string): boolean {
+    return !!this.slots.get(appAgentKey(monitorId, appId))?.turn;
+  }
+
+  /** Queued task counts per app agent key, for pool stats. Empty queues are omitted. */
+  getQueueSizes(): Record<string, number> {
+    const sizes: Record<string, number> = {};
+    for (const [key, slot] of this.slots) {
+      if (slot.queue.length > 0) sizes[key] = slot.queue.length;
+    }
+    return sizes;
+  }
+
   /**
-   * Drop the window tracking for one monitor (its app agents are disposed with it).
+   * Drop every app's queued tasks and hand them back, for the caller to report. See
+   * `MonitorQueuePolicy.clear()` for why they are returned rather than swallowed.
+   *
+   * The running turns keep their slots: each still drains its (now empty) queue and
+   * clears its own busy mark on the way out.
+   */
+  clearQueues(): Task[] {
+    const dropped: Task[] = [];
+    for (const slot of this.slots.values()) {
+      dropped.push(...slot.queue.splice(0).map((q) => q.task));
+    }
+    return dropped;
+  }
+
+  /**
+   * Drop everything tracked for one monitor (its app agents are disposed with it).
+   *
+   * A turn still unwinding keeps its own reference to its slot, so its teardown finishes
+   * against that record and cannot drain or clear a successor's.
    */
   clearMonitor(monitorId: string): void {
     const prefix = appAgentKey(monitorId, '');
-    for (const key of this.activeWindows.keys()) {
-      if (key.startsWith(prefix)) this.activeWindows.delete(key);
-    }
-    for (const key of this.contextLost.keys()) {
-      if (key.startsWith(prefix)) this.contextLost.delete(key);
+    for (const key of this.slots.keys()) {
+      if (key.startsWith(prefix)) this.slots.delete(key);
     }
     this.handoffState.forgetMonitor(monitorId);
   }
 
   disposeAll(): void {
-    this.activeWindows.clear();
+    // Bookkeeping only — each slot's turn resolver is held by the turn's own `finally`,
+    // so a close already waiting on one is released by the turn, not by this map.
+    this.slots.clear();
     this.profiles.clear();
     this.handoffState.clear();
-    this.contextLost.clear();
-    // Bookkeeping only — each entry's resolver is held by its own turn's `finally`, so
-    // a close already waiting on one is released by the turn, not by this map.
-    this.inflight.clear();
   }
 
   /**
@@ -519,10 +570,10 @@ export class AppTaskProcessor {
    * on the successor rather than on the reclaimed agent's own last breath.
    */
   private takeContextLostNotice(monitorId: string, appId: string): string {
-    const key = appAgentKey(monitorId, appId);
-    const reason = this.contextLost.get(key);
-    if (!reason) return '';
-    this.contextLost.delete(key);
+    const slot = this.slots.get(appAgentKey(monitorId, appId));
+    const reason = slot?.contextLost;
+    if (!slot || !reason) return '';
+    slot.contextLost = undefined;
     return formatContextLostNotice(reason);
   }
 
@@ -563,10 +614,13 @@ export class AppTaskProcessor {
    * waiting on `hook: 'response'`, that is a turn that simply never comes back. The
    * same sentence `handleWindowClose` uses, then, and keep draining until something is
    * actually runnable.
+   *
+   * Takes the slot the finished turn ran under rather than looking it up again: if the
+   * monitor was cleared meanwhile, a fresh slot under the same key belongs to someone else.
    */
-  private async processQueue(processingKey: string): Promise<void> {
+  private async processQueue(slot: AppSlot): Promise<void> {
     for (;;) {
-      const next = this.ctx.windowQueuePolicy.dequeue(processingKey);
+      const next = slot.queue.shift();
       if (!next) return;
 
       const appId = next.task.windowId

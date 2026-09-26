@@ -2,7 +2,7 @@
  * CdpBrowserProvider — shared CDP plumbing for browser providers.
  *
  * Holds everything that is identical between the two `BrowserProvider`
- * implementations: the session map, browserId assignment, tab creation via
+ * implementations: the per-browser records, browserId assignment, tab creation via
  * Chrome's HTTP debugging API, target discovery / auto-adoption of popups, the
  * idle-cleanup loop, and stats.
  *
@@ -54,35 +54,62 @@ interface NewTargetInfo {
   openerId?: string;
 }
 
+/**
+ * Everything the provider knows about one browserId, in one place.
+ *
+ * Every field is optional in spirit because a record legitimately exists without a
+ * live socket: an adoption is claimed before its session is attached, an idle-swept
+ * session keeps its record (and its still-open tab) so the id comes back on revive,
+ * and a revive is in flight before anything else is. Only {@link drop} takes one
+ * apart, which is what stops a teardown path from clearing some of it and leaving
+ * the rest.
+ *
+ * This is the in-memory half. The persisted half — `BrowserSessionStore` — is what
+ * survives a restart, and `drop`'s `forgetRecord` is the one switch between them.
+ */
+interface BrowserRecord {
+  /** The live session, when one is attached. */
+  session?: BrowserSession;
+  /** The Chrome target currently serving this id — mirrored in `targets`. */
+  targetId?: string;
+  /**
+   * Exists only because a target does: an adopted popup or the user's own tab.
+   * Nothing on disk remembers it, so when its target dies there is nothing to
+   * revive and the record goes with it rather than being left as a stale id.
+   */
+  ephemeral: boolean;
+  /** Crash-restarts attempted since the last successful one. */
+  restarts: number;
+  /** A {@link CdpBrowserProvider.reviveSession} in flight, so concurrent callers join it. */
+  reviving?: Promise<BrowserSession | null>;
+  /** An adopted popup not yet handed out by `consumeAdoptedTabs`. */
+  unannounced?: boolean;
+}
+
 export abstract class CdpBrowserProvider implements BrowserProvider {
-  protected sessions = new Map<string, BrowserSession>();
+  protected records = new Map<string, BrowserRecord>();
+  /**
+   * Every page target we have claimed that Chrome has not reported destroyed, and
+   * which browserId it serves. The reverse of `BrowserRecord.targetId`, and the only
+   * honest way to answer "who opened this popup?" — CDP names the *opener target*,
+   * not a browserId.
+   *
+   * `null` is a target we let go of that is still open in Chrome — a closed
+   * session's tab, a crashed target a restart replaced. Owned by nobody, so its
+   * death is no one's news, but still claimed, so discovery and `syncExistingTabs`
+   * never adopt it back as a stranger.
+   */
+  protected targets = new Map<string, string | null>();
   protected nextId = 0;
   protected pendingSessions = 0;
   protected cleanupTimer: ReturnType<typeof setInterval> | null = null;
   protected browserCdp: CDPClient | null = null;
-  protected adoptedTargets = new Set<string>();
-  protected knownTargetIds = new Set<string>();
-  protected pendingAdoptions = new Map<string, { browserId: string; openerBrowserId?: string }>();
-  /**
-   * Which browserId is behind each CDP target. The reverse of what the session map
-   * holds, and the only honest way to answer "who opened this popup?" — CDP names
-   * the *opener target*, not a browserId.
-   */
-  protected targetOwners = new Map<string, string>();
   /** The shield every tracked session carries; see {@link setShield}. */
   protected shield: ShieldProfile = { initScript: '', blockedUrls: [] };
-  /**
-   * Sessions that exist only because a target does: adopted popups and the user's
-   * own tabs. Nothing on disk remembers them, so when their target dies there is
-   * nothing to revive and the entry is dropped rather than left as a stale id.
-   */
-  protected ephemeralSessions = new Set<string>();
   private tabListeners = new Set<(event: BrowserTabEvent) => void>();
   private discoveryPromise: Promise<void> | null = null;
   /** The named sessions this provider has, as they survive a restart. */
   protected readonly store = new BrowserSessionStore();
-  private restartCounts = new Map<string, number>();
-  private reviving = new Map<string, Promise<BrowserSession | null>>();
 
   // ── Subclass contract ──────────────────────────────────────────────────────
 
@@ -113,6 +140,97 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    */
   protected abstract reachableChromePort(): Promise<number | null>;
 
+  private *liveSessions(): Generator<[string, BrowserSession]> {
+    for (const [id, rec] of this.records) {
+      if (rec.session) yield [id, rec.session];
+    }
+  }
+
+  private get liveCount(): number {
+    let n = 0;
+    for (const rec of this.records.values()) if (rec.session) n++;
+    return n;
+  }
+
+  /** Remove a record that no longer holds anything — no socket, no tab, no revive. */
+  private pruneIfEmpty(browserId: string): void {
+    const rec = this.records.get(browserId);
+    if (rec && !rec.session && !rec.targetId && !rec.reviving) this.records.delete(browserId);
+  }
+
+  private recordFor(browserId: string): BrowserRecord {
+    let rec = this.records.get(browserId);
+    if (!rec) {
+      rec = { ephemeral: false, restarts: 0 };
+      this.records.set(browserId, rec);
+    }
+    return rec;
+  }
+
+  /**
+   * Claim a target for a fresh adoption, before the first await — a second
+   * announcement of the same target, or a sync racing it, must find it taken.
+   */
+  private claim(browserId: string, targetId: string): BrowserRecord {
+    const rec: BrowserRecord = { targetId, ephemeral: true, restarts: 0 };
+    this.records.set(browserId, rec);
+    this.targets.set(targetId, browserId);
+    return rec;
+  }
+
+  /** Point a record at a new target; the one it had (if any) is released, not forgotten. */
+  private bindTarget(browserId: string, rec: BrowserRecord, targetId: string): void {
+    if (rec.targetId && rec.targetId !== targetId) this.releaseTarget(browserId, rec.targetId);
+    rec.targetId = targetId;
+    this.targets.set(targetId, browserId);
+  }
+
+  private releaseTarget(browserId: string, targetId: string): void {
+    if (this.targets.get(targetId) === browserId) this.targets.set(targetId, null);
+  }
+
+  /** The browserId a target currently serves, if any. */
+  private ownerOf(targetId: string): string | undefined {
+    return this.targets.get(targetId) ?? undefined;
+  }
+
+  /**
+   * Take a browser's live session away — the one teardown every path goes through.
+   *
+   * `forgetRecord: true` is a decision: the user shut the window, the agent closed
+   * the tab, the popup's target died. The in-memory record goes, its tab (if still
+   * open) is released, and the persisted record is forgotten so the id no longer
+   * revives.
+   *
+   * `forgetRecord: false` drops only the socket — the idle sweep, server exit. The
+   * persisted record stays so the id comes back the next time someone asks for it,
+   * and the in-memory record keeps whatever still means something: the tab left
+   * open in Chrome (so its death is still announced and it is never re-adopted as a
+   * stranger), the crash-restart count, a revive already in flight.
+   *
+   * Bookkeeping is settled before the close is awaited, so a close that throws
+   * cannot leave half a record behind. The close's own error is the caller's to
+   * swallow or surface.
+   */
+  private async drop(browserId: string, { forgetRecord }: { forgetRecord: boolean }) {
+    const rec = this.records.get(browserId);
+    const session = rec?.session;
+    if (rec) {
+      rec.session = undefined;
+      rec.unannounced = false;
+      if (forgetRecord) {
+        if (rec.targetId) this.releaseTarget(browserId, rec.targetId);
+        this.records.delete(browserId);
+      } else {
+        this.pruneIfEmpty(browserId);
+      }
+    }
+    // Ephemeral ids were never written down; forgetting one could only ever erase
+    // a record that some *other* tab left under the same name.
+    if (forgetRecord && !rec?.ephemeral) this.store.forget(browserId);
+    if (session) await session.close();
+  }
+
   // ── Shared lifecycle ─────────────────────────────────────────────────────────
 
   protected startCleanup() {
@@ -127,7 +245,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     const now = Date.now();
     const toClose: string[] = [];
 
-    for (const [id, session] of this.sessions) {
+    for (const [id, session] of this.liveSessions()) {
       // Someone is looking at this tab. Reading a long page is not idleness, and
       // the pre-P1 sweep would take the canvas out from under them mid-article.
       if (session.screencasting) continue;
@@ -139,24 +257,25 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     }
 
     for (const id of toClose) {
-      const session = this.sessions.get(id);
+      const session = this.records.get(id)?.session;
       if (session) {
         console.log(`[browser] Closing idle browser ${id} (window: ${session.windowId})`);
-        this.sessions.delete(id);
-        await session.close().catch(() => {});
+        // Not a close: a collected session keeps its record and comes back the next
+        // time someone asks for that id.
+        await this.drop(id, { forgetRecord: false }).catch(() => {});
       }
     }
 
     // If no sessions left, release the Chrome process (only when we own it).
-    if (this.sessions.size === 0 && this.ownsChrome) {
+    if (this.liveCount === 0 && this.ownsChrome) {
       await this.closeEndpoint();
     }
   }
 
   /**
-   * Put a session in the map and give it the lifecycle a process has: its state is
-   * written down as it changes, and its death is something the provider reacts to
-   * rather than something a viewer discovers by looking at a frozen canvas.
+   * Attach a session to its record and give it the lifecycle a process has: its
+   * state is written down as it changes, and its death is something the provider
+   * reacts to rather than something a viewer discovers by looking at a frozen canvas.
    *
    * `persist` is false for a tab we merely adopted — the user's own window, or a
    * popup a page opened. Those are not ours to recreate, and writing them down
@@ -167,7 +286,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     session: BrowserSession,
     { persist }: { persist: boolean },
   ): void {
-    this.sessions.set(browserId, session);
+    this.recordFor(browserId).session = session;
     if (this.shield.initScript || this.shield.blockedUrls.length > 0) {
       session.applyShield(this.shield).catch((err) => {
         console.error(`[browser] Failed to apply shield to session ${browserId}:`, err);
@@ -207,26 +326,31 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    * and the window is left showing the failure, which is the honest outcome.
    */
   private async restartCrashed(browserId: string, session: BrowserSession): Promise<void> {
-    if (this.sessions.get(browserId) !== session) return;
+    const rec = this.records.get(browserId);
+    if (!rec || rec.session !== session) return;
 
-    const attempts = (this.restartCounts.get(browserId) ?? 0) + 1;
-    if (attempts > MAX_CRASH_RESTARTS) {
-      console.error(`[browser] Session ${browserId} crashed ${attempts - 1}x — giving up`);
-      this.restartCounts.delete(browserId);
+    rec.restarts++;
+    if (rec.restarts > MAX_CRASH_RESTARTS) {
+      console.error(`[browser] Session ${browserId} crashed ${rec.restarts - 1}x — giving up`);
       await this.closeSession(browserId).catch(() => {});
       return;
     }
-    this.restartCounts.set(browserId, attempts);
 
     try {
       const port = await this.reachableChromePort();
       if (port == null) return; // Chrome itself is gone; a revive would relaunch it.
       const target = await this.openTarget(port);
       await session.reattach(target.webSocketDebuggerUrl, session.currentUrl);
-      this.knownTargetIds.add(target.id);
-      this.targetOwners.set(target.id, browserId);
+      if (rec.session !== session || this.records.get(browserId) !== rec) {
+        // Closed while it was coming back. The fresh tab is nobody's.
+        this.targets.set(target.id, null);
+        return;
+      }
+      // The crashed target is released rather than kept: if Chrome later reports it
+      // destroyed, that is not this (now live) session closing.
+      this.bindTarget(browserId, rec, target.id);
       console.log(`[browser] Session ${browserId} revived → ${session.currentUrl}`);
-      this.restartCounts.delete(browserId);
+      rec.restarts = 0;
     } catch (err) {
       console.error(`[browser] Failed to revive session ${browserId}:`, err);
     }
@@ -242,17 +366,16 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    * window is holding us to.
    */
   async reviveSession(browserId: string): Promise<BrowserSession | null> {
-    const live = this.sessions.get(browserId);
+    const existing = this.records.get(browserId);
+    const live = existing?.session;
     if (live && !live.isClosed) return live;
+    if (existing?.reviving) return existing.reviving;
 
-    const inFlight = this.reviving.get(browserId);
-    if (inFlight) return inFlight;
-
-    const attempt = (async () => {
+    const attempt: Promise<BrowserSession | null> = (async () => {
       await this.store.load();
       const record = this.store.get(browserId);
       if (!record) return null;
-      if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) return null;
+      if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) return null;
 
       const { session } = await this.createSession(browserId, { mobile: record.mobile });
       session.windowId = record.windowId;
@@ -265,9 +388,15 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       }
       console.log(`[browser] Revived session ${browserId} → ${session.currentUrl}`);
       return session;
-    })().finally(() => this.reviving.delete(browserId));
+    })().finally(() => {
+      const rec = this.records.get(browserId);
+      if (rec?.reviving !== attempt) return;
+      rec.reviving = undefined;
+      // A revive with nothing to revive leaves an empty record; it means nothing.
+      this.pruneIfEmpty(browserId);
+    });
 
-    this.reviving.set(browserId, attempt);
+    this.recordFor(browserId).reviving = attempt;
     return attempt.catch((err) => {
       console.error(`[browser] Revive failed for ${browserId}:`, err);
       return null;
@@ -311,8 +440,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       this.browserCdp.on('Target.targetCreated', (params: unknown) => {
         const p = params as { targetInfo: NewTargetInfo };
         if (p.targetInfo.type !== 'page') return;
-        if (this.knownTargetIds.has(p.targetInfo.targetId)) return;
-        if (this.adoptedTargets.has(p.targetInfo.targetId)) return;
+        if (this.targets.has(p.targetInfo.targetId)) return;
         if (p.targetInfo.url === 'about:blank' && !p.targetInfo.openerId) return;
 
         this.handleNewTarget(p.targetInfo, port).catch((err) => {
@@ -330,22 +458,20 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   }
 
   private async handleNewTarget(targetInfo: NewTargetInfo, chromePort: number): Promise<void> {
-    if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) {
+    if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) {
       console.log('[browser] Cannot adopt new tab — limit reached');
       return;
     }
-
-    this.adoptedTargets.add(targetInfo.targetId);
 
     // Chrome names the opener target outright. The old reading of this — "whichever
     // session was active most recently" — was only ever right when an agent's click
     // was the last thing that happened, which is exactly not the case while a human
     // is driving the page live.
-    const openerBrowserId = targetInfo.openerId
-      ? this.targetOwners.get(targetInfo.openerId)
-      : undefined;
+    const openerBrowserId = targetInfo.openerId ? this.ownerOf(targetInfo.openerId) : undefined;
 
     const browserId = String(this.nextId++);
+    const rec = this.claim(browserId, targetInfo.targetId);
+    let tracked = false;
 
     try {
       const resp = await fetch(`http://127.0.0.1:${chromePort}/json`, {
@@ -357,7 +483,14 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         url: string;
       }>;
       const target = targets.find((t) => t.id === targetInfo.targetId);
-      if (!target) return;
+      if (!target) {
+        // Released, not unclaimed: a target Chrome announced but will not list is
+        // not worth a second attempt from every later sync.
+        if (this.records.get(browserId) === rec) {
+          void this.drop(browserId, { forgetRecord: true }).catch(() => {});
+        }
+        return;
+      }
 
       this.pendingSessions++;
       try {
@@ -368,17 +501,21 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, {
           adopt: true,
         });
+        if (this.records.get(browserId) !== rec) {
+          // The target died, or the endpoint went, while we were attaching.
+          await session.close().catch(() => {});
+          return;
+        }
         session.openerBrowserId = openerBrowserId;
         session.currentUrl = target.url || session.currentUrl;
-        this.knownTargetIds.add(target.id);
-        this.targetOwners.set(target.id, browserId);
-        this.ephemeralSessions.add(browserId);
         this.track(browserId, session, { persist: false });
+        tracked = true;
         // A popup is usually still navigating when it is announced, so its address
         // is read once it has settled rather than from the announcement.
         await new Promise((r) => setTimeout(r, 500));
         await session.refreshLocation();
-        this.pendingAdoptions.set(browserId, { browserId, openerBrowserId });
+        if (rec.session !== session) return; // gone in the meantime — nothing to announce
+        rec.unannounced = true;
         this.emitTabEvent({
           type: 'opened',
           browserId,
@@ -393,6 +530,11 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         this.pendingSessions--;
       }
     } catch (err) {
+      // Before the session is tracked, a failure leaves nothing worth keeping; after,
+      // the tab is adopted and only its announcement went wrong.
+      if (!tracked && this.records.get(browserId) === rec) {
+        void this.drop(browserId, { forgetRecord: true }).catch(() => {});
+      }
       console.error('[browser] Failed to adopt target:', err);
     }
   }
@@ -401,28 +543,30 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    * A target went away — the page closed its popup, the user closed the tab.
    *
    * Announced so a viewer watching that tab can step back to whatever opened it,
-   * instead of holding a canvas that will never paint again. An ephemeral session
+   * instead of holding a canvas that will never paint again. An ephemeral record
    * goes with its target: there is no record to revive it from, and leaving the
    * entry behind would offer an id that resolves to a dead socket.
    */
   private handleTargetGone(targetId: string): void {
-    const browserId = this.targetOwners.get(targetId);
-    this.targetOwners.delete(targetId);
-    this.adoptedTargets.delete(targetId);
-    this.knownTargetIds.delete(targetId);
+    const browserId = this.ownerOf(targetId);
+    this.targets.delete(targetId);
     if (!browserId) return;
 
-    const session = this.sessions.get(browserId);
+    const rec = this.records.get(browserId);
+    if (rec) rec.targetId = undefined;
     this.emitTabEvent({
       type: 'closed',
       browserId,
-      openerBrowserId: session?.openerBrowserId,
+      openerBrowserId: rec?.session?.openerBrowserId,
     });
 
-    if (!this.ephemeralSessions.delete(browserId) || !session) return;
-    this.sessions.delete(browserId);
-    this.pendingAdoptions.delete(browserId);
-    void session.close().catch(() => {});
+    // A non-ephemeral record is left to its own lifecycle: where crash-restart is
+    // wired, the socket going with the tab brings it back on a fresh target.
+    if (!rec?.ephemeral) {
+      this.pruneIfEmpty(browserId);
+      return;
+    }
+    void this.drop(browserId, { forgetRecord: true }).catch(() => {});
   }
 
   /**
@@ -464,22 +608,24 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     for (const t of targets) {
       if (t.type !== 'page') continue;
       if (!t.webSocketDebuggerUrl) continue; // not attachable (e.g. DevTools already open)
-      if (this.knownTargetIds.has(t.id) || this.adoptedTargets.has(t.id)) continue;
+      if (this.targets.has(t.id)) continue;
       const url = t.url || '';
       // Skip internal / scratch pages — nothing useful to address there.
       if (/^(chrome|chrome-extension|devtools|about|edge):/.test(url)) continue;
-      if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) break;
+      if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) break;
 
-      this.adoptedTargets.add(t.id);
-      this.knownTargetIds.add(t.id);
       const browserId = String(this.nextId++);
+      const rec = this.claim(browserId, t.id);
       this.pendingSessions++;
       try {
-        this.targetOwners.set(t.id, browserId);
-        this.ephemeralSessions.add(browserId);
         const session = await BrowserSession.create(browserId, t.webSocketDebuggerUrl, {
           adopt: true,
         });
+        if (this.records.get(browserId) !== rec) {
+          // The tab closed, or the endpoint went, while we were attaching.
+          await session.close().catch(() => {});
+          continue;
+        }
         session.currentUrl = url || 'about:blank';
         session.currentTitle = t.title || '';
         this.track(browserId, session, { persist: false });
@@ -487,10 +633,10 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
           `[browser] Adopted existing tab [browser:${browserId}] → ${session.currentUrl}`,
         );
       } catch (err) {
-        this.adoptedTargets.delete(t.id);
-        this.knownTargetIds.delete(t.id);
-        this.targetOwners.delete(t.id);
-        this.ephemeralSessions.delete(browserId);
+        // Unclaimed rather than released: a tab we failed to attach to is worth
+        // another try on the next sync.
+        if (this.records.get(browserId) === rec) this.records.delete(browserId);
+        if (this.targets.get(t.id) === browserId) this.targets.delete(t.id);
         console.error('[browser] Failed to adopt existing tab:', err);
       } finally {
         this.pendingSessions--;
@@ -498,14 +644,13 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     }
   }
 
-  /** Check and consume any pending auto-adopted tabs. */
   async setShield(patch: Partial<ShieldProfile>): Promise<ShieldProfile> {
     this.shield = {
       initScript: patch.initScript ?? this.shield.initScript,
       blockedUrls: [...(patch.blockedUrls ?? this.shield.blockedUrls)],
     };
     await Promise.all(
-      [...this.sessions.values()].map((s) =>
+      [...this.liveSessions()].map(([, s]) =>
         s.applyShield(this.shield).catch((err) => {
           console.error(`[browser] Failed to apply shield to session ${s.id}:`, err);
         }),
@@ -518,15 +663,20 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     return { initScript: this.shield.initScript, blockedUrls: [...this.shield.blockedUrls] };
   }
 
+  /** Check and consume any pending auto-adopted tabs. */
   consumeAdoptedTabs(): AdoptedTab[] {
     const result: AdoptedTab[] = [];
-    for (const [browserId, info] of this.pendingAdoptions) {
-      const session = this.sessions.get(browserId);
-      if (session) {
-        result.push({ browserId, url: session.currentUrl, openerBrowserId: info.openerBrowserId });
+    for (const [browserId, rec] of this.records) {
+      if (!rec.unannounced) continue;
+      rec.unannounced = false;
+      if (rec.session) {
+        result.push({
+          browserId,
+          url: rec.session.currentUrl,
+          openerBrowserId: rec.session.openerBrowserId,
+        });
       }
     }
-    this.pendingAdoptions.clear();
     return result;
   }
 
@@ -548,17 +698,24 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     }
   }
 
-  /** Disconnect shared CDP/discovery state, then release the process (if ours). */
+  /**
+   * Disconnect shared CDP/discovery state, then release the process (if ours).
+   *
+   * Every target claim goes with the endpoint — the tabs behind them are gone or
+   * about to be — and so does every record left holding nothing but one. A revive
+   * in flight keeps its record: it will bring the endpoint back up itself.
+   */
   protected async closeEndpoint() {
     if (this.browserCdp) {
       this.browserCdp.close();
       this.browserCdp = null;
     }
-    this.adoptedTargets.clear();
-    this.knownTargetIds.clear();
-    this.targetOwners.clear();
-    this.ephemeralSessions.clear();
-    this.pendingAdoptions.clear();
+    this.targets.clear();
+    for (const [id, rec] of this.records) {
+      rec.targetId = undefined;
+      rec.unannounced = false;
+      if (!rec.session && !rec.reviving) this.records.delete(id);
+    }
     this.discoveryPromise = null;
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
@@ -572,7 +729,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     browserId?: string,
     options?: BrowserSessionOptions,
   ): Promise<{ session: BrowserSession; browserId: string }> {
-    if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) {
+    if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) {
       throw new Error(
         `Browser limit reached (max ${MAX_SESSIONS}). Close an existing browser first.`,
       );
@@ -599,8 +756,10 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
       const target = await this.openTarget(port);
       const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, options);
-      this.knownTargetIds.add(target.id);
-      this.targetOwners.set(target.id, browserId);
+      // Updated in place, not replaced: a revive waiting on this id holds the record.
+      const rec = this.recordFor(browserId);
+      rec.ephemeral = false;
+      this.bindTarget(browserId, rec, target.id);
       this.track(browserId, session, { persist: options?.adopt !== true });
       return { session, browserId };
     } finally {
@@ -609,39 +768,29 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   }
 
   getSession(browserId: string): BrowserSession | undefined {
-    return this.sessions.get(browserId);
+    return this.records.get(browserId)?.session;
   }
 
   getAllSessions(): Map<string, BrowserSession> {
-    return new Map(this.sessions);
+    return new Map(this.liveSessions());
   }
 
   async closeSession(browserId: string): Promise<void> {
-    const session = this.sessions.get(browserId);
-    if (session) {
-      this.sessions.delete(browserId);
-      await session.close();
-    }
     // A close is a decision — the user shut the window, the agent closed the tab —
     // so the record goes with it. The idle sweep deliberately does *not* come
     // through here (see `cleanupIdle`): a collected session keeps its record and
     // comes back the next time someone asks for that id.
-    this.restartCounts.delete(browserId);
-    this.ephemeralSessions.delete(browserId);
-    for (const [targetId, owner] of this.targetOwners) {
-      if (owner === browserId) this.targetOwners.delete(targetId);
-    }
-    this.store.forget(browserId);
+    await this.drop(browserId, { forgetRecord: true });
 
     // Release the Chrome process if no sessions remain — only when we own it.
-    if (this.sessions.size === 0 && this.ownsChrome) {
+    if (this.liveCount === 0 && this.ownsChrome) {
       await this.closeEndpoint();
     }
   }
 
   /** Close all sessions (keeps the endpoint alive for reuse). */
   async closeAll(): Promise<void> {
-    const ids = [...this.sessions.keys()];
+    const ids = [...this.liveSessions()].map(([id]) => id);
     for (const id of ids) {
       await this.closeSession(id);
     }
@@ -649,7 +798,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
   /** Find the session bound to a specific YAAR window. */
   findByWindowId(windowId: string): BrowserSession | undefined {
-    for (const session of this.sessions.values()) {
+    for (const [, session] of this.liveSessions()) {
       if (session.windowId === windowId) return session;
     }
     return undefined;
@@ -658,23 +807,23 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   /**
    * Shut down everything — called on server exit.
    *
-   * Sessions are closed directly rather than through {@link closeSession}: exiting
-   * is not the user deciding to be rid of these tabs, so their records stay on disk
-   * and the next launch can revive them into the profile that still holds their
-   * cookies.
+   * Sessions are dropped without forgetting their records rather than closed
+   * through {@link closeSession}: exiting is not the user deciding to be rid of
+   * these tabs, so their records stay on disk and the next launch can revive them
+   * into the profile that still holds their cookies.
    */
   async shutdown(): Promise<void> {
-    for (const session of this.sessions.values()) {
-      await session.close().catch(() => {});
+    const ids = [...this.liveSessions()].map(([id]) => id);
+    for (const id of ids) {
+      await this.drop(id, { forgetRecord: false }).catch(() => {});
     }
-    this.sessions.clear();
     await this.store.flush().catch(() => {});
     await this.closeEndpoint();
   }
 
   getStats(): BrowserProviderStats {
     return {
-      activeSessions: this.sessions.size,
+      activeSessions: this.liveCount,
       maxSessions: MAX_SESSIONS,
       chromeRunning: this.chromeRunning,
     };
@@ -689,7 +838,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     const now = Date.now();
     const out: BrowserSessionInfo[] = [];
 
-    for (const [id, session] of this.sessions) {
+    for (const [id, session] of [...this.liveSessions()]) {
       out.push({
         id,
         url: session.currentUrl,
@@ -708,7 +857,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     if (this.ownsChrome) {
       await this.store.load();
       for (const record of this.store.list()) {
-        if (this.sessions.has(record.id)) continue;
+        if (this.records.get(record.id)?.session) continue;
         out.push({
           id: record.id,
           url: record.url,

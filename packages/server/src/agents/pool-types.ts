@@ -18,7 +18,6 @@ import type { ExternalTurn, ProviderType, TokenUsage } from '../providers/types.
 import type { SessionId } from '../session/types.js';
 import type {
   MonitorQueuePolicy,
-  WindowQueuePolicy,
   ContextAssemblyPolicy,
   ReloadCachePolicy,
   MonitorBudgetPolicy,
@@ -179,11 +178,10 @@ export interface MonitorPoolContext extends TurnContext, TimelineAccess {
   getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy;
 }
 
-/** What `AppTaskProcessor` needs: the window queues, and the hook that answers a monitor. */
+/** What `AppTaskProcessor` needs: the agent pool, and the hook that answers a monitor. */
 export interface AppPoolContext extends TurnContext, TimelineAccess {
   readonly sessionId: SessionId;
   readonly agentPool: AgentPool;
-  readonly windowQueuePolicy: WindowQueuePolicy;
   /** Deliver a hook-triggered response notification to the monitor agent. */
   notifyHookResponse(
     appId: string,

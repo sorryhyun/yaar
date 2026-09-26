@@ -155,7 +155,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
 10. **Policy pattern**: Server decomposes complex behavior into focused policy classes:
     - `session-policies/` — `StreamToEventMapper` (maps a provider stream to server events; emitted OS Actions are delivered by `LiveSession.handleEmittedAction`)
-    - `context-pool-policies/` — `MonitorQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `MonitorBudgetPolicy`, `WindowSubscriptionPolicy` (handle task queuing, prompt assembly, monitor rate limits, and window change notifications)
+    - `context-pool-policies/` — `MonitorQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `MonitorBudgetPolicy`, `WindowSubscriptionPolicy` (handle task queuing, prompt assembly, monitor rate limits, and window change notifications)
 
 See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/architecture/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/reference/claude_codex.md` for provider behavioral differences. See `docs/guides/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/guides/remote_mode.md` for network access.
 

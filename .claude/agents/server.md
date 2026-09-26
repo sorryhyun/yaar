@@ -44,7 +44,7 @@ SessionHub (singleton registry)
 
 - **Policy classes**: Complex behavior decomposed into focused policies (under `agents/`):
   - `agents/session-policies/`: `StreamToEventMapper`, `ToolActionBridge`
-  - `agents/context-pool-policies/`: `MonitorQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowSubscriptionPolicy`, `MonitorBudgetPolicy`
+  - `agents/context-pool-policies/`: `MonitorQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowSubscriptionPolicy`, `MonitorBudgetPolicy`
 - **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections (observer pattern). All server→frontend events must flow through `LiveSession.broadcast()` — never call `BroadcastCenter.publishToSession()` directly, it bypasses routing and silently fails during active agent streaming. Non-agent contexts (HTTP routes, proxy) go through `actionEmitter` instead, resolved to a session by `session/session-event-router.ts`'s one process-wide subscription per channel.
 - **Warm Pool** (`providers/warm-pool.ts`): Providers pre-initialized at startup. Auto-replenishes when acquired.
 - **actionEmitter**: Tools emit actions via `actionEmitter.emitAction()`, which broadcasts to frontend and optionally waits for rendering feedback.

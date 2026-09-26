@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test';
 import { MonitorQueuePolicy } from '../agents/context-pool-policies/monitor-queue-policy.js';
-import { WindowQueuePolicy } from '../agents/context-pool-policies/window-queue-policy.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-policy.js';
 import {
@@ -38,52 +37,6 @@ describe('MonitorQueuePolicy', () => {
     const policy = new MonitorQueuePolicy(1);
     policy.enqueue({ requestedType: 'monitor', kind: 'user', messageId: '1', content: 'a' });
     expect(policy.canEnqueue()).toBe(false);
-  });
-});
-
-describe('WindowQueuePolicy', () => {
-  it('queues sequentially per key', () => {
-    const policy = new WindowQueuePolicy();
-    policy.enqueue('w1', {
-      requestedType: 'app',
-      kind: 'user',
-      windowId: 'w1',
-      messageId: '1',
-      content: 'first',
-    });
-    policy.enqueue('w1', {
-      requestedType: 'app',
-      kind: 'user',
-      windowId: 'w1',
-      messageId: '2',
-      content: 'second',
-    });
-
-    expect(policy.dequeue('w1')?.task.messageId).toBe('1');
-    expect(policy.dequeue('w1')?.task.messageId).toBe('2');
-  });
-
-  // The window queue was unbounded, so a wedged app agent accumulated every later click
-  // with no ceiling and no refusal. The bound is per key: one stuck app must not start
-  // refusing another app's messages.
-  it('bounds each key independently', () => {
-    const policy = new WindowQueuePolicy(1);
-    expect(policy.canEnqueue('app-0-memo')).toBe(true);
-    policy.enqueue('app-0-memo', {
-      requestedType: 'app',
-      kind: 'user',
-      windowId: 'w1',
-      messageId: '1',
-      content: 'a',
-    });
-
-    expect(policy.canEnqueue('app-0-memo')).toBe(false);
-    expect(policy.canEnqueue('app-0-notes')).toBe(true);
-    expect(policy.maxSize).toBe(1);
-
-    // Draining makes room again.
-    policy.dequeue('app-0-memo');
-    expect(policy.canEnqueue('app-0-memo')).toBe(true);
   });
 });
 

@@ -96,7 +96,7 @@ Window interactions (`COMPONENT_ACTION`, `WINDOW_MESSAGE`) route by window type:
 - **App windows** → a dedicated **app agent** via `AppTaskProcessor`. App agents are persistent per `appId` and survive window close/reopen. They use a scoped `app` MCP toolset (`query`/`command`/`relay`) instead of generic verbs — see [common_flow.md](./common_flow.md) for the division of responsibility.
 - **Monitor → app agent** — a monitor agent messages an app window with `invoke('yaar://windows/{id}', { action: 'message', ... })`; the task takes the same queue path as a user interaction. Fire-and-forget; combine with `subscribe` to learn when the app agent finishes.
 
-Same-window tasks are serialized via `WindowQueuePolicy`; different windows run in parallel.
+Tasks for one app on one monitor are serialized by `AppTaskProcessor` (a bounded queue per app agent, steered into the running turn where the provider allows); different apps run in parallel.
 
 ### Subscriptions and locking
 

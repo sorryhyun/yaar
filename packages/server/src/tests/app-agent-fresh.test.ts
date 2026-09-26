@@ -365,6 +365,22 @@ describe('a window message answered on a fresh app agent', () => {
     await first;
   });
 
+  it('keeps the app busy after a stop, until the stopped turn has unwound', async () => {
+    // "Stop all" drops the queues. It used to drop the processing flags with them, so an
+    // app whose turn was still unwinding read as idle, and the next message started a
+    // second main turn on the agent that turn was still standing on.
+    blockTurns = true;
+    const first = message('m1');
+    await runningAgent();
+
+    await pool.interruptAll();
+    expect(pool.hasActiveAppAgentTurn(WINDOW)).toBe(true);
+
+    releaseHeldTurns();
+    await first;
+    expect(pool.hasActiveAppAgentTurn(WINDOW)).toBe(false);
+  });
+
   it('never lands two agents for one key when creations overlap', async () => {
     // Both calls find the map empty and both await `acquireProvider`. Without the
     // reservation the loser is set into `appAgents` and then overwritten — an agent

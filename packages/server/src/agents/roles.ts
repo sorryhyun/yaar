@@ -67,11 +67,11 @@ export function sessionRole(suffix: string): string {
 /**
  * The prefix every per-turn role of an app agent starts with.
  *
- * The monitor follows the appId — the opposite order from `appProcessingKey()`'s
- * queue key for the same pair (`app-task-processor.ts`). That looks like a typo and
- * is not: a prefix match here has to name one app on one monitor, and the two
- * spellings live in different keyspaces. They were both hand-built at call sites
- * until it bit; each has exactly one owner now.
+ * Not the same spelling as `appAgentKey()` for the pair (`agent-roster.ts`): a prefix
+ * match here has to name one app on one monitor inside the role keyspace, which the
+ * `::` of the pool key does not. Each spelling has exactly one owner — they were
+ * hand-built at call sites until a third one, the old window-queue key, drifted into
+ * the opposite order.
  */
 export function appRolePrefix(monitorId: string, appId: string): string {
   return `${APP_ROLE_PREFIX}${appId}-m${monitorId}`;

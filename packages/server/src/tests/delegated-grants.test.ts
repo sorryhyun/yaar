@@ -282,3 +282,84 @@ describe('telling the two 403s apart', () => {
     expect(await denied!.text()).not.toMatch(/cannot delegate/);
   });
 });
+
+/**
+ * One side record per window, under one key.
+ *
+ * The registry used to keep grants, undelegated paths, history and replay policy in four
+ * parallel maps, and to find a grant it read — and to revoke one it deleted — under three
+ * spellings of the window's id. These pin what that bought, now that there is one record:
+ * every spelling still reaches it, a record filed before the window existed is the
+ * window's once it does, and one close drops all of it.
+ */
+describe('the per-window side record', () => {
+  const grant = [{ uri: FILE, verbs: ['read' as const] }];
+
+  it('adopts a grant filed under the bare raw id before the create, for every spelling', () => {
+    const reg = new WindowStateRegistry();
+    reg.grantWindowAccess('notes', grant); // no monitor to scope it with
+    createAppWindow(reg, 'notes', '0');
+    expect(reg.getWindowGrants('notes', '0')).toEqual(grant);
+    expect(reg.getWindowGrants('0/notes')).toEqual(grant);
+    expect(reg.getWindowGrants('0/notes', '0')).toEqual(grant);
+  });
+
+  it('drops everything the window held in one close, pre-create records included', () => {
+    const reg = new WindowStateRegistry();
+    reg.grantWindowAccess('notes', grant);
+    reg.noteUndelegatedUris('notes', [SIBLING]);
+    createAppWindow(reg, 'notes', '0');
+    reg.grantWindowAccess('notes', [{ uri: SIBLING, verbs: ['read'] }], '0');
+    reg.recordAppCommand('0/notes', { kind: 'command', command: 'open' });
+    reg.setAppProtocol('0/notes', ['open']);
+
+    reg.handleAction({ type: 'window.close', windowId: 'notes' } as OSAction, '0');
+
+    for (const spelling of ['notes', '0/notes']) {
+      expect(reg.getWindowGrants(spelling, '0')).toEqual([]);
+      expect(reg.wasUndelegated(SIBLING, spelling, '0')).toBe(false);
+      expect(reg.getWindowHistory(spelling).entries).toEqual([]);
+      expect(reg.getNoReplayCommands(spelling).size).toBe(0);
+    }
+    // And the next window to take the id starts with nothing.
+    createAppWindow(reg, 'notes', '0');
+    expect(reg.getWindowGrants('notes', '0')).toEqual([]);
+  });
+
+  it('merges a raw-id record into one the create’s own handle already holds', () => {
+    const reg = new WindowStateRegistry();
+    reg.grantWindowAccess('notes', grant);
+    reg.grantWindowAccess('notes', [{ uri: SIBLING, verbs: ['read'] }], '0');
+    createAppWindow(reg, 'notes', '0');
+    expect(
+      reg.getWindowGrants('notes', '0').map((e) => (typeof e === 'string' ? e : e.uri)),
+    ).toEqual([SIBLING, FILE]);
+  });
+
+  it('keeps a monitor-scoped pre-create grant off another monitor’s copy', () => {
+    const reg = new WindowStateRegistry();
+    reg.grantWindowAccess('notes', grant, '0');
+    createAppWindow(reg, 'notes', '1');
+    createAppWindow(reg, 'notes', '0');
+    expect(reg.getWindowGrants('notes', '1')).toEqual([]);
+    expect(reg.getWindowGrants('notes', '0')).toEqual(grant);
+  });
+
+  it('reaches a window registered under a bare key by the handle the frontend names it by', () => {
+    const reg = new WindowStateRegistry();
+    // No monitor: the unscoped anomaly `actionKey` warns about.
+    reg.handleAction({
+      type: 'window.create',
+      windowId: 'devtools-preview-anima',
+      title: 'preview',
+      bounds: { x: 0, y: 0, w: 500, h: 400 },
+      content: { renderer: 'iframe', data: '/api/apps/x' },
+    } as unknown as OSAction);
+    reg.grantWindowAccess('0/devtools-preview-anima', grant, '0');
+    expect(reg.getWindowGrants('devtools-preview-anima')).toEqual(grant);
+    expect(reg.getWindowGrants('0/devtools-preview-anima', '0')).toEqual(grant);
+
+    reg.handleAction({ type: 'window.close', windowId: 'devtools-preview-anima' } as OSAction);
+    expect(reg.getWindowGrants('0/devtools-preview-anima', '0')).toEqual([]);
+  });
+});

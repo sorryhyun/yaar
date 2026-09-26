@@ -68,6 +68,88 @@ const NO_COMMANDS: ReadonlySet<string> = new Set<string>();
  */
 const MAX_UNDELEGATED_URIS = 32;
 
+/**
+ * Everything the registry keeps about a window *besides* the window itself — one record,
+ * under one key (`WindowStateRegistry.sideKey`), dropped by one `delete`.
+ *
+ * These used to be four parallel maps, and parallel maps are four chances to key a window
+ * differently and four deletes a teardown path can forget. They did disagree: the app maps
+ * were keyed one way, the grant maps another, and a close had to delete the grants under
+ * three spellings to be sure it had them all. A record may exist before its window does
+ * (`window.create` files its grants before the emit) — `handleAction` adopts it at create.
+ */
+interface WindowSideState {
+  /**
+   * The ordered history the app has been driven through (see `WindowHistoryEntry`). The
+   * replayable command log is a *view* of this (`getAppCommands`), not a second list —
+   * replay and history must never disagree about what was sent.
+   */
+  history?: { entries: WindowHistoryEntry[]; nextSeq: number; dropped: number };
+  /**
+   * The command names the *currently registered* app declared `replay: 'never'` for. On
+   * the same record as `history` because the two are read together at replay time — a
+   * set filed under one key while the commands it filters live under another silently
+   * filters nothing.
+   */
+  noReplay?: Set<string>;
+  /**
+   * Everything a caller granted *to this window* at runtime — the storage files a
+   * more-privileged principal named to its app, the permissions such a caller added on top
+   * of the manifest, and the document the window was told to render. Each readable by the
+   * window's app for as long as the window lives.
+   *
+   * This is the single home of window-scoped **authority**; the iframe token carries only
+   * **identity**. The token is not durable — it is re-minted on remount and on reconnect
+   * (`/api/iframe-token`) from identity alone — so authority recorded on it vanishes the
+   * first time the desktop reloads. Dropped by the same `window.close` that drops the
+   * history: authority dies with its window.
+   *
+   * The producers narrow, this only stores: `features/window/delegated-grants.ts` holds
+   * the rules for what a payload may delegate, and `features/window/create.ts` gates the
+   * caller-supplied permissions on the same `mayDelegateGrants` check. Read at the access
+   * gate via `getWindowGrants`.
+   */
+  grants?: PermissionEntry[];
+  /**
+   * Storage files a caller named to this app that were **not** delegated, because the
+   * caller was an app-role principal and may not delegate at all (`mayDelegateGrants`).
+   * Diagnostics, never authority — nothing reads this to decide an answer, only to
+   * explain one.
+   *
+   * The rule is correct and stays; what it lacked was a way to tell its refusal apart
+   * from an ordinary one. devtools' `previewCommand` relays a command through its own
+   * app agent, so a file the caller named reaches the preview ungranted and the app's
+   * `read` comes back "Not permitted" — the same sentence a genuinely undeclared path
+   * gets. An agent auditing whether a permission is still needed reads that as proof the
+   * removal broke something. Recording the paths lets the gate say which of the two it
+   * is (`requirePermission`). Bounded (`MAX_UNDELEGATED_URIS`) and dropped with the
+   * window, like the grants.
+   */
+  undelegated?: Set<string>;
+}
+
+/** Add `entries` to a record's grants — additive, deduplicated by URI. */
+function addGrants(rec: WindowSideState, entries: readonly PermissionEntry[]): void {
+  const existing = rec.grants ?? [];
+  const seen = new Set(existing.map((e) => (typeof e === 'string' ? e : e.uri)));
+  const added = entries.filter((e) => {
+    const uri = typeof e === 'string' ? e : e.uri;
+    if (seen.has(uri)) return false;
+    seen.add(uri);
+    return true;
+  });
+  if (added.length > 0) rec.grants = [...existing, ...added];
+}
+
+/** Add `uris` to a record's undelegated set, up to the cap. */
+function addUndelegated(rec: WindowSideState, uris: Iterable<string>): void {
+  const set = (rec.undelegated ??= new Set());
+  for (const uri of uris) {
+    if (set.size >= MAX_UNDELEGATED_URIS) break;
+    set.add(uri);
+  }
+}
+
 /** Every action that says something about a window. The union `handleAction` is total over. */
 export type WindowAction = Extract<OSAction, { type: `window.${string}` }>;
 
@@ -108,55 +190,12 @@ export function windowCreateAction(win: WindowState): OSAction {
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   /**
-   * Per window: the ordered history the app has been driven through (see
-   * `WindowHistoryEntry`). The replayable command log is a *view* of this
-   * (`getAppCommands`), not a second list — replay and history must never disagree
-   * about what was sent.
+   * Per window: the history, replay policy, grants and undelegated paths (see
+   * `WindowSideState`), under the key `sideKey` produces and no other. Kept apart from
+   * `windows` because a record can precede its window — and, for an id this registry
+   * never held, outlive the question of whether there is one.
    */
-  private appCommands: Map<
-    string,
-    { entries: WindowHistoryEntry[]; nextSeq: number; dropped: number }
-  > = new Map();
-  /**
-   * Per window: the command names the *currently registered* app declared
-   * `replay: 'never'` for. Keyed exactly like `appCommands` (resolved key, raw id as
-   * fallback) because the two are read together at replay time — a set filed under one
-   * key while the commands it filters live under another silently filters nothing.
-   */
-  private appNoReplay: Map<string, Set<string>> = new Map();
-  /**
-   * Per window: everything a caller granted *to this window* at runtime — the storage
-   * files a more-privileged principal named to its app, the permissions such a caller
-   * added on top of the manifest, and the document the window was told to render. Each
-   * readable by the window's app for as long as the window lives.
-   *
-   * This is the single home of window-scoped **authority**; the iframe token carries only
-   * **identity**. The token is not durable — it is re-minted on remount and on reconnect
-   * (`/api/iframe-token`) from identity alone — so authority recorded on it vanishes the
-   * first time the desktop reloads. Keyed like `appCommands`, and dropped by the same
-   * `window.close` that drops them.
-   *
-   * The producers narrow, this only stores: `features/window/delegated-grants.ts` holds
-   * the rules for what a payload may delegate, and `features/window/create.ts` gates the
-   * caller-supplied permissions on the same `mayDelegateGrants` check. Read at the access
-   * gate via `getWindowGrants`.
-   */
-  private delegatedGrants: Map<string, PermissionEntry[]> = new Map();
-  /**
-   * Per window: storage files a caller named to this app that were **not** delegated,
-   * because the caller was an app-role principal and may not delegate at all
-   * (`mayDelegateGrants`). Diagnostics, never authority — nothing reads this to decide
-   * an answer, only to explain one.
-   *
-   * The rule is correct and stays; what it lacked was a way to tell its refusal apart
-   * from an ordinary one. devtools' `previewCommand` relays a command through its own
-   * app agent, so a file the caller named reaches the preview ungranted and the app's
-   * `read` comes back "Not permitted" — the same sentence a genuinely undeclared path
-   * gets. An agent auditing whether a permission is still needed reads that as proof the
-   * removal broke something. Recording the paths lets the gate say which of the two it
-   * is (`requirePermission`). Bounded and dropped with the window, like the grants.
-   */
-  private undelegatedUris: Map<string, Set<string>> = new Map();
+  private side: Map<string, WindowSideState> = new Map();
   /**
    * Stacking order, bottom to top — this registry's mirror of the desktop's `zOrder`.
    *
@@ -361,6 +400,7 @@ export class WindowStateRegistry {
           createdAt: now,
           updatedAt: now,
         });
+        this.adoptPreCreateState(key);
         this.restack(key, action.variant);
         // Only a standard window that is actually on screen steals focus — the same
         // condition the frontend applies.
@@ -374,24 +414,20 @@ export class WindowStateRegistry {
         // Never `actionKey`: a close that mints a handle deletes a key that by
         // construction holds nothing, leaving the real window behind (see `targetKey`).
         // Falling back to the raw id keeps the best-effort teardown a close of an
-        // unregistered window has always had — a preview created through the iframe
-        // proxy files its app commands under exactly that id.
+        // unregistered window has always had — a record filed for an id no window holds
+        // sits under exactly that id.
         const key = this.targetKey(action.windowId, monitorId) ?? action.windowId;
         const appId = this.windows.get(key)?.appId;
         // Read the owner before remove() drops it — the callback needs it to find
         // the app agent that was driving this window.
         const owner = this.handleMap.getMonitorId(key) ?? monitorId;
         this.windows.delete(key);
-        this.appCommands.delete(key);
-        this.appNoReplay.delete(key);
-        // Every spelling — see getWindowGrants for why a grant can be filed under the
-        // raw id. A revoked grant that survives under another key is a live one.
-        this.delegatedGrants.delete(key);
-        this.delegatedGrants.delete(action.windowId);
-        this.delegatedGrants.delete(this.handleMap.getRawWindowId(key));
-        this.undelegatedUris.delete(key);
-        this.undelegatedUris.delete(action.windowId);
-        this.undelegatedUris.delete(this.handleMap.getRawWindowId(key));
+        // One delete, because there is one record: whatever was filed before the create
+        // was adopted by it (`adoptPreCreateState`), and everything filed since went
+        // through `sideKey`, which answers this same key for a window that exists. A
+        // revoked grant that survived under another spelling would be a live one — the
+        // reason this used to delete the grants three times over.
+        this.side.delete(key);
         this.stack = this.stack.filter((id) => id !== key);
         this.refocusIfHolding(key);
         this.handleMap.remove(key);
@@ -629,26 +665,82 @@ export class WindowStateRegistry {
   }
 
   /**
-   * The key the per-window app maps (`appCommands`, `appNoReplay`) file a window under.
+   * The one key a window's side record (`WindowSideState`) is filed and read under.
    *
-   * Resolved key where the window is known, raw id where it is not — a window may be
-   * addressed before it exists in this registry (a preview created through the iframe
-   * proxy, a restored id), and dropping the record entirely would lose it. Every app map
-   * must use this one function: `recordAppCommand` writing under "0/memo" while
-   * `getNoReplayCommands` reads under "memo" is a filter that quietly never matches.
+   * Every side read and write goes through here, and nothing else computes a side key:
+   * `recordAppCommand` writing under "0/memo" while `getNoReplayCommands` reads under
+   * "memo" is a filter that quietly never matches, and a grant written under one spelling
+   * and revoked under another is a grant that outlives its window.
+   *
+   *  1. **The window's own key**, when there is a window — `targetKey`, so a raw id is
+   *     scoped to the explicit monitor or else the caller's. `monitorId` is passed
+   *     explicitly by the access gate: a grant is *recorded* inside an agent turn, which
+   *     carries a monitor, but *read* on an HTTP request, which carries none, and a raw id
+   *     repeats across monitors.
+   *  2. **The bare key a handle's window was registered under.** A window created with no
+   *     monitor (the unscoped anomaly `actionKey` warns about, an older log's restore) is
+   *     keyed "devtools-preview-anima", while the frontend — which always picks a monitor —
+   *     names it "0/devtools-preview-anima", and so does the token it mints at reconnect.
+   *     Both are the same window, so both reach the same record.
+   *  3. **The key the window is about to have**, when there is none yet: `window.create`
+   *     records its grants *before* the emit. `handleFor` answers the handle the create will
+   *     register without registering it; filed under the bare raw id instead, a grant is
+   *     one every monitor's copy of the same app could read. With no monitor to scope it,
+   *     the id as given — which `adoptPreCreateState` hands to the window at create.
    */
-  private appKey(windowId: string): string {
-    return this.resolve(windowId)?.[0] ?? windowId;
+  private sideKey(windowId: string, monitorId?: string): string {
+    const live = this.targetKey(windowId, monitorId);
+    if (live) return live;
+    const raw = this.handleMap.getRawWindowId(windowId);
+    if (raw !== windowId && this.windows.has(raw)) return raw;
+    return this.handleMap.handleFor(windowId, monitorId);
+  }
+
+  private sideOf(windowId: string, monitorId?: string): WindowSideState {
+    const key = this.sideKey(windowId, monitorId);
+    let rec = this.side.get(key);
+    if (!rec) {
+      rec = {};
+      this.side.set(key, rec);
+    }
+    return rec;
+  }
+
+  private peekSide(windowId: string, monitorId?: string): WindowSideState | undefined {
+    return this.side.get(this.sideKey(windowId, monitorId));
+  }
+
+  /**
+   * Hand a newly created window whatever was filed for it under its bare raw id before it
+   * existed — a grant recorded with no monitor to scope it, an app that registered first.
+   *
+   * This is what lets the record have one key. Without it the raw-id record stays where
+   * it was, every read has to union the spellings to find it, and every close has to
+   * delete under all of them — which is what this registry used to do, and a teardown that
+   * must remember three keys is one that forgets the fourth.
+   *
+   * A raw key that is itself a live window (an unscoped one) holds *that* window's record,
+   * not a pending one, and is left alone.
+   */
+  private adoptPreCreateState(key: string): void {
+    const raw = this.handleMap.getRawWindowId(key);
+    if (raw === key || this.windows.has(raw)) return;
+    const pending = this.side.get(raw);
+    if (!pending) return;
+    this.side.delete(raw);
+    const own = this.side.get(key);
+    if (!own) {
+      this.side.set(key, pending);
+      return;
+    }
+    if (pending.grants) addGrants(own, pending.grants);
+    if (pending.undelegated) addUndelegated(own, pending.undelegated);
+    own.history ??= pending.history;
+    own.noReplay ??= pending.noReplay;
   }
 
   private historyOf(windowId: string) {
-    const key = this.appKey(windowId);
-    let history = this.appCommands.get(key);
-    if (!history) {
-      history = { entries: [], nextSeq: 1, dropped: 0 };
-      this.appCommands.set(key, history);
-    }
-    return history;
+    return (this.sideOf(windowId).history ??= { entries: [], nextSeq: 1, dropped: 0 });
   }
 
   private pushHistory(
@@ -701,7 +793,7 @@ export class WindowStateRegistry {
 
   /** The window's history, oldest first, and how many leading entries the cap dropped. */
   getWindowHistory(windowId: string): { entries: readonly WindowHistoryEntry[]; dropped: number } {
-    const history = this.appCommands.get(this.appKey(windowId));
+    const history = this.peekSide(windowId)?.history;
     return history
       ? { entries: history.entries, dropped: history.dropped }
       : { entries: [], dropped: 0 };
@@ -713,7 +805,7 @@ export class WindowStateRegistry {
    * the whole log.
    */
   truncateWindowHistory(windowId: string, seq: number): WindowHistoryEntry[] {
-    const history = this.appCommands.get(this.appKey(windowId));
+    const history = this.peekSide(windowId)?.history;
     if (!history) return [];
     const idx = history.entries.findIndex((e) => e.seq > seq);
     if (idx === -1) return [];
@@ -734,29 +826,35 @@ export class WindowStateRegistry {
   }
 
   /**
-   * Record storage files delegated to this window's app (see `delegatedGrants`).
+   * Record storage files delegated to this window's app (see `WindowSideState.grants`).
    *
    * Additive and deduplicated by URI: a second command naming the same file must not
    * grow the list, and each call adds to what earlier ones granted rather than replacing
-   * it — an agent that opens a file, then opens a second one, meant both.
+   * it — an agent that opens a file, then opens a second one, meant both. Callable before
+   * the window exists (`window.create` records before the emit); `sideKey` files it under
+   * the handle the create is about to register.
    */
   grantWindowAccess(windowId: string, entries: readonly PermissionEntry[], monitorId?: string) {
     if (entries.length === 0) return;
-    // `window.create` records its grants *before* the emit, so the window does not exist
-    // yet and `targetKey` finds nothing. Falling back to the bare raw id filed the grant
-    // under a key every monitor's copy of the same app resolves to; `handleFor` gives the
-    // handle the create is about to register, without registering it.
-    const key =
-      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
-    const existing = this.delegatedGrants.get(key) ?? [];
-    const seen = new Set(existing.map((e) => (typeof e === 'string' ? e : e.uri)));
-    const added = entries.filter((e) => {
-      const uri = typeof e === 'string' ? e : e.uri;
-      if (seen.has(uri)) return false;
-      seen.add(uri);
-      return true;
-    });
-    if (added.length > 0) this.delegatedGrants.set(key, [...existing, ...added]);
+    addGrants(this.sideOf(windowId, monitorId), entries);
+  }
+
+  /**
+   * Record storage files a caller named to this window but could not delegate.
+   *
+   * Same keying as {@link grantWindowAccess}, for the same reason — the recording happens
+   * inside an agent turn and the reading happens on an HTTP request. Capped per window:
+   * this exists to explain one 403, and an unbounded set fed by a caller's payloads is a
+   * leak wearing a diagnostic's clothes.
+   */
+  noteUndelegatedUris(windowId: string, uris: readonly string[], monitorId?: string) {
+    if (uris.length === 0) return;
+    addUndelegated(this.sideOf(windowId, monitorId), uris);
+  }
+
+  /** Was this exact URI named to this window by a caller that may not delegate grants? */
+  wasUndelegated(uri: string, windowId: string, monitorId?: string): boolean {
+    return this.peekSide(windowId, monitorId)?.undelegated?.has(uri) ?? false;
   }
 
   /**
@@ -767,57 +865,16 @@ export class WindowStateRegistry {
    * carries none — and a raw window id repeats across monitors, so an ambient-only
    * lookup finds nothing for any app open on two of them. The iframe token pins the
    * monitor at mint time precisely so this lookup can be exact.
-   */
-  /**
-   * Record storage files a caller named to this window but could not delegate.
    *
-   * Same keying and the same three spellings on read as {@link grantWindowAccess}, for
-   * the same reason — the recording happens inside an agent turn and the reading happens
-   * on an HTTP request. Capped per window: this exists to explain one 403, and an
-   * unbounded set fed by a caller's payloads is a leak wearing a diagnostic's clothes.
+   * A caller may ask by raw id (an agent turn) or by handle (an iframe token minted at
+   * reconnect); both land on the one record `sideKey` names. This used to union three
+   * spellings, because a grant filed before the window existed sat under the bare raw id
+   * — reading only the resolved key is how a file named at create time stopped being
+   * granted the moment the desktop reloaded and the token came back naming the handle.
+   * The create now adopts that record instead (`adoptPreCreateState`).
    */
-  noteUndelegatedUris(windowId: string, uris: readonly string[], monitorId?: string) {
-    if (uris.length === 0) return;
-    const key =
-      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
-    let set = this.undelegatedUris.get(key);
-    if (!set) {
-      set = new Set();
-      this.undelegatedUris.set(key, set);
-    }
-    for (const uri of uris) {
-      if (set.size >= MAX_UNDELEGATED_URIS) break;
-      set.add(uri);
-    }
-  }
-
-  /** Was this exact URI named to this window by a caller that may not delegate grants? */
-  wasUndelegated(uri: string, windowId: string, monitorId?: string): boolean {
-    const key =
-      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
-    for (const spelling of [key, windowId, this.handleMap.getRawWindowId(windowId)]) {
-      if (this.undelegatedUris.get(spelling)?.has(uri)) return true;
-    }
-    return false;
-  }
-
   getWindowGrants(windowId: string, monitorId?: string): PermissionEntry[] {
-    const key =
-      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
-    // Every spelling of this one window, unioned. A caller may ask by raw id (an agent
-    // turn) or by handle (an iframe token minted at reconnect), and a grant recorded by a
-    // path that had no monitor to scope it with still sits under the bare raw id. Reading
-    // only the resolved key is how a file named at create time stopped being granted the
-    // moment the desktop reloaded and the token came back naming the handle.
-    const out: PermissionEntry[] = [];
-    const seen = new Set<string>();
-    for (const spelling of [key, windowId, this.handleMap.getRawWindowId(windowId)]) {
-      if (seen.has(spelling)) continue;
-      seen.add(spelling);
-      const entries = this.delegatedGrants.get(spelling);
-      if (entries) out.push(...entries);
-    }
-    return out;
+    return [...(this.peekSide(windowId, monitorId)?.grants ?? [])];
   }
 
   /**
@@ -845,9 +902,12 @@ export class WindowStateRegistry {
       win.appProtocol = true;
       win.updatedAt = Date.now();
     }
-    const key = this.appKey(windowId);
-    if (noReplay && noReplay.length > 0) this.appNoReplay.set(key, new Set(noReplay));
-    else this.appNoReplay.delete(key);
+    if (noReplay && noReplay.length > 0) {
+      this.sideOf(windowId).noReplay = new Set(noReplay);
+    } else {
+      const rec = this.peekSide(windowId);
+      if (rec) delete rec.noReplay;
+    }
   }
 
   /**
@@ -857,7 +917,7 @@ export class WindowStateRegistry {
    * that never heard of the field replays exactly as it always did.
    */
   getNoReplayCommands(windowId: string): ReadonlySet<string> {
-    return this.appNoReplay.get(this.appKey(windowId)) ?? NO_COMMANDS;
+    return this.peekSide(windowId)?.noReplay ?? NO_COMMANDS;
   }
 
   hasWindow(windowId: string): boolean {
@@ -930,12 +990,9 @@ export class WindowStateRegistry {
 
   clear(): void {
     this.windows.clear();
-    this.appCommands.clear();
-    this.appNoReplay.clear();
     // Authority dies with its window. Left here, a grant would be readable by whatever
-    // later window reuses the id — the per-window close drops these for the same reason.
-    this.delegatedGrants.clear();
-    this.undelegatedUris.clear();
+    // later window reuses the id — the per-window close drops its record for the same reason.
+    this.side.clear();
     this.stack = [];
     this.focused = null;
     this.handleMap.clear();

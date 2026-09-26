@@ -62,15 +62,20 @@ describe('the idle sweep', () => {
     const provider = Object.create(CdpBrowserProvider.prototype) as InstanceType<
       typeof CdpBrowserProvider
     >;
-    const sessions = new Map<string, unknown>([
-      ['stale', stale],
-      ['companion', companion],
+    const records = new Map<string, { session?: unknown; ephemeral: boolean; restarts: number }>([
+      ['stale', { session: stale, ephemeral: false, restarts: 0 }],
+      ['companion', { session: companion, ephemeral: false, restarts: 0 }],
     ]);
-    Object.assign(provider, { sessions, ownsChrome: false, closeEndpoint: async () => {} });
+    Object.assign(provider, {
+      records,
+      targets: new Map(),
+      ownsChrome: false,
+      closeEndpoint: async () => {},
+    });
 
     await (provider as unknown as { cleanupIdle(): Promise<void> }).cleanupIdle();
 
-    expect(sessions.has('stale')).toBe(false);
-    expect(sessions.has('companion')).toBe(true);
+    expect(records.get('stale')?.session).toBeUndefined();
+    expect(records.get('companion')?.session).toBe(companion);
   });
 });
