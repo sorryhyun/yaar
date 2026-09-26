@@ -1,9 +1,9 @@
 export {};
 import { appStorage, errMsg } from '@bundled/yaar';
 import { format as devFormat } from '@bundled/yaar-dev';
-import { activeProject, files, setStatusText } from '../core';
+import { activeProject, fileChanges, files, setStatusText } from '../core';
 import { projectPath, isBinaryPath } from '../lib/paths';
-import { changedLineRanges, formatLineRanges, diffStats } from '../lib/diff';
+import { applyHunksWithin, changedLineRanges, formatLineRanges, diffStats } from '../lib/diff';
 import { refreshFiles, writeFile } from './files';
 
 // Prettier over the project's source, through the host's own formatter.
@@ -52,6 +52,18 @@ export interface FormatOutcome {
   unchanged: number;
   /** Files the formatter refused, each with why. */
   skipped: { path: string; reason: string }[];
+  /** `onlyChanged`: files with no recorded edit this session, left alone. */
+  untouched?: number;
+}
+
+/**
+ * The file as it was before its oldest edit still in the Changes history, or null when
+ * the history holds no edit of it for this project.
+ */
+function editBaseline(projectId: string, path: string): string | null {
+  const mine = fileChanges().filter((c) => c.projectId === projectId && c.path === path);
+  const oldest = mine[mine.length - 1];
+  return oldest ? oldest.before : null;
 }
 
 /**
@@ -63,7 +75,10 @@ export interface FormatOutcome {
  * code is the normal state of a project mid-edit, and one bad file must not stop
  * the other twenty from being tidied.
  */
-export async function formatFiles(paths?: string[]): Promise<FormatOutcome> {
+export async function formatFiles(
+  paths?: string[],
+  { onlyChanged = false }: { onlyChanged?: boolean } = {},
+): Promise<FormatOutcome> {
   const proj = activeProject();
   if (!proj) throw new Error('No active project. Open or create one first.');
 
@@ -75,13 +90,24 @@ export async function formatFiles(paths?: string[]): Promise<FormatOutcome> {
         .filter((f) => !f.isDirectory && isFormattable(f.path))
         .map((f) => f.path);
 
-  const outcome: FormatOutcome = { formatted: [], unchanged: 0, skipped: [] };
+  const outcome: FormatOutcome = {
+    formatted: [],
+    unchanged: 0,
+    skipped: [],
+    ...(onlyChanged ? { untouched: 0 } : {}),
+  };
   // An explicit path that formats nothing is a mistake worth naming; the same file
   // reached by the sweep was simply never a candidate, so it is filtered out above
   // rather than reported as a skip.
   for (const path of targets) {
     if (!isFormattable(path)) {
       outcome.skipped.push({ path, reason: 'No formatter for this file type.' });
+      continue;
+    }
+
+    const baseline = onlyChanged ? editBaseline(proj.id, path) : null;
+    if (onlyChanged && baseline === null) {
+      outcome.untouched = (outcome.untouched ?? 0) + 1;
       continue;
     }
 
@@ -98,10 +124,15 @@ export async function formatFiles(paths?: string[]): Promise<FormatOutcome> {
       outcome.skipped.push({ path, reason: result.error ?? 'Formatting failed.' });
       continue;
     }
-    if (!result.changed) {
+    const formatted =
+      baseline !== null
+        ? applyHunksWithin(content, result.formatted, changedLineRanges(baseline, content))
+        : result.formatted;
+    if (!result.changed || formatted === content) {
       outcome.unchanged += 1;
       continue;
     }
+    result.formatted = formatted;
 
     await writeFile(path, result.formatted, {
       before: content,

@@ -2,6 +2,7 @@ import { AppCommandError, errMsg, invoke, defineAppCommand } from '@bundled/yaar
 import { previewWindowId, setPreviewWindowId } from '../core';
 import {
   captureFailureHint,
+  cropToSelector,
   inspectPreview,
   openPreview,
   previewEvaluate,
@@ -25,15 +26,28 @@ export const previewCommands = {
       'A capture that succeeded while omitting content (an unreadable canvas, an image it ' +
       'could not inline, or a composite that fell back to the largest canvas alone) leads ' +
       'with a warning block naming what is missing — a blank region under such a warning ' +
-      'is not evidence the app drew nothing there.',
+      'is not evidence the app drew nothing there. With `selector`, the image is cropped to ' +
+      'that element (a selector matching nothing is an error).',
     params: {
       type: 'object',
       properties: {
         info: { type: 'boolean', description: 'Also return window geometry/size.' },
+        selector: {
+          type: 'string',
+          description: 'CSS selector; crop the screenshot to the first matching element.',
+        },
       },
     },
     run: async (p) => {
-      const { images, info } = await readPreview();
+      const read = await readPreview();
+      const info = read.info;
+      let images = read.images;
+      let cropNote: string | undefined;
+      if (typeof p.selector === 'string' && p.selector.trim() && images.length > 0) {
+        const cropped = await cropToSelector(images[0], p.selector);
+        images = [cropped.image];
+        cropNote = cropped.note;
+      }
       if (images.length === 0) {
         // The server reports *why* the capture produced nothing (window.ts attaches
         // captureFailure). Pass that through with its recovery hint rather than
@@ -60,6 +74,7 @@ export const previewCommands = {
       const warnings: string[] = [];
       const stale = previewStaleNote();
       if (stale) warnings.push(stale);
+      if (cropNote) warnings.push(cropNote);
       const degraded = info.captureDegraded;
       if (Array.isArray(degraded) && degraded.length > 0) {
         warnings.push(
@@ -227,7 +242,15 @@ export const previewCommands = {
           items: { type: 'string' },
           description:
             'Run only steps in these groups (ungrouped steps still run). The comparison ' +
-            'then covers only what ran. Incompatible with update.',
+            'then covers only what ran. Incompatible with a full update; fine with `steps`.',
+        },
+        steps: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'With update: true, rewrite only these rows (by step label; a repeated label is ' +
+            '"label (2)") and keep the rest of the baseline. The other rows are still compared ' +
+            'and reported as `failures`.',
         },
       },
     },
@@ -237,6 +260,7 @@ export const previewCommands = {
         ...(typeof p.path === 'string' ? { path: p.path } : {}),
         ...(p.update === true ? { update: true } : {}),
         ...(Array.isArray(p.groups) ? { groups: p.groups.map((g) => String(g)) } : {}),
+        ...(Array.isArray(p.steps) ? { steps: p.steps.map((s) => String(s)) } : {}),
       }),
   }),
   resizePreview: defineAppCommand({

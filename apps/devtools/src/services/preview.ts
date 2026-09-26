@@ -283,6 +283,66 @@ async function evaluateRaw(wid: string, expression: string, timeoutMs?: number):
   });
 }
 
+/**
+ * Cut one element out of a preview capture, by its bounding box in the iframe.
+ *
+ * The capture is scaled against the viewport, so a capture whose aspect ratio does not
+ * match the viewport (window chrome included, or a fallback canvas) cannot be mapped and
+ * comes back whole with a note rather than cropped to the wrong place.
+ */
+export async function cropToSelector(
+  image: CapturedImage,
+  selector: string,
+): Promise<{ image: CapturedImage; note?: string }> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  const probe =
+    `(function(){var e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;` +
+    'var r=e.getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height,' +
+    'vw:window.innerWidth,vh:window.innerHeight};})()';
+  let raw: unknown = await evaluateRaw(wid, probe);
+  for (let i = 0; i < 2 && typeof raw === 'string'; i++) {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      break;
+    }
+  }
+  if (!raw || typeof raw !== 'object') {
+    throw new AppCommandError(
+      `selector ${JSON.stringify(selector)} matched nothing in the preview.`,
+    );
+  }
+  const rect = raw as { x: number; y: number; w: number; h: number; vw: number; vh: number };
+  const bytes = Uint8Array.from(atob(image.data), (c) => c.charCodeAt(0));
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: image.mimeType }));
+  const sx = bitmap.width / rect.vw;
+  const sy = bitmap.height / rect.vh;
+  if (!(sx > 0) || Math.abs(sx - sy) / sx > 0.05) {
+    return {
+      image,
+      note: `The capture (${bitmap.width}×${bitmap.height}) does not map onto the viewport (${rect.vw}×${rect.vh}), so it is returned whole.`,
+    };
+  }
+  const pad = 4;
+  const x0 = Math.max(0, Math.floor((rect.x - pad) * sx));
+  const y0 = Math.max(0, Math.floor((rect.y - pad) * sy));
+  const x1 = Math.min(bitmap.width, Math.ceil((rect.x + rect.w + pad) * sx));
+  const y1 = Math.min(bitmap.height, Math.ceil((rect.y + rect.h + pad) * sy));
+  if (x1 - x0 < 2 || y1 - y0 < 2) {
+    throw new AppCommandError(
+      `selector ${JSON.stringify(selector)} matched an element with no visible area in the viewport ` +
+        `(${Math.round(rect.w)}×${Math.round(rect.h)} at ${Math.round(rect.x)},${Math.round(rect.y)}).`,
+    );
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = x1 - x0;
+  canvas.height = y1 - y0;
+  canvas.getContext('2d')?.drawImage(bitmap, x0, y0, x1 - x0, y1 - y0, 0, 0, x1 - x0, y1 - y0);
+  const url = canvas.toDataURL('image/png');
+  return { image: { data: url.slice(url.indexOf(',') + 1), mimeType: 'image/png' } };
+}
+
 export interface EvaluateWithChanges {
   result: unknown;
   /** What moved between the snapshot taken before the expression ran and after it. */

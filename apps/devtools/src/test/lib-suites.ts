@@ -34,6 +34,15 @@ import {
   isReferenceLookupPath,
   otherReferences,
   otherReferencesSummary,
+  applyHunksWithin,
+  scanJs,
+  classifyChange,
+  findStaleFileRefs,
+  cssSelectorClasses,
+  markupClasses,
+  cssClassReport,
+  filesNamedInTask,
+  splitBySize,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -707,6 +716,161 @@ const references = suite('references', {
   },
 });
 
+const sourceScan = suite('source-scan', {
+  'a comment-only edit is classified as comments'() {
+    const before = 'const a = 1; // old note\n/* block */\nexport { a };\n';
+    const after = 'const a = 1; // new, longer note\n/**\n * rewritten block\n */\nexport { a };\n';
+    eq(classifyChange('src/x.ts', before, after), 'comments');
+  },
+
+  'a string or code change is code'() {
+    eq(classifyChange('src/x.ts', "const a = 'x // y';", "const a = 'x // z';"), 'code');
+    eq(classifyChange('src/x.ts', 'const a = 1;', 'const a = 2;'), 'code');
+    eq(
+      classifyChange('src/x.ts', 'const u = `a ${b /* c */} d`;', 'const u = `a ${b} e`;'),
+      'code',
+    );
+  },
+
+  'a comment marker inside a string or regex is not a comment'() {
+    const s = scanJs("const u = 'http://x'; const r = /\\/\\*/g; // real");
+    eq(
+      s.comments.map((c) => c.text.trim()),
+      ['real'],
+    );
+    ok(s.code.includes("'http://x'"), 'string kept');
+  },
+
+  'newline versus space still matters after a comment is removed'() {
+    eq(classifyChange('src/x.ts', 'a\n// c\nb', 'a\nb'), 'comments');
+    eq(classifyChange('src/x.ts', 'a\nb', 'a b'), 'code');
+  },
+
+  'css comments, markdown outside src, and tsx'() {
+    eq(classifyChange('src/a.css', '.a{color:red}/* x */', '.a{color:red}/* y */'), 'comments');
+    eq(classifyChange('src/a.css', '.a{color:red}', '.a{color:blue}'), 'code');
+    eq(classifyChange('AGENTS.md', 'a', 'b'), 'docs');
+    eq(classifyChange('src/notes.md', 'a', 'b'), 'code');
+    eq(classifyChange('src/v.tsx', 'a // x', 'a // y'), 'code');
+  },
+
+  'stale file references in comments and markdown'() {
+    const paths = ['src/lib/edits.ts', 'src/main.ts', 'AGENTS.md'];
+    const refs = findStaleFileRefs(
+      [
+        { path: 'src/main.ts', text: "// see lib/edits.ts and actions.ts\nconst p = 'gone.ts';" },
+        {
+          path: 'AGENTS.md',
+          text: 'Uses `src/main.ts`.\nOld: `src/ui/old.ts`; server: packages/server/x.ts',
+        },
+      ],
+      paths,
+    );
+    eq(
+      refs.map((r) => `${r.file}:${r.line} ${r.ref}`),
+      ['src/main.ts:1 actions.ts', 'AGENTS.md:2 src/ui/old.ts'],
+    );
+  },
+
+  'a missing file under a project directory is reported'() {
+    const refs = findStaleFileRefs(
+      [{ path: 'AGENTS.md', text: 'see `src/ui/old.ts`' }],
+      ['src/ui/new.ts', 'AGENTS.md'],
+    );
+    eq(
+      refs.map((r) => r.ref),
+      ['src/ui/old.ts'],
+    );
+  },
+
+  'selector classes skip declaration bodies and at-rule preludes'() {
+    const css =
+      '.a, .b:hover > .c { background: url(x.png); }\n@media (min-width: 1.5em) { .d { top: .5rem } }';
+    eq(cssSelectorClasses(css).sort(), ['a', 'b', 'c', 'd']);
+  },
+
+  'markup classes come from class attributes and classList'() {
+    const src =
+      "html`<div class=\"row ${x} y-btn\">`; el.classList.add('open'); const o = { class: 'tag' };";
+    eq(markupClasses(src).sort(), ['open', 'row', 'tag', 'y-btn']);
+  },
+
+  'css class report: unused, unstyled and unknown SDK names'() {
+    const report = cssClassReport(
+      [{ path: 'src/a.css', text: '.row{} .dead{} .kind-open{} .open{}' }],
+      [
+        {
+          path: 'src/v.ts',
+          text: "html`<i class=\"row bare y-nope y-btn\">`; el.classList.add('open'); const k = 'kind-' + x;",
+        },
+      ],
+      ['y-btn'],
+    );
+    eq(
+      report.unused.map((u) => u.name),
+      ['dead'],
+    );
+    eq(
+      report.unstyled.map((u) => u.name),
+      ['bare'],
+    );
+    eq(
+      report.unknownSdk.map((u) => u.name),
+      ['y-nope'],
+    );
+  },
+
+  'files named in a task: paths, directories, globs and bare names'() {
+    const files = [
+      { path: 'src/ui', isDirectory: true },
+      { path: 'src/ui/a.ts', bytes: 10 },
+      { path: 'src/ui/b.ts', bytes: 20 },
+      { path: 'src/lib/c.ts', bytes: 30 },
+      { path: 'src/main.ts', bytes: 40 },
+      { path: 'AGENTS.md', bytes: 50 },
+    ];
+    eq(
+      filesNamedInTask('Review src/ui/ and src/lib/*.ts, then main.ts. Also AGENTS.md.', files).map(
+        (f) => f.path,
+      ),
+      ['AGENTS.md', 'src/lib/c.ts', 'src/main.ts', 'src/ui/a.ts', 'src/ui/b.ts'],
+    );
+    eq(filesNamedInTask('nothing here', files), []);
+  },
+
+  'split by size keeps order and caps each group'() {
+    const f = (path: string, bytes: number) => ({ path, bytes });
+    eq(
+      splitBySize([f('a', 60), f('b', 50), f('c', 200), f('d', 10)], 100).map((g) =>
+        g.map((x) => x.path),
+      ),
+      [['a'], ['b'], ['c'], ['d']],
+    );
+    eq(splitBySize([f('a', 30), f('b', 30), f('c', 30)], 100).length, 1);
+  },
+});
+
+const formatWithin = suite('format-within', {
+  'only hunks on touched lines are taken'() {
+    const current = 'a  =  1\nx\nb=2\ny\nc  =  3\n';
+    const formatted = 'a = 1\nx\nb = 2\ny\nc = 3\n';
+    eq(
+      applyHunksWithin(current, formatted, [{ start: 3, end: 3 }]),
+      'a  =  1\nx\nb = 2\ny\nc  =  3\n',
+    );
+  },
+
+  'no touched lines leaves the file alone'() {
+    eq(applyHunksWithin('x  \n', 'x\n', []), 'x  \n');
+  },
+
+  'every line touched equals the full format'() {
+    const current = 'a  =  1\nb=2\n';
+    const formatted = 'a = 1\nb = 2\n';
+    eq(applyHunksWithin(current, formatted, [{ start: 1, end: 2 }]), formatted);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -719,4 +883,6 @@ export const libSuites: Suite[] = [
   appManifest,
   identifier,
   references,
+  sourceScan,
+  formatWithin,
 ];

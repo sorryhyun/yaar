@@ -19,3 +19,4 @@ export * from './preview';
 export * from './script';
 export * from './manifest';
 export * from './worker';
+export * from './checks';

@@ -26,6 +26,7 @@ into them.
   under `covers:` — that is what makes "read this first" machine-checkable.
 - **AGENTS.md stays short**: the module map, the invariants an editor must not break, and
   pointers into `agent/docs/`. Anything longer than a clause moves behind the door.
+- A cleanup pass over prose that already exists is the `doc-trimming` topic.
 
 ### Protocol description style
 

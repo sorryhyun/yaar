@@ -30,7 +30,7 @@ Without a raised `timeoutMs`, a slow build surfaces as "App did not respond" ins
 
 **Cloning is the only way to read an app's source.** `cloneApp` does it *here*, as an editable project; the `search` app's `clone-app` writes source into shared storage instead (and takes a glob, so it is the one to reach for when a question spans many apps). Its `purge-clones` cleans up after itself; `deleteProject` cleans up after this one.
 
-**`cloneApp` switches the active project out from under whatever was open.** It does not ask, and nothing restores it. When the user had a project open, the safe sequence is: read `project` first, clone, work, `deleteProject` the clone, then `openProject` back to the id you saved.
+**`cloneApp` switches the active project out from under whatever was open.** It does not ask. Its result names the displaced project as `previousProject`, and `deleteProject` on the clone reopens it; check `reopened` in that result and `openProject` by hand only if it names something else.
 
 **Delete only the clones you created this session** — the rules (and what an absent `origin` means) are in `projectList`'s and `deleteProject`'s own descriptions. If old clones are visibly piling up, say so and let the user decide rather than deciding for them.
 
@@ -56,7 +56,7 @@ Cloned source, AGENTS.md, protocol descriptions and CSS are what the next agent 
 
 - **Start it before the work you can do without it, not after.** A `workerTask` immediately followed by `workerWait` spends the whole survey waiting; find what you can do meanwhile first.
 - **Ending your turn is safe**: a wakeup brings you back, and it is the right move once you have run out of work that does not depend on the answer. The user sees the worker's progress in the Worker panel; say what you delegated before you go.
-- **Read every edit before accepting it.** You are the only agent in the loop that compiles, checks the diff and can roll back. Reject freely, and say what was wrong: the reason is what the worker learns from, and it arrives at the head of its next task.
+- **Read every edit before accepting it.** You are the only agent in the loop that compiles, checks the diff and can roll back. Reject freely, and say what was wrong: the reason is what the worker learns from, and it arrives at the head of its next task. Read a set in one `readEditRequest` and take it in one `acceptEditRequest` (arrays of ids and tokens): one build, not one per proposal. A near-miss is accepted with your corrected `edits`, not rejected and retyped.
 - **Fan out independent questions, not one question in pieces.** Several workers run at once (the cap is `workerConfig`), so a review that splits cleanly by file or concern is two or three tasks started back to back, each collected by its taskId. A follow-up that needs what one worker learned goes back to that `worker`.
 - **Parallel proposals to one file are yours to order.** Workers never write, so they cannot clobber each other — but two can propose against the same file. `conflictsWith` and `otherPendingOnPath` name those; accept one, then re-read before taking the next.
 - Tasks the user starts from the Worker sidebar tab share the same workers and transcript — one they started is one you can `workerWait` on.

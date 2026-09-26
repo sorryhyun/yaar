@@ -1,6 +1,7 @@
 export {};
+import { createSignal } from '@bundled/solid-js';
 import { AppCommandError, errMsg, invoke } from '@bundled/yaar';
-import { previewWindowId } from '../core';
+import { activeProject, buildSerial, fileChanges, previewWindowId } from '../core';
 import { previewStaleNote, previewWindowIsOpen } from './preview';
 import { readFileText, writeFile } from './files';
 
@@ -324,6 +325,8 @@ export interface ScriptRunOptions {
   path?: string;
   update?: boolean;
   groups?: string[];
+  /** With `update`: rewrite only these rows (by label) and keep the rest of the baseline. */
+  steps?: string[];
 }
 
 export interface ScriptFailure {
@@ -350,7 +353,73 @@ export interface ScriptRunResult {
   removed?: string[];
   /** The script and the baseline no longer line up row-for-row — nothing was value-compared. */
   structureMismatch?: string;
+  /** Rows a `steps` update rewrote. */
+  updated?: string[];
   note?: string;
+}
+
+const LABEL_WRITE = 'previewScript baseline';
+
+/** The last run in this window, which `deploy` reads to say whether the build it ships was tested. */
+interface ScriptRunRecord {
+  projectId: string;
+  script: string;
+  buildSerial: number;
+  at: number;
+  pass: boolean;
+  partial: boolean;
+  summary: string;
+}
+
+const [lastScriptRun, setLastScriptRun] = createSignal<ScriptRunRecord | null>(null);
+
+/**
+ * Why the regression suite does not vouch for the build about to ship, or null when it
+ * does or the project has none. Advisory: `deploy` reports it and ships regardless.
+ */
+export async function regressionWarning(): Promise<string | null> {
+  const proj = activeProject();
+  if (!proj) return null;
+  const run = lastScriptRun();
+  const mine = run && run.projectId === proj.id ? run : null;
+  if (!mine) {
+    return (await readFileText(DEFAULT_SCRIPT_PATH)) === null
+      ? null
+      : `${DEFAULT_SCRIPT_PATH} exists but previewScript has not run in this session, so ` +
+          'nothing checked this build against its baseline.';
+  }
+  if (mine.buildSerial !== buildSerial()) {
+    return `The last previewScript run (${mine.script}) measured an older build; the project was compiled since.`;
+  }
+  const edited = fileChanges().find(
+    (c) => c.projectId === proj.id && c.timestamp > mine.at && c.label !== LABEL_WRITE,
+  );
+  if (edited) {
+    return `${edited.path} changed after the last previewScript run, which measured the code before it.`;
+  }
+  if (!mine.pass) return `The last previewScript run (${mine.script}) failed: ${mine.summary}.`;
+  if (mine.partial) return `The last previewScript run (${mine.script}) covered only some groups.`;
+  return null;
+}
+
+export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRunResult> {
+  const result = await runScript(opts);
+  const proj = activeProject();
+  if (proj) {
+    const failed = result.failures?.length ?? 0;
+    setLastScriptRun({
+      projectId: proj.id,
+      script: result.script,
+      buildSerial: buildSerial(),
+      at: Date.now(),
+      pass: result.pass !== false,
+      partial: !!opts.groups?.length,
+      summary: result.structureMismatch
+        ? 'the script no longer lines up with its baseline'
+        : `${failed + (result.failuresOmitted ?? 0)} failing row(s), first: ${result.failures?.[0]?.step ?? '?'}`,
+    });
+  }
+  return result;
 }
 
 function parseBaseline(baselinePath: string, text: string): BaselineFile {
@@ -377,7 +446,7 @@ function inGroups(group: string | undefined, groups?: string[]): boolean {
   return !groups || !group || groups.includes(group);
 }
 
-export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRunResult> {
+async function runScript(opts: ScriptRunOptions): Promise<ScriptRunResult> {
   const wid = previewWindowId();
   if (!wid || !(await previewWindowIsOpen())) {
     throw new AppCommandError('No preview window open. Run compile, then preview, then this.');
@@ -411,11 +480,16 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
         }.`,
       );
     }
-    if (opts.update) {
+    if (opts.update && !opts.steps) {
       // A partial run cannot stand in for the whole baseline, and patching rows into
       // one file across runs would blend measurements of different builds.
-      throw new AppCommandError('update: true requires a full run — drop "groups".');
+      throw new AppCommandError(
+        'update: true requires a full run — drop "groups", or name the rows to rewrite in "steps".',
+      );
     }
+  }
+  if (opts.steps && !opts.update) {
+    throw new AppCommandError('"steps" names rows to rewrite, so it needs update: true.');
   }
 
   const toRun = script.steps.filter((s) => inGroups(s.group, groups));
@@ -473,11 +547,16 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
     await writeFile(
       script.baselinePath,
       JSON.stringify({ script: scriptPath, results: rows }, null, 2),
-      { label: 'previewScript baseline' },
+      { label: LABEL_WRITE },
     );
   };
 
   if (baselineText === null) {
+    if (opts.steps) {
+      throw new AppCommandError(
+        `No baseline at ${script.baselinePath} to rewrite rows in. Run once without "steps" first.`,
+      );
+    }
     if (groups) {
       throw new AppCommandError(
         `No baseline at ${script.baselinePath}, and a groups-filtered run cannot capture one. ` +
@@ -496,6 +575,8 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
 
   const baseline = parseBaseline(script.baselinePath, baselineText);
   const expectedRows = baseline.results.filter((r) => inGroups(r?.group, groups));
+
+  if (opts.steps) return await updateSteps(opts.steps, baseline, rows, groups, summary, scriptPath);
 
   // Updating comes before the alignment check: re-capture is what a caller does after
   // editing the script. The delta is reported by label instead: `added` and `removed`
@@ -569,5 +650,72 @@ export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRu
     pass: failures.length === 0,
     ...(shown.length > 0 ? { failures: shown } : {}),
     ...(failures.length > shown.length ? { failuresOmitted: failures.length - shown.length } : {}),
+  };
+}
+
+/**
+ * Rewrite only the named rows of the baseline from this run and keep every other row
+ * as it was — the rest are compared like a normal run, so one intended change does not
+ * re-bless the whole file. Rows are matched by label (repeats numbered as in `rowKeys`).
+ */
+async function updateSteps(
+  names: string[],
+  baseline: BaselineFile,
+  rows: BaselineRow[],
+  groups: string[] | undefined,
+  summary: { script: string; baseline: string; stepsRun: number; rowsRecorded: number },
+  scriptPath: string,
+): Promise<ScriptRunResult> {
+  const covered = baseline.results
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => inGroups(row?.group, groups));
+  const expectedKeys = rowKeys(covered.map((c) => c.row));
+  const runKeys = rowKeys(rows);
+  const unknown = names.filter((n) => !runKeys.includes(n) || !expectedKeys.includes(n));
+  if (unknown.length > 0) {
+    throw new AppCommandError(
+      `No row ${unknown.map((n) => `"${n}"`).join(', ')} in both this run and the baseline. ` +
+        `Rows this run recorded: ${runKeys.slice(0, 40).join(', ')}${runKeys.length > 40 ? ', …' : ''}. ` +
+        'A row the baseline does not hold yet arrives with a full update: true.',
+    );
+  }
+  const results = [...baseline.results];
+  for (const name of names) {
+    results[covered[expectedKeys.indexOf(name)]!.index] = rows[runKeys.indexOf(name)]!;
+  }
+  await writeFile(summary.baseline, JSON.stringify({ script: scriptPath, results }, null, 2), {
+    label: LABEL_WRITE,
+  });
+
+  const failures: ScriptFailure[] = [];
+  runKeys.forEach((key, i) => {
+    if (names.includes(key)) return;
+    const at = expectedKeys.indexOf(key);
+    if (at < 0) return;
+    const want = JSON.stringify(normalize(covered[at]!.row.value));
+    const got = JSON.stringify(rows[i]!.value);
+    if (want === got) return;
+    failures.push({
+      step: key,
+      ...(rows[i]!.group ? { group: rows[i]!.group } : {}),
+      expected: reportValue(normalize(covered[at]!.row.value)),
+      actual: reportValue(rows[i]!.value),
+    });
+  });
+  const added = runKeys.filter((k) => !expectedKeys.includes(k));
+  const removed = expectedKeys.filter((k) => !runKeys.includes(k));
+  const shown = failures.slice(0, MAX_REPORTED_FAILURES);
+  return {
+    mode: 'updated',
+    ...summary,
+    updated: names,
+    pass: failures.length === 0 && added.length === 0 && removed.length === 0,
+    ...(shown.length > 0 ? { failures: shown } : {}),
+    ...(failures.length > shown.length ? { failuresOmitted: failures.length - shown.length } : {}),
+    ...(added.length > 0 ? { added } : {}),
+    ...(removed.length > 0 ? { removed } : {}),
+    note:
+      'Only the rows in "updated" were rewritten. `failures` are the other rows, compared ' +
+      'against the baseline as usual; `added`/`removed` rows need a full update: true.',
   };
 }

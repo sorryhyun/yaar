@@ -93,6 +93,47 @@ export function formatLineRanges(ranges: LineRange[], max = 12): string {
   return rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
 }
 
+/**
+ * `formatted` applied only where it meets `touched`: each hunk of the diff from
+ * `current` to `formatted` is taken when it overlaps a touched line of `current`
+ * (1-based, inclusive) and left as `current` had it otherwise. A pure insertion
+ * counts as sitting on the line it lands in front of.
+ */
+export function applyHunksWithin(current: string, formatted: string, touched: LineRange[]): string {
+  if (current === formatted || touched.length === 0) return current;
+  const parts = diffLines(current, formatted);
+  let out = '';
+  let line = 1;
+  for (let k = 0; k < parts.length; k++) {
+    const part = parts[k];
+    if (!part.added && !part.removed) {
+      out += part.value;
+      line += part.count ?? part.value.split('\n').length - 1;
+      continue;
+    }
+    let removed = '';
+    let added = '';
+    let removedCount = 0;
+    while (k < parts.length && (parts[k].added || parts[k].removed)) {
+      const p = parts[k];
+      if (p.removed) {
+        removed += p.value;
+        removedCount += p.count ?? p.value.split('\n').length - 1;
+      } else {
+        added += p.value;
+      }
+      k++;
+    }
+    k--;
+    const start = line;
+    const end = removedCount > 0 ? line + removedCount - 1 : line;
+    const hit = touched.some((r) => r.start <= end && r.end >= start);
+    out += hit ? added : removed;
+    line += removedCount;
+  }
+  return out;
+}
+
 /** A unified patch for one file, with `context` unchanged lines around each hunk. */
 export function buildPatch(name: string, before: string, after: string, context = 3): string {
   return createPatch(name, before, after, '', '', { context });

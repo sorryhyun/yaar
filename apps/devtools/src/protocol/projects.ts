@@ -18,13 +18,14 @@ export const projectCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      const { id, appId } = await createProject(String(p.name));
+      const { id, appId, previous } = await createProject(String(p.name));
       const proj = activeProject();
       return {
         projectId: id,
         appId,
         project: proj ? { id: proj.id, name: proj.name } : undefined,
         files: files().map((f) => f.path),
+        ...(previous ? { previousProject: previous } : {}),
       };
     },
   }),
@@ -46,23 +47,35 @@ export const projectCommands = {
     },
   }),
   deleteProject: defineAppCommand({
-    description: 'Permanently delete a project and its files. Not undoable.',
+    description:
+      'Permanently delete a project and its files. Not undoable. Deleting the active project ' +
+      'reopens the one that was in front when it was created or cloned (else the last open ' +
+      'tab); the result names it as `reopened`.',
     params: {
       type: 'object',
-      properties: { id: { type: 'string' } },
+      properties: {
+        id: { type: 'string' },
+        reopenPrevious: {
+          type: 'boolean',
+          description:
+            'Default true. false: fall back to the last open tab instead of the project ' +
+            'this one was made from.',
+        },
+      },
       required: ['id'],
     },
     replay: 'never',
-    run: async (p) => {
-      await deleteProject(String(p.id));
-    },
+    run: async (p) =>
+      await deleteProject(String(p.id), { reopenPrevious: p.reopenPrevious !== false }),
   }),
   cloneApp: defineAppCommand({
     description:
       'Clone an installed app source into a new project and open it. The copy is a sandbox: ' +
       'editing it changes nothing about the live app until you deploy. Returns `appId` (from ' +
-      'the cloned app.json — the id deploy expects), `files` (the cloned paths), and ' +
-      '`agentsMd` with the cloned root AGENTS.md contents, or null when the app has no AGENTS.md.',
+      'the cloned app.json — the id deploy expects), `files` (the cloned paths), ' +
+      '`agentsMd` with the cloned root AGENTS.md contents (null when the app has none), and ' +
+      '`previousProject` — the project the clone replaced in front, which deleteProject on ' +
+      'the clone reopens.',
     params: {
       type: 'object',
       properties: {
@@ -72,12 +85,13 @@ export const projectCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      const { id: projectId, appId, agentsMd } = await cloneApp(String(p.appId));
+      const { id: projectId, appId, agentsMd, previous } = await cloneApp(String(p.appId));
       const proj = activeProject();
       return {
         projectId,
         appId,
         project: proj ? { id: proj.id, name: proj.name } : undefined,
+        ...(previous ? { previousProject: previous } : {}),
         files: files().map((f) => f.path),
         agentsMd,
       };

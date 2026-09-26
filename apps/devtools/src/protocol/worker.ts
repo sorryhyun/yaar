@@ -7,8 +7,11 @@ import {
   diagnostics,
   files,
   typecheckState,
+  setTypecheckState,
 } from '../core';
-import { applyEdits } from '../lib/edits';
+import { applyEdits, type EditSpec } from '../lib/edits';
+import { classifyChange, filesNamedInTask, splitBySize } from '../lib/source-scan';
+import { resolveCompileStatus } from '../lib/compile-status';
 import {
   compile,
   grep,
@@ -31,8 +34,13 @@ import {
   setWorkerCap,
   workerSlots,
   pendingOnPath,
+  parseEditSpecs,
+  noteWorkerRead,
+  noteWorkerGrep,
+  freeWorkerCount,
   MAX_WORKERS,
   NO_ACTIVE_PROJECT,
+  type EditProposal,
 } from '../services';
 
 // Two audiences, one file. `workerTask`/`workerWait`/`workerInterrupt` and the
@@ -65,6 +73,10 @@ import {
 /** Shared with the dry run in services/worker.ts, which refuses the same way. */
 const NO_PROJECT = NO_ACTIVE_PROJECT;
 
+/** Named files past this size are refused as one task; ~280 KB was seen to go quiet. */
+const TASK_BYTES_LIMIT = 150_000;
+const TASK_CHUNK_BYTES = 120_000;
+
 /**
  * Apply an accepted proposal and hand back what changed, or throw.
  *
@@ -73,10 +85,18 @@ const NO_PROJECT = NO_ACTIVE_PROJECT;
  * place a human sees that an edit came from the worker rather than from the
  * agent they were talking to.
  */
+interface Applied {
+  proposal: EditProposal;
+  edits: EditSpec[];
+  lines: number;
+  before: string;
+  after: string;
+}
+
 async function applyProposal(
   id: number,
   path: string,
-  edits: Parameters<typeof applyEdits>[1],
+  edits: EditSpec[],
 ): Promise<{ before: string; after: string }> {
   const before = await readFileText(path);
   if (before === null) throw new AppCommandError('No such file in the active project: ' + path);
@@ -161,7 +181,12 @@ export const workerCommands = {
       '`worker` id, so fan independent surveys out as separate tasks and collect each by ' +
       'taskId. A worker keeps its memory across tasks and a task goes to the worker that ' +
       'finished last when it is free — pass `worker` to pin a follow-up to a specific one, ' +
-      'and `fresh` to opt out of memory. With every worker busy the call is refused, not queued.',
+      'and `fresh` to opt out of memory. With every worker busy the call is refused, not queued. ' +
+      'Files the task names (paths, directories, globs) are its scope: a task naming more than ' +
+      '~150 KB of them is refused with a suggested split, since one worker turn that size ' +
+      'tends to end with "went quiet" — pass `split: true` to run it as parallel chunks, or ' +
+      '`allowLarge: true` to run it whole. The result reports `filesRead` and `filesNotRead` ' +
+      'against that scope, and a turn that went quiet carries a `stopDiagnosis`.',
     params: {
       type: 'object',
       properties: {
@@ -184,14 +209,75 @@ export const workerCommands = {
             'not want this one built on it. Costs a respawn; the default (false) is right ' +
             'for a follow-up.',
         },
+        split: {
+          type: 'boolean',
+          description:
+            'When the named files exceed the size limit, start one task per ~120 KB chunk on ' +
+            'free workers, each told to read only its chunk. Refused if there are more chunks ' +
+            'than free workers. Returns `tasks`, one per chunk.',
+        },
+        allowLarge: {
+          type: 'boolean',
+          description: 'Run an over-limit task on one worker anyway.',
+        },
       },
       required: ['task'],
     },
     replay: 'never',
     run: async (p) => {
+      const task = String(p.task ?? '');
+      const scope = filesNamedInTask(task, files());
+      const scopeBytes = scope.reduce((n, f) => n + f.bytes, 0);
+      const kb = (bytes: number) => Math.round(bytes / 1000);
+      if (scopeBytes > TASK_BYTES_LIMIT && p.allowLarge !== true) {
+        const chunks = splitBySize(scope, TASK_CHUNK_BYTES);
+        const describe = (chunk: typeof scope) =>
+          `${chunk.length} files, ~${kb(chunk.reduce((n, f) => n + f.bytes, 0))} KB: ` +
+          chunk.map((f) => f.path).join(', ');
+        if (p.split !== true) {
+          throw new AppCommandError(
+            `This task names ${scope.length} files, ~${kb(scopeBytes)} KB — past the ` +
+              `~${kb(TASK_BYTES_LIMIT)} KB one worker reliably finishes in a turn. Pass split: true ` +
+              `to run it as ${chunks.length} parallel tasks, narrow the task, or pass ` +
+              'allowLarge: true to run it whole. Suggested split:\n' +
+              chunks.map((c, i) => `${i + 1}. ${describe(c)}`).join('\n'),
+          );
+        }
+        if (p.worker != null || p.fresh === true) {
+          throw new AppCommandError('split picks its own workers — drop `worker` and `fresh`.');
+        }
+        const free = freeWorkerCount();
+        if (chunks.length > free) {
+          throw new AppCommandError(
+            `split needs ${chunks.length} free workers and ${free} ${free === 1 ? 'is' : 'are'} free ` +
+              `(cap ${workerCap()}). Raise the cap with workerConfig, wait for a running task, ` +
+              'or narrow the task.',
+          );
+        }
+        const tasks = [];
+        for (const chunk of chunks) {
+          const started = await startWorkerTask(
+            `${task}\n\nYour share of this task is only these files; other workers cover the ` +
+              `rest, so do not read beyond them: ${chunk.map((f) => f.path).join(', ')}`,
+            { wakeAgent: true, scope: chunk.map((f) => f.path) },
+          );
+          if (started.error) throw new AppCommandError(started.error);
+          tasks.push({
+            taskId: started.taskId,
+            worker: started.worker,
+            files: chunk.length,
+            kb: kb(chunk.reduce((n, f) => n + f.bytes, 0)),
+          });
+        }
+        return {
+          split: true,
+          tasks,
+          collect: 'You will be woken once per task. workerWait with each taskId collects them.',
+        };
+      }
       // `wakeAgent` is what separates this call from the same task typed into the
       // Worker panel: the agent asked, so the agent is woken when it settles.
-      const started = await startWorkerTask(String(p.task), {
+      const started = await startWorkerTask(task, {
         wakeAgent: true,
         ...(p.fresh === true ? { fresh: true } : {}),
         ...(p.worker != null ? { worker: String(p.worker) } : {}),
@@ -201,6 +287,7 @@ export const workerCommands = {
         taskId: started.taskId,
         worker: started.worker,
         status: 'running',
+        ...(scope.length ? { scope: { files: scope.length, kb: kb(scopeBytes) } } : {}),
         collect:
           `You will be woken with the answer (channel "worker", taskId ${started.taskId}). ` +
           'To block for it instead, call workerWait.',
@@ -271,73 +358,97 @@ export const workerCommands = {
   }),
   readEditRequest: defineAppCommand({
     description:
-      'Read one edit the worker proposed, whole: the file, the rationale, and the exact ' +
-      'search/replace steps. The `worker` state key and a task result list proposals as ' +
-      'summaries; this is where the bodies are. It also returns the `token` that ' +
-      'acceptEditRequest requires, which is the point of the command — an edit cannot be ' +
-      'applied without having been read, so accepting one is never cheaper than looking at ' +
-      'it. Reading costs nothing and does not commit you.',
+      'Read edits the worker proposed, whole: the file, the rationale, the exact ' +
+      'search/replace steps, and `evidence` — the greps the worker ran in that task before ' +
+      'proposing, with sample matches. The `worker` state key and a task result list ' +
+      'proposals as summaries; this is where the bodies are. It also returns the `token` ' +
+      'that acceptEditRequest requires, which is the point of the command — an edit cannot be ' +
+      'applied without having been read. Pass an array of ids to read several at once. ' +
+      'Reading costs nothing and does not commit you.',
     params: {
       type: 'object',
       properties: {
-        id: { type: 'number', description: 'The proposal id, as the summaries report it.' },
+        id: {
+          oneOf: [{ type: 'number' }, { type: 'array', items: { type: 'number' } }],
+          description: 'A proposal id, or an array of them, as the summaries report it.',
+        },
       },
       required: ['id'],
     },
     replay: 'never',
     run: async (p) => {
-      const id = Number(p.id);
-      const proposal = findProposal(id);
-      if (!proposal) {
-        throw new AppCommandError(
-          'No edit request #' +
-            id +
-            '. Read the `worker` state key for the ones that exist; resetting the worker ' +
-            'clears them along with its transcript.',
-        );
-      }
-      return {
-        id: proposal.id,
-        taskId: proposal.taskId,
-        worker: proposal.worker,
-        path: proposal.path,
-        status: proposal.status,
-        ...(proposal.status === 'pending' && pendingOnPath(proposal.path, id).length
-          ? { conflictsWith: pendingOnPath(proposal.path, id).map((q) => q.id) }
-          : {}),
-        rationale: proposal.rationale,
-        edits: proposal.edits,
-        token: proposal.token,
-        ...(proposal.resolution ? { resolution: proposal.resolution } : {}),
-      };
+      const many = Array.isArray(p.id);
+      const ids = (many ? (p.id as unknown[]) : [p.id]).map(Number);
+      const bodies = ids.map((id) => {
+        const proposal = findProposal(id);
+        if (!proposal) {
+          throw new AppCommandError(
+            'No edit request #' +
+              id +
+              '. Read the `worker` state key for the ones that exist; resetting the worker ' +
+              'clears them along with its transcript.',
+          );
+        }
+        const conflicts =
+          proposal.status === 'pending' ? pendingOnPath(proposal.path, id).map((q) => q.id) : [];
+        return {
+          id: proposal.id,
+          taskId: proposal.taskId,
+          worker: proposal.worker,
+          path: proposal.path,
+          status: proposal.status,
+          ...(conflicts.length ? { conflictsWith: conflicts } : {}),
+          rationale: proposal.rationale,
+          edits: proposal.edits,
+          ...(proposal.evidence?.length ? { evidence: proposal.evidence } : {}),
+          token: proposal.token,
+          ...(proposal.resolution ? { resolution: proposal.resolution } : {}),
+        };
+      });
+      return many ? { requests: bodies } : bodies[0];
     },
   }),
   acceptEditRequest: defineAppCommand({
     description:
-      'Apply an edit the worker proposed, then type check and compile. Requires the `token` ' +
-      'from readEditRequest and a one-line `intent` in your own words, because an accept is ' +
-      'supposed to be a judgement and not a forward. Re-checks the edits against the file ' +
-      'first — the project may have moved since the proposal was made — and refuses without ' +
-      'writing if they no longer apply. If the bundle then fails, or type errors increase, ' +
-      'the file is restored, the project is rebuilt clean, and the result comes back with ' +
-      '`rolledBack: true` and the `failure` that caused it — a broken build never survives this ' +
-      'command. Accepts run one at a time even when called concurrently; `otherPendingOnPath` ' +
-      'names proposals to the same file (often from a parallel worker) that were verified ' +
-      'against the bytes this one replaced, and are re-checked when you accept them. The write is recorded in the Changes panel labelled with the proposal ' +
-      'number. Slow (up to two builds): pass timeoutMs, e.g. 120000.',
+      'Apply edits the worker proposed, then type check and compile once. Requires the ' +
+      '`token` from readEditRequest for each id and a one-line `intent` in your own words, ' +
+      'because an accept is a judgement and not a forward. Pass arrays for `id` and `token` ' +
+      '(same order) to take several proposals with ONE build; a batch skips any that no ' +
+      'longer apply and names them in `stale`. When every applied change touches only ' +
+      'comments (TS/JS/CSS) or Markdown outside src/, no build runs and `build` says ' +
+      '"skipped"; the type-check verdict is kept, since the code it describes is unchanged. ' +
+      'Pass `edits` with a single id to accept a corrected version of that proposal: they ' +
+      'replace its steps, are dry-run the same way, and the worker is told what you changed. ' +
+      'Each proposal is re-checked against the file first and refused without writing if it ' +
+      'no longer applies. If the bundle then fails, or type errors increase, every file ' +
+      'written is restored, the project is rebuilt clean, and the result carries ' +
+      '`rolledBack: true` and the `failure` — a broken build never survives this command. ' +
+      '`otherPendingOnPath` names proposals to the same files that were verified against the ' +
+      'bytes just replaced. Slow when it builds (up to two builds): pass timeoutMs, e.g. 120000.',
     params: {
       type: 'object',
       properties: {
-        id: { type: 'number', description: 'The proposal id.' },
+        id: {
+          oneOf: [{ type: 'number' }, { type: 'array', items: { type: 'number' } }],
+          description: 'The proposal id, or an array of ids applied in that order.',
+        },
         token: {
-          type: 'string',
-          description: 'The token readEditRequest returned for this proposal.',
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+          description: 'The token readEditRequest returned; an array matching `id` for a batch.',
         },
         intent: {
           type: 'string',
           description:
-            'One line, yours: what this edit does and why you are taking it. Recorded with ' +
-            'the proposal and sent back to the worker.',
+            'One line, yours: what these edits do and why you are taking them. Recorded with ' +
+            'each proposal and sent back to the worker.',
+        },
+        edits: {
+          type: 'array',
+          items: { type: 'object' },
+          description:
+            'Single id only: your corrected steps, replacing the proposal’s — the same shape ' +
+            'as editFile’s `edits` (search/replace, or startLine/endLine/anchor/replace). Each ' +
+            'search must match exactly once.',
         },
       },
       required: ['id', 'token', 'intent'],
@@ -347,124 +458,239 @@ export const workerCommands = {
       serializeAccept(async () => {
         if (!activeProject())
           throw new AppCommandError('No active project. Open or create one first.');
-        const id = Number(p.id);
+        const many = Array.isArray(p.id);
+        const ids = (many ? (p.id as unknown[]) : [p.id]).map(Number);
+        const tokens = (Array.isArray(p.token) ? (p.token as unknown[]) : [p.token]).map((t) =>
+          String(t ?? ''),
+        );
         const intent = String(p.intent ?? '').trim();
-        const proposal = findProposal(id);
-        if (!proposal) throw new AppCommandError('No edit request #' + id + '.');
-        if (proposal.status !== 'pending') {
+        if (ids.length === 0)
+          throw new AppCommandError('id is empty — name at least one proposal.');
+        if (tokens.length !== ids.length) {
           throw new AppCommandError(
-            'Edit request #' +
-              id +
-              ' is already ' +
-              proposal.status +
-              ': ' +
-              (proposal.resolution ?? ''),
+            `Pass one token per id, in the same order: got ${ids.length} ids and ${tokens.length} tokens.`,
           );
         }
-        if (String(p.token ?? '') !== proposal.token) {
-          throw new AppCommandError(
-            'Wrong token for edit request #' +
-              id +
-              '. Call readEditRequest first and pass the ' +
-              'token it returns — this command will not apply an edit you have not read.',
-          );
+        if (new Set(ids).size !== ids.length) {
+          throw new AppCommandError('The same id appears twice in `id`.');
         }
         if (intent.length < 12) {
           throw new AppCommandError(
-            'intent must say something. One line in your own words about what this edit does ' +
-              'and why you are taking it.',
+            'intent must say something. One line in your own words about what these edits do ' +
+              'and why you are taking them.',
           );
         }
-
-        // The proposal was checked when it was submitted, against the file as it was
-        // then. Anything since — another accept, an editFile of your own, a project
-        // switch — may have invalidated it, and an anchor that no longer matches is
-        // the thing this catches before a write rather than after one.
-        const recheck = await validateProposedEdits(proposal.path, proposal.edits);
-        if (!recheck.ok) {
-          resolveProposal(id, 'failed', 'Stale at accept: ' + recheck.error);
-          queueWorkerFeedback(
-            'Edit request #' +
-              id +
-              ' could not be applied — ' +
-              recheck.error +
-              ' The file changed after you proposed it. Re-read it before proposing again.',
-            proposal.worker,
-          );
-          throw new AppCommandError(
-            'Edit request #' +
-              id +
-              ' no longer applies: ' +
-              recheck.error +
-              ' Nothing was written.',
-          );
+        let amended: EditSpec[] | null = null;
+        if (p.edits !== undefined) {
+          if (ids.length !== 1) {
+            throw new AppCommandError('`edits` amends one proposal — pass a single id with it.');
+          }
+          amended = parseEditSpecs(p.edits);
+          if (!amended || amended.length === 0) {
+            throw new AppCommandError(
+              '`edits` must be a non-empty array of {search, replace} or ' +
+                '{startLine, endLine, anchor, replace} objects.',
+            );
+          }
         }
 
+        // Every gate before any write: a batch that failed its third token after writing
+        // two files would leave a half-taken batch nobody asked for.
+        const proposals = ids.map((id, i) => {
+          const proposal = findProposal(id);
+          if (!proposal) throw new AppCommandError('No edit request #' + id + '.');
+          if (proposal.status !== 'pending') {
+            throw new AppCommandError(
+              'Edit request #' +
+                id +
+                ' is already ' +
+                proposal.status +
+                ': ' +
+                (proposal.resolution ?? ''),
+            );
+          }
+          if (tokens[i] !== proposal.token) {
+            throw new AppCommandError(
+              'Wrong token for edit request #' +
+                id +
+                '. Call readEditRequest first and pass the ' +
+                'token it returns — this command will not apply an edit you have not read.',
+            );
+          }
+          return proposal;
+        });
+
+        const verdictBefore = typecheckState();
         const baseline = typeErrorCount();
-        const applied = await applyProposal(id, proposal.path, proposal.edits);
-        await typecheck();
-        await compile();
+        const applied: Applied[] = [];
+        const stale: { id: number; error: string }[] = [];
+        for (const proposal of proposals) {
+          const id = proposal.id;
+          const edits = amended ?? proposal.edits;
+          // The proposal was checked when it was submitted, against the file as it was
+          // then. Anything since — another accept, an editFile of your own, a project
+          // switch — may have invalidated it.
+          const recheck = await validateProposedEdits(proposal.path, edits);
+          if (!recheck.ok) {
+            // An amendment that does not apply is the caller's slip, not the worker's.
+            if (!amended) {
+              resolveProposal(id, 'failed', 'Stale at accept: ' + recheck.error);
+              queueWorkerFeedback(
+                'Edit request #' +
+                  id +
+                  ' could not be applied — ' +
+                  recheck.error +
+                  ' The file changed after you proposed it. Re-read it before proposing again.',
+                proposal.worker,
+              );
+            }
+            if (!many) {
+              throw new AppCommandError(
+                (amended
+                  ? 'Your edits for #' + id + ' do not apply: '
+                  : 'Edit request #' + id + ' no longer applies: ') +
+                  recheck.error +
+                  ' Nothing was written.',
+              );
+            }
+            stale.push({ id, error: recheck.error ?? 'does not apply' });
+            continue;
+          }
+          const written = await applyProposal(id, proposal.path, edits);
+          applied.push({ proposal, edits, lines: recheck.lines ?? 0, ...written });
+        }
 
-        const built = bundleStatus() === 'success';
-        const after = typeErrorCount();
-        // Two different failures, and only one of them is this edit's fault. A bundle
-        // that stopped building is: Bun built before and does not now. A type error
-        // count is only evidence if a typecheck had run before the edit — otherwise
-        // the errors may be older than the proposal, and rolling back on them would
-        // discard a good edit to hide someone else's mess.
-        const regressed = baseline.reliable && after.count > baseline.count;
-        if (!built || regressed) {
-          const why = !built
-            ? 'the bundle failed'
-            : 'type errors went from ' + baseline.count + ' to ' + after.count;
-          // Read before the revert: the rebuild below succeeds, so asking afterwards
-          // reports the clean state and says nothing about what went wrong.
-          const failure = built
-            ? diagnostics().filter((d) => d.severity === 'error')
-            : compileErrors();
-          await writeFile(proposal.path, applied.before, {
-            before: applied.after,
-            label: 'revert worker edit #' + id,
-          });
-          await typecheck();
-          await compile();
-          resolveProposal(id, 'failed', 'Applied and rolled back: ' + why);
-          queueWorkerFeedback(
-            'Edit request #' +
-              id +
-              ' was applied and rolled back because ' +
-              why +
-              '. ' +
-              (failure.length ? 'First error: ' + JSON.stringify(failure[0]) + '. ' : '') +
-              'Read the file again and check what your replacement text broke.',
-            proposal.worker,
-          );
+        if (applied.length === 0) {
           return {
-            applied: false,
-            rolledBack: true,
-            id,
-            path: proposal.path,
-            reason: why,
-            failure,
+            applied: [],
+            stale,
+            note: 'Nothing was written: no proposal in the batch still applies.',
           };
         }
 
-        resolveProposal(id, 'accepted', intent);
-        queueWorkerFeedback(
-          'Edit request #' + id + ' was accepted and applied. ' + intent,
-          proposal.worker,
+        const needsBuild = applied.some(
+          (a) => classifyChange(a.proposal.path, a.before, a.after) === 'code',
         );
-        // Proposals parked against the same file were verified against the bytes this
-        // accept just replaced; name them so the caller re-reads before taking another.
-        const stillPending = pendingOnPath(proposal.path, id).map((q) => q.id);
+        if (needsBuild) {
+          await typecheck();
+          await compile();
+          const built = bundleStatus() === 'success';
+          const after = typeErrorCount();
+          // Two different failures, and only one of them is the edits' fault. A bundle
+          // that stopped building is. A type error count is only evidence if a
+          // typecheck had run before the edit — otherwise the errors may be older than
+          // the proposal, and rolling back on them would discard a good edit.
+          const regressed = baseline.reliable && after.count > baseline.count;
+          if (!built || regressed) {
+            const why = !built
+              ? 'the bundle failed'
+              : 'type errors went from ' + baseline.count + ' to ' + after.count;
+            // Read before the revert: the rebuild below succeeds, so asking afterwards
+            // reports the clean state and says nothing about what went wrong.
+            const failure = built
+              ? diagnostics().filter((d) => d.severity === 'error')
+              : compileErrors();
+            for (const a of [...applied].reverse()) {
+              await writeFile(a.proposal.path, a.before, {
+                before: a.after,
+                label: 'revert worker edit #' + a.proposal.id,
+              });
+            }
+            await typecheck();
+            await compile();
+            // A batch cannot say which of its edits broke the build, so its proposals
+            // stay pending for one-at-a-time accepts instead of being marked failed.
+            if (!many) {
+              const id = applied[0].proposal.id;
+              resolveProposal(id, 'failed', 'Applied and rolled back: ' + why);
+              queueWorkerFeedback(
+                'Edit request #' +
+                  id +
+                  ' was applied and rolled back because ' +
+                  why +
+                  '. ' +
+                  (failure.length ? 'First error: ' + JSON.stringify(failure[0]) + '. ' : '') +
+                  'Read the file again and check what your replacement text broke.',
+                applied[0].proposal.worker,
+              );
+            }
+            return {
+              applied: false,
+              rolledBack: true,
+              ids: applied.map((a) => a.proposal.id),
+              reason: why,
+              failure,
+              ...(many
+                ? {
+                    note:
+                      'Every file in the batch was restored and the proposals are still pending. ' +
+                      'Accept them one at a time to find the one that breaks the build.',
+                  }
+                : {}),
+              ...(stale.length ? { stale } : {}),
+            };
+          }
+        } else {
+          // Comments and docs only: the verdict from before still describes the code.
+          setTypecheckState(verdictBefore);
+        }
+
+        for (const a of applied) {
+          const id = a.proposal.id;
+          resolveProposal(id, 'accepted', amended ? 'Accepted with changes: ' + intent : intent);
+          queueWorkerFeedback(
+            amended
+              ? 'Edit request #' +
+                  id +
+                  ' was accepted after the caller corrected it. Applied instead of your steps: ' +
+                  JSON.stringify(amended).slice(0, 800) +
+                  '. ' +
+                  intent
+              : 'Edit request #' + id + ' was accepted and applied. ' + intent,
+            a.proposal.worker,
+          );
+        }
+        const typeErrors = typeErrorCount().count;
+        const build = needsBuild ? 'ran' : 'skipped (comments/docs only)';
+        const status = resolveCompileStatus(bundleStatus(), typecheckState());
+        // Proposals parked against the same files were verified against the bytes these
+        // accepts just replaced; name them so the caller re-reads before taking another.
+        const doneIds = new Set(applied.map((a) => a.proposal.id));
+        const stillPending = [
+          ...new Set(
+            applied.flatMap((a) =>
+              pendingOnPath(a.proposal.path)
+                .map((q) => q.id)
+                .filter((q) => !doneIds.has(q)),
+            ),
+          ),
+        ];
+        if (!many) {
+          const a = applied[0];
+          return {
+            applied: true,
+            id: a.proposal.id,
+            path: a.proposal.path,
+            editsApplied: a.edits.length,
+            lines: a.lines,
+            ...(amended ? { amended: true } : {}),
+            build,
+            typeErrors,
+            status,
+            ...(stillPending.length ? { otherPendingOnPath: stillPending } : {}),
+          };
+        }
         return {
-          applied: true,
-          id,
-          path: proposal.path,
-          editsApplied: proposal.edits.length,
-          lines: recheck.lines,
-          typeErrors: after.count,
-          status: after.count === 0 ? 'success' : 'error',
+          applied: applied.map((a) => ({
+            id: a.proposal.id,
+            path: a.proposal.path,
+            editsApplied: a.edits.length,
+            lines: a.lines,
+          })),
+          ...(stale.length ? { stale } : {}),
+          build,
+          typeErrors,
+          status,
           ...(stillPending.length ? { otherPendingOnPath: stillPending } : {}),
         };
       }),
@@ -600,7 +826,9 @@ export const workerCommands = {
           endLine: p.end_line != null ? Number(p.end_line) : undefined,
           lineNum: true,
         });
-        return result.content;
+        return (
+          result.content + noteWorkerRead(String(p.personaId ?? ''), path, result.content.length)
+        );
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`;
       }
@@ -649,12 +877,20 @@ export const workerCommands = {
       // explores source, and a minified bundle line would eat its context for nothing.
       const result = await grep(pattern, p.glob ? String(p.glob) : undefined);
       if (result.matches.length === 0) {
+        noteWorkerGrep(String(p.personaId ?? ''), pattern, p.glob ? String(p.glob) : undefined, []);
         return result.excluded
           ? `No matches in source (${result.excluded} were in generated output, which this tool skips).`
           : 'No matches found.';
       }
-      const body = result.matches.map((m) => `${m.file}:${m.line}│${m.content}`).join('\n');
-      return result.truncated ? `${body}\n(results truncated)` : body;
+      const lines = result.matches.map((m) => `${m.file}:${m.line}│${m.content}`);
+      const nudge = noteWorkerGrep(
+        String(p.personaId ?? ''),
+        pattern,
+        p.glob ? String(p.glob) : undefined,
+        lines,
+      );
+      const body = lines.join('\n');
+      return (result.truncated ? `${body}\n(results truncated)` : body) + nudge;
     },
   }),
 };

@@ -53,6 +53,40 @@ const EMPTY_APP_JSON: z.infer<typeof ProjectAppJsonSchema> = {};
  */
 const ORIGINS_PATH = 'project-origins.json';
 
+/**
+ * For each project made by `createProject` or `cloneApp`, the project that was in front
+ * when it was made — where `deleteProject` returns to. A sidecar for the same reason as
+ * {@link ORIGINS_PATH}.
+ */
+const RETURN_PATH = 'project-return.json';
+
+async function readReturnMap(): Promise<Record<string, string>> {
+  const raw = await appStorage.readJsonOr<unknown>(RETURN_PATH, undefined);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [id, to] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof to === 'string') out[id] = to;
+  }
+  return out;
+}
+
+/** Best effort, like `recordOrigin`: losing it only costs the automatic return. */
+async function updateReturnMap(edit: (map: Record<string, string>) => void): Promise<void> {
+  try {
+    const map = await readReturnMap();
+    edit(map);
+    await appStorage.save(RETURN_PATH, JSON.stringify(map, null, 2));
+  } catch (err) {
+    console.error('[devtools] recording the return project failed', err);
+  }
+}
+
+/** The project in front right now, as the one a new project should return to. */
+function currentForReturn(): { id: string; name: string } | null {
+  const proj = activeProject();
+  return proj ? { id: proj.id, name: proj.name } : null;
+}
+
 async function readOrigins(): Promise<Record<string, string>> {
   const raw = await appStorage.readJsonOr<unknown>(ORIGINS_PATH, undefined);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -320,7 +354,10 @@ export async function loadProjects(): Promise<void> {
   }
 }
 
-export async function createProject(name: string): Promise<{ id: string; appId: string }> {
+export async function createProject(
+  name: string,
+): Promise<{ id: string; appId: string; previous: { id: string; name: string } | null }> {
+  const previous = currentForReturn();
   const id = Date.now().toString();
   const appId = appIdFromName(name, id);
   await appStorage.save(projectPath(id, 'src/main.ts'), scaffoldMain(name, appId));
@@ -334,10 +371,11 @@ export async function createProject(name: string): Promise<{ id: string; appId: 
     JSON.stringify({ appId, name, icon: '🧩', version: '1.0.0' }, null, 2),
   );
   await recordOrigin(id, 'new');
+  if (previous) await updateReturnMap((m) => (m[id] = previous.id));
   await loadProjects();
   await openProject(id);
   setStatusText(`Created project "${name}"`);
-  return { id, appId };
+  return { id, appId, previous };
 }
 
 export interface InstalledApp {
@@ -386,10 +424,13 @@ export interface CloneAppResult {
   appId: string;
   /** Root AGENTS.md content, or null when the cloned app does not provide one. */
   agentsMd: string | null;
+  /** The project that was in front before the clone replaced it, if any. */
+  previous: { id: string; name: string } | null;
 }
 
 export async function cloneApp(appId: string): Promise<CloneAppResult> {
   setStatusText(`Cloning "${appId}"...`);
+  const previous = currentForReturn();
   const result = await invoke<{
     // `encoding` is set for files whose bytes are not valid UTF-8 (images, fonts,
     // wasm). Writing those with the default utf-8 encoding re-encodes the base64
@@ -423,10 +464,16 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
     agentsMd = raw;
   }
   await recordOrigin(id, `clone:${appId}`);
+  if (previous) await updateReturnMap((m) => (m[id] = previous.id));
   await loadProjects();
   await openProject(id);
   setStatusText(`Cloned "${name}"`);
-  return { id, appId: typeof meta.appId === 'string' ? meta.appId : appId, agentsMd };
+  return {
+    id,
+    appId: typeof meta.appId === 'string' ? meta.appId : appId,
+    agentsMd,
+    previous,
+  };
 }
 
 /**
@@ -503,7 +550,24 @@ function clearActiveProjectState({ record = true }: { record?: boolean } = {}): 
   if (record) saveWorkspace();
 }
 
-export async function deleteProject(id: string): Promise<void> {
+export interface DeleteProjectResult {
+  deleted: string;
+  /** The project now in front when the deleted one was, or null when none is open. */
+  reopened: { id: string; name: string } | null;
+  /** True when `reopened` is the project that was in front before this one was made. */
+  returnedToPrevious?: boolean;
+}
+
+/**
+ * Delete a project. When it is the active one, the project that was in front when it
+ * was created or cloned is reopened (unless `reopenPrevious` is false), falling back to
+ * the last open tab.
+ */
+export async function deleteProject(
+  id: string,
+  { reopenPrevious = true }: { reopenPrevious?: boolean } = {},
+): Promise<DeleteProjectResult> {
+  const returnTo = (await readReturnMap().catch(() => ({}) as Record<string, string>))[id];
   try {
     // Remove the entire project directory (server handles recursive deletion)
     await appStorage.remove(projectPath(id));
@@ -537,10 +601,24 @@ export async function deleteProject(id: string): Promise<void> {
   } catch {
     /* best effort — loadProjects prunes anything left behind */
   }
+  await updateReturnMap((m) => {
+    delete m[id];
+    // A project that pointed here now points where this one did.
+    for (const [k, v] of Object.entries(m)) if (v === id) m[k] = returnTo ?? '';
+    for (const [k, v] of Object.entries(m)) if (!v) delete m[k];
+  });
   setOpenTabs(openTabs().filter((t) => t !== id));
+  let returnedToPrevious = false;
   if (activeProject()?.id === id) {
     const remaining = openTabs();
-    if (remaining.length > 0) {
+    const back =
+      reopenPrevious && returnTo && returnTo !== id && projects().some((p) => p.id === returnTo)
+        ? returnTo
+        : null;
+    if (back) {
+      await openProject(back);
+      returnedToPrevious = true;
+    } else if (remaining.length > 0) {
       await openProject(remaining[remaining.length - 1]);
     } else {
       clearActiveProjectState();
@@ -550,6 +628,12 @@ export async function deleteProject(id: string): Promise<void> {
   }
   await loadProjects();
   setStatusText('Project deleted');
+  const now = activeProject();
+  return {
+    deleted: id,
+    reopened: now ? { id: now.id, name: now.name } : null,
+    ...(returnedToPrevious ? { returnedToPrevious } : {}),
+  };
 }
 
 export function closeTab(id: string): void {

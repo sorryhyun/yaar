@@ -13,8 +13,9 @@ import {
   type StreamFrame,
 } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import { activeProject } from '../core';
+import { activeProject, files } from '../core';
 import { applyEdits, type EditSpec } from '../lib/edits';
+import { filesNamedInTask } from '../lib/source-scan';
 import { PersonaHandleSchema, WorkerEditListSchema, WorkerFrameDataSchema } from '../schema';
 import { readFileText } from './files';
 
@@ -70,6 +71,34 @@ export interface TurnOutcome {
   error?: string;
   reports?: string[];
   proposals?: EditProposalSummary[];
+  /** Every file the worker opened with read_file this task. */
+  filesRead?: string[];
+  /** Files the task named that the worker never opened. */
+  filesNotRead?: string[];
+  /** Why a turn that ended without a terminal frame probably stopped. */
+  stopDiagnosis?: StopDiagnosis;
+}
+
+/**
+ * The server does not say why a turn stopped without a `done` or `error` frame, so
+ * this is what the turn's own activity suggests.
+ */
+export interface StopDiagnosis {
+  likelyCause: string;
+  silentForMs: number;
+  toolCalls: number;
+  /** Characters of tool output (file reads and grep results) the worker took in. */
+  charsRead: number;
+  lastTool?: string;
+}
+
+/** One grep the worker ran, kept as evidence for the proposals that follow it. */
+export interface GrepEvidence {
+  pattern: string;
+  glob?: string;
+  matches: number;
+  /** Up to a few `path:line│text` lines, preferring the proposal's own file. */
+  sample: string[];
 }
 
 /** One task, from acceptance to outcome. Ids are global across slots. */
@@ -94,6 +123,18 @@ export interface WorkerTaskRecord {
    * settles. False for a task the user ran from the Worker panel.
    */
   wakeAgent?: boolean;
+  /** Files the task text names (paths, directories, globs), resolved at start. */
+  scope?: string[];
+  filesRead?: string[];
+  filesNotRead?: string[];
+  stopDiagnosis?: StopDiagnosis;
+  // Activity bookkeeping, mutated in place like `reports`.
+  charsRead?: number;
+  toolCalls?: number;
+  lastTool?: string;
+  lastActivityAt?: number;
+  /** Where the next read-budget nudge fires, in chars read. */
+  nudgeAt?: number;
 }
 
 interface Inflight {
@@ -311,6 +352,11 @@ function isBusy(slot: WorkerSlot): boolean {
   return slot.reserved || slot.inflight !== null;
 }
 
+/** Workers within the cap that could take a task right now. */
+export function freeWorkerCount(): number {
+  return workerSlots.slice(0, workerCap()).filter((s) => !isBusy(s)).length;
+}
+
 function appendEntry(slot: WorkerSlot, kind: WorkerEntry['kind'], text: string): void {
   setWorkerEntries([...workerEntries(), { kind, text, timestamp: Date.now(), worker: slot.id }]);
 }
@@ -370,11 +416,16 @@ function settle(slot: WorkerSlot, outcome: TurnOutcome): void {
   // The invariant every reader depends on: a settled task reports *something*.
   const error = outcome.error ?? (answer ? undefined : noAnswerError(reports));
   const proposals = proposalsOfTask(record.id);
+  const filesRead = record.filesRead ?? [];
+  const filesNotRead = (record.scope ?? []).filter((p) => !filesRead.includes(p));
   const settled: TurnOutcome = {
     ...(answer ? { answer } : {}),
     ...(error ? { error } : {}),
     ...(reports.length ? { reports } : {}),
     ...(proposals.length ? { proposals } : {}),
+    ...(filesRead.length ? { filesRead } : {}),
+    ...(filesNotRead.length ? { filesNotRead } : {}),
+    ...(outcome.stopDiagnosis ? { stopDiagnosis: outcome.stopDiagnosis } : {}),
   };
   const finished: WorkerTaskRecord = { ...record, endedAt: Date.now(), ...settled };
   settledTasks.set(finished.id, finished);
@@ -400,10 +451,45 @@ function settle(slot: WorkerSlot, outcome: TurnOutcome): void {
       ...(finished.error ? { error: finished.error } : {}),
       ...(reports.length ? { reports } : {}),
       ...(proposals.length ? { proposals } : {}),
+      ...(filesNotRead.length ? { filesNotRead } : {}),
+      ...(settled.stopDiagnosis ? { stopDiagnosis: settled.stopDiagnosis } : {}),
+      ...(finished.answer && finished.answer.length > LONG_ANSWER_CHARS
+        ? {
+            answerChars: finished.answer.length,
+            answerNote:
+              `The answer is ${finished.answer.length} chars; if it arrives cut short, ` +
+              `workerWait({ taskId: ${finished.id} }) returns it whole.`,
+          }
+        : {}),
       elapsedMs: (finished.endedAt ?? Date.now()) - finished.startedAt,
     },
     { wakeAgent: !!finished.wakeAgent && !served },
   );
+}
+
+/** Answers longer than this carry a pointer to workerWait in the wakeup event. */
+const LONG_ANSWER_CHARS = 6000;
+
+/** Tool output a worker may take in before it is told to report and wrap up. */
+const READ_NUDGE_CHARS = 120_000;
+const READ_NUDGE_STEP = 60_000;
+
+function diagnoseQuiet(record: WorkerTaskRecord): StopDiagnosis {
+  const charsRead = record.charsRead ?? 0;
+  const toolCalls = record.toolCalls ?? 0;
+  const likelyCause =
+    charsRead > 200_000
+      ? `context exhaustion is likely: the worker took in ~${Math.round(charsRead / 1000)}K chars of tool output this turn`
+      : toolCalls >= 60
+        ? `a turn or tool-call limit is likely: ${toolCalls} tool calls this turn`
+        : 'unknown: the server ended the turn without a done or error frame and did not say why';
+  return {
+    likelyCause,
+    silentForMs: Date.now() - (record.lastActivityAt ?? record.startedAt),
+    toolCalls,
+    charsRead,
+    ...(record.lastTool ? { lastTool: record.lastTool } : {}),
+  };
 }
 
 /** Restart a slot's silence watchdog — any frame or tool call counts as progress. */
@@ -411,18 +497,27 @@ function keepAlive(slot: WorkerSlot): void {
   const inflight = slot.inflight;
   if (!inflight) return;
   clearTimeout(inflight.timer);
+  inflight.record.lastActivityAt = Date.now();
   inflight.timer = setTimeout(() => {
     const draft = slot.draft().trim();
+    const diagnosis = diagnoseQuiet(inflight.record);
     batch(() => {
       appendEntry(
         slot,
         'error',
-        `Worker went quiet${draft ? ` — partial answer kept:\n${draft}` : ''}.`,
+        `Worker went quiet (${diagnosis.likelyCause})${draft ? ` — partial answer kept:\n${draft}` : ''}.`,
       );
       slot.setDraft('');
       slot.setStatus('idle');
     });
-    settle(slot, { error: 'The worker went quiet.', ...(draft ? { answer: draft } : {}) });
+    settle(slot, {
+      error:
+        'The worker went quiet: no frame or tool call for ' +
+        `${Math.round(TURN_IDLE_TIMEOUT_MS / 1000)}s. Likely cause: ${diagnosis.likelyCause}. ` +
+        '`filesRead`/`filesNotRead` say what it covered; re-run only what it did not, in smaller slices.',
+      stopDiagnosis: diagnosis,
+      ...(draft ? { answer: draft } : {}),
+    });
   }, TURN_IDLE_TIMEOUT_MS);
 }
 
@@ -433,7 +528,77 @@ function keepAlive(slot: WorkerSlot): void {
 export function noteWorkerToolCall(summary: string, personaId?: string): void {
   const slot = slotOf(personaId);
   appendEntry(slot, 'tool', summary);
+  const record = slot.inflight?.record;
+  if (record) {
+    record.toolCalls = (record.toolCalls ?? 0) + 1;
+    record.lastTool = summary;
+  }
   keepAlive(slot);
+}
+
+/**
+ * Count one read_file result against the task. Returns a note to append to what the
+ * worker reads when its intake crosses the next budget line, or '' — the nudge is
+ * what gets findings reported before a turn runs out of context and dies silently.
+ */
+export function noteWorkerRead(personaId: string, path: string, chars: number): string {
+  const record = slotOf(personaId).inflight?.record;
+  if (!record) return '';
+  const read = (record.filesRead ??= []);
+  const clean = path.replace(/^\.\//, '');
+  if (!read.includes(clean)) read.push(clean);
+  return countIntake(record, chars);
+}
+
+/** Record one grep as evidence, and count its output against the read budget. */
+export function noteWorkerGrep(
+  personaId: string,
+  pattern: string,
+  glob: string | undefined,
+  lines: string[],
+): string {
+  const record = slotOf(personaId).inflight?.record;
+  if (!record) return '';
+  // Kept off the record: records ride in the shared panel snapshot, twice a second.
+  const greps = taskGreps.get(record.id) ?? [];
+  greps.push({
+    pattern,
+    ...(glob ? { glob } : {}),
+    matches: lines.length,
+    sample: lines.slice(0, 30),
+  });
+  if (greps.length > 10) greps.shift();
+  taskGreps.set(record.id, greps);
+  if (taskGreps.size > MAX_SETTLED) taskGreps.delete(taskGreps.keys().next().value!);
+  return countIntake(
+    record,
+    lines.reduce((n, l) => n + l.length + 1, 0),
+  );
+}
+
+const taskGreps = new Map<number, GrepEvidence[]>();
+
+function countIntake(record: WorkerTaskRecord, chars: number): string {
+  record.charsRead = (record.charsRead ?? 0) + chars;
+  const at = record.nudgeAt ?? READ_NUDGE_CHARS;
+  if (record.charsRead < at) return '';
+  record.nudgeAt = record.charsRead + READ_NUDGE_STEP;
+  const unread = (record.scope ?? []).filter((p) => !(record.filesRead ?? []).includes(p));
+  return (
+    `\n\n[Dev Tools: you have taken in ~${Math.round(record.charsRead / 1000)}K chars this task and ` +
+    'your context is filling. Post what you have found so far with the report tool now. Then ' +
+    'finish only the most important remaining files and give your final answer, naming every ' +
+    `file you did not get to${unread.length ? ` (${unread.length} of the files the task named are still unread)` : ''}.]`
+  );
+}
+
+/** The evidence a proposal carries: this task's greps, samples narrowed to its file first. */
+function evidenceFor(record: WorkerTaskRecord | undefined, path: string): GrepEvidence[] {
+  return (record ? (taskGreps.get(record.id) ?? []) : []).slice(-8).map((g) => {
+    const own = g.sample.filter((l) => l.startsWith(path + ':'));
+    const rest = g.sample.filter((l) => !l.startsWith(path + ':'));
+    return { ...g, sample: [...own, ...rest].slice(0, 6) };
+  });
 }
 
 /**
@@ -515,6 +680,8 @@ export interface EditProposal {
    */
   token: string;
   resolution?: string;
+  /** The greps the worker ran in this task before proposing — what it checked. */
+  evidence?: GrepEvidence[];
 }
 
 /** What a list of proposals says without quoting their bodies. */
@@ -620,6 +787,27 @@ export async function validateProposedEdits(
 }
 
 /**
+ * An edit list as JSON delivered it — from a worker's tool call or a caller's amendment —
+ * as `EditSpec`s, with the `oldString`/`newString` aliases folded in. Null when the shape
+ * is wrong.
+ */
+export function parseEditSpecs(raw: unknown): EditSpec[] | null {
+  const parsed = z.safeParse(WorkerEditListSchema, raw);
+  if (!parsed.success) return null;
+  return parsed.data.map((e) => ({
+    ...(e.search !== undefined || e.oldString !== undefined
+      ? { search: e.search ?? e.oldString }
+      : {}),
+    ...(e.replace !== undefined || e.newString !== undefined
+      ? { replace: e.replace ?? e.newString }
+      : {}),
+    ...(e.startLine !== undefined ? { startLine: e.startLine } : {}),
+    ...(e.endLine !== undefined ? { endLine: e.endLine } : {}),
+    ...(e.anchor !== undefined ? { anchor: e.anchor } : {}),
+  }));
+}
+
+/**
  * Take one proposed edit from a worker, dry-run it, and park it for the caller.
  * Returns the string the worker reads as its tool result.
  */
@@ -644,23 +832,11 @@ export async function addWorkerEditRequest(input: {
   } catch (err) {
     return `edits is not valid JSON (${errMsg(err)}). Send an array of edit objects, e.g. [{"search":"old text","replace":"new text"}].`;
   }
-  const parsed = z.safeParse(WorkerEditListSchema, raw);
-  if (!parsed.success) {
+  const edits = parseEditSpecs(raw);
+  if (!edits) {
     return 'edits must be an array of objects, each with search+replace or startLine+endLine+anchor.';
   }
-  if (parsed.data.length === 0) return 'edits is empty — nothing to propose.';
-
-  const edits: EditSpec[] = parsed.data.map((e) => ({
-    ...(e.search !== undefined || e.oldString !== undefined
-      ? { search: e.search ?? e.oldString }
-      : {}),
-    ...(e.replace !== undefined || e.newString !== undefined
-      ? { replace: e.replace ?? e.newString }
-      : {}),
-    ...(e.startLine !== undefined ? { startLine: e.startLine } : {}),
-    ...(e.endLine !== undefined ? { endLine: e.endLine } : {}),
-    ...(e.anchor !== undefined ? { anchor: e.anchor } : {}),
-  }));
+  if (edits.length === 0) return 'edits is empty — nothing to propose.';
 
   const check = await validateProposedEdits(path, edits);
   if (!check.ok) {
@@ -679,6 +855,8 @@ export async function addWorkerEditRequest(input: {
     status: 'pending',
     token: proposalToken(path, rationale, edits),
   };
+  const evidence = evidenceFor(slot.inflight?.record, path);
+  if (evidence.length) proposal.evidence = evidence;
   setWorkerProposals([...workerProposals(), proposal].slice(-MAX_PROPOSALS));
   appendEntry(
     slot,
@@ -847,6 +1025,19 @@ be a guess. The tool answers you either way, so a refusal is yours to fix and re
 turn. If it tells you another proposal already targets the same file, keep your edit minimal and
 say in the rationale what it depends on. Still describe the change in your final answer: the
 caller decides from that.
+
+Text you propose for a comment or a doc is read later by someone who never saw this task. Never
+put work notes in it: no "(verified by grep)", "per the task", "fixed:", "now" or "no longer".
+State what the code does or requires, not how you checked it. Check every sentence you write
+against the code as it stands, exactly as you checked the sentence you are replacing: grep for
+each symbol, constant, number or behaviour it names before proposing it. A replacement that is
+wrong in a new way is worse than the original, and a note duplicating the one beside it is noise.
+When a comment you change states a fact that AGENTS.md or agent/docs/ also states, grep those
+too and propose the matching edit.
+
+When a task names files, read all of them or name the ones you did not reach in your final
+answer. If a tool result tells you your context is filling, report what you have at once and
+wrap up rather than reading on.
 
 Report as you go with the report tool — after each batch of files, not saved up for the end. Two
 reasons, both real: your final answer can be lost whole to a size cap, while a report already
@@ -1062,7 +1253,7 @@ function pickSlot(worker?: string): { slot?: WorkerSlot; error?: string } {
  */
 export async function startWorkerTask(
   task: string,
-  opts: { wakeAgent?: boolean; fresh?: boolean; worker?: string } = {},
+  opts: { wakeAgent?: boolean; fresh?: boolean; worker?: string; scope?: string[] } = {},
 ): Promise<StartOutcome> {
   const content = task.trim();
   if (!content) return { error: 'Empty task.' };
@@ -1093,12 +1284,14 @@ export async function startWorkerTask(
       ? `Since your last turn:\n${owed.map((line) => `- ${line}`).join('\n')}\n\nNow: ${content}`
       : content;
 
+    const scope = opts.scope ?? filesNamedInTask(content, files()).map((f) => f.path);
     const record: WorkerTaskRecord = {
       id: ++taskSeq,
       task: content,
       worker: slot.id,
       startedAt: Date.now(),
       ...(opts.wakeAgent ? { wakeAgent: true } : {}),
+      ...(scope.length ? { scope } : {}),
     };
     batch(() => {
       appendEntry(slot, 'task', content);
@@ -1145,6 +1338,9 @@ export interface WaitResult {
   error?: string;
   reports?: string[];
   proposals?: EditProposalSummary[];
+  filesRead?: string[];
+  filesNotRead?: string[];
+  stopDiagnosis?: StopDiagnosis;
   /** On a timeout with no taskId: every task still running. */
   running?: number[];
 }
@@ -1161,6 +1357,9 @@ function resultOf(record: WorkerTaskRecord): WaitResult {
     ...(record.error ? { error: record.error } : {}),
     ...(record.reports?.length ? { reports: record.reports } : {}),
     ...(record.proposals?.length ? { proposals: record.proposals } : {}),
+    ...(record.filesRead?.length ? { filesRead: record.filesRead } : {}),
+    ...(record.filesNotRead?.length ? { filesNotRead: record.filesNotRead } : {}),
+    ...(record.stopDiagnosis ? { stopDiagnosis: record.stopDiagnosis } : {}),
   };
 }
 
@@ -1227,6 +1426,7 @@ export function waitForWorker(
             elapsedMs: Date.now() - record.startedAt,
             ...(record.reports?.length ? { reports: [...record.reports] } : {}),
             ...(proposals.length ? { proposals } : {}),
+            ...(record.filesRead?.length ? { filesRead: [...record.filesRead] } : {}),
           });
           return;
         }
@@ -1258,6 +1458,9 @@ export function waitForWorker(
           ...(outcome.error ? { error: outcome.error } : {}),
           ...(outcome.reports?.length ? { reports: outcome.reports } : {}),
           ...(outcome.proposals?.length ? { proposals: outcome.proposals } : {}),
+          ...(outcome.filesRead?.length ? { filesRead: outcome.filesRead } : {}),
+          ...(outcome.filesNotRead?.length ? { filesNotRead: outcome.filesNotRead } : {}),
+          ...(outcome.stopDiagnosis ? { stopDiagnosis: outcome.stopDiagnosis } : {}),
         });
         return true;
       });

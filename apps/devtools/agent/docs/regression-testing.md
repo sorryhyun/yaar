@@ -22,6 +22,11 @@ that is the pre-change build: capture first, then touch the code.
 4. A failing group re-runs alone: `previewScript` with `groups: ["R7"]`.
 5. After an **intended** behavior change, `update: true` rewrites the baseline and reports
    the delta by label — read it; every `changed` entry should be a change you meant to make.
+   When only some rows were meant to move, `update: true` with `steps: ["label", ...]`
+   rewrites just those rows and still compares the rest.
+6. `deploy` reports a `testWarning` when the last run in this session failed, measured an
+   older build, or predates an edit, or when `src/test/regression.json` exists and was never
+   run. It warns and ships; re-run and redeploy if the warning is real.
 
 A `previewScript` call runs every step sequentially, so raise its `timeoutMs` well past the
 sum of its steps (a 40-step script easily wants 120000+).
@@ -119,8 +124,9 @@ Verify current behavior on a build you trust, then re-run **the same call** with
 - `added` / `removed` — steps the script gained or lost. Evidence about the script, not about
   the app.
 
-`update: true` still requires a full run: it is refused together with `groups`, because a
-partial run cannot stand in for the whole baseline.
+A full `update: true` still requires a full run: it is refused together with `groups`,
+because a partial run cannot stand in for the whole baseline. With `steps` it is not, since
+only the named rows are replaced.
 
 ## Practical notes
 

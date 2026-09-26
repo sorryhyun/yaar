@@ -104,6 +104,14 @@ tool list that writes directly re-opens that hole.
   only here — do not turn it on for `editFile`.
 - **Accept needs the `token` from `readEditRequest` and a caller-written `intent`**, or delegation
   degrades into a forward. A discipline gate, not a security boundary.
+- **A batch accept builds once.** Every gate (existence, status, token) is checked before the
+  first write; a proposal gone stale mid-batch is skipped and named, and a failed build restores
+  every file written and leaves the batch pending, since it cannot say which edit broke it.
+- **No build when nothing buildable changed.** `classifyChange` in `lib/source-scan.ts` calls an
+  edit `comments` when the TS/JS/CSS scan with comments dropped is byte-identical, and `docs`
+  for Markdown outside `src/`. Then the typecheck verdict from before the write is restored,
+  the same exemption `writeAppJson` in `services/build.ts` takes for app.json. `.tsx`/`.jsx` are
+  always `code`: JSX text can hold a `//` that is not a comment.
 - A rejection reaches the worker at the head of its *next* task (`pendingFeedback`), because the
   server takes no message while no turn is running. Drop that queue and rejected proposals return
   unchanged. The queue is **per worker**, keyed by `proposal.worker` — feedback delivered to the
@@ -123,6 +131,12 @@ persona, stream, watchdog and in-flight record; `workerCap()` of them may run at
 - **`acceptEditRequest` is serialized** (`serializeAccept`). Each accept writes, typechecks,
   compiles and may revert; two interleaved would judge each other's build. Parallel proposals to
   one file are flagged (`conflictsWith`), never merged.
+- **A task's scope is the files its text names** (`filesNamedInTask`). `workerTask` refuses a
+  scope past `TASK_BYTES_LIMIT` unless split or `allowLarge`, and the settled result compares the
+  scope with `filesRead`. The watchdog cannot learn why a turn stopped (the server sends no
+  reason), so `diagnoseQuiet` infers it from the turn's tool calls and intake.
+- **Grep evidence lives in `taskGreps`, not on the task record**: records ride in the panel
+  snapshot published twice a second, and match samples would bloat every publish.
 
 ## Where the panes live
 

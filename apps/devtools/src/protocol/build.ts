@@ -18,6 +18,9 @@ import {
   getRuntimeManifest,
   diffManifestNames,
   formatFiles,
+  checkProject,
+  summarizeCheck,
+  regressionWarning,
 } from '../services';
 
 export const buildCommands = {
@@ -139,6 +142,8 @@ export const buildCommands = {
       'removed } — `lines` being where it changed in the NEW file ("12, 40-44"), so the ' +
       'line numbers still hold for a read or edit that follows. Not the diff text: the ' +
       'Changes panel holds that, and every rewrite is recorded there like any other edit. ' +
+      'With `onlyChanged: true` only the lines edited this session are reformatted and the ' +
+      'rest of each file is left as it was. ' +
       'A file Prettier cannot parse is skipped with its syntax error and the rest still ' +
       'run — so a `skipped` entry after an edit is worth reading: it usually means that ' +
       'edit left the file unparseable, which no amount of type checking will phrase as ' +
@@ -153,12 +158,20 @@ export const buildCommands = {
             'Project-relative files to format. Omit to format every formattable file in ' +
             'the project.',
         },
+        onlyChanged: {
+          type: 'boolean',
+          description:
+            'Apply formatting only where it overlaps lines changed since the oldest recorded ' +
+            'edit of each file (the Changes history keeps the last 40 edits); a formatter ' +
+            'change that runs into an edited line is taken whole. A file with no recorded ' +
+            'edit is left alone and counted in `untouched`.',
+        },
       },
     },
     replay: 'never',
     run: async (p) => {
       const paths = Array.isArray(p.paths) ? p.paths.map(String) : undefined;
-      const outcome = await formatFiles(paths);
+      const outcome = await formatFiles(paths, { onlyChanged: p.onlyChanged === true });
       return {
         status: outcome.skipped.length > 0 ? 'partial' : 'success',
         ...outcome,
@@ -251,8 +264,11 @@ export const buildCommands = {
       required: ['appId'],
     },
     replay: 'never',
-    run: async (p) =>
-      await deploy({
+    run: async (p) => {
+      // Read before the deploy: the version bump it writes would count as an edit after
+      // the last regression run.
+      const testWarning = await regressionWarning().catch(() => null);
+      const result = await deploy({
         appId: String(p.appId),
         name: p.name ? String(p.name) : undefined,
         icon: p.icon ? String(p.icon) : undefined,
@@ -261,6 +277,28 @@ export const buildCommands = {
         skipTypecheck: p.skipTypecheck === true,
         allowProtocolShrink: p.allowProtocolShrink === true,
         bump: typeof p.bump === 'boolean' ? p.bump : undefined,
-      }),
+      });
+      const checks = await checkProject()
+        .then(summarizeCheck)
+        .catch(() => []);
+      return {
+        ...result,
+        ...(testWarning ? { testWarning } : {}),
+        ...(checks.length ? { checkNotes: [...checks, 'Details: checkProject.'] } : {}),
+      };
+    },
+  }),
+  checkProject: defineAppCommand({
+    description:
+      'Static checks the type checker and bundler do not make: `staleFileRefs` — source ' +
+      'files (*.ts, *.css, …) named in comments or Markdown that exist nowhere in the ' +
+      'project; `css.unused` — classes defined in project CSS that no string in the source ' +
+      'names; `css.unstyled` — classes put on elements (class=, className, classList) with ' +
+      'no project CSS rule; `css.unknownSdk` — y-* classes the design tokens do not define, ' +
+      'which fail silently. Lexical and heuristic: a class built at runtime from parts, or a ' +
+      'path outside the project, can appear here, so read each before acting on it.',
+    params: { type: 'object', properties: {} },
+    replay: 'never',
+    run: async () => await checkProject(),
   }),
 };
