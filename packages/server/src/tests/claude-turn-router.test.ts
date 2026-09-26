@@ -13,6 +13,8 @@
  *    reader is released rather than left waiting.
  * 4. Off the bridge nothing is detached: frames with no reader wait for the next turn, as
  *    they did when the turn read the stream itself.
+ * 5. Except an interrupted turn's tail: what its closed reader left unanswered is dropped up
+ *    to its `result`, on or off the bridge, so the next turn never opens on a stale result.
  */
 import { describe, expect, it } from 'bun:test';
 
@@ -163,6 +165,78 @@ describe('TurnRouter', () => {
     r.route({ type: 'rate_limit_event' });
     expect(detached).toHaveLength(0);
     expect(r.detachedActive).toBe(false);
+  });
+
+  // The interrupted turn's tail — the `aborted` assistant frame and its `result` — lands
+  // after its reader stopped. Queued for the next turn, that stale `result` ended the
+  // next turn on arrival, and every turn after it read its predecessor's answer.
+  it.each([false, true])(
+    'drops the tail of a turn its reader abandoned (bridge: %p)',
+    async (detachable) => {
+      const { r, detached } = router(detachable);
+      const first = r.openTurn('first');
+      r.markOwn('first');
+      r.route(started('first'));
+      r.route(text('almost done'));
+      r.closeTurn(first);
+
+      r.route({ ...text('almost done.'), aborted: true });
+      r.route(result('first'));
+
+      const next = r.openTurn('next');
+      r.markOwn('next');
+      r.route(started('next'));
+      r.route(text('fresh'));
+      r.route(result('next'));
+
+      expect(await available(next, 3)).toEqual([started('next'), text('fresh'), result('next')]);
+      expect(detached).toHaveLength(0);
+    },
+  );
+
+  it('drops an abandoned tail that arrives before its own lifecycle frame', async () => {
+    const { r } = router(false);
+    const first = r.openTurn('first');
+    r.markOwn('first');
+    r.closeTurn(first);
+
+    r.route(started('first'));
+    r.route(text('late'));
+    r.route(result('first'));
+
+    const next = r.openTurn('next');
+    r.markOwn('next');
+    r.route(started('next'));
+    r.route(result('next'));
+    expect(await available(next, 2)).toEqual([started('next'), result('next')]);
+  });
+
+  it('releases the next turn when its message was folded into the abandoned one', async () => {
+    const { r } = router(false);
+    const first = r.openTurn('first');
+    r.markOwn('first');
+    r.route(started('first'));
+    r.closeTurn(first);
+
+    const next = r.openTurn('next');
+    r.markOwn('next');
+    r.route(text('answer to both'));
+    r.route(result('first', 'next'));
+    expect(await available(next, 1)).toEqual([result('first', 'next')]);
+  });
+
+  it('lets the next turn through if the abandoned one never sends its result', async () => {
+    const { r } = router(false);
+    const first = r.openTurn('first');
+    r.markOwn('first');
+    r.route(started('first'));
+    r.closeTurn(first);
+
+    const next = r.openTurn('next');
+    r.markOwn('next');
+    r.route(started('next'));
+    r.route(result('next'));
+    expect(await available(next, 2)).toEqual([started('next'), result('next')]);
   });
 
   it('ends every reader when the stream ends, including one opened afterwards', async () => {

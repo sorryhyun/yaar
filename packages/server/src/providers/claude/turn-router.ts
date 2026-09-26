@@ -20,6 +20,14 @@
  * With Remote Control off nothing is ever detached, and a frame with no reader waits in
  * the backlog for the next turn — which is exactly what reading the stream from inside
  * the turn used to do with it.
+ *
+ * Except the tail of a turn its reader walked away from. An interrupt stops the reader at
+ * once, but the CLI still finishes the command it was running — an `aborted` assistant
+ * frame, then a `result` — and those went to the backlog too. The next turn opened on a
+ * stale `result`, ended before its own message was answered, and the answer then waited
+ * for the turn after: every turn from there on showed its predecessor's reply while the
+ * agent's tool calls went on unseen. So the commands a closed reader left unanswered are
+ * **abandoned**, and their frames are dropped up to their `result`.
  */
 
 import { createInputChannel, type InputChannel } from './input-channel.js';
@@ -74,7 +82,9 @@ function promptText(content: unknown): string | undefined {
 
 export class TurnRouter {
   private readonly ownUuids = new Set<string>();
-  private owner: 'turn' | 'detached' | null = null;
+  private owner: 'turn' | 'detached' | 'abandoned' | null = null;
+  /** Own commands whose reader closed before their `result`; see the header. */
+  private readonly abandoned = new Set<string>();
   private inbox: InputChannel | null = null;
   private inboxUuid: string | null = null;
   private backlog: unknown[] = [];
@@ -110,12 +120,20 @@ export class TurnRouter {
     return inbox;
   }
 
-  /** The YAAR turn stopped reading. Idempotent; a stale inbox is ignored. */
+  /**
+   * The YAAR turn stopped reading. Idempotent; a stale inbox is ignored.
+   *
+   * Whatever YAAR pushed that no `result` has answered yet — the turn's own message when
+   * it was interrupted, a steer or an escape correction still queued behind it — has no
+   * reader any more, so it is abandoned rather than left for the next turn.
+   */
   closeTurn(inbox: InputChannel): void {
     if (this.inbox !== inbox) return;
     this.inbox = null;
     this.inboxUuid = null;
-    if (this.owner === 'turn') this.owner = null;
+    for (const uuid of this.ownUuids) this.abandoned.add(uuid);
+    this.ownUuids.clear();
+    if (this.owner === 'turn') this.owner = 'abandoned';
   }
 
   /** A turn the CLI is running belongs to no YAAR reader. */
@@ -125,6 +143,32 @@ export class TurnRouter {
 
   route(frame: unknown): void {
     const f = (frame ?? {}) as RoutedFrame;
+    const startedUuid =
+      f.type === 'command_lifecycle' && f.state === 'started' ? f.command_uuid : undefined;
+
+    // The CLI runs commands in the order they were pushed, so the open turn's own command
+    // starting is proof every abandoned one is over — even one whose `result` never came,
+    // which would otherwise swallow this turn whole.
+    if (startedUuid && startedUuid === this.inboxUuid && this.abandoned.size > 0) {
+      this.abandoned.clear();
+      if (this.owner === 'abandoned') this.owner = null;
+    }
+    if (this.owner === null && startedUuid && this.abandoned.has(startedUuid)) {
+      this.owner = 'abandoned';
+    }
+    if (this.owner === 'abandoned') {
+      if (f.type === 'result') {
+        const answered = f.user_message_uuids ?? [];
+        for (const uuid of answered) this.abandoned.delete(uuid);
+        this.owner = null;
+        // The next turn's message, folded into the abandoned command, was answered here —
+        // same release as a YAAR message folded into a claude.ai turn.
+        if (this.inbox && this.inboxUuid && answered.includes(this.inboxUuid)) {
+          this.inbox.push(frame);
+        }
+      }
+      return;
+    }
 
     if (
       this.owner === null &&
@@ -155,6 +199,7 @@ export class TurnRouter {
   /** The stream is gone: wake every reader so none waits forever. */
   end(): void {
     this.ended = true;
+    this.abandoned.clear();
     this.inbox?.close();
     this.inbox = null;
     this.detached?.channel.close();
