@@ -189,6 +189,12 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     window.addEventListener('touchmove', function(e) {
       var t = e.touches[0];
       if (!pan || !t) return;
+      // A finger held still long enough to select a word (text-selection.ts) is not
+      // starting a pan or a pull. Nothing is claimed yet: its slop is under the 10px below.
+      if (window.__yaarTouchClaimed) {
+        pan = null;
+        return;
+      }
       var dx = t.screenX - pan.x, dy = t.screenY - pan.y;
       if (!pan.axis) {
         var appTook = e.defaultPrevented;
@@ -214,7 +220,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       var p = pan;
       pan = null;
       var t = e.changedTouches[0];
-      if (!p || !t) return;
+      if (!p || !t || window.__yaarTouchClaimed) return;
       var dx = t.screenX - p.x, dy = t.screenY - p.y;
       // A fast flick can arrive as start and end with no move between: the shell decides
       // from the travel alone whether that was a swipe. SWIPE_MIN_PX / SWIPE_AXIS_RATIO.

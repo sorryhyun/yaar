@@ -283,6 +283,16 @@ export const APP_MSG = {
    * `'x'`, which is all a frame loaded before the pull existed ever sends.
    */
   touchPan: 'yaar:touch-pan',
+  /**
+   * The phone's own text selection inside an app frame (iframe-scripts/text-selection.ts),
+   * reported to the desktop, which draws the handles and the menu for it. `{ selection:
+   * null }` when there is none any more, else `{ selection: { text?, start, end, bounds } }`
+   * in frame client coordinates: `start`/`end` are the caret lines the handles hang from
+   * (`{ x, top, bottom }`), `bounds` the range's box, and `clip`, when the text is in a
+   * scroller, that scroller's box — a handle outside it is hidden. `text` is left out of a report that
+   * only moved the range (a scroll), and the desktop keeps the last one.
+   */
+  textSelection: 'yaar:text-selection',
 
   // Console capture (iframe-scripts/console-capture.ts).
   console: 'yaar:console',
@@ -305,6 +315,12 @@ export const APP_MSG = {
    * Sent by the desktop's `iframe-bridge/drop.ts`, instead of a gesture message to the agent.
    */
   drop: 'yaar:drop',
+  /**
+   * Desktop → frame, acting on the frame's text selection (see `textSelection`): `{ op:
+   * 'clear' | 'selectAll' }`, or a handle drag — `{ op: 'dragStart', end: 'start' | 'end' }`,
+   * `{ op: 'drag', x, y }` in frame client coordinates, `{ op: 'dragEnd' }`.
+   */
+  textSelectionCommand: 'yaar:text-selection-command',
 } as const;
 
 /** Any `yaar:*` postMessage type. */

@@ -2,14 +2,21 @@
  * The phone's long-press selection, driven by touches: what a held finger selects, what
  * a moving one does not, what a tap clears, and what the menu does with the word.
  *
- * happy-dom has no hit testing, so `caretRangeFromPoint` is stubbed to put the caret at a
- * fixed offset of the content's text — the word logic itself is `textSelection.test.ts`'s.
+ * happy-dom has no hit testing, so `caretRangeFromPoint` is stubbed to put the caret where
+ * the test says — the word and range logic itself is `textSelection.test.ts`'s — and no
+ * layout, so the content box is given one for the handles to be drawn inside.
  */
 import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
 import { render, cleanup, act, fireEvent, screen } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { LONG_PRESS_MS, PhoneTextSelection } from '@/components/desktop/PhoneTextSelection';
-import { getTextSelection, clearTextSelection, isTouchClaimed } from '@/lib/textSelection';
+import {
+  getTextSelection,
+  clearTextSelection,
+  isTouchClaimed,
+  selectionText,
+} from '@/lib/textSelection';
+import { APP_MSG } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
 /** See `PhoneGestures.test.tsx`: a plain Event carrying the touch lists is enough. */
@@ -25,6 +32,26 @@ function touch(target: EventTarget, type: string, x: number, y: number): Event {
   return event;
 }
 
+/** happy-dom has no `DOMRect` global; a plain box reads the same. */
+function box(left: number, top: number, width: number, height: number): DOMRect {
+  const r = {
+    left,
+    top,
+    width,
+    height,
+    x: left,
+    y: top,
+    right: left + width,
+    bottom: top + height,
+  };
+  return { ...r, toJSON: () => r } as DOMRect;
+}
+
+function selectedText(): string | undefined {
+  const selection = getTextSelection();
+  return selection ? selectionText(selection) : undefined;
+}
+
 function hold() {
   act(() => {
     jest.advanceTimersByTime(LONG_PRESS_MS + 10);
@@ -36,6 +63,7 @@ describe('PhoneTextSelection', () => {
   let frame: HTMLElement;
   let content: HTMLElement;
   let paragraph: HTMLElement;
+  let caretOffset = 7;
 
   beforeEach(() => {
     useDesktopStore.setState({
@@ -54,12 +82,14 @@ describe('PhoneTextSelection', () => {
     content.appendChild(paragraph);
     frame.appendChild(content);
     document.body.appendChild(frame);
-    // The caret always lands inside "press".
+    // The caret lands inside "press" unless a test moves it.
+    caretOffset = 7;
     doc.caretRangeFromPoint = () => {
       const r = document.createRange();
-      r.setStart(paragraph.firstChild!, 7);
+      r.setStart(paragraph.firstChild!, caretOffset);
       return r;
     };
+    content.getBoundingClientRect = () => box(-10, -10, 400, 800);
     jest.useFakeTimers();
   });
 
@@ -75,7 +105,7 @@ describe('PhoneTextSelection', () => {
     render(<PhoneTextSelection />);
     touch(paragraph, 'touchstart', 50, 50);
     hold();
-    expect(getTextSelection()?.range.toString()).toBe('press');
+    expect(selectedText()).toBe('press');
     expect(getTextSelection()?.windowId).toBe('w1');
     expect(isTouchClaimed()).toBe(true);
     expect(screen.getByRole('menu')).toBeTruthy();
@@ -139,7 +169,7 @@ describe('PhoneTextSelection', () => {
     touch(paragraph, 'touchstart', 50, 50);
     hold();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Select all' }));
-    expect(getTextSelection()?.range.toString()).toBe('long press here');
+    expect(selectedText()).toBe('long press here');
   });
 
   it('hands the word to the Ask AI input', () => {
@@ -188,5 +218,121 @@ describe('PhoneTextSelection', () => {
     touch(paragraph, 'touchstart', 50, 50);
     hold();
     expect(getTextSelection()).toBeNull();
+  });
+
+  it('drags an end with its handle, past the other one too, without the menu in the way', () => {
+    render(<PhoneTextSelection />);
+    touch(paragraph, 'touchstart', 50, 50);
+    hold();
+    touch(paragraph, 'touchend', 50, 50);
+
+    const endHandle = document.querySelector('[data-text-selection-handle="end"]')!;
+    expect(document.querySelector('[data-text-selection-handle="start"]')).not.toBeNull();
+    touch(endHandle, 'touchstart', 60, 70);
+    // Claimed on the spot, so the shell's gestures never take it.
+    expect(isTouchClaimed()).toBe(true);
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    caretOffset = 15;
+    const move = touch(endHandle, 'touchmove', 120, 70);
+    expect(move.defaultPrevented).toBe(true);
+    expect(selectedText()).toBe('press here');
+
+    // Past the start: the start becomes the end, and "press" is the anchor it turns on.
+    caretOffset = 0;
+    touch(endHandle, 'touchmove', 0, 70);
+    expect(selectedText()).toBe('long ');
+
+    touch(endHandle, 'touchend', 0, 70);
+    expect(selectedText()).toBe('long ');
+    expect(screen.getByRole('menu')).toBeTruthy();
+  });
+
+  it('clears when a pan or a pull takes the desktop out from under it', async () => {
+    render(<PhoneTextSelection />);
+    touch(paragraph, 'touchstart', 50, 50);
+    hold();
+    touch(paragraph, 'touchend', 50, 50);
+    document.documentElement.dataset.shadePull = 'dragging';
+    // MutationObserver callbacks are microtasks.
+    await act(async () => {});
+    expect(getTextSelection()).toBeNull();
+    delete document.documentElement.dataset.shadePull;
+  });
+
+  describe('in an app frame', () => {
+    let card: HTMLElement;
+    let iframe: HTMLIFrameElement;
+    const posted: unknown[] = [];
+
+    beforeEach(() => {
+      posted.length = 0;
+      card = document.createElement('div');
+      card.setAttribute(WINDOW_ID_DATA_ATTR, 'w1');
+      iframe = document.createElement('iframe');
+      card.appendChild(iframe);
+      document.body.appendChild(card);
+      iframe.getBoundingClientRect = () => box(0, 0, 400, 800);
+      (iframe.contentWindow as unknown as { postMessage: unknown }).postMessage = (m: unknown) =>
+        posted.push(m);
+    });
+
+    afterEach(() => card.remove());
+
+    /** See PhoneGestures.test.tsx: happy-dom's postMessage loses `source` identity. */
+    function fromFrame(data: unknown) {
+      act(() => {
+        const ev = new document.defaultView!.Event('message');
+        Object.defineProperty(ev, 'data', { value: data });
+        Object.defineProperty(ev, 'source', { value: iframe.contentWindow });
+        window.dispatchEvent(ev);
+      });
+    }
+
+    const report = {
+      type: APP_MSG.textSelection,
+      selection: {
+        text: 'framed',
+        start: { x: 10, top: 20, bottom: 40 },
+        end: { x: 60, top: 20, bottom: 40 },
+        bounds: { left: 10, top: 20, width: 50, height: 20 },
+      },
+    };
+
+    it("draws the frame's selection with the same handles and menu", () => {
+      render(<PhoneTextSelection />);
+      fromFrame(report);
+      expect(selectedText()).toBe('framed');
+      expect(screen.getByRole('menu')).toBeTruthy();
+      expect(document.querySelectorAll('[data-text-selection-handle]').length).toBe(2);
+
+      fromFrame({ type: APP_MSG.textSelection, selection: null });
+      expect(getTextSelection()).toBeNull();
+      expect(posted).toEqual([]);
+    });
+
+    it('ignores a report too malformed to place', () => {
+      render(<PhoneTextSelection />);
+      fromFrame({ type: APP_MSG.textSelection, selection: { text: 'x', start: 'nope' } });
+      expect(getTextSelection()).toBeNull();
+    });
+
+    it('tells the frame to let go on a tap outside it', () => {
+      render(<PhoneTextSelection />);
+      fromFrame(report);
+      touch(document.body, 'touchstart', 200, 200);
+      touch(document.body, 'touchend', 200, 200);
+      expect(getTextSelection()).toBeNull();
+      expect(posted).toEqual([{ type: APP_MSG.textSelectionCommand, op: 'clear' }]);
+    });
+
+    it("clears the shell's own selection on a tap inside a frame", () => {
+      render(<PhoneTextSelection />);
+      touch(paragraph, 'touchstart', 50, 50);
+      hold();
+      touch(paragraph, 'touchend', 50, 50);
+      fromFrame({ type: APP_MSG.click });
+      expect(getTextSelection()).toBeNull();
+    });
   });
 });

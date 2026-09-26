@@ -29,3 +29,35 @@
 .item:active {
   background: var(--bg-overlay-strong);
 }
+
+/* Android's teardrop, its point on the line end: the start handle hangs to the left of
+   the first character, the end handle to the right of the last. */
+.handle {
+  position: fixed;
+  z-index: var(--z-toast);
+  background: var(--color-accent);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* A thumb-sized mark, a finger-sized target. */
+.handle::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+
+.start {
+  border-radius: 50% 0 50% 50%;
+}
+
+.end {
+  border-radius: 0 50% 50% 50%;
+}
+
+/* A dragged end is found by hit-testing the text under the finger; a handle in the way
+   would be what the probe hit. The drag's touches keep their target regardless. */
+.handle[data-dragging] {
+  pointer-events: none;
+}

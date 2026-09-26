@@ -14,6 +14,7 @@ import {
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
   IFRAME_DEVICE_SDK_SCRIPT,
+  IFRAME_TEXT_SELECTION_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
   IFRAME_VERB_SDK_SCRIPT,
 } from '@yaar/shared';
@@ -39,6 +40,7 @@ const IFRAME_INJECTED_SCRIPTS: [marker: string, source: string][] = [
   ['data-yaar-contextmenu', IFRAME_CONTEXTMENU_SCRIPT],
   ['data-yaar-notifications', IFRAME_NOTIFICATIONS_SDK_SCRIPT],
   ['data-yaar-device', IFRAME_DEVICE_SDK_SCRIPT],
+  ['data-yaar-text-selection', IFRAME_TEXT_SELECTION_SCRIPT],
   ['data-yaar-windows', IFRAME_WINDOWS_SDK_SCRIPT],
 ];
 

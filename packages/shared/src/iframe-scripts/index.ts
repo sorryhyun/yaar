@@ -7,5 +7,6 @@ export { IFRAME_WINDOWS_SDK_SCRIPT } from './windows-sdk.js';
 export { IFRAME_STORAGE_SDK_SCRIPT } from './storage-sdk.js';
 export { IFRAME_NOTIFICATIONS_SDK_SCRIPT } from './notifications-sdk.js';
 export { IFRAME_DEVICE_SDK_SCRIPT } from './device-sdk.js';
+export { IFRAME_TEXT_SELECTION_SCRIPT } from './text-selection.js';
 export { IFRAME_APP_PROTOCOL_SCRIPT } from './app-protocol.js';
 export { IFRAME_CONSOLE_CAPTURE_SCRIPT } from './console-capture.js';

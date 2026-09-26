@@ -74,6 +74,8 @@ type RoutedMessageKey =
   | 'keydown'
   | 'fileDrop'
   | 'touchPan'
+  // IFRAME_TEXT_SELECTION_SCRIPT — the phone's own text selection inside an app.
+  | 'textSelection'
   // IFRAME_APP_PROTOCOL_SCRIPT — the fire-and-forget iframe → parent messages.
   | 'ready'
   | 'interaction'

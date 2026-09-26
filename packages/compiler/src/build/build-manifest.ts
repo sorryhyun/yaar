@@ -182,8 +182,14 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * '40': the touch relay forwards an upward drag from content already at its bottom too,
  * so a pull up from over an app card raises the phone's palette sheet. Same shadowing as
  * '35'.
+ *
+ * '41': the text-selection script (#123) is baked in — on a phone, app content goes
+ * `user-select: none` and a long-press selects with the shell's own handles and menu
+ * instead of Chrome's toolbar — and the contextmenu script's touch relay lets go of a
+ * touch that long-press claimed. New for the isolated apps, as '38'; shadowed for the
+ * relay, as '35'.
  */
-export const COMPILER_VERSION = '40';
+export const COMPILER_VERSION = '41';
 
 export interface BuildManifest {
   sourceHash: string;
