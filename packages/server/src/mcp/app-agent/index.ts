@@ -136,6 +136,21 @@ function emptyIfRootMissing(result: StorageListResult, isRoot: boolean): Storage
   return !result.success && result.notFound && isRoot ? { success: true, entries: [] } : result;
 }
 
+/**
+ * A built-in listing's answer: `{ uri, success, entries }`, paged and sorted as the verbs
+ * door's `list` is — the first {@link LIST_PAGE_SIZE} entries unless `range` says otherwise,
+ * with a `_notes` line giving the total and the next range. The same params reach an
+ * app's own `storage:list` override untouched, so the one vocabulary holds on both sides.
+ */
+export function listAnswer(uri: string, result: StorageListResult, options?: ListOptions) {
+  if (!result.entries) return okJson({ uri, ...result });
+  const paged = applyListOptions(result.entries, { defaultLimit: LIST_PAGE_SIZE, ...options });
+  if ('error' in paged) return error(paged.error);
+  const answer = okJson({ uri, ...result, entries: paged.page });
+  // Spread: the MCP SDK's result type wants an index signature `VerbResult` lacks.
+  return paged.note ? { ...foldNotes(prependNote(answer, paged.note)) } : answer;
+}
+
 export function appRelativeEntries(appId: string, result: StorageListResult): StorageListResult {
   if (!result.entries) return result;
   const prefix = `apps/${appId}/`;
@@ -161,6 +176,12 @@ import {
   storageDelete,
 } from '../../storage/storage-manager.js';
 import type { StorageListResult } from '../../storage/types.js';
+import {
+  applyListOptions,
+  parseListOptions,
+  LIST_PAGE_SIZE,
+  type ListOptions,
+} from '../../lib/list-options.js';
 import {
   appNamespaceStorage,
   namesSharedStorage,
@@ -332,8 +353,9 @@ async function sharedStorageCommand(
   appId: string,
   subCommand: string,
   arg: string,
-  content: unknown,
+  params: Record<string, unknown> | undefined,
 ) {
+  const content = params?.content;
   const verbs: Record<string, Verb> = {
     read: 'read',
     write: 'invoke',
@@ -361,7 +383,7 @@ async function sharedStorageCommand(
         if (result.isDirectory) {
           const listDenied = await authorizeSharedStorage(appId, path, 'list');
           if (listDenied) return error(listDenied);
-          return okJson({ uri, ...(await storageList(path)) });
+          return listAnswer(uri, await storageList(path));
         }
         return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
       }
@@ -384,7 +406,9 @@ async function sharedStorageCommand(
     default: {
       // Root-relative entries, the coordinate system this spelling is already in: each
       // path reads back as `yaar://storage/{path}` with nothing to strip or prepend.
-      return okJson({ uri, ...(await storageList(path)) });
+      const options = parseListOptions(params);
+      if ('error' in options) return error(options.error);
+      return listAnswer(uri, await storageList(path), options);
     }
   }
 }
@@ -542,7 +566,7 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!path) {
           // Entries come back in storage-root coordinates, which is this spelling's own
           // coordinate system — each reads back directly as `yaar://storage/{path}`.
-          return okJson({ uri, ...(await storageList('')) });
+          return listAnswer(uri, await storageList(''));
         }
         const result = await storageRead(path);
         if (!result.success) {
@@ -556,7 +580,7 @@ export function registerAppAgentTools(server: McpServer): void {
           if (result.isDirectory) {
             const listDenied = await authorizeSharedStorage(appId, path, 'list');
             if (listDenied) return error(listDenied);
-            return okJson({ uri, ...(await storageList(path)) });
+            return listAnswer(uri, await storageList(path));
           }
           return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
         }
@@ -588,7 +612,7 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!relativePath) {
           // List root storage
           const result = emptyIfRootMissing(await storageList(scoped), true);
-          return okJson({ uri, ...appRelativeEntries(appId, result) });
+          return listAnswer(uri, appRelativeEntries(appId, result));
         }
         const result = await storageRead(scoped);
         if (!result.success) {
@@ -597,7 +621,7 @@ export function registerAppAgentTools(server: McpServer): void {
           // caller that may read a file may list the folder holding it.
           if (result.isDirectory) {
             const listed = await storageList(scoped);
-            return okJson({ uri, ...appRelativeEntries(appId, listed) });
+            return listAnswer(uri, appRelativeEntries(appId, listed));
           }
           const hint = await sharedStorageHint(appId, relativePath, 'read');
           return error(`${result.error ?? 'read failed.'} (resolved to ${uri})${hint}`);
@@ -686,7 +710,7 @@ export function registerAppAgentTools(server: McpServer): void {
             );
             if (overridden) return { ...overridden };
           }
-          return sharedStorageCommand(appId, subCommand, path, args.params?.content);
+          return sharedStorageCommand(appId, subCommand, path, args.params);
         }
         const scoped = scopedAppStoragePath(appId, path);
         if (!scoped) return error(STORAGE_PATH_ERROR);
@@ -713,7 +737,7 @@ export function registerAppAgentTools(server: McpServer): void {
             if (!result.success) {
               if (result.isDirectory) {
                 const listed = await storageList(scoped);
-                return okJson({ uri, ...appRelativeEntries(appId, listed) });
+                return listAnswer(uri, appRelativeEntries(appId, listed));
               }
               const hint = await sharedStorageHint(appId, path, 'read');
               return error(`${result.error ?? 'read failed.'} (resolved to ${uri})${hint}`);
@@ -740,8 +764,10 @@ export function registerAppAgentTools(server: McpServer): void {
             return okJson(storageDeleteAnswer(uri, appScopedRef(path)));
           }
           case 'list': {
+            const options = parseListOptions(args.params);
+            if ('error' in options) return error(options.error);
             const result = emptyIfRootMissing(await storageList(scoped), !path);
-            return okJson({ uri, ...appRelativeEntries(appId, result) });
+            return listAnswer(uri, appRelativeEntries(appId, result), options);
           }
           default:
             return error(

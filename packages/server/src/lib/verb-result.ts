@@ -71,6 +71,11 @@ export interface VerbResult {
    */
   readFiltered?: boolean;
   /**
+   * The list's `sort`/`order`/`range` was applied to this result — the list-verb mirror of
+   * `readFiltered` (see `hasListOptions` in lib/list-options.ts). Stripped in the registry.
+   */
+  listFiltered?: boolean;
+  /**
    * Notes `prependNote` added to a result carrying `structuredContent`, newest first. Their
    * text blocks never reach a model beside that object, so `foldNotes` moves them into it at
    * the MCP boundary. Never set without `structuredContent`.

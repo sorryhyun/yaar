@@ -4,7 +4,7 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, unlink, rename, rm, stat } from 'fs/promises';
+import { mkdir, readdir, unlink, rename, rm, stat, lstat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { join, relative, dirname, extname } from 'path';
 import { pdfToImages, pdfToText, getPdfPageCount } from '../features/pdf.js';
@@ -593,10 +593,28 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
 
     for (const entry of dirEntries) {
       const entryPath = join(resolved.absolutePath, entry);
-      const stats = await stat(entryPath);
+      const path = join(cleaned, entry).replaceAll('\\', '/');
+      // `stat` follows a symlink, so one dangling link used to throw here and fail the
+      // whole listing — in a mounted folder, one stale link out of thousands of files
+      // made the folder unlistable. List the link itself instead: it is there, and the
+      // user may want to delete it. An entry gone since `readdir` is simply skipped.
+      const stats = await stat(entryPath).catch(() => null);
+      if (!stats) {
+        const link = await lstat(entryPath).catch(() => null);
+        if (link?.isSymbolicLink()) {
+          entries.push({
+            path,
+            isDirectory: false,
+            size: 0,
+            modifiedAt: link.mtime.toISOString(),
+            brokenLink: true,
+          });
+        }
+        continue;
+      }
 
       entries.push({
-        path: join(cleaned, entry).replaceAll('\\', '/'),
+        path,
         isDirectory: stats.isDirectory(),
         size: stats.size,
         modifiedAt: stats.mtime.toISOString(),

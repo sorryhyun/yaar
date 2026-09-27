@@ -497,7 +497,7 @@ One MCP tool per verb, served from the `verbs` namespace:
 |-----------|------------|
 | `describe` | `{ uri }` |
 | `read` | `{ uri, lines?, pattern?, context?, pdfText?, pdfPages?, rawImage? }` — `lines` (e.g. `"10-20"`, `"50"`, `"100-"`) and `pattern` (regex, matching lines only) filter text files; `context` sets lines of context around a `pattern` match (default 0); `pdfText` (`boolean \| string`) extracts a PDF's text layer, `pdfPages` (e.g. `"1-3"`) rasterizes a page range to images — omitting both returns PDF metadata only; `rawImage` returns an image's stored bytes instead of the WebP re-encode reads normally apply |
-| `list` | `{ uri }` |
+| `list` | `{ uri, sort?, order?, range? }` — storage folders only (elsewhere ignored, with a note): `sort` is `name`/`modified`/`size`, `range` pages entries 1-based (`"201-400"`); with no `range` a folder returns its first 200 entries and a note with the total |
 | `invoke` | `{ uri, payload? }` — `payload` is an object, or an array of objects (see [Batching](#batching)) |
 | `delete` | `{ uri }` |
 

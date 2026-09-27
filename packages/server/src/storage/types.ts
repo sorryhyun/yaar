@@ -7,6 +7,8 @@ export interface StorageEntry {
   isDirectory: boolean;
   size: number;
   modifiedAt: string;
+  /** A symlink whose target is missing or unreachable — listed, but nothing to read. */
+  brokenLink?: boolean;
 }
 
 export interface StorageImageContent {

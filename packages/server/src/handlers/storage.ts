@@ -9,7 +9,7 @@
  */
 
 import { parseFileUri } from '@yaar/shared';
-import type { ResourceRegistry } from './uri-registry.js';
+import type { ResourceRegistry, VerbOptions } from './uri-registry.js';
 import {
   ok,
   okJson,
@@ -22,7 +22,8 @@ import {
   prependNote,
   type VerbResult,
 } from '../lib/verb-result.js';
-import { applyEdit, applyReadOptions, type ReadOptions } from '../lib/read-options.js';
+import { applyEdit, applyReadOptions } from '../lib/read-options.js';
+import { applyListOptions, type ListOptions } from '../lib/list-options.js';
 import { mimeFromPath } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import {
@@ -223,17 +224,17 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       return describeStoragePath(resolved.sourceUri, parsed?.path ?? '');
     },
 
-    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: VerbOptions): Promise<VerbResult> {
       const parsed = parseFileUri(resolved.sourceUri);
       if (!parsed) {
         if (resolved.sourceUri === 'yaar://storage')
-          return this.list!(resolved).then((r) =>
+          return this.list!(resolved, options).then((r) =>
             prependNote(r, 'This is a folder — used list instead.'),
           );
         return error('Invalid storage URI.');
       }
       if (!parsed.path)
-        return this.list!(resolved).then((r) =>
+        return this.list!(resolved, options).then((r) =>
           prependNote(r, 'This is a folder — used list instead.'),
         );
 
@@ -245,7 +246,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       if (!result.success) {
         // Directory — or an archive, which reads as the folder it stands for → fall through to list
         if (result.isDirectory)
-          return this.list!(resolved).then((r) =>
+          return this.list!(resolved, options).then((r) =>
             prependNote(
               r,
               result.isArchive
@@ -293,7 +294,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       };
     },
 
-    async list(resolved: ResolvedUri): Promise<VerbResult> {
+    async list(resolved: ResolvedUri, options?: ListOptions): Promise<VerbResult> {
       const parsed = parseFileUri(resolved.sourceUri);
       // Bare yaar://storage (no trailing /) — treat as root listing
       const path = parsed ? parsed.path : resolved.sourceUri === 'yaar://storage' ? '' : null;
@@ -310,21 +311,28 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return error(result.error!);
       }
 
-      const entries = result.entries!;
+      const paged = applyListOptions(result.entries!, options);
+      if ('error' in paged) return error(paged.error);
       // A listing URI may arrive with a trailing slash (`yaar://storage/mounts/`),
       // and `${path}/` would then be `mounts//` — one character longer than the
       // prefix the entry paths actually carry, so every child name lost its first
       // character ("mounts/toolresults" listed as "oolresults"). Normalize first.
       const base = path.replace(/\/+$/, '');
       const prefix = base ? `${base}/` : '';
-      return okLinks(
-        entries.map((e) => ({
+      const links = okLinks(
+        paged.page.map((e) => ({
           uri: `yaar://storage/${e.path}`,
           name: e.path.slice(prefix.length) || e.path,
-          description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
-          mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+          description: e.isDirectory
+            ? 'directory'
+            : e.brokenLink
+              ? 'broken symlink'
+              : `${e.size ?? 0} bytes`,
+          mimeType: e.isDirectory || e.brokenLink ? undefined : mimeFromPath(e.path),
+          ...(options?.sort === 'modified' ? { modifiedAt: e.modifiedAt } : {}),
         })),
       );
+      return { ...(paged.note ? prependNote(links, paged.note) : links), listFiltered: true };
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

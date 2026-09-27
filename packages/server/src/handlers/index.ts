@@ -28,6 +28,7 @@ import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
 import { resolveShorthandUri } from '../http/uri-match.js';
 import { LARGE_RESULT_META } from '../mcp/result-size.js';
+import { LIST_PAGE_SIZE } from '../lib/list-options.js';
 import { spillOversizedResult } from '../mcp/result-spill.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 import type { LayoutNote } from '../session/layout-context.js';
@@ -119,7 +120,7 @@ function appendLayoutContext(result: VerbResult): VerbResult {
 
 /** Spread to satisfy MCP SDK's index-signature requirement on tool results. */
 const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry['execute']>) => {
-  const [verb, rawUri, payload, readOptions] = args;
+  const [verb, rawUri, payload, options] = args;
 
   // The scheme is optional at this door and nowhere past it. Resolving here — ahead of
   // brace expansion, `recordVerbCall` and the registry — is what keeps that true: the
@@ -133,7 +134,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
   if (expanded.length === 1) {
     // Normal single-URI path
     recordVerbCall(verb, uri, payload);
-    const result = await reg.execute(verb, uri, payload, readOptions);
+    const result = await reg.execute(verb, uri, payload, options);
     return {
       ...appendLayoutContext(await spillOversizedResult(verb, expanded, foldNotes(result))),
     };
@@ -143,7 +144,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
   const settled = await Promise.allSettled(
     expanded.map((u: string) => {
       recordVerbCall(verb, u, payload);
-      return reg.execute(verb, u, payload, readOptions);
+      return reg.execute(verb, u, payload, options);
     }),
   );
   const combined = formatBatchResults(expanded, settled);
@@ -242,6 +243,8 @@ export function registerVerbTools(server: McpServer): void {
         pdfText,
         pdfPages,
         rawImage,
+        // A read that lands on a folder falls back to list — page it as list would.
+        defaultLimit: LIST_PAGE_SIZE,
       }),
   );
 
@@ -250,13 +253,34 @@ export function registerVerbTools(server: McpServer): void {
     {
       description:
         'List child resources under a yaar:// URI. ' +
+        `A storage folder returns ${LIST_PAGE_SIZE} entries at a time, with a note giving the ` +
+        'total and the next range; sort/order pick which entries come first. ' +
         'URIs support brace expansion: yaar://storage/{dir1,dir2} lists both.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to list children of'),
+        sort: z
+          .enum(['name', 'modified', 'size'])
+          .optional()
+          .describe(
+            'Storage folders: order by name (directories first, the default), last write ' +
+              '(each entry then carries modifiedAt), or byte size (files only first).',
+          ),
+        order: z
+          .enum(['asc', 'desc'])
+          .optional()
+          .describe('Default "asc" for name, "desc" for modified/size — newest or largest first.'),
+        range: z
+          .string()
+          .optional()
+          .describe(
+            `Storage folders: which entries to return (1-based, inclusive), e.g. "1-100", ` +
+              `"201-400", "500-". Default: the first ${LIST_PAGE_SIZE}.`,
+          ),
       },
       _meta: LARGE_RESULT_META,
     },
-    async ({ uri }) => exec(reg, 'list', uri),
+    async ({ uri, sort, order, range }) =>
+      exec(reg, 'list', uri, undefined, { sort, order, range, defaultLimit: LIST_PAGE_SIZE }),
   );
 
   server.registerTool(

@@ -69,9 +69,9 @@ export function hasLineFilter(options?: ReadOptions): boolean {
 
 /**
  * Parse a line range string like "10-20", "50", or "100-" into [start, end] (1-based inclusive).
- * Returns null on invalid input.
+ * Returns null on invalid input. Also a list's `range` (see list-options.ts).
  */
-function parseLineRange(range: string): [start: number, end: number | null] | null {
+export function parseLineRange(range: string): [start: number, end: number | null] | null {
   const m = range.match(/^(\d+)(?:-(\d*))?$/);
   if (!m) return null;
   const start = parseInt(m[1], 10);

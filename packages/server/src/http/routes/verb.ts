@@ -15,8 +15,7 @@ import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '.
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError } from '../../handlers/utils.js';
 import { isEmptyLinkList, type VerbResult } from '../../lib/verb-result.js';
-import type { InvokePayload, Verb } from '../../handlers/uri-registry.js';
-import type { ReadOptions } from '../../lib/read-options.js';
+import type { InvokePayload, Verb, VerbOptions } from '../../handlers/uri-registry.js';
 import { invokeSources, resolveInvokeSources } from '../../handlers/storage-copy.js';
 import {
   namesSelf,
@@ -518,11 +517,15 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // and the `lines` / `pattern` filters an MCP caller has always had. This door dropped the
   // 4th argument entirely before, so an app could name a read option but never send one, and
   // `appStorage.readJsonOr` had no way to say that an absent file was the expected answer.
+  // For `list` it is the sort/order/range an MCP caller has; no default page here — an app
+  // asking for a folder gets all of it unless it names a range.
   // The array form is already refused for a non-invoke verb inside `execute`.
-  const readOptions =
-    verb === 'read' && payload && !Array.isArray(payload) ? (payload as ReadOptions) : undefined;
+  const options =
+    (verb === 'read' || verb === 'list') && payload && !Array.isArray(payload)
+      ? (payload as VerbOptions)
+      : undefined;
   const dispatch = () => {
-    const execute = () => registry.execute(verb, resolvedUri, payload, readOptions);
+    const execute = () => registry.execute(verb, resolvedUri, payload, options);
     return sessionId
       ? runWithAgentContext(
           {

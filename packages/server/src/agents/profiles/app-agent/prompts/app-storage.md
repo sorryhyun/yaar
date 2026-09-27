@@ -8,6 +8,10 @@ what names that tree:
 - **Write file:** `command(command: "storage:write", params: { path: "app/file.json", content: "..." })`
 - **Delete file:** `command(command: "storage:delete", params: { path: "app/file.json" })`
 
+A listing returns 200 entries at a time, with a note giving the total and the next range. Pass
+`sort` (`"name"`, the default; `"modified"` or `"size"`, newest or largest first), `order`
+(`"asc"`/`"desc"`) and `range` (`"201-400"`) in the `storage:list` params to choose the page.
+
 `app/` is a spelling, not a folder of yours: `app/notes.json` is the file `notes.json` at your
 own storage root. Exactly two leading segments work this way — `app/{path}` is your tree and
 `shared/{path}` is the **commons** (`yaar://storage/shared/{path}` — see the next section; no

@@ -11,6 +11,10 @@ import { resolveUri } from './uri-resolve.js';
 import type { AccessPrincipal } from '../agents/agent-context.js';
 import { error, ok, prependNote, type VerbResult } from '../lib/verb-result.js';
 import { hasLineFilter, type ReadOptions } from '../lib/read-options.js';
+import { hasListOptions, type ListOptions } from '../lib/list-options.js';
+
+/** The options bag `execute` hands a handler: read filters, list ordering/paging. */
+export type VerbOptions = ReadOptions & ListOptions;
 
 /**
  * Injected resolver for the current caller's principal. Decoupled from
@@ -82,8 +86,12 @@ export interface ResourceHandler {
 
   /** Custom describe handler. When provided, called instead of auto-generation. */
   describe?(resolved: ResolvedUri): Promise<VerbResult>;
-  read?(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult>;
-  list?(resolved: ResolvedUri): Promise<VerbResult>;
+  /**
+   * Gets the whole bag, not only the read filters: a read that lands on a folder falls back
+   * to `list`, and should page it the way a list at the same door would.
+   */
+  read?(resolved: ResolvedUri, options?: VerbOptions): Promise<VerbResult>;
+  list?(resolved: ResolvedUri, options?: ListOptions): Promise<VerbResult>;
   invoke?(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult>;
   delete?(resolved: ResolvedUri): Promise<VerbResult>;
 }
@@ -209,7 +217,7 @@ export class ResourceRegistry {
     verb: Verb,
     uri: string,
     payload?: InvokePayload,
-    readOptions?: ReadOptions,
+    options?: VerbOptions,
   ): Promise<VerbResult> {
     if (Array.isArray(payload)) {
       if (verb !== 'invoke') {
@@ -254,7 +262,7 @@ export class ResourceRegistry {
       const bareUri = uri.slice(0, -1);
       const bareHandler = this.findHandler(bareUri);
       if (bareHandler && bareHandler !== handler && bareHandler.verbs.includes(verb)) {
-        return this.execute(verb, bareUri, payload, readOptions);
+        return this.execute(verb, bareUri, payload, options);
       }
     }
 
@@ -292,13 +300,13 @@ export class ResourceRegistry {
     if (!handler.verbs.includes(verb)) {
       // Trailing-slash fallback: "yaar://apps/" → retry as "yaar://apps"
       if (uri !== 'yaar://' && uri.endsWith('/')) {
-        return this.execute(verb, uri.slice(0, -1), payload, readOptions);
+        return this.execute(verb, uri.slice(0, -1), payload, options);
       }
       // Cross-verb fallback: read↔list
       if (verb === 'read' && handler.verbs.includes('list') && handler.list) {
         const resolved = resolveUri(uri);
         if (!resolved) return error(`Could not resolve URI: ${uri}`);
-        const result = await handler.list.call(handler, resolved);
+        const { listFiltered: _, ...result } = await handler.list.call(handler, resolved, options);
         return prependNote(
           result,
           'Note: this is a folder/collection — used "list" instead of "read".',
@@ -326,12 +334,25 @@ export class ResourceRegistry {
       return handler.invoke!.call(handler, resolved, payload);
     }
     if (verb === 'read') {
-      const { readFiltered, ...result } = await handler.read!.call(handler, resolved, readOptions);
-      if (readFiltered || result.isError || !hasLineFilter(readOptions)) return result;
+      const {
+        readFiltered,
+        listFiltered: _,
+        ...result
+      } = await handler.read!.call(handler, resolved, options);
+      if (readFiltered || result.isError || !hasLineFilter(options)) return result;
       return prependNote(
         result,
         'Note: lines/pattern/chars filtering is not supported for this resource and was ignored — ' +
           'this is the full value.',
+      );
+    }
+    if (verb === 'list') {
+      const { listFiltered, ...result } = await handler.list!.call(handler, resolved, options);
+      if (listFiltered || result.isError || !hasListOptions(options)) return result;
+      return prependNote(
+        result,
+        'Note: sort/order/range is not supported for this resource and was ignored — ' +
+          'this is the full listing.',
       );
     }
     return (method as (resolved: ResolvedUri) => Promise<VerbResult>).call(handler, resolved);

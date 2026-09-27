@@ -68,8 +68,13 @@ List directory contents by URI.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `uri` | `string` | yes | Directory URI (e.g. `yaar://storage/`, `yaar://storage/docs`) |
+| `sort` | `"name" \| "modified" \| "size"` | no | `name` (default): directories first, then alphabetically. `modified`: by last write, directories mixed in, each entry carrying `modifiedAt`. `size`: by bytes, files first — a directory's stat size is not its contents. |
+| `order` | `"asc" \| "desc"` | no | Default `asc` for `name`, `desc` for `modified`/`size` (newest or largest first). |
+| `range` | `string` | no | Which entries to return, 1-based inclusive like `read`'s `lines`: `"1-100"`, `"201-400"`, `"500-"`. |
 
-Returns `resource_link` entries, directories first then alphabetically. Mounted directories appear as virtual entries under `yaar://storage/mounts/`. Listing a file path falls back to `read` with a note.
+Returns `resource_link` entries. Mounted directories appear as virtual entries under `yaar://storage/mounts/`. Listing a file path falls back to `read` with a note.
+
+**Paging.** Through the MCP `list` tool, a folder with no `range` returns its first 200 entries (`LIST_PAGE_SIZE` in `lib/list-options.ts`) behind a note — `Entries 1-200 of 5234. Next page: range "201-400".` — so a mounted folder with thousands of entries does not arrive as one oversized, spilled result. A `read` that falls back to `list` pages the same way. `POST /api/verb` has no default page: an app's `list` (the payload carries `sort`/`order`/`range`) gets the whole folder unless it asks for a range. Other `list` targets ignore these options, with a note saying so. The app agent's built-in `storage:list` (and a `query` that lands on a folder) pages and sorts the same way, from the same `sort`/`order`/`range` in its params — and an app that overrides `storage:list` receives those params too, so its handler can honour them.
 
 **Returns:** Resource links, or `"(empty)"` if the directory has no entries.
 
