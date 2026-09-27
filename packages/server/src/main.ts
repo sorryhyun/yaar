@@ -219,5 +219,11 @@ async function startup() {
   });
 }
 
+// Until Bun.serve() binds, nothing holds the event loop open — and under Bun 1.4.2 a pending
+// `Bun.file(<missing>).text()` does not either: the promise never settles, the loop drains,
+// and the process exits 0 without a word. A fresh install has no config/mounts.json, so that
+// is exactly how the standalone exe died on first launch. Hold the loop until boot settles.
+const bootHold = setInterval(() => {}, 60_000);
+
 /** Resolves when the server is fully ready (listening + warm pool initialized). */
-export const ready = startup();
+export const ready = startup().finally(() => clearInterval(bootHold));

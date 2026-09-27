@@ -12,7 +12,7 @@
  * restart. Same six steps, different contract.
  */
 
-import { mkdir } from 'fs/promises';
+import { mkdir, readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { getConfigDir } from './storage-manager.js';
 
@@ -48,7 +48,9 @@ export function createPersistedStore<T>(filename: string, createDefault: () => T
   const read = async (): Promise<T> => {
     if (cached !== null) return cached;
     try {
-      cached = JSON.parse(await Bun.file(path()).text()) as T;
+      // `readFile`, not `Bun.file().text()`: under Bun 1.4.2 the latter never settles for a
+      // missing file when nothing else holds the event loop — see the boot hold in main.ts.
+      cached = JSON.parse(await readFile(path(), 'utf8')) as T;
     } catch {
       // Missing or corrupt — either way the caller gets a usable value, not a throw.
       cached = createDefault();
