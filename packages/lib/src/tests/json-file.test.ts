@@ -46,6 +46,9 @@ describe('createDebouncedJsonFile', () => {
       writer.schedule();
     }
     await Bun.sleep(80);
+    // The timer has fired by now; flush() waits out its in-flight write rather
+    // than betting a slow runner finished mkdir+write+rename inside the sleep.
+    await writer.flush();
 
     expect(snapshotCalls).toBe(1);
     expect(await readJson(file)).toEqual({ value: 'call-4' });
@@ -54,18 +57,19 @@ describe('createDebouncedJsonFile', () => {
   it('resetOnSchedule extends the window on every call instead of coalescing to the first', async () => {
     let value = 'first';
     const writer = createDebouncedJsonFile(file, () => ({ value }), {
-      delayMs: 40,
+      delayMs: 150,
       resetOnSchedule: true,
     });
 
     writer.schedule();
-    await Bun.sleep(25);
+    await Bun.sleep(90);
     value = 'second';
-    writer.schedule(); // resets the 40ms window — no write yet at the 40ms mark from the first call
-    await Bun.sleep(25);
+    writer.schedule(); // resets the 150ms window — no write yet at the 150ms mark from the first call
+    await Bun.sleep(90);
     expect(await readFile(file, 'utf-8').catch(() => null)).toBeNull();
 
-    await Bun.sleep(25); // now past 40ms since the reset
+    await Bun.sleep(90); // now past 150ms since the reset
+    await writer.flush();
     expect(await readJson(file)).toEqual({ value: 'second' });
   });
 
