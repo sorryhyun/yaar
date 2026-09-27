@@ -7,6 +7,7 @@ import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import {
   APP_MSG,
   IFRAME_IME_GUARD_SCRIPT,
+  IFRAME_AUTOFILL_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
@@ -31,6 +32,7 @@ import styles from '@/styles/window/renderers.module.css';
 const IFRAME_INJECTED_SCRIPTS: [marker: string, source: string][] = [
   // First — the guard must be listening before any app code registers handlers
   ['data-yaar-ime-guard', IFRAME_IME_GUARD_SCRIPT],
+  ['data-yaar-autofill-guard', IFRAME_AUTOFILL_GUARD_SCRIPT],
   ['data-yaar-capture', IFRAME_CAPTURE_HELPER_SCRIPT],
   // Verb SDK must come before storage/windows SDKs (they depend on it)
   ['data-yaar-verb', IFRAME_VERB_SDK_SCRIPT],

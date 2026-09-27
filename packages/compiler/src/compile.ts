@@ -22,6 +22,7 @@ import {
 } from './build/build-manifest.js';
 import {
   IFRAME_IME_GUARD_SCRIPT,
+  IFRAME_AUTOFILL_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_VERB_SDK_SCRIPT,
@@ -138,6 +139,7 @@ function getRawSdkScripts(): string {
   return [
     // First — the guard must be listening before any app code registers handlers
     IFRAME_IME_GUARD_SCRIPT,
+    IFRAME_AUTOFILL_GUARD_SCRIPT,
     IFRAME_CAPTURE_HELPER_SCRIPT,
     IFRAME_STORAGE_SDK_SCRIPT,
     IFRAME_VERB_SDK_SCRIPT,
