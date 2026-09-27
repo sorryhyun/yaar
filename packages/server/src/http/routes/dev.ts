@@ -448,11 +448,17 @@ async function dispatchDevAction(
         sessionId: principal.sessionId,
       });
       if (!result.success) return jsonResponse(result);
+      // Named field by field, so a new internal one does not leak by default — which
+      // makes this list the contract, and every field the shim documents must be on it.
+      // `staleWindow` was once computed, then dropped right here: a self-deploy reported
+      // success while its window kept running the old bundle, with nothing saying so.
       return jsonResponse({
         success: true,
         appId: result.appId,
         name: result.name,
         icon: result.icon,
+        closedWindows: result.closedWindows,
+        ...(result.staleWindow ? { staleWindow: result.staleWindow } : {}),
       });
     }
   }
