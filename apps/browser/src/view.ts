@@ -217,7 +217,7 @@ function LiveStatsBar() {
 /** The page itself: the still screenshot, the live canvas, and the IME anchor over it. */
 function Stage() {
   return html`
-    <div class="screenshot-area">
+    <div class=${() => (liveMode() ? 'screenshot-area live' : 'screenshot-area')}>
       <div class="loading-track">
         <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
       </div>

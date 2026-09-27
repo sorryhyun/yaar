@@ -131,17 +131,24 @@
 }
 
 /*
- * Live mode (pre-P0 spike). The canvas fills the area and the remote viewport is
- * re-emulated to match it, so `object-fit` has nothing left to letterbox in the
- * steady state — it only covers the moment between a resize and the reflowed
- * frame that answers it.
+ * Live mode (pre-P0 spike). The remote viewport is re-emulated to match the area,
+ * so in the steady state the frame fills it exactly. Between a resize and the
+ * reflowed frame that answers it, the frame keeps the area's width and its own
+ * aspect, pinned to the top: a phone keyboard sliding up (the shell resizes content
+ * under it) covers the bottom of the page instead of letterboxing the whole frame
+ * smaller for a moment and snapping back. It also keeps the canvas box and the
+ * picture identical, which is what `toRemote` and `placeAnchor` assume.
  */
+.screenshot-area.live {
+  overflow: hidden;
+}
+
 .screenshot-area .live-canvas {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
   display: block;
   outline: none;
   cursor: default;
