@@ -16,6 +16,7 @@ import {
   SHADE_OVERPULL_MAX_PX,
   SWIPE_MIN_PX,
   dragAxis,
+  peekBadgeProgress,
   peekOffset,
   shadeClearArmed,
   shadeDim,
@@ -109,6 +110,22 @@ describe('peekOffset', () => {
     // edge that does not move at all says nothing at all.
     expect(peekOffset(80, false, width)).toBe(80 / RUBBER_BAND_DIVISOR);
     expect(peekOffset(width * 3, false, width)).toBe(width / RUBBER_BAND_DIVISOR);
+  });
+});
+
+describe('peekBadgeProgress', () => {
+  it('shows nothing for a drag that has barely claimed the axis', () => {
+    expect(peekBadgeProgress(0)).toBe(0);
+    expect(peekBadgeProgress(DRAG_INTENT_PX)).toBe(0);
+    expect(peekBadgeProgress(-DRAG_INTENT_PX)).toBe(0);
+  });
+
+  it('grows with the drag and is whole by the distance that lands it', () => {
+    const mid = peekBadgeProgress((DRAG_INTENT_PX + SWIPE_MIN_PX) / 2);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+    expect(peekBadgeProgress(SWIPE_MIN_PX)).toBe(1);
+    expect(peekBadgeProgress(-SWIPE_MIN_PX * 3)).toBe(1);
   });
 });
 

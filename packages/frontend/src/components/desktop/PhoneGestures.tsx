@@ -69,6 +69,7 @@ import {
   PEEK_SETTLE_MS,
   PEEK_TITLE_LIMIT,
   dragAxis,
+  peekBadgeProgress,
   peekOffset,
   shadeClearArmed,
   shouldCommitDrag,
@@ -102,6 +103,8 @@ const PAN_LAYER = 'monitor-peek';
 const PEEK_X_VAR = '--monitor-peek-x';
 /** Published beside it so the settle transition and the settle timer cannot disagree. */
 const PEEK_MS_VAR = '--monitor-peek-ms';
+/** How far the badge has faded in, 0–1 — it grows with the drag rather than popping up. */
+const PEEK_BADGE_VAR = '--monitor-peek-badge';
 /**
  * How long a pan onto a new monitor holds the slide while the server mints it. The
  * switch arrives on the `MONITORS` answer, not on the finger lifting, and snapping back to
@@ -314,6 +317,7 @@ export function PhoneGestures() {
         PEEK_X_VAR,
         `${peekOffset(dx, peekRef.current !== null, globalThis.innerWidth)}px`,
       );
+      setGestureVar(PAN_LAYER, PEEK_BADGE_VAR, `${peekBadgeProgress(dx)}`);
     };
 
     /** Let go: run the rest of the slide, then land on whichever surface won. */
@@ -334,6 +338,7 @@ export function PhoneGestures() {
         PEEK_X_VAR,
         landing ? `${landing.side === 'left' ? width : -width}px` : '0px',
       );
+      setGestureVar(PAN_LAYER, PEEK_BADGE_VAR, landing ? '1' : '0');
       settle.current = setTimeout(() => {
         // Switch and un-translate in the same tick: React commits the new surface before
         // the browser paints, so the desktop is never seen at rest showing the old one.
@@ -728,6 +733,8 @@ export function PhoneGestures() {
         <div
           className={styles.badge}
           data-peek-badge=""
+          data-gesture-layer={PAN_LAYER}
+          ref={gestureLayerRef(PAN_LAYER)}
           data-new={peek.target.kind === 'new' || undefined}
           data-cli={peek.target.kind === 'cli' || undefined}
           aria-hidden

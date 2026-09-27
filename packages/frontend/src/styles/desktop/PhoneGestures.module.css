@@ -13,6 +13,12 @@
   initial-value: 220ms;
 }
 
+@property --monitor-peek-badge {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 /* Mobile-only: `PhoneGestures` renders nothing on a desktop, so no form-factor guard. */
 
 .gutter {
@@ -147,11 +153,16 @@
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow-lg);
   color: var(--color-text);
-  transform: translate(-50%, -50%);
+  /* Grown with the drag — see `peekBadgeProgress` — not animated in on its own clock. */
+  opacity: var(--monitor-peek-badge);
+  transform: translate(-50%, -50%) scale(calc(0.6 + 0.4 * var(--monitor-peek-badge)));
   pointer-events: none;
-  animation-name: badgeIn;
-  animation-duration: var(--duration-fast);
-  animation-timing-function: ease-out;
+}
+
+:global(html[data-monitor-peek='settling']) .badge {
+  transition:
+    opacity var(--monitor-peek-ms, 220ms) ease-out,
+    transform var(--monitor-peek-ms, 220ms) ease-out;
 }
 
 .badgeNumber {
@@ -187,15 +198,4 @@
   font-weight: 600;
   color: var(--color-muted);
   white-space: nowrap;
-}
-
-@keyframes badgeIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
 }

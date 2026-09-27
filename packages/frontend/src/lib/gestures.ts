@@ -136,6 +136,19 @@ export function peekOffset(dx: number, hasNeighbour: boolean, viewportWidth: num
 }
 
 /**
+ * How far the pan's badge has faded in, 0 to 1, for a finger that has travelled `dx`.
+ *
+ * Nothing until the drag is past `DRAG_INTENT_PX`, and all of it only at `SWIPE_MIN_PX`,
+ * the distance that lands the pan. A badge that appeared whole on the first frame was a
+ * large box flashed up by every sideways brush of a scroll; grown with the drag, it is
+ * barely there for a nudge, and fully there exactly when letting go would switch.
+ */
+export function peekBadgeProgress(dx: number): number {
+  const t = (Math.abs(dx) - DRAG_INTENT_PX) / (SWIPE_MIN_PX - DRAG_INTENT_PX);
+  return Math.max(0, Math.min(1, t));
+}
+
+/**
  * Whether a finished drag lands where it was heading or falls back.
  *
  * Distance *or* speed: a slow deliberate drag is read from how far it went, and a flick
