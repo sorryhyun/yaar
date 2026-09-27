@@ -153,6 +153,8 @@
   outline: none;
   cursor: default;
   background: var(--yaar-bg);
+  /* A finger drag is the remote page's scroll (input.ts), not this frame's pan. */
+  touch-action: none;
 }
 
 /*

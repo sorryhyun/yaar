@@ -118,6 +118,138 @@ export function onCanvasWheel(e: WheelEvent): void {
   });
 }
 
+// ── Touch ───────────────────────────────────────────────────────────────
+//
+// A phone turns a tap into mouse events on its own — those arrive above, after the
+// finger lifts — but a drag becomes nothing a canvas can hear: no mousemove, no
+// wheel. So a finger drag is read here from pointer events and sent as wheel
+// deltas at the point it started, which scrolls whatever is under the finger in
+// the remote page the way a desktop wheel would. The canvas is `touch-action:
+// none`, or the browser would claim the drag for its own panning and cancel it.
+//
+// Deltas are summed per animation frame (each is a CDP round trip), and a drag
+// released while still moving keeps going as a fling that decays, because a
+// scroll that stops dead the instant the finger lifts reads as broken on a phone.
+
+const TOUCH_SLOP = 6;
+const FLING_MIN_SPEED = 0.3; // local px per ms
+const FLING_DECAY = 0.95; // per 16 ms frame
+
+interface Drag {
+  id: number;
+  origin: { x: number; y: number };
+  lastX: number;
+  lastY: number;
+  scrolling: boolean;
+  samples: { t: number; x: number; y: number }[];
+}
+
+let drag: Drag | null = null;
+let pending: { x: number; y: number; dx: number; dy: number } | null = null;
+let flingFrame = 0;
+
+/** Local CSS px → remote CSS px, which is what a wheel delta is measured in. */
+function remoteScale(): number {
+  const canvas = getCanvas();
+  const w = canvas?.getBoundingClientRect().width;
+  return w ? remoteW() / w : 1;
+}
+
+function flushWheel(): void {
+  const wheel = pending;
+  pending = null;
+  if (!wheel || (wheel.dx === 0 && wheel.dy === 0)) return;
+  markInput();
+  send({
+    t: 'mouse',
+    type: 'mouseWheel',
+    x: wheel.x,
+    y: wheel.y,
+    deltaX: wheel.dx,
+    deltaY: wheel.dy,
+    modifiers: 0,
+  });
+}
+
+function queueScroll(origin: { x: number; y: number }, localDx: number, localDy: number): void {
+  const s = remoteScale();
+  if (!pending) {
+    pending = { ...origin, dx: 0, dy: 0 };
+    requestAnimationFrame(flushWheel);
+  }
+  // Dragging the page up scrolls it down: the finger moves the content, a wheel the view.
+  pending.dx -= localDx * s;
+  pending.dy -= localDy * s;
+}
+
+function stopFling(): void {
+  if (flingFrame) cancelAnimationFrame(flingFrame);
+  flingFrame = 0;
+}
+
+function startFling(origin: { x: number; y: number }, vx: number, vy: number): void {
+  stopFling();
+  let last = performance.now();
+  const step = (now: number) => {
+    const dt = Math.min(now - last, 50);
+    last = now;
+    const decay = Math.pow(FLING_DECAY, dt / 16);
+    vx *= decay;
+    vy *= decay;
+    if (Math.hypot(vx, vy) < 0.02) {
+      flingFrame = 0;
+      return;
+    }
+    queueScroll(origin, vx * dt, vy * dt);
+    flingFrame = requestAnimationFrame(step);
+  };
+  flingFrame = requestAnimationFrame(step);
+}
+
+export function onCanvasPointerDown(e: PointerEvent): void {
+  if (e.pointerType !== 'touch') return;
+  // A finger on the glass stops a fling, as it does on any phone.
+  stopFling();
+  if (drag) return; // a second finger: pinch is not forwarded
+  const p = toRemote(e);
+  if (!p) return;
+  drag = {
+    id: e.pointerId,
+    origin: p,
+    lastX: e.clientX,
+    lastY: e.clientY,
+    scrolling: false,
+    samples: [{ t: e.timeStamp, x: e.clientX, y: e.clientY }],
+  };
+}
+
+export function onCanvasPointerMove(e: PointerEvent): void {
+  if (!drag || e.pointerId !== drag.id) return;
+  if (!drag.scrolling) {
+    const moved = Math.hypot(e.clientX - drag.lastX, e.clientY - drag.lastY);
+    if (moved < TOUCH_SLOP) return;
+    drag.scrolling = true;
+  }
+  queueScroll(drag.origin, e.clientX - drag.lastX, e.clientY - drag.lastY);
+  drag.lastX = e.clientX;
+  drag.lastY = e.clientY;
+  drag.samples.push({ t: e.timeStamp, x: e.clientX, y: e.clientY });
+  while (drag.samples.length > 2 && e.timeStamp - drag.samples[0].t > 100) drag.samples.shift();
+}
+
+export function onCanvasPointerUp(e: PointerEvent): void {
+  if (!drag || e.pointerId !== drag.id) return;
+  const { scrolling, samples, origin } = drag;
+  drag = null;
+  if (!scrolling || e.type === 'pointercancel') return;
+  const first = samples[0];
+  const dt = e.timeStamp - first.t;
+  if (dt <= 0 || dt > 150) return;
+  const vx = (e.clientX - first.x) / dt;
+  const vy = (e.clientY - first.y) / dt;
+  if (Math.hypot(vx, vy) >= FLING_MIN_SPEED) startFling(origin, vx, vy);
+}
+
 export function onCanvasContextMenu(e: MouseEvent): void {
   // The remote page gets the right-click (as a mousePressed above); showing this
   // iframe's own context menu on top of it would be showing the wrong page's menu.

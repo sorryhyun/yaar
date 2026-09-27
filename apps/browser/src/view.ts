@@ -26,6 +26,9 @@ import {
   onCanvasMouseUp,
   onCanvasMouseMove,
   onCanvasWheel,
+  onCanvasPointerDown,
+  onCanvasPointerMove,
+  onCanvasPointerUp,
   onCanvasContextMenu,
   onCanvasKeyDown,
   onCanvasKeyUp,
@@ -249,6 +252,10 @@ function Stage() {
         onMouseUp=${onCanvasMouseUp}
         onMouseMove=${onCanvasMouseMove}
         onWheel=${onCanvasWheel}
+        onPointerDown=${onCanvasPointerDown}
+        onPointerMove=${onCanvasPointerMove}
+        onPointerUp=${onCanvasPointerUp}
+        onPointerCancel=${onCanvasPointerUp}
         onContextMenu=${onCanvasContextMenu}
       ></canvas>
       <!--

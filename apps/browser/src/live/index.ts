@@ -15,7 +15,7 @@
  *   socket.ts   connect/disconnect and the text control protocol
  *   paint.ts    binary frame → pixels on the canvas
  *   stats.ts    fps / kbps / dropped / input-to-pixel lag
- *   input.ts    pointer, wheel, keyboard and viewport sync
+ *   input.ts    pointer, wheel, touch scroll, keyboard and viewport sync
  *   ime.ts      the hidden anchor that makes composition possible
  *
  * The spike's question is "does this feel good in the hand?", so stats.ts is
@@ -24,7 +24,8 @@
  * and server clocks are unrelated, so nothing here subtracts one from the other.
  *
  * Not here, on purpose (they are P0, not the spike): a compositor capture mode
- * with an escape hatch, touch, file drop, the agent co-drive lock.
+ * with an escape hatch, touch beyond one-finger scrolling (pinch, long-press), file
+ * drop, the agent co-drive lock.
  *
  * IME *is* here, as a second probe — see ime.ts. It is P0's highest-risk item
  * ("ships in the first cut or the first cut doesn't ship"), so it gets measured on
