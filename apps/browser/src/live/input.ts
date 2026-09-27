@@ -183,6 +183,9 @@ export function onCanvasKeyDown(e: KeyboardEvent): void {
     type: printable ? 'keyDown' : 'rawKeyDown',
     ...(printable ? { text: e.key, unmodifiedText: e.key.toLowerCase() } : {}),
   });
+  // Both can move the remote focus without a click — Tab to the next field, Enter
+  // submitting a form — and the soft keyboard follows whether that is still a field.
+  if (e.key === 'Tab' || e.key === 'Enter') requestCaret(300);
 }
 
 export function onCanvasKeyUp(e: KeyboardEvent): void {

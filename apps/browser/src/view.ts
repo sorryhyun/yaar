@@ -264,6 +264,7 @@ function Stage() {
         }}
         style=${() => (liveMode() ? '' : 'display:none')}
         aria-hidden="true"
+        inputmode="none"
         autocomplete="off"
         autocapitalize="off"
         autocorrect="off"

@@ -31,11 +31,37 @@ export function isImeKey(e: KeyboardEvent): boolean {
   return composing || e.isComposing || e.keyCode === 229;
 }
 
-/** Give the keyboard to the anchor, so composition has something to attach to. */
+/**
+ * Give the keyboard to the anchor, so composition has something to attach to.
+ *
+ * Focused on every click and on entering live mode, because a desktop keyboard's
+ * keys only reach the remote page through it. That focus must not raise a phone's
+ * soft keyboard, so the anchor sits at `inputmode="none"` until the remote page
+ * says a text field has focus — see `setRemoteEditable`.
+ */
 export function focusRemoteKeyboard(): void {
   const anchor = getAnchor();
   if (anchor) anchor.focus({ preventScroll: true });
   else getCanvas()?.focus();
+}
+
+/**
+ * Show or hide the soft keyboard to match what the remote page focused.
+ *
+ * Only the `caret` reply can say, and it arrives after the tap, so the anchor stays
+ * focused throughout and only its `inputmode` changes. A focused element's new
+ * `inputmode` is not re-read by every mobile keyboard, so the anchor is refocused
+ * to make it — still inside the tap's user activation, which is what lets a
+ * programmatic focus raise the keyboard. Never mid-composition: the blur would end it.
+ */
+export function setRemoteEditable(editable: boolean): void {
+  const anchor = getAnchor();
+  const mode = editable ? 'text' : 'none';
+  if (!anchor || anchor.inputMode === mode) return;
+  anchor.inputMode = mode;
+  if (document.activeElement !== anchor || composing) return;
+  anchor.blur();
+  anchor.focus({ preventScroll: true });
 }
 
 /** Leaving live mode: no preedit is in flight and the anchor keeps no shadow text. */
@@ -43,7 +69,10 @@ export function resetIme(): void {
   composing = false;
   setImeStatus('');
   const anchor = getAnchor();
-  if (anchor) anchor.value = '';
+  if (anchor) {
+    anchor.value = '';
+    anchor.inputMode = 'none';
+  }
 }
 
 export function onImeStart(): void {

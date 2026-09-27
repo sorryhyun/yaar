@@ -350,17 +350,25 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
       }
       return;
     }
-    // Asked for on composition start, answered once: the app parks its hidden IME
-    // anchor here so the OS draws the candidate window under the remote caret.
+    // Asked for after a click and on composition start: the app parks its hidden IME
+    // anchor here so the OS draws the candidate window under the remote caret, and
+    // reads `editable` to decide whether a phone's soft keyboard should be up.
     case 'caret': {
       state.session
         .caretRect()
-        .then((rect) => {
+        .then((caret) => {
           if (ws.readyState !== 1) return;
           // A miss is an answer too — "the page would not say where its caret is"
           // is precisely what the probe needs to hear, and silence would read as a
           // dropped message instead.
-          ws.send(JSON.stringify(rect ? { t: 'caret', ...rect } : { t: 'caret', found: false }));
+          const editable = caret?.editable === true;
+          ws.send(
+            JSON.stringify(
+              typeof caret?.x === 'number'
+                ? { t: 'caret', ...caret, editable }
+                : { t: 'caret', found: false, editable },
+            ),
+          );
         })
         .catch(() => {});
       return;

@@ -13,7 +13,7 @@ import { resetStats, startStatsClock, stopStatsClock } from './stats';
 import { startFallback, stopFallback } from './fallback';
 import { paintFrame } from './paint';
 import { upsertTab, removeTab, followTab } from './tabs';
-import { placeAnchor, reportNoCaret, resetIme } from './ime';
+import { placeAnchor, reportNoCaret, resetIme, setRemoteEditable } from './ime';
 import { syncViewport } from './input';
 
 /**
@@ -32,6 +32,7 @@ interface ControlFrame {
   y?: number;
   h?: number;
   found?: boolean;
+  editable?: boolean;
 }
 
 export function connectLive(browserId: string): void {
@@ -82,6 +83,7 @@ function handleControlFrame(text: string): void {
   try {
     const msg = JSON.parse(text) as ControlFrame;
     if (msg.t === 'caret') {
+      setRemoteEditable(msg.editable === true);
       if (typeof msg.x === 'number' && typeof msg.y === 'number') {
         placeAnchor(msg.x, msg.y, msg.h ?? 16);
       } else if (msg.found === false) {

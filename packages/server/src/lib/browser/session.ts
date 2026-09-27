@@ -155,6 +155,14 @@ export interface RawKeyEvent {
   windowsVirtualKeyCode?: number;
 }
 
+/** The remote page's answer to "where is your caret?" — see `CARET_RECT`. */
+export interface CaretInfo {
+  editable: boolean;
+  x?: number;
+  y?: number;
+  h?: number;
+}
+
 export interface BrowserSessionOptions {
   mobile?: boolean;
   /**
@@ -1657,10 +1665,12 @@ export class BrowserSession extends EventEmitter {
   /**
    * Where the remote page's caret is, in viewport CSS px — so the app can park
    * its hidden IME anchor there and the OS draws the candidate window under the
-   * text being typed instead of in the corner of the window.
+   * text being typed instead of in the corner of the window. `editable` says
+   * whether the focused element takes typing at all, which is what decides
+   * whether a phone's soft keyboard should be up.
    */
-  async caretRect(): Promise<{ x: number; y: number; h: number } | null> {
-    return (await this.eval<{ x: number; y: number; h: number } | null>(CARET_RECT)) ?? null;
+  async caretRect(): Promise<CaretInfo | null> {
+    return (await this.eval<CaretInfo | null>(CARET_RECT)) ?? null;
   }
 
   /**

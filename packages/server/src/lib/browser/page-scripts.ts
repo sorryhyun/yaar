@@ -486,7 +486,14 @@ export const FIND_MAIN_CONTENT = `(function() {
 // ── caretRect ─────────────────────────────────────────────────────────
 
 /**
- * IIFE → `{x, y, h}` of the text caret in viewport CSS px, or null.
+ * IIFE → `{editable, x, y, h}`: whether the focused element takes typing, and the
+ * text caret in viewport CSS px (`x`/`y`/`h` absent when it cannot be found).
+ *
+ * `editable` is what lets a phone keep its soft keyboard down: the app's anchor
+ * is focused on every tap, so without it a tap on a logo raised the keyboard as
+ * surely as a tap on a search box. A focused cross-origin iframe answers `true`
+ * — what it focused is out of reach, and a keyboard that never comes up for a
+ * field is worse than one that comes up once too often.
  *
  * The IME probe's one page-side question: a candidate window is drawn by the
  * *local* OS at the *local* caret, and the local caret is a hidden textarea
@@ -502,8 +509,21 @@ export const FIND_MAIN_CONTENT = `(function() {
  *   settles for the containing element's box.
  */
 export const CARET_RECT = `(function() {
+  var NOT_TEXT = /^(button|checkbox|color|file|hidden|image|radio|range|reset|submit)$/;
+  function isEditable(node) {
+    while (node && node.tagName === 'IFRAME') {
+      try { node = node.contentDocument && node.contentDocument.activeElement; }
+      catch (e) { return true; }
+      if (!node) return true;
+    }
+    if (!node) return false;
+    if (node.tagName === 'INPUT') return !node.disabled && !node.readOnly && !NOT_TEXT.test(node.type);
+    if (node.tagName === 'TEXTAREA') return !node.disabled && !node.readOnly;
+    return node.isContentEditable === true;
+  }
   var el = document.activeElement;
   var tag = el && el.tagName;
+  var editable = isEditable(el);
   if (tag === 'INPUT' || tag === 'TEXTAREA') {
     var r = el.getBoundingClientRect();
     var st = getComputedStyle(el);
@@ -519,7 +539,7 @@ export const CARET_RECT = `(function() {
       } catch (e) {}
     }
     var h = Math.min(parseFloat(st.lineHeight) || r.height, r.height);
-    return { x: Math.max(r.left, Math.min(x, r.right)), y: r.top + (r.height - h) / 2, h: h };
+    return { editable: editable, x: Math.max(r.left, Math.min(x, r.right)), y: r.top + (r.height - h) / 2, h: h };
   }
   var sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -532,7 +552,7 @@ export const CARET_RECT = `(function() {
       var host = node.nodeType === 1 ? node : node.parentElement;
       rr = host ? host.getBoundingClientRect() : null;
     }
-    if (rr && (rr.height || rr.width)) return { x: rr.right, y: rr.top, h: rr.height || 16 };
+    if (rr && (rr.height || rr.width)) return { editable: editable, x: rr.right, y: rr.top, h: rr.height || 16 };
   }
-  return null;
+  return { editable: editable };
 })()`;
