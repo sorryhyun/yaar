@@ -9,4 +9,8 @@ import type { PluginSummary } from "./PluginSummary.js";
 import type { ScheduledTaskSummary } from "./ScheduledTaskSummary.js";
 import type { SkillSummary } from "./SkillSummary.js";
 
-export type PluginDetail = { marketplaceName: string, marketplacePath: AbsolutePathBuf | null, summary: PluginSummary, shareUrl: string | null, description: string | null, skills: Array<SkillSummary>, hooks: Array<PluginHookSummary>, apps: Array<AppSummary>, appTemplates: Array<AppTemplateSummary>, mcpServers: Array<string>, scheduledTasks: Array<ScheduledTaskSummary> | null, };
+export type PluginDetail = { marketplaceName: string, marketplacePath: AbsolutePathBuf | null, summary: PluginSummary, shareUrl: string | null, description: string | null, skills: Array<SkillSummary>,
+/**
+ * The declared onboarding skill, when the plugin and visible skill are enabled.
+ */
+onboardingSkill: SkillSummary | null, hooks: Array<PluginHookSummary>, apps: Array<AppSummary>, appTemplates: Array<AppTemplateSummary>, mcpServers: Array<string>, scheduledTasks: Array<ScheduledTaskSummary> | null, };

@@ -91,6 +91,7 @@ export type { SubAgentSource } from "./SubAgentSource.js";
 export type { ThreadId } from "./ThreadId.js";
 export type { ThreadMemoryMode } from "./ThreadMemoryMode.js";
 export type { Tool } from "./Tool.js";
+export type { ToolExposureSurface } from "./ToolExposureSurface.js";
 export type { Verbosity } from "./Verbosity.js";
 export type { WebSearchAction } from "./WebSearchAction.js";
 export type { WebSearchContextSize } from "./WebSearchContextSize.js";
