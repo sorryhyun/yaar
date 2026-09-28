@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, blobToDataUrl, errMsg } from '@bundled/yaar';
+import { appStorage, blobToDataUrl, errMsg, read } from '@bundled/yaar';
 import {
   activeProject,
   setActiveProject,
@@ -191,6 +191,37 @@ export function resolveProjectPath(raw: string): string {
   if (path === null) throw new Error(`refused: path escapes the project: ${raw}`);
   if (path === '') throw new Error('path is empty — name a file inside the project');
   return path;
+}
+
+/** What `readModelSummary` can steer — the server's `gltfNode` / `gltfDepth` / `gltfKeys`. */
+export interface ModelSummaryOptions {
+  node?: string;
+  depth?: number;
+  keys?: string;
+}
+
+/**
+ * A glTF/GLB model's structure — node tree with TRS, local and world bounds per mesh,
+ * materials, image sizes, animation channels — as the server's glTF reader summarizes it.
+ * `ref` is a project path or a `yaar://storage/...` URI. Nothing is compiled or previewed:
+ * the summary comes from the file, so it reaches models no bundle imports.
+ */
+export async function readModelSummary(
+  ref: string,
+  opts: ModelSummaryOptions = {},
+): Promise<string> {
+  let uri = ref;
+  if (!ref.startsWith('yaar://')) {
+    const proj = activeProject();
+    if (!proj) throw new Error('No active project. Open or create one first.');
+    uri = `yaar://apps/self/storage/${projectPath(proj.id, resolveProjectPath(ref))}`;
+  }
+  const result = await read(uri, {
+    ...(opts.node !== undefined ? { gltfNode: opts.node } : {}),
+    ...(opts.depth !== undefined ? { gltfDepth: opts.depth } : {}),
+    ...(opts.keys !== undefined ? { gltfKeys: opts.keys } : {}),
+  });
+  return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
 }
 
 function missingFileError(path: string): Error {

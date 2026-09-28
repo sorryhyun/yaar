@@ -1,5 +1,6 @@
 import { AppCommandError, describe, errMsg, list, read, defineAppCommand } from '@bundled/yaar';
 import { bundledLibraries } from '@bundled/yaar-dev';
+import { readModelSummary } from '../services';
 
 import { imageBlocks, imagesFromReadResult } from './read-blocks';
 
@@ -60,6 +61,51 @@ export const introspectCommands = {
         return { result };
       } catch (err) {
         throw new AppCommandError(`Failed to inspect URI ${uri}: ${errMsg(err)}`);
+      }
+    },
+  }),
+  inspectModel: defineAppCommand({
+    description:
+      'Read a .glb/.gltf model as data: node tree with local TRS, per-mesh local and world ' +
+      'bounds (real sizes in metres), vertex/triangle counts, materials, texture sizes, and ' +
+      'each animation clip with its duration and the node paths it keys. Reads the file ' +
+      'itself — no compile or preview needed. `node` scopes it to a subtree and adds ' +
+      'per-channel keyframe stats (first/last/min/max, degrees of swing for rotations); ' +
+      "`keys` returns one clip's full keyframes. Bounds are the rest pose; morph targets are " +
+      'ignored. The result is line-oriented JSON, one record per line.',
+    params: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Project path (e.g. "src/assets/rifle.glb") or a yaar://storage/... URI.',
+        },
+        node: {
+          type: 'string',
+          description:
+            'Node name (exact, case-insensitive, or a unique substring) or "#index": scope ' +
+            'the summary to its subtree.',
+        },
+        depth: { type: 'number', description: 'Levels of the node tree to list.' },
+        keys: {
+          type: 'string',
+          description:
+            'Animation name or "#index": return its keyframes as [time, ...value] rows — ' +
+            'only the channels under `node` when that is set.',
+        },
+      },
+      required: ['path'],
+    },
+    run: async (p) => {
+      const path = String(p.path);
+      try {
+        return await readModelSummary(path, {
+          ...(typeof p.node === 'string' ? { node: p.node } : {}),
+          ...(typeof p.depth === 'number' ? { depth: p.depth } : {}),
+          ...(typeof p.keys === 'string' ? { keys: p.keys } : {}),
+        });
+      } catch (err) {
+        throw new AppCommandError(`Failed to inspect model ${path}: ${errMsg(err)}`);
       }
     },
   }),

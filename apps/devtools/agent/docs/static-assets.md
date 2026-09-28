@@ -28,7 +28,10 @@ uploads, generated output, anything that changes without a recompile.
 **3D models:** an imported `.glb` arrives as a `data:` URI for `GLTFLoader.parse`
 (`describeBundledLibrary` on `three/addons`). A `.gltf` naming a sidecar `.bin` or texture
 files cannot resolve those relative URLs against a `data:` URI — export the
-**self-contained `.glb`** rather than copying the sidecars in.
+**self-contained `.glb`** rather than copying the sidecars in. Before fitting, framing or
+animating a model, `inspectModel` it: node names and TRS, each mesh's world bounds (its real
+size), and which nodes every clip keys — `node` for one limb's keyframe stats, `keys` for a
+clip's full keyframes. Never regex a preview's bundle for the base64 to learn any of that.
 
 **Why not `storage.url(...)`:** the preview runs under a throwaway principal, so anything
 hitting `/api/storage/` resolves against a different identity than the deployed app will

@@ -47,6 +47,9 @@ Read a file by URI.
 | `context` | `number` | no | Context lines around pattern matches (default: `0`) |
 | `pdfText` | `boolean \| string` | no | PDF only: extract the text layer. `true` (or `"all"`) reads the whole document; a range like `"1-3"` scopes it. |
 | `pdfPages` | `string` | no | PDF only: page range to rasterize to images, e.g. `"1-3"`, `"5"`, `"2-"` — for scanned/visual PDFs. |
+| `gltfNode` | `string` | no | glTF/GLB only: scope the model summary to a node's subtree (a name — exact, case-insensitive, or a unique substring — or `"#index"`). Adds per-channel keyframe stats. |
+| `gltfDepth` | `number` | no | glTF/GLB only: how many levels of the node tree to list. |
+| `gltfKeys` | `string` | no | glTF/GLB only: an animation (name or `"#index"`) whose keyframes to return in full, as `[time, ...value]` rows — only under `gltfNode` when that is set. |
 | `missingOk` | `boolean` | no | Answer an absent file with `null` instead of an error. For when "it isn't there yet" is an expected state — an optional config file on a first run. A file holding a literal `null` is indistinguishable from an absent one; `list` the parent if you must tell them apart. |
 
 **Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
@@ -54,6 +57,8 @@ Read a file by URI.
 **Returns (PDF files):** View-first by default — reading a PDF with no `pdfText`/`pdfPages` returns metadata only (`pdfMeta: true`, page count, byte size) plus a hint to open it in a viewer window (`yaar://storage/` iframe content), with zero bytes ingested. Pass `pdfText` to extract the text layer (cheapest way to actually read the content), or `pdfPages` to rasterize a page range to base64 images — capped at `MAX_PDF_RASTER_PAGES` (20 pages) per request, and re-encoded to WebP unless `rawImage: true` (see [File Type Handling](#file-type-handling)).
 
 **Returns (image files):** Base64-encoded image content with MIME type.
+
+**Returns (glTF/GLB models):** A structural summary as line-oriented JSON (`@yaar/lib/gltf`), not the bytes: the node tree with local TRS, each mesh's vertex/triangle counts and local and world bounds (rest pose; a skinned mesh placed by its first joint's bind matrix), materials, image sizes read from their headers, and each animation's duration and the node paths it keys. Per-channel keyframe stats (first/last, min/max, degrees of swing for rotations) appear when the file has at most 64 channels or `gltfNode` scopes the read. A `.gltf`'s sidecar buffers and images resolve against its own folder through storage path resolution — never outside storage, and a remote URI is never fetched. Draco/meshopt-compressed data is reported, not decoded. Files over 256 MB are refused.
 
 **Returns (binary files):** A message explaining the file can't be read as text, with a pointer to the REST API.
 
@@ -375,6 +380,7 @@ All operations resolve paths in order:
 | Text files (`.txt`, `.md`, `.ts`, `.json`, etc.) | Read as UTF-8, line-numbered output |
 | PDF (`.pdf`) | View-first: returns metadata only (page count, byte size) by default. `pdfText` extracts the text layer; `pdfPages` rasterizes a page range via poppler (capped at 20 pages) and re-encodes it to WebP |
 | Images (`.png`, `.jpg`, `.gif`, `.webp`) | Return as base64 image content, re-encoded to WebP |
+| 3D models (`.glb`, `.gltf`) | Structural summary — tree, bounds, materials, animation channels; steered by `gltfNode`/`gltfDepth`/`gltfKeys` |
 | Other binary | Return explanation message, point to REST API |
 
 A read is a **presentation** read: its consumer is a vision model, so PNG and JPEG bytes
@@ -580,4 +586,5 @@ Stored at `config/{appId}.json`. Managed via verb tools: `read('yaar://config/ap
 |-------|-------|
 | Max upload size (REST) | 50 MB |
 | Max PDF rasterize pages (`pdfPages` per request) | 20 |
+| Max glTF/GLB size for a model summary | 256 MB |
 | PDF render scale | 1.5× |

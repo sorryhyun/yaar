@@ -242,6 +242,9 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         pdfText: options?.pdfText,
         pdfPages: options?.pdfPages,
         rawImage: options?.rawImage,
+        gltfNode: options?.gltfNode,
+        gltfDepth: options?.gltfDepth,
+        gltfKeys: options?.gltfKeys,
       });
       if (!result.success) {
         // Directory — or an archive, which reads as the folder it stands for → fall through to list

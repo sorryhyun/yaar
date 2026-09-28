@@ -179,6 +179,8 @@ export function registerVerbTools(server: McpServer): void {
         '(elsewhere the filter is ignored, with a note saying so). ' +
         'Reading a PDF returns its metadata plus a hint to open it in a viewer window — it does ' +
         'NOT ingest the content unless you pass pdfText (text layer) or pdfPages (page images). ' +
+        'Reading a .glb/.gltf returns a model summary — node tree with TRS, local and world ' +
+        'bounds per mesh, materials, animation channels — steered by gltfNode/gltfKeys/gltfDepth. ' +
         'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to read'),
@@ -231,10 +233,42 @@ export function registerVerbTools(server: McpServer): void {
             'Images only: return the stored bytes instead of the smaller WebP re-encode ' +
               'reads normally apply. Only when the exact pixels matter.',
           ),
+        gltfNode: z
+          .string()
+          .optional()
+          .describe(
+            'glTF/GLB only: scope the summary to this node\'s subtree (a name, or "#index") — ' +
+              'its meshes, materials and animation channels, each channel with keyframe stats.',
+          ),
+        gltfDepth: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('glTF/GLB only: how many levels of the node tree to list.'),
+        gltfKeys: z
+          .string()
+          .optional()
+          .describe(
+            'glTF/GLB only: an animation name (or "#index") whose keyframes to return in full, ' +
+              'as [time, ...value] rows. Combine with gltfNode to keep it to one limb.',
+          ),
       },
       _meta: LARGE_RESULT_META,
     },
-    async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage }) =>
+    async ({
+      uri,
+      lines,
+      pattern,
+      context,
+      chars,
+      pdfText,
+      pdfPages,
+      rawImage,
+      gltfNode,
+      gltfDepth,
+      gltfKeys,
+    }) =>
       exec(reg, 'read', uri, undefined, {
         lines,
         pattern,
@@ -243,6 +277,9 @@ export function registerVerbTools(server: McpServer): void {
         pdfText,
         pdfPages,
         rawImage,
+        gltfNode,
+        gltfDepth,
+        gltfKeys,
         // A read that lands on a folder falls back to list — page it as list would.
         defaultLimit: LIST_PAGE_SIZE,
       }),

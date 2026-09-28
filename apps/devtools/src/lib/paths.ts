@@ -91,6 +91,11 @@ export function isImagePath(path: string): boolean {
   return IMAGE_EXT.test(path);
 }
 
+/** Whether this path is a glTF model — read as the server's structural summary. */
+export function isModelPath(path: string): boolean {
+  return /\.(glb|gltf)$/i.test(path);
+}
+
 /**
  * Whether this path holds bytes that are not text at all. Reading one as text gives
  * mojibake, so the callers that would have shown it say what the file is instead.

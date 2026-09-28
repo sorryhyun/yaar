@@ -6,9 +6,10 @@
 
 import { mkdir, readdir, unlink, rename, rm, stat, lstat } from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { join, relative, dirname, extname } from 'path';
+import { join, relative, dirname, extname, posix } from 'path';
 import { pdfToImages, pdfToText, getPdfPageCount } from '../features/pdf.js';
 import { toWebPForModel } from '@yaar/lib/image';
+import { GltfError, formatSummaryJson, summarizeGltf } from '@yaar/lib/gltf';
 import { containedPath, containedRealPath } from '@yaar/lib/paths';
 import {
   STORAGE_DIR,
@@ -181,6 +182,12 @@ export interface StorageReadOptions {
    * to write the bytes back out somewhere.
    */
   rawImage?: boolean;
+  /** glTF/GLB only: scope the model summary to one node's subtree (a name, or "#index"). */
+  gltfNode?: string;
+  /** glTF/GLB only: how many levels of the node tree the summary lists. */
+  gltfDepth?: number;
+  /** glTF/GLB only: an animation (name or "#index") whose keyframes to return in full. */
+  gltfKeys?: string;
 }
 
 /**
@@ -204,6 +211,65 @@ async function imageReadResult(buf: Buffer, mime: string, raw?: boolean): Promis
       ? `Image file (${mime})`
       : `Image file (${mime}, re-encoded to ${encoded.mimeType} for this read; the stored file is unchanged)`;
   return { success: true, content: note, images: [image] };
+}
+
+const GLTF_EXTENSIONS = new Set(['.glb', '.gltf']);
+/** The summary parses the whole file in memory; past this it is not the tool for the job. */
+const MAX_GLTF_READ_BYTES = 256 * 1024 * 1024;
+
+/**
+ * A glTF/GLB read: node tree, mesh bounds, materials, image sizes and animation channels as
+ * grep-friendly JSON (`@yaar/lib/gltf`). A `.gltf`'s sidecar buffers and images resolve
+ * against its own folder, through `resolvePath` like any other storage path — so they cannot
+ * climb out of storage, and a remote URI is never fetched.
+ */
+async function gltfReadResult(
+  absolutePath: string,
+  filePath: string,
+  size: number,
+  opts?: StorageReadOptions,
+): Promise<StorageReadResult> {
+  if (size > MAX_GLTF_READ_BYTES) {
+    return {
+      success: false,
+      error: `"${filePath}" is ${size} bytes; a model summary reads files up to ${MAX_GLTF_READ_BYTES}.`,
+    };
+  }
+  const folder = posix.dirname(normalizeSeparators(filePath));
+  try {
+    const summary = await summarizeGltf(await Bun.file(absolutePath).bytes(), {
+      node: opts?.gltfNode,
+      depth: opts?.gltfDepth,
+      keys: opts?.gltfKeys,
+      resolveUri: async (uri) => {
+        let rel = uri;
+        try {
+          rel = decodeURIComponent(uri);
+        } catch {
+          // Not percent-encoded after all — use it as written.
+        }
+        if (/^[a-z][a-z0-9+.-]*:/i.test(rel)) return null;
+        const sibling = resolvePath(posix.join(folder, rel));
+        if (!sibling) return null;
+        try {
+          return await Bun.file(sibling.absolutePath).bytes();
+        } catch {
+          return null;
+        }
+      },
+    });
+    if (opts?.gltfNode === undefined && opts?.gltfKeys === undefined) {
+      summary.readOptions = {
+        gltfNode: 'a node name or "#index": scope to its subtree, with per-channel keyframe stats',
+        gltfKeys: 'an animation name: its full keyframes as [time, ...value] rows (with gltfNode, that subtree only)',
+        gltfDepth: 'how many levels of the node tree to list',
+      };
+    }
+    return { success: true, content: formatSummaryJson(summary) };
+  } catch (err) {
+    if (err instanceof GltfError) return { success: false, error: `${filePath}: ${err.message}` };
+    throw err;
+  }
 }
 
 const utf8Decoder = new TextDecoder();
@@ -376,6 +442,12 @@ export async function storageRead(
         totalPages,
         pdfMeta: true,
       };
+    }
+
+    // 3D models — a structural summary rather than a binary notice, or, for a .gltf, rather
+    // than JSON whose embedded buffers can be megabytes of base64.
+    if (GLTF_EXTENSIONS.has(extname(validatedPath).toLowerCase())) {
+      return gltfReadResult(validatedPath, filePath, fileStat.size, opts);
     }
 
     // Image files — return as base64 image content, re-encoded for the model (see imageReadResult).

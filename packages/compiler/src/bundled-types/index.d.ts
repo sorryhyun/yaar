@@ -1541,6 +1541,12 @@ interface YaarReadOptions {
   pdfPages?: string;
   /** Images only: the stored bytes instead of the WebP re-encode a read normally applies. */
   rawImage?: boolean;
+  /** glTF/GLB only: scope the model summary to one node's subtree (a name, or "#index"). */
+  gltfNode?: string;
+  /** glTF/GLB only: how many levels of the node tree the summary lists. */
+  gltfDepth?: number;
+  /** glTF/GLB only: an animation (name or "#index") whose keyframes to return in full. */
+  gltfKeys?: string;
   /**
    * Answer an absent resource with `null` instead of throwing.
    *

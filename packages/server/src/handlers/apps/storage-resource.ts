@@ -123,7 +123,11 @@ export async function readStorage(
   if (!storagePath.path) {
     return storageListLinks(storagePath.appId, prefixedPath, { missingIsEmpty: true });
   }
-  const result = await storageRead(prefixedPath);
+  const result = await storageRead(prefixedPath, {
+    gltfNode: options?.gltfNode,
+    gltfDepth: options?.gltfDepth,
+    gltfKeys: options?.gltfKeys,
+  });
   if (!result.success) {
     // An archive reads as the folder it stands for. (A plain directory still answers with
     // the error below: this door never fell through to list for one, and the SDK's

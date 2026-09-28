@@ -1,6 +1,6 @@
 import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
-import { assetImportLine, editText, isImagePath, type EditSpec } from '../lib';
+import { assetImportLine, editText, isImagePath, isModelPath, type EditSpec } from '../lib';
 import {
   openFile,
   writeFile,
@@ -11,6 +11,7 @@ import {
   findReferences,
   readFileContent,
   readImageFile,
+  readModelSummary,
   listProjectFiles,
   resolveProjectPath,
   copyFromStorage,
@@ -95,7 +96,8 @@ export const fileCommands = {
       'before anything is read; a file that cannot be read becomes its own text block ' +
       'beginning `[readFile error]`, beside the files that could, and the call throws only ' +
       'when none could. Does not change editor open state unless openInEditor is set. ' +
-      'Image files come back as a viewable image block, not text.',
+      'Image files come back as a viewable image block, not text; a .glb/.gltf as its ' +
+      '`inspectModel` summary.',
     params: {
       type: 'object',
       properties: {
@@ -147,6 +149,11 @@ export const fileCommands = {
               const image = await readImageFile(fp);
               if (image) return { blocks: imageBlocks(fp, [image]) };
               // Unreadable as bytes — fall through to the text path, which reports it.
+            }
+            // A model is answered with its structure, not its bytes: `inspectModel` with
+            // no options, so the tree and bounds arrive without a second call.
+            if (isModelPath(fp)) {
+              return { blocks: [{ type: 'text', text: await readModelSummary(fp) }] };
             }
             const r = await readFileContent(fp, opts);
             // Embedded resource block — gives Claude URI + MIME metadata per file

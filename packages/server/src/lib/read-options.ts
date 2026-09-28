@@ -41,6 +41,13 @@ export interface ReadOptions {
    */
   rawImage?: boolean;
   /**
+   * glTF/GLB only. A model read returns a structural summary (node tree, bounds, materials,
+   * animation channels); these steer it — a subtree, a depth, one clip's full keyframes.
+   */
+  gltfNode?: string;
+  gltfDepth?: number;
+  gltfKeys?: string;
+  /**
    * Answer an absent resource with `null` instead of an error.
    *
    * The caller is declaring that absence is an expected state — `appStorage.readJsonOr`

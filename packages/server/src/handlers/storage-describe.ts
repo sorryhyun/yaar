@@ -114,6 +114,23 @@ export async function describeStoragePath(uri: string, path: string): Promise<Ve
     });
   }
 
+  // A model reads as a structural summary, and the options that steer it are no use unnamed.
+  const ext = extname(cleaned).toLowerCase();
+  if (ext === '.glb' || ext === '.gltf') {
+    return okJson({
+      ...base,
+      readOptions: {
+        gltfNode:
+          'A node name or "#index": scope the summary to its subtree, with per-channel keyframe stats.',
+        gltfKeys: 'An animation name or "#index": its full keyframes as [time, ...value] rows.',
+        gltfDepth: 'How many levels of the node tree to list.',
+      },
+      hint:
+        'A plain read returns the node tree with TRS, local and world bounds per mesh, ' +
+        'materials, image sizes and animation channels — not the bytes.',
+    });
+  }
+
   if (!isPdf) return okJson(base);
 
   // A PDF is the one file type whose read has options worth naming up front: reading

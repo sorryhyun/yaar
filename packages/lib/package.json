@@ -19,6 +19,10 @@
       "types": "./dist/fonts/index.d.ts",
       "import": "./dist/fonts/index.js"
     },
+    "./gltf": {
+      "types": "./dist/gltf/index.d.ts",
+      "import": "./dist/gltf/index.js"
+    },
     "./freedpi": {
       "types": "./dist/freedpi/index.d.ts",
       "import": "./dist/freedpi/index.js"
