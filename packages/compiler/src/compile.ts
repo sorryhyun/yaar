@@ -42,6 +42,7 @@ import {
   formatTokenFindings,
   type AppSourceFile,
 } from './guards/design-token-guard.js';
+import { scanClasses, formatClassFindings } from './guards/design-class-guard.js';
 import { APP_MOUNT_ID } from './guards/mount-guard.js';
 
 /**
@@ -114,6 +115,11 @@ export interface CompileResult {
   errors?: string[];
   /** Key names written to dist/protocol.json, when the app registers a protocol. */
   protocol?: { commands: string[]; state: string[] };
+  /**
+   * Findings worth an author's attention that did not fail the build — today, `y-*`
+   * classes no stylesheet defines (`guards/design-class-guard.ts`). Absent when clean.
+   */
+  warnings?: string[];
 }
 
 /**
@@ -326,8 +332,11 @@ export async function compileTypeScript(
     // Reject tokens that can never resolve, before paying for a bundle.
     // (The mount guard runs inside solidHtmlSourcePlugin, which already has the
     // parsed source of every reachable file.)
-    const tokenFindings = scanTokens(readAppSources(sources));
+    const appSources = readAppSources(sources);
+    const tokenFindings = scanTokens(appSources);
     if (tokenFindings.length > 0) throw new Error(formatTokenFindings(tokenFindings));
+    // Unknown `y-*` classes only warn: which string is a class list is a heuristic.
+    const warnings = formatClassFindings(scanClasses(appSources));
 
     // Bundle TypeScript to JavaScript
     const jsCode = await compileWithBun(
@@ -416,6 +425,7 @@ export async function compileTypeScript(
     return {
       success: true,
       outputPath,
+      ...(warnings.length > 0 ? { warnings } : {}),
       ...(extraction.protocol
         ? {
             protocol: {

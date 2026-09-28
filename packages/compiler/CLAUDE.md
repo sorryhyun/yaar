@@ -43,7 +43,8 @@ src/
 │   ├── guard-report.ts    # createAppSourceFile/walk/snippet/format — the shape all three guards share (ASCII rule lives here)
 │   ├── solid-html-guard.ts # Classifies broken solid-js/html templates (AST-based, fails the build)
 │   ├── mount-guard.ts     # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
-│   └── design-token-guard.ts # Rejects var(--yaar-*) names that can never resolve
+│   ├── design-token-guard.ts # Rejects var(--yaar-*) names that can never resolve
+│   └── design-class-guard.ts # Warns on y-* classes no stylesheet defines (CompileResult.warnings)
 ├── protocol/
 │   ├── extract-protocol-dir.ts   # Protocol extraction entry point — picks the AST reader or the fold
 │   ├── extract-protocol-ast.ts   # What `defineApp` means: locate the call, build the manifest, public entry points
@@ -93,7 +94,7 @@ src/
 ## Compilation Flow
 
 1. **Entry:** `compileTypeScript(sandboxPath, options)` — expects `src/main.ts`
-2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve
+2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve. `scanClasses()` reads the same files for `y-*` classes nothing defines and returns them as `warnings` (never a failure)
 3. **Bundle:** `Bun.build()` with 4 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
 4. **SDK injection:** 10 iframe SDK scripts (ime-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame, and an origin-isolated app is not one — without it such an app forwards none of the shell's reserved shortcuts (Shift+Tab, Ctrl+1-9, Ctrl+W)
 5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable
@@ -208,6 +209,14 @@ each derives its expectation from the compiler's own output so it cannot drift.
 - **Tokens:** the known set is parsed out of `YAAR_DESIGN_TOKENS_CSS`. A token the app
   declares itself is legal, and so is `var(--yaar-x, fallback)` — a fallback is exactly
   how you opt out. Suggestions rank by *segment overlap* before edit distance.
+- **Classes** (`guards/design-class-guard.ts`) are the one check that **warns** instead of
+  failing, because which string is a class list is a heuristic. It reads only unambiguous
+  class positions (`class=`/`className=` values, `class:` properties, `classList.*()`
+  arguments), skips any name it cannot read whole (`y-btn-${v}`, `'y-tone-' + t`), and
+  counts classes the app defines in its own CSS as known. Measured on the fleet at landing:
+  2 true positives, 0 false. It deliberately has **no unused-class check**: apps style DOM
+  that libraries create (`d2h-*`, highlighter tokens), so that check produced dozens of
+  permanent, unfixable warnings.
 - **Guard messages must be ASCII**: those raised from a Bun plugin pass through an error
   path that mangles non-ASCII bytes (an em dash arrives as `â`). The rule, the walk, the
   snippet, and the `path:line:col` / `problem:` / `fix:` rendering live once in

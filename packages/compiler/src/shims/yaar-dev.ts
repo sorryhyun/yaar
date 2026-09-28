@@ -38,6 +38,8 @@ export function compile(path: string, opts?: { title?: string }) {
     errors?: string[];
     /** Extracted manifest key names — null when the app registers no protocol. */
     protocol?: { commands: string[]; state: string[] } | null;
+    /** Findings that did not fail the build, e.g. a `y-*` class no stylesheet defines. */
+    warnings?: string[];
   }>('compile', {
     path,
     ...opts,

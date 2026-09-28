@@ -399,6 +399,8 @@ async function dispatchDevAction(
         // Manifest key names as extracted, so callers can inspect what the
         // agent will see without deploying. Null when the app registers none.
         protocol: result.protocol ?? null,
+        // Non-fatal findings (unknown `y-*` classes); empty when clean.
+        warnings: result.warnings ?? [],
       });
     }
 

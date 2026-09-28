@@ -1301,6 +1301,8 @@ interface YaarDevCompileResult {
   errors?: string[];
   /** Extracted manifest key names — null when the app registers no protocol. */
   protocol?: { commands: string[]; state: string[] } | null;
+  /** Findings that did not fail the build, e.g. a `y-*` class no stylesheet defines. */
+  warnings?: string[];
   /** Set on transport/auth failures (4xx/5xx) instead of the compile-result fields. */
   error?: string;
 }

@@ -71,6 +71,12 @@ export {
   type TokenFinding,
 } from './guards/design-token-guard.js';
 export {
+  knownClasses,
+  scanClasses,
+  formatClassFindings,
+  type ClassFinding,
+} from './guards/design-class-guard.js';
+export {
   APP_REGISTER_REMOVED_MESSAGE,
   extractProtocolFromModules,
   formatProtocolError,

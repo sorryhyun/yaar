@@ -64,7 +64,7 @@ function distance(a: string, b: string): number {
 function segments(token: string): Set<string> {
   return new Set(
     token
-      .replace(/^--yaar-/, '')
+      .replace(/^(--yaar-|y-)/, '')
       .split('-')
       .filter(Boolean),
   );
