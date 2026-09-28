@@ -16,7 +16,7 @@ describe('app agent model selection', () => {
   it('defaults apps without agentType to Sonnet/Terra', async () => {
     const profile = await buildAppAgentProfile('dock');
 
-    expect(profile.model).toBe('claude-sonnet-5');
+    expect(profile.model).toBe('claude-sonnet-5-5');
     expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-terra');
     expect(profile.appStateKeys).toEqual([
       'agents',

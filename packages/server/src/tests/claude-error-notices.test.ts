@@ -114,12 +114,12 @@ describe('Claude failure channels → StreamMessage', () => {
         type: 'system',
         subtype: 'model_refusal_fallback',
         original_model: 'claude-opus-5',
-        fallback_model: 'claude-sonnet-5',
+        fallback_model: 'claude-sonnet-5-5',
         session_id: 's1',
       }),
     );
     expect(recovered?.noticeLevel).toBe('info');
-    expect(recovered?.content).toContain('claude-sonnet-5');
+    expect(recovered?.content).toContain('claude-sonnet-5-5');
   });
 
   it('forwards a rejected subscription limit and swallows the per-request chatter', () => {

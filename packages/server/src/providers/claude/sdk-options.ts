@@ -100,7 +100,7 @@ export function buildSDKOptions({
     // `||`, not `??`: an empty model string falls back to the default, as it
     // did when callers patched the model in with `if (options.model)`. A turn with
     // no model is never the monitor's, so fable mode lifts the default to Opus.
-    model: options.model || subordinateModel('claude-sonnet-5'),
+    model: options.model || subordinateModel('claude-sonnet-5-5'),
     resume: resumeSession,
     cwd: getStorageDir(),
     tools: builtinTools,
