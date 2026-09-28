@@ -604,7 +604,8 @@ export function registerWindowHandlers(
       'Every window also answers three state keys of its own, whatever it renders: ' +
       '__content (its content, no capture), __screenshot and __console (iframe windows). ' +
       'A bare read of an iframe window is __content + __screenshot, the screenshot winning. ' +
-      'Invoke actions: create, update (requires operation), close, reload (re-mount the ' +
+      'Invoke actions: create, update (operation for the content, title to rename — either ' +
+      'or both), close, reload (re-mount the ' +
       "content — the window, its app agent and its subscriptions survive, the iframe's " +
       'in-memory state does not; this is how a window picks up a redeployed bundle without ' +
       'losing its agent), lock, unlock, move (x, y), resize (width, height), app_query, ' +
@@ -616,7 +617,12 @@ export function registerWindowHandlers(
       properties: {
         action: windowActions.schema,
         // create fields
-        title: { type: 'string' },
+        title: {
+          type: 'string',
+          description:
+            'create: the window title. update: renames the window — on its own, or ' +
+            'alongside an operation.',
+        },
         renderer: {
           type: 'string',
           enum: ['markdown', 'html', 'text', 'table', 'iframe', 'component'],
@@ -653,7 +659,7 @@ export function registerWindowHandlers(
         operation: {
           type: 'string',
           enum: ['append', 'prepend', 'replace', 'insertAt', 'clear'],
-          description: 'Required for "update" action.',
+          description: 'Required for "update", unless the call only renames the window (title).',
         },
         position: { type: 'number' },
         // app_command / app_query fields — the three parameters that carry the entire

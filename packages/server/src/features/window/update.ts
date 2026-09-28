@@ -2,7 +2,8 @@
  * Window content update logic.
  */
 
-import type { ContentUpdateOperation } from '@yaar/shared';
+import type { ContentUpdateOperation, OSAction } from '@yaar/shared';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { ok, error, type VerbResult } from '../../lib/verb-result.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { getAgentId } from '../../agents/agent-context.js';
@@ -14,7 +15,13 @@ import {
 } from './helpers.js';
 import { namesInlinableUri, inlineUriContent } from './inline-content.js';
 
-/** Handle window content updates (append, prepend, replace, insertAt, clear). */
+/**
+ * Handle window updates: content (append, prepend, replace, insertAt, clear) and/or the
+ * title. `title` rides the same action rather than a verb of its own because `update` is
+ * where an agent reaches for it — before this, a `title` passed alongside `operation` was
+ * dropped with a success reply, and one passed alone was refused for lacking `operation`,
+ * so the only way to rename a window was to close it and open a copy under a new id.
+ */
 export async function handleUpdate(
   windowState: WindowStateRegistry,
   windowId: string,
@@ -27,8 +34,23 @@ export async function handleUpdate(
   const lockErr = requireWindowUnlocked(windowState, windowId, agentId);
   if (lockErr) return lockErr;
 
-  const opType = payload.operation as string;
-  if (!opType) return error('"operation" is required (append, prepend, replace, insertAt, clear).');
+  let title: string | undefined;
+  if (payload.title !== undefined) {
+    if (typeof payload.title !== 'string' || !payload.title.trim())
+      return error('"title" must be a non-empty string.');
+    title = payload.title;
+  }
+
+  const opType = payload.operation as string | undefined;
+  if (!opType) {
+    if (title === undefined)
+      return error(
+        '"operation" is required (append, prepend, replace, insertAt, clear), ' +
+          'or pass "title" alone to rename the window.',
+      );
+    setTitle(windowId, title);
+    return ok(`Renamed window "${formatWindowRef(windowId)}" to "${title}".`);
+  }
 
   let data = (payload.content as string | { headers: string[]; rows: string[][] }) ?? '';
 
@@ -80,5 +102,13 @@ export async function handleUpdate(
   );
   if (err) return err;
 
-  return ok(`Updated window "${formatWindowRef(windowId)}" (${opType})`);
+  if (title !== undefined) setTitle(windowId, title);
+  return ok(
+    `Updated window "${formatWindowRef(windowId)}" (${opType})` +
+      (title !== undefined ? ` and renamed it to "${title}".` : ''),
+  );
+}
+
+function setTitle(windowId: string, title: string): void {
+  actionEmitter.emitAction({ type: 'window.setTitle', windowId, title } satisfies OSAction);
 }

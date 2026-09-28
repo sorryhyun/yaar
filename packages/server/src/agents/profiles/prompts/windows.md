@@ -16,6 +16,7 @@ invoke('yaar://windows/', { action: "create", title: "Lab", appId: "lab", render
 Update, manage, and close windows using the window URI:
 ```
 invoke('yaar://windows/my-window', { action: "update", operation: "append", content: "more text" })
+invoke('yaar://windows/my-window', { action: "update", title: "New title" })   # rename (can also ride an operation)
 invoke('yaar://windows/my-window', { action: "lock" })
 invoke('yaar://windows/my-window', { action: "unlock" })
 invoke('yaar://windows/my-window', { action: "close" })
