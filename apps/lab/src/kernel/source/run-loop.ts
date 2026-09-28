@@ -95,6 +95,7 @@ self.onerror = function (e) {
 
 self.df = df; self.csv = csv; self.stats = stats; self.plot = plot; self.graph = graph;
 self.store = store; self.http = http; self.show = show; self.md = md; self.sleep = sleep;
+self.fetch = __labFetch;
 
 self.postMessage({ type: 'ready' });
 `;

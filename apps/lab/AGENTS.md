@@ -87,7 +87,10 @@ the preview, and read it back from devtools' `consoleLogs`.
 - It is **not type checked**. A typo there compiles fine and fails at run time. Test kernel
   changes with `previewCommand runCode`, not with `compile`.
 - Internals are prefixed `__lab` so a user's `var logs = ...` cannot shadow them. Only
-  `store csv df stats plot http show md sleep` are meant to be visible.
+  `store csv df stats plot http show md sleep` are meant to be visible — plus `fetch`,
+  which the kernel replaces with a bridge call: the worker's own `fetch` resolves
+  `/api/...` against its `blob:` URL and fails, and it carries neither the iframe token
+  nor the allowlisted proxy. Keep cell network access going through the window.
 
 ### The source transform
 

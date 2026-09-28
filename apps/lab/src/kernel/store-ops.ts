@@ -1,4 +1,4 @@
-import { appStorage, dataUrlToBlob, storage } from '@bundled/yaar';
+import { appStorage, base64ToBytes, dataUrlToBlob, storage } from '@bundled/yaar';
 import { resolvePath, type ResolvedPath } from './paths';
 
 /**
@@ -59,25 +59,61 @@ export async function storeRead(raw: string): Promise<string> {
   }
 }
 
+/**
+ * What a cell can hand `store.write` once the kernel has normalised it: text, or bytes
+ * (the kernel turns every ArrayBuffer and typed array into a Uint8Array before the
+ * bridge, and a Blob crosses as itself).
+ */
+export type WriteContent = string | Uint8Array | Blob;
+
+/** `store.write`'s `encoding` option; `'base64'` means `content` is base64 text to decode. */
+export type WriteEncoding = 'utf-8' | 'base64';
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/**
+ * The bytes to write, or `null` for a text write. Three spellings reach bytes: a
+ * Uint8Array or Blob, a base64 `data:` URL (so `store.write(p, await plot.toPNG())` is
+ * an image rather than a text file full of base64), and a bare base64 string under
+ * `encoding: 'base64'` — the one that used to land on disk as base64 characters.
+ */
+async function toBytes(
+  content: WriteContent,
+  encoding?: WriteEncoding,
+): Promise<Uint8Array | null> {
+  if (content instanceof Uint8Array) return content;
+  if (content instanceof Blob) return new Uint8Array(await content.arrayBuffer());
+  if (/^data:[^;,]*;base64,/.test(content)) {
+    return new Uint8Array(await dataUrlToBlob(content).arrayBuffer());
+  }
+  if (encoding !== 'base64') return null;
+  try {
+    return base64ToBytes(content);
+  } catch {
+    throw new Error("encoding 'base64' was given but the data is not valid base64");
+  }
+}
+
 export async function storeWrite(
   raw: string,
-  content: string,
+  content: WriteContent,
+  encoding?: WriteEncoding,
 ): Promise<{ path: string; resolved: string; bytes: number }> {
   const t = resolvePath(raw, 'write');
-  const text = String(content);
   try {
-    // A base64 data URL is written as real bytes, so `store.write(p, await plot.toPNG())`
-    // produces a usable image rather than a text file full of base64.
-    if (/^data:[^;,]*;base64,/.test(text)) {
-      const b64 = text.slice(text.indexOf(',') + 1);
-      if (t.shared) {
-        const blob = dataUrlToBlob(text);
-        await storage.save(t.path, blob);
-        return { path: t.raw, resolved: t.display, bytes: blob.size };
-      }
-      await appStorage.save(t.path, b64, { encoding: 'base64' });
-      return { path: t.raw, resolved: t.display, bytes: Math.floor((b64.length * 3) / 4) };
+    const bytes = await toBytes(content, encoding);
+    if (bytes) {
+      if (t.shared) await storage.save(t.path, bytes);
+      else await appStorage.save(t.path, bytesToBase64(bytes), { encoding: 'base64' });
+      return { path: t.raw, resolved: t.display, bytes: bytes.byteLength };
     }
+    const text = String(content);
     if (t.shared) await storage.save(t.path, text);
     else await appStorage.save(t.path, text);
     return { path: t.raw, resolved: t.display, bytes: text.length };

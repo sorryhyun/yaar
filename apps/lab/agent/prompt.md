@@ -79,6 +79,8 @@ await store.read(path)            // text
 await store.readJSON(path)
 await store.readCSV(path, opts?)  // -> array of objects
 await store.write(path, data)     // string as-is; array + .csv -> CSV; else JSON
+await store.write(path, bytes)    // Uint8Array / ArrayBuffer / Blob -> the bytes themselves
+await store.write(path, b64, { encoding: 'base64' })  // decode base64 text, write the bytes
 await store.writeCSV(path, rows)
 await store.list(dir)             // [{ path, isDirectory, size, modifiedAt }]
 await store.remove(path)
@@ -113,8 +115,10 @@ store.list failed for 'yaar://apps/self/storage/shared' (Directory not found).
 Paths are this app's private storage by default — use 'yaar://storage/shared' for shared storage.
 ```
 
-Writing a base64 `data:` URL stores real bytes, so
-`store.write('yaar://storage/shared/lab/c.png', await plot.toPNG())` produces a usable image.
+Binary files go through `store.write` too: pass bytes, a base64 `data:` URL (so
+`store.write('yaar://storage/shared/lab/c.png', await plot.toPNG())` is a real image), or
+bare base64 with `{ encoding: 'base64' }`. The only option is `encoding`; anything else
+throws rather than being ignored.
 
 ### df — mini dataframe
 
@@ -190,7 +194,10 @@ Or, for a chart already rendered in a cell, use the `exportChart` command.
 
 `show(x)` adds an extra output block to a cell. `md(text)` adds rendered markdown.
 `sleep(ms)`. `http.json(url)` / `http.text(url)` / `http.raw(url, init)` for network calls
-(proxied, allowlisted).
+(proxied, allowlisted). Plain `fetch(url, init)` also works and returns a real `Response`
+(`res.blob()`, `res.arrayBuffer()`): the window performs it, so relative `/api/...` URLs
+resolve and the same proxy and allowlist apply. It is buffered, not streamed, and `res.url`
+is empty. To save a file, prefer `store.write` over POSTing to `/api/storage`.
 
 ## Notebook commands
 

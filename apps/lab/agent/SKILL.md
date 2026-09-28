@@ -31,6 +31,8 @@ await store.read(path)              // text
 await store.readJSON(path)
 await store.readCSV(path, opts?)    // -> array of objects
 await store.write(path, data)       // string as-is; array + .csv -> CSV; else JSON
+await store.write(path, bytes)      // Uint8Array / ArrayBuffer / Blob -> the bytes themselves
+await store.write(path, b64, { encoding: 'base64' })  // decode base64 text, write the bytes
 await store.writeJSON(path, data)
 await store.writeCSV(path, rows)
 await store.list(dir)               // [{ path, isDirectory, size, modifiedAt }]
@@ -41,6 +43,11 @@ await store.exists(path)
 A bare path (`notes/x.json`) is always Lab's own private storage. Shared storage takes a
 URI: `yaar://storage/shared/lab/x.png`, or the `shared:` shorthand. `..` is refused in
 every form — leave app storage with a URI, not traversal.
+
+Binary files go through `store.write` too: pass bytes, a base64 `data:` URL (so
+`store.write('yaar://storage/shared/lab/c.png', await plot.toPNG())` is a real image), or
+bare base64 with `{ encoding: 'base64' }`. The only option is `encoding`; anything else
+throws rather than being ignored.
 
 ### http — proxied, allowlisted requests
 
@@ -54,6 +61,11 @@ All three take `(url, init)` where `init` is the familiar `{ method, headers, bo
 There is no `get`/`post` — the method goes in `init`. Requests are proxied server-side, so
 the domain needs the user's allowlist approval and a denial arrives as a thrown error
 naming it.
+
+Plain `fetch(url, init)` works too and returns a real `Response` (`res.blob()`,
+`res.arrayBuffer()`): it is performed by the window, so relative `/api/...` URLs resolve
+and the same proxy and allowlist apply. The response is buffered, not streamed, and
+`res.url` is empty. To save a file, prefer `store.write` over POSTing to `/api/storage`.
 
 ### df — mini dataframe
 
