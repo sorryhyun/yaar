@@ -183,6 +183,28 @@ function storageVerb(req: Request, url: URL): Verb | null {
   }
 }
 
+/**
+ * The query parameters a storage write or delete may carry: the two credentials
+ * (`extractIframeToken`, remote mode's `extractToken`). The file is named by the URL
+ * path and by nothing else, so any other parameter is a caller who thinks otherwise —
+ * `POST /api/storage/upload?path=shared/x.png` wrote a file called `upload` and
+ * answered `{ ok: true, path: 'upload' }`. Refusing it names the mistake.
+ */
+const MUTATION_QUERY_PARAMS = new Set(['__yaar_token', 'token']);
+
+/** A 400 for a write or delete whose query string would be ignored, else `null`. */
+function refuseStrayQuery(req: Request, url: URL): Response | null {
+  if (req.method !== 'POST' && req.method !== 'DELETE') return null;
+  const stray = [...new Set(url.searchParams.keys())].filter((k) => !MUTATION_QUERY_PARAMS.has(k));
+  if (stray.length === 0) return null;
+  return errorResponse(
+    `Unsupported query parameter${stray.length > 1 ? 's' : ''} ${stray.map((k) => `'${k}'`).join(', ')} ` +
+      `on ${req.method} /api/storage — the target file is the URL path (${req.method} /api/storage/{path}), ` +
+      `nothing in the query names it.`,
+    400,
+  );
+}
+
 /** Serve app static files (for deployed apps). */
 async function handleApps(
   req: Request,
@@ -207,6 +229,8 @@ async function handleStorage(
 ): Promise<Response | null> {
   const verb = storageVerb(req, url);
   if (!verb) return null;
+  const stray = refuseStrayQuery(req, url);
+  if (stray) return stray;
 
   // Name the resource in the permission model's own vocabulary, then ask. This also
   // resolves the `self` pronoun (`apps/self/`, `shared/self/`) against the calling app
