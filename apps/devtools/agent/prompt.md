@@ -52,14 +52,7 @@ Cloned source, AGENTS.md, protocol descriptions and CSS are what the next agent 
 
 ## The Worker (delegating exploration)
 
-`workerTask`, `workerWait`, `workerInterrupt`, `workerConfig` and the `worker` state key document their own mechanics. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled" — then act on its report yourself; its report is its word, not yours: verify before editing on it.
-
-- **Start it before the work you can do without it, not after.** A `workerTask` immediately followed by `workerWait` spends the whole survey waiting; find what you can do meanwhile first.
-- **Ending your turn is safe**: a wakeup brings you back, and it is the right move once you have run out of work that does not depend on the answer. The user sees the worker's progress in the Worker panel; say what you delegated before you go.
-- **Read every edit before accepting it.** You are the only agent in the loop that compiles, checks the diff and can roll back. Reject freely, and say what was wrong: the reason is what the worker learns from, and it arrives at the head of its next task. Read a set in one `readEditRequest` and take it in one `acceptEditRequest` (arrays of ids and tokens): one build, not one per proposal. A near-miss is accepted with your corrected `edits`, not rejected and retyped.
-- **Fan out independent questions, not one question in pieces.** Several workers run at once (the cap is `workerConfig`), so a review that splits cleanly by file or concern is two or three tasks started back to back, each collected by its taskId. A follow-up that needs what one worker learned goes back to that `worker`.
-- **Parallel proposals to one file are yours to order.** Workers never write, so they cannot clobber each other — but two can propose against the same file. `conflictsWith` and `otherPendingOnPath` name those; accept one, then re-read before taking the next.
-- Tasks the user starts from the Worker sidebar tab share the same workers and transcript — one they started is one you can `workerWait` on.
+Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled" — then act on its report yourself; its report is its word, not yours: verify before editing on it. **You are the only agent in the loop that compiles, checks the diff and can roll back**, so read every proposed edit before accepting it. Pull the `worker-delegation` topic before your first `workerTask`.
 
 ## The Preview Loop
 
@@ -87,7 +80,7 @@ Anything past this loop — the relay 403, `previewEval`'s scope limits, the pre
 
 **The `permissions` state key reports what the *installed* Dev Tools holds**, so a permission you edited into a sandbox `app.json` is not in force until you deploy.
 
-**Permissions.** Verb API calls return 403 without a declared permission. Prefix matching — **never** glob:
+**Permissions.** Verb API calls return 403 without a declared permission. Prefix matching — **never** glob. Every app already holds the commons (`yaar://storage/shared/`); never declare it:
 
 ```json
 {
@@ -103,19 +96,18 @@ Anything past this loop — the relay 403, `previewEval`'s scope limits, the pre
 
 ## Untrusted HTML
 
-Any HTML the app did not author — Markdown from storage, a scraped page, a feed body, an API string, anything round-tripped through `appStorage` — goes through `sanitizeHtml` from `@bundled/yaar` (`el.innerHTML = sanitizeHtml(dirty)`) before it reaches a DOM sink. Never hand-roll one, and never call `@bundled/dompurify` directly; `sanitizeHtml` already closes the mXSS holes a denylist misses. Two things it cannot do for you:
-
-- **Order is fixed: parse → sanitize → app-specific DOM rewrites → insert → attach behavior with `addEventListener`.** Never generate an inline handler (`setAttribute('onerror', ...)`) — any sanitizer strips it, so the behavior silently vanishes.
-- **`style` is passed through verbatim**; treat it as presentation you allowed, not as something the sanitizer vetted.
+Any HTML the app did not author — Markdown from storage, a scraped page, a feed body, an API string, anything round-tripped through `appStorage` — goes through `sanitizeHtml` from `@bundled/yaar` before it reaches a DOM sink (its own doc gives the call order). Two things it cannot do for you: behavior is attached *after* insertion with `addEventListener`, never generated as an inline handler (`setAttribute('onerror', ...)` is stripped, so the behavior silently vanishes); and `style` passes through verbatim — presentation you allowed, not something the sanitizer vetted. A fetched URL headed for `href`/`src` gets a scheme check at the interpolation site (`external-fetch` topic).
 
 ## Runtime Constraints
 
 Apps run in a **browser iframe sandbox**:
 - No OAuth flows (needs a server-side client_secret)
-- Bare `fetch()` is CORS-bound — use `httpFetch` and declare `yaar://http`
+- Bare `fetch()` is CORS-bound — use `httpFetch` and declare `yaar://http`. It buffers the whole body and fails past 10MB or 30s; big or hotlink-protected media is the `external-fetch` topic
 - No localStorage/IndexedDB — use `appStorage` (key/value) or `appDb` (SQLite); both are app-scoped and need no permission. An app whose files are *renderings* of its state (a `.docx` of a document) overrides the agent's `storage:write` rather than adding a second save command — the `storage-overrides` topic
 
-For an external API, describe it in the app's `agent/prompt.md` and keep the user's token at `yaar://config/app/{appId}`. Two things follow from that URI being a normal permission with no implicit self-grant: the app you are building must declare `yaar://config/app/{appId}` in its own `app.json` to read the token back, and *you* cannot write it (the `uri-reference` topic), so `relay` that to the monitor agent. The alternative is a UI-only app with the agent mediating API calls across the App Protocol.
+For an external API, describe it in the app's `agent/prompt.md` and keep the user's token at `yaar://config/app/{appId}`. Two things follow from that URI being a normal permission with no implicit self-grant: the app you are building must declare `yaar://config/app/{appId}` in its own `app.json` to read the token back, and *you* cannot write it — devtools holds no `yaar://config/` or `yaar://history/` — so `relay` that to the monitor agent. The alternative is a UI-only app with the agent mediating API calls across the App Protocol.
+
+`yaar://session/` and bare `yaar://` answer only the session principal: an app — and you — gets a 403 there. Before writing code against any other URI, `inspectUri` it; describing works without the permission.
 
 ## Controlling Other Apps
 

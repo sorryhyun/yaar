@@ -1,50 +1,47 @@
 ---
 name: bundled-libraries
-description: Read before importing @bundled/* — solid-js entry points, the yaar helper roster, gated SDKs.
+description: Read before importing @bundled/* — which library or yaar helper exists, which to prefer over hand-rolling, gated SDKs.
 audience: agent
 ---
 
 ## Bundled Libraries
 
-Import via `@bundled/*`; no npm install. `query("bundledLibraries")` lists what exists;
-`describeBundledLibrary` documents any of them — read it before writing against a library.
+Import via `@bundled/*`; no npm install. `query("bundledLibraries")` lists what exists, and
+`describeBundledLibrary` returns a library's type declarations with their doc comments —
+entry points, signatures, what is deliberately missing (`solid-js`'s three entry points,
+`three/addons`' loaders). **Read it before writing against a library**; this topic only says
+what exists and which to prefer.
 
-```ts
-import { v4 as uuid } from '@bundled/uuid';
-import { animate, createTimeline } from '@bundled/anime';
-```
+`@bundled/yaar`'s declarations run to ~65KB, so here is its index. Look a name up there
+rather than guessing its signature:
 
-- **`solid-js`** — reactive UI, split across three entry points that are easy to confuse.
-  `import { createSignal, createEffect, For, Show } from '@bundled/solid-js'`;
-  `import html from '@bundled/solid-js/html'` (**default** export, not named);
-  `import { render } from '@bundled/solid-js/web'`. Reaching for `render` or `html` on
-  `@bundled/solid-js` is the usual first-compile failure. Prefer `import './styles.css'`
-  over inline styles.
-- **`three`** — core only on `@bundled/three`; the loaders and controls live behind a
-  second entry point, `@bundled/three/addons` (`GLTFLoader`, `OBJLoader`, `STLLoader`,
-  `GLTFExporter`, `OrbitControls`, `PointerLockControls`, `TransformControls`,
-  `BufferGeometryUtils`, ...); do not hand-roll a glTF reader. `DRACOLoader`/`KTX2Loader`
-  are absent: they fetch a decoder from a sibling path a single-file app cannot
-  serve. `PointerLockControls`, and any hand-rolled `requestPointerLock`, needs a
-  drag-to-look fallback: a click you dispatch never takes the lock (`preview-debugging`).
-- **`yaar`** — the Verb API (`read`, `list`, `invoke`, `describe`, `del`, `subscribe`,
-  `stream`, `httpFetch`) plus helpers: `defineApp`, `defineAppCommand`,
-  `createProtocolContext`, `appStorage`, `appDb`, `sanitizeHtml`, `escapeHtml`,
-  `safeParseOr`, `showToast`, `showConfirm`, `showPrompt`, `errMsg`, `AppCommandError`,
-  `withLoading`, `tryToast`, `wait`, `createStaleGuard`, `onShortcut`, `createKeyState`,
-  `createPersistedSignal`, `createSharedSignal` (state every copy of a window follows —
-  the `multi-window-sync` topic), `createCollapsiblePanel`, `createAutosave`, `toWebP`,
-  `downloadBlob`, `blobToDataUrl`, `bytesToBase64`/`base64ToBytes` (chunked — never
-  `btoa(String.fromCharCode(...bytes))`, which overflows the stack on a few MB), `links`,
-  `formatBytes`, `formatDuration`, `formatClock`.
-  **Always prefer the helper over hand-rolling**: `showToast` over custom toast HTML,
-  `showConfirm` over native `confirm()` (native dialogs block the page *and* any agent
-  driving it), `errMsg` over `err instanceof Error`, `safeParseOr` over a
-  safeParse/log/fallback block, `formatBytes`/`formatClock` over a local unit ladder or a
-  hardcoded locale (two windows must not render the same value differently). `defineApp`
-  takes `events`, `onCapture` and `onClose` on top of the fields covered in the
-  `verb-api` topic.
+- **Verbs:** `read`, `list`, `invoke`, `describe`, `del`, `subscribe`, `stream`, `httpFetch`.
+- **App shape:** `defineApp`, `defineAppCommand`, `createProtocolContext`, `AppCommandError`,
+  `links`.
+- **Storage and state:** `appStorage`, `appDb`, `createPersistedSignal`,
+  `createSharedSignal`, `createAutosave`.
+- **UI:** `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`,
+  `createCollapsiblePanel`, `onShortcut`, `createKeyState`, `isNarrow`, `isTouch`,
+  `createMediaQuery`, `onSwipe`.
+- **Data:** `sanitizeHtml`, `escapeHtml`, `safeParseOr`, `errMsg`, `wait`,
+  `createStaleGuard`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `dataUrlToBlob`,
+  `bytesToBase64`, `base64ToBytes`, `formatBytes`, `formatDuration`, `formatClock`.
 
-**Gated SDKs** (`@bundled/yaar-dev`, `@bundled/yaar-web`, `@bundled/yaar-ml`) need a matching `"bundles"` entry
-in `app.json` to import; what each exports is `describeBundledLibrary`'s answer, not this
-document's.
+**Prefer the helper over hand-rolling, every time** — each exists because an app got the
+hand-rolled version wrong:
+
+- `showConfirm` over native `confirm()` — a native dialog blocks the page *and* any agent
+  driving it.
+- `showToast` over custom toast HTML; `errMsg` over `err instanceof Error`; `safeParseOr`
+  over a safeParse/log/fallback block.
+- `formatBytes`/`formatClock` over a local unit ladder or a hardcoded locale — two windows
+  must not render the same value differently.
+- `bytesToBase64` over `btoa(String.fromCharCode(...bytes))`, which overflows the stack on a
+  few MB.
+- `createSharedSignal` for state a command sets and every copy of the window must show
+  (`multi-window-sync` topic).
+
+**Gated SDKs** (`@bundled/yaar-dev`, `@bundled/yaar-web`, `@bundled/yaar-media`,
+`@bundled/yaar-ml`) need a matching `"bundles"` entry in `app.json` to import — the bundle
+is the grant, with no permission entry. What each exports is `describeBundledLibrary`'s
+answer.

@@ -23,8 +23,14 @@ audience: agent
   accessor, and `props.foo()` throws `foo is not a function` (typechecks clean, renders a
   blank window). Same mechanism fires a zero-arg event handler during render. Wrap it
   (`foo=${() => accessor}`) to deliver the callable, share a module-level signal, or delegate
-  handlers on a parent DOM element. Functions with declared parameters (`(e) => …`) pass
-  through untouched.
+  handlers on a parent DOM element. "Zero-arg" is `fn.length === 0`, which counts
+  parameters only up to the first default or rest: `(e) => …` passes through untouched, but
+  `(x = 1) => …`, `(...args) => …` and `({ a } = {}) => …` are invoked like accessors.
+- **A render callback passed as children must sit tight against the tags.** A `For`-like
+  component taking `(item) => row` as `children` gets an *array* (whitespace text nodes plus
+  the function) when the template has spaces or newlines around it — `>${(x) => …}</>`,
+  not `> ${…} </>`. It compiles and renders a blank list. Calling a component as a plain
+  function (`${Field({ … })}`) sidesteps prop wrapping entirely when that is simpler.
 - **HTML entities inside `${}` don't decode** — interpolated strings are set as
   `textContent`, so `&#128247;` renders literally. Use the actual character (📷). Entities
   work only in static template text.

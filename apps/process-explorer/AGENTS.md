@@ -30,9 +30,9 @@ the store.
 
 ## Gotchas
 
-**`html` unwraps function props into reactive getters.** Passing a render
-callback as a prop (`row=${(x) => ...}`) makes it fire during render with no
-arguments. `ProcessList` therefore takes its row renderer as *children*, exactly
+**`html` unwraps zero-length function props into reactive getters**
+(`fn.length === 0`, so a callback whose parameter has a default fires during render
+with no arguments). `ProcessList` takes its row renderer as *children*, exactly
 as `For` does — and the children function must sit tight against the tags
 (`>${(x) => ...}</>`), because surrounding whitespace turns `children` into an
 array of text nodes plus the function, which `For` cannot use. This compiles

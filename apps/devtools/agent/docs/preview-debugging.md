@@ -53,7 +53,7 @@ rehearsed in a preview. Deploy, then check that.
 **Its `permissions` and `bundles` are read off the sandbox `app.json` too**, so a declared
 grant is in force in the preview — a write to a path under `yaar://storage/` really writes
 there. Two limits: the preview can never reach past
-**Dev Tools' own** permissions (the `uri-reference` topic; a project declaring one it lacks
+**Dev Tools' own** permissions (the `permissions` state key; a project declaring one it lacks
 gets it dropped, not honoured), and the list is read **when the preview window is created**, so edit `app.json`
 first, then re-open the preview. Install-time grants such as `subagents` are not in force
 either: a command that spawns sub-agents fails in preview while the surrounding UI works,

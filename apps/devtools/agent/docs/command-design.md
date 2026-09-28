@@ -96,6 +96,21 @@ on an identifier you know exists before reporting absence. *Seen in:* github
   an off-frame rect is drawn, not rejected. *Seen in:* image-edit
   `agent/docs/coordinate-space.md`.
 
+### Batches of independent items: continue and report
+
+Atomic rollback is for one document. For N independent items (install N apps, fetch N
+pages), a failure on one must not abort the rest — record it in a per-item `results` array
+and move on, or the remainder stays stale with nothing on screen saying so. *Seen in:*
+market-apps `src/actions/update-all.ts`.
+
+### Busy guards: check before mutating, lock synchronously
+
+- **Refuse before touching anything.** crawl's search commands wrote filters and switched
+  tabs *before* their busy check, so a refused call still changed settings.
+- **The lock is a plain module flag set before the first `await`**, not the signal the UI
+  displays: market-apps' `updateRun` is raised several awaits in, so two quick calls both
+  saw it down. Its `runInFlight` flag is the lock; the signal is for display.
+
 ### Replay is a per-command question
 
 `replay: 'never'` is decided by *"does re-running this on remount duplicate or wrong an

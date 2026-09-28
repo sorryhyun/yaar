@@ -6,11 +6,19 @@ audience: agent
 
 ## External Fetch
 
-### The proxy caps every response at 10MB and 30s
+### Big bodies: `mediaUrl` first, a Range loop second
 
-`httpFetch` crosses the server's proxy, which **fails** a response past 10MB or a request
-past 30s — it does not "run slowly". Anything that can exceed either goes through a
-Range loop, and crawl and transcribe built the same one:
+`httpFetch` crosses the server's proxy, which buffers the whole body and **fails** past
+10MB or 30s — it does not "run slowly". For anything large, reach first for `mediaUrl(url,
+{ referer })` from `@bundled/yaar-media` (`"bundles": ["yaar-media"]`): a same-origin URL
+that **streams** through the server with Range passthrough, no cap, and an optional
+`Referer`. Hand it to `<video>`/`<audio>`/`<img>` or `fetch()` it. The stream has no
+`Content-Length`; compare bytes read to `X-Content-Length` to catch truncation. crawl
+plays video this way, with parallel Range `fetch`es of the `mediaUrl` feeding a
+`MediaSource` when one connection is slower than the bitrate (`src/stream.ts`).
+
+When the bytes must come through `httpFetch` itself (custom headers or cookies the media
+proxy does not forward), use a Range loop — crawl and transcribe built the same one:
 
 ```ts
 const first = await httpFetch(url, { headers: { Range: `bytes=0-${CHUNK - 1}` } });
@@ -55,7 +63,9 @@ change applies mid-job) is shared per endpoint class (API vs image CDN). Its `ge
 
 Many image CDNs serve only requests carrying the page's own `Referer`, which neither a
 bare `<img src>` in an iframe nor an agent's own fetch can send — the symptom is a 403 or
-a placeholder image. The app's `httpFetch` sets `Referer`, downloads once, then (a)
+a placeholder image (or, for video, the post's HTML page served as "media"). To *show*
+it, `mediaUrl(url, { referer })` is enough. To hand it to the agent, the app's
+`httpFetch` sets `Referer`, downloads once, then (a)
 writes the original into the shared tree and (b) inlines a downscaled copy as an image
 content block (`command-design` topic). Never hand the agent the remote URL to fetch
 itself. Cap how many folders pile up in the commons. *Seen in:* dc-comics

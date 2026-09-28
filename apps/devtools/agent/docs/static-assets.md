@@ -25,12 +25,10 @@ uploads, generated output, anything that changes without a recompile.
 **text**, not a data URI — hand it to `innerHTML`, an iframe's `srcdoc`, or `DOMParser`.
 `copyFile` from `yaar://storage/...` brings one in like any other asset.
 
-**3D models:** `import level from './level.glb'` gives `data:model/gltf-binary;base64,...`;
-decode it with `atob` and hand the bytes to `GLTFLoader.parse(buf, '', onLoad)` from
-`@bundled/three/addons`. A `.gltf` inlines as `data:model/gltf+json` and works the same
-when its buffers are embedded — but one that names a sidecar `.bin` or texture files cannot
-resolve those relative URLs against a `data:` URI, so export the **self-contained `.glb`**
-rather than copying the sidecars in.
+**3D models:** an imported `.glb` arrives as a `data:` URI for `GLTFLoader.parse`
+(`describeBundledLibrary` on `three/addons`). A `.gltf` naming a sidecar `.bin` or texture
+files cannot resolve those relative URLs against a `data:` URI — export the
+**self-contained `.glb`** rather than copying the sidecars in.
 
 **Why not `storage.url(...)`:** the preview runs under a throwaway principal, so anything
 hitting `/api/storage/` resolves against a different identity than the deployed app will
