@@ -259,7 +259,10 @@ interface ContextMessage {
 
 - **Monitor agent prompts** don't inject the tape (provider session continuity carries history)
 - **Window close** prunes that window's messages from the tape
-- **Session restore** rebuilds the tape from a previous session's JSONL log
+- **Session restore** rebuilds the tape from a previous session's JSONL log, and the new
+  launch's log starts with that restored state copied in (`restored: true` entries,
+  `metadata.restoredFrom`, carried-over `threadIds`). Each log can therefore be restored
+  on its own, however many restarts are chained
 - Monitor history is capped (~200 messages, pruned to the most recent half)
 
 ## InteractionTimeline

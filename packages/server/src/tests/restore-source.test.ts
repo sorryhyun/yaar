@@ -8,11 +8,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtemp, mkdir, rm, writeFile, readdir } from 'fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readdir, rename } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { findRestorableSession } from '../logging/restore-source.js';
-import { createSession } from '../logging/session-logger.js';
+import { findRestorableSession, selectCarryOverEntries } from '../logging/restore-source.js';
+import { createSession, SessionLogger } from '../logging/session-logger.js';
+import { getWindowRestoreActions } from '../logging/window-restore.js';
+import { getContextRestoreMessages } from '../logging/context-restore.js';
 import type { SessionMetadata } from '../logging/types.js';
 
 let root: string;
@@ -105,5 +107,122 @@ describe('findRestorableSession', () => {
 
     const restorable = await findRestorableSession(root);
     expect(restorable?.session.sessionId).toBe('real');
+  });
+});
+
+/**
+ * A restart restores the previous log into memory; these check that the new log records
+ * it too. It used to start blank, so it read as a reset — and the restart after it
+ * restored from that blank-but-for-new-activity log and really did lose everything.
+ */
+describe('carry-over into the next launch', () => {
+  const windowCreate = (windowId: string, title: string) => ({
+    type: 'action',
+    timestamp: '2026-01-01T00:00:01.000Z',
+    agentId: 'monitor-0',
+    parentAgentId: null,
+    action: {
+      type: 'window.create',
+      windowId,
+      title,
+      bounds: { x: 0, y: 0, w: 400, h: 300 },
+      content: { renderer: 'markdown', data: title },
+    },
+  });
+  const assistantMessage = (content: string) => ({ ...userMessage(content), type: 'assistant' });
+
+  /** What `lifecycle.ts` does at boot: restore, mint this launch's log, seed it. */
+  async function relaunch(): Promise<{ logger: SessionLogger; sessionId: string }> {
+    const restorable = await findRestorableSession(root);
+    const created = await createSession('claude', root);
+    const logger = new SessionLogger(created);
+    if (restorable) {
+      logger.carryOver(
+        restorable.session.sessionId,
+        selectCarryOverEntries(restorable.messages, getWindowRestoreActions(restorable.messages)),
+        restorable.session.metadata.threadIds,
+      );
+    }
+    return { logger, sessionId: created.sessionId };
+  }
+
+  beforeEach(async () => {
+    await seedSession(
+      'first',
+      '2026-01-01T00:00:00.000Z',
+      [
+        userMessage('remember the number 7'),
+        assistantMessage('noted: 7'),
+        windowCreate('0/notes', 'Notes'),
+        windowCreate('0/scratch', 'Scratch'),
+        {
+          type: 'interaction',
+          timestamp: '2026-01-01T00:00:02.000Z',
+          agentId: null,
+          parentAgentId: null,
+          interaction: 'close:0/scratch',
+        },
+      ],
+      { threadIds: { 'monitor-0': 'thread-abc' } },
+    );
+  });
+
+  it('a relaunch that records anything carries the restored state with it', async () => {
+    const { logger, sessionId } = await relaunch();
+    logger.logUserMessage('what was the number?', 'monitor-0');
+    await logger.dispose();
+
+    // The restart after that one restores from the second log — and gets everything.
+    const restorable = await findRestorableSession(root);
+    expect(restorable?.session.sessionId).toBe(sessionId);
+    expect(restorable?.session.metadata.restoredFrom).toBe('first');
+    expect(restorable?.session.metadata.threadIds).toEqual({ 'monitor-0': 'thread-abc' });
+    expect(getContextRestoreMessages(restorable!.messages).map((m) => m.content)).toEqual([
+      'remember the number 7',
+      'noted: 7',
+      'what was the number?',
+    ]);
+    expect(getWindowRestoreActions(restorable!.messages).map((a) => a.windowId)).toEqual([
+      '0/notes',
+    ]);
+  });
+
+  it('survives a chain of restarts', async () => {
+    for (const note of ['second', 'third']) {
+      const { logger, sessionId } = await relaunch();
+      logger.logUserMessage(note, 'monitor-0');
+      await logger.dispose();
+      // Session ids have one-second resolution; two relaunches in a test do not.
+      await rename(join(root, sessionId), join(root, note));
+    }
+
+    const restorable = await findRestorableSession(root);
+    expect(getContextRestoreMessages(restorable!.messages).map((m) => m.content)).toEqual([
+      'remember the number 7',
+      'noted: 7',
+      'second',
+      'third',
+    ]);
+    // The snapshot is re-reduced each hop, not appended to: one window, one create.
+    expect(restorable!.messages.filter((m) => m.type === 'action')).toHaveLength(1);
+  });
+
+  it('a relaunch nobody used stays prunable and restores nothing of its own', async () => {
+    const { logger, sessionId } = await relaunch();
+    await logger.dispose();
+
+    // Exactly the shape `pruneEmptySessions()` deletes: nothing in the log itself.
+    expect(await Bun.file(join(root, sessionId, 'messages.jsonl')).text()).toBe('');
+    expect(await findRestorableSession(root).then((r) => r?.session.sessionId)).toBe('first');
+  });
+
+  it('a monitor reset drops the carried thread id', async () => {
+    const { logger } = await relaunch();
+    logger.clearThreadId('monitor-0');
+    logger.logUserMessage('start over', 'monitor-0');
+    await logger.dispose();
+
+    const restorable = await findRestorableSession(root);
+    expect(restorable?.session.metadata.threadIds ?? {}).toEqual({});
   });
 });

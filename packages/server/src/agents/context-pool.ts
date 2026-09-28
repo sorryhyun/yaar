@@ -900,6 +900,7 @@ export class ContextPool implements PoolContext {
       );
       this.budgetPolicy.clearMonitor(monitorId);
       delete this.savedThreadIds?.[monitorRole(monitorId)];
+      this.getSessionLogger()?.clearThreadId(monitorRole(monitorId));
 
       const spawned = await this.spawnMonitorAgent(monitorId);
       if (!spawned.ok) {
@@ -936,8 +937,9 @@ export class ContextPool implements PoolContext {
       log.error('reset: resetCodexProviders failed', { err });
     }
 
-    // Clear saved thread IDs so we don't resume old sessions
+    // Clear saved thread IDs so we don't resume old sessions — this launch or the next
     this.savedThreadIds = undefined;
+    this.getSessionLogger()?.clearThreadIds();
 
     // Re-create fresh main agents for ALL previously active monitors
     for (const monitorId of activeMonitorIds) {

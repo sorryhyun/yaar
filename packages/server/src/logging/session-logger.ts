@@ -4,7 +4,7 @@ import type { OSAction, UserInteraction } from '@yaar/shared';
 import { createDebouncedJsonFile, type DebouncedJsonFile } from '@yaar/lib/json-file';
 import { formatCompactInteraction } from '../lib/format-interaction.js';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
-import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
+import type { AgentInfo, ParsedMessage, SessionInfo, SessionMetadata } from './types.js';
 import { NOT_FOUND_CATEGORY } from './types.js';
 import type { ContextSource } from '../agents/context.js';
 import type { EscapeGuardRecord } from '../providers/types.js';
@@ -81,9 +81,12 @@ function safeStringify(value: unknown): string {
  * Generate a unique session ID based on timestamp.
  */
 function generateSessionId(): string {
-  // Format: YYYY-MM-DD_HH-MM-SS
+  // Format: YYYY-MM-DD_HH-MM-SS, both halves local. The date used to come from
+  // `toISOString()` (UTC) and the time from `toTimeString()` (local), so east of UTC a
+  // morning launch was named after the previous day and sorted among its sessions.
   const now = new Date();
-  const date = now.toISOString().split('T')[0];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const time = now.toTimeString().split(' ')[0].replace(/:/g, '-');
   return `${date}_${time}`;
 }
@@ -152,6 +155,10 @@ export class SessionLogger {
 
   private readonly metadataWriter: DebouncedJsonFile;
 
+  // Entries carried over from the session this launch restored from, held until this
+  // launch records something of its own — see carryOver().
+  private carriedLines: string[] | null = null;
+
   constructor(sessionInfo: SessionInfo) {
     this.sessionInfo = sessionInfo;
     this.metadataWriter = createDebouncedJsonFile(
@@ -176,6 +183,37 @@ export class SessionLogger {
    */
   updateProvider(provider: string): void {
     this.sessionInfo.metadata.provider = provider;
+    this.scheduleMetadataSave();
+  }
+
+  /**
+   * Seed this log with the state it was restored from (see `selectCarryOverEntries()`),
+   * and carry that session's provider thread ids forward.
+   *
+   * The entries are held back and written ahead of the first entry this launch records,
+   * not at boot: a launch nobody used must still leave the structurally empty log
+   * `pruneEmptySessions()` deletes, and `findRestorableSession()` skips — the next launch
+   * then restores from the same source this one did, and loses nothing. Only
+   * `messages.jsonl` gets them; the per-agent logs stay a record of what each agent did
+   * in this launch.
+   *
+   * The thread ids go straight into the metadata. They are what a restart resumes, and a
+   * launch whose monitor never ran a turn would otherwise drop them — its log has no
+   * thread ids of its own, so the launch after it would start every agent fresh.
+   */
+  carryOver(
+    fromSessionId: string,
+    entries: ParsedMessage[],
+    threadIds: Record<string, string> | undefined,
+  ): void {
+    this.sessionInfo.metadata.restoredFrom = fromSessionId;
+    if (threadIds && Object.keys(threadIds).length > 0) {
+      this.sessionInfo.metadata.threadIds = {
+        ...threadIds,
+        ...this.sessionInfo.metadata.threadIds,
+      };
+    }
+    this.carriedLines = entries.length > 0 ? entries.map((e) => JSON.stringify(e) + '\n') : null;
     this.scheduleMetadataSave();
   }
 
@@ -231,8 +269,12 @@ export class SessionLogger {
 
     const line = JSON.stringify(entry) + '\n';
 
-    // Buffer global messages log
+    // Buffer global messages log — behind the carried-over entries, if this is the first.
     const globalPath = join(this.sessionInfo.directory, 'messages.jsonl');
+    if (this.carriedLines) {
+      for (const carried of this.carriedLines) this.bufferLine(globalPath, carried);
+      this.carriedLines = null;
+    }
     this.bufferLine(globalPath, line);
 
     // Buffer per-agent JSONL (skip for agent-less entries like user interactions)
@@ -494,6 +536,24 @@ export class SessionLogger {
       this.sessionInfo.metadata.threadIds = {};
     }
     this.sessionInfo.metadata.threadIds[canonicalAgent] = threadId;
+    this.scheduleMetadataSave();
+  }
+
+  /**
+   * Forget the thread filed under one canonical agent, so a restart does not resume it.
+   * The counterpart to a monitor reset: the reset starts the agent on a fresh thread, and
+   * a thread id left here would bring the old one back on the next launch.
+   */
+  clearThreadId(canonicalAgent: string): void {
+    if (!this.sessionInfo.metadata.threadIds?.[canonicalAgent]) return;
+    delete this.sessionInfo.metadata.threadIds[canonicalAgent];
+    this.scheduleMetadataSave();
+  }
+
+  /** Forget every thread id — the counterpart to a full reset. See clearThreadId(). */
+  clearThreadIds(): void {
+    if (!this.sessionInfo.metadata.threadIds) return;
+    delete this.sessionInfo.metadata.threadIds;
     this.scheduleMetadataSave();
   }
 

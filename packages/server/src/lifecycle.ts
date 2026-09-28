@@ -12,6 +12,7 @@ import { syncAppShortcuts } from './storage/shortcuts.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
   findRestorableSession,
+  selectCarryOverEntries,
   getWindowRestoreActions,
   getContextRestoreMessages,
   getCliRestoreEntries,
@@ -200,6 +201,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     restoreActions: [],
     contextMessages: [],
   };
+  let carryOver: Parameters<SessionLogger['carryOver']> | null = null;
 
   try {
     const restorable = await findRestorableSession();
@@ -230,14 +232,22 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
           from: lastSession.sessionId,
         });
       }
+      carryOver = [
+        lastSession.sessionId,
+        selectCarryOverEntries(messages, options.restoreActions),
+        lastSession.metadata?.threadIds,
+      ];
     }
   } catch (err) {
     log.error('failed to restore previous session', { err });
   }
 
-  // Create session log eagerly so user interactions are logged from the start
+  // Create session log eagerly so user interactions are logged from the start — seeded
+  // with what was just restored, so it continues the previous log instead of reading as
+  // a reset (see selectCarryOverEntries()).
   const sessionInfo = await createSession('pending');
   options.sessionLogger = new SessionLogger(sessionInfo);
+  if (carryOver) options.sessionLogger.carryOver(...carryOver);
 
   return options;
 }

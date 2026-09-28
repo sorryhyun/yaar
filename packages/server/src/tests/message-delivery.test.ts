@@ -50,6 +50,8 @@ mock.module('../logging/session-logger.js', () => {
     logAgentMessage = mock(() => {});
     logAction = mock(() => {});
     logThreadId = mock(() => {});
+    clearThreadId = mock(() => {});
+    clearThreadIds = mock(() => {});
     registerAgent = mock(() => {});
     close = mock(() => {});
     dispose = mock(async () => {});

@@ -23,6 +23,13 @@ export interface SessionMetadata {
    * still-running instance is holding open. Absent in logs from older builds.
    */
   pid?: number;
+  /**
+   * The session this launch restored from, when it restored at all. Its restorable state
+   * (context messages and a snapshot of the open windows) is copied into this log as
+   * `restored` entries, so the log reads as the continuation it is — see
+   * `SessionLogger.carryOver()`.
+   */
+  restoredFrom?: string;
 }
 
 export interface SessionInfo {
@@ -77,6 +84,11 @@ export interface ParsedMessage {
   /** See {@link NOT_FOUND_CATEGORY} for the one value the failure tally treats specially. */
   errorCategory?: string;
   durationMs?: number;
+  /**
+   * Copied from the session this one restored from, not recorded by this launch. Written
+   * only by `SessionLogger.carryOver()`; see `SessionMetadata.restoredFrom`.
+   */
+  restored?: boolean;
 }
 
 /**

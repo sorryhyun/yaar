@@ -19,7 +19,7 @@ export type { AgentInfo, SessionMetadata, SessionInfo, ParsedMessage } from './t
 export { createSession, SessionLogger } from './session-logger.js';
 export { pruneEmptySessions } from './prune.js';
 export type { PruneOptions } from './prune.js';
-export { findRestorableSession } from './restore-source.js';
+export { findRestorableSession, selectCarryOverEntries } from './restore-source.js';
 export type { RestoreSource } from './restore-source.js';
 export {
   listSessions,
