@@ -37,6 +37,28 @@ export function formatProtocolError(err: ProtocolError): string {
   return `${err.file}:${err.line}:${err.column}: ${err.message}`;
 }
 
+/**
+ * The first syntax error in a parsed module, or null.
+ *
+ * `createSourceFile` never throws on bad syntax; it recovers, and the recovery
+ * can drop every statement after the error. `parseDiagnostics` is not in the
+ * public typings, but it is the parser's own list and has been for years.
+ */
+export function firstParseError(ts: TsModule, source: TsSourceFile): ProtocolError | null {
+  const diagnostics = (source as { parseDiagnostics?: import('typescript').Diagnostic[] })
+    .parseDiagnostics;
+  const first = diagnostics?.[0];
+  if (!first) return null;
+  const { line, character } = source.getLineAndCharacterOfPosition(first.start ?? 0);
+  const text = ts.flattenDiagnosticMessageText(first.messageText, ' ');
+  return {
+    message: `could not be parsed: ${text.replace(/[^\x20-\x7e]/g, '?')}`,
+    file: source.fileName,
+    line: line + 1,
+    column: character + 1,
+  };
+}
+
 export interface Binding {
   /** The initializer expression this name is bound to. */
   node: TsNode;
@@ -137,9 +159,16 @@ export function isRelative(specifier: string): boolean {
   return specifier.startsWith('./') || specifier.startsWith('../');
 }
 
-/** Index a module's top-level `const` bindings and imports. */
+/**
+ * Index a module's top-level `const` bindings and imports.
+ *
+ * The script kind is left to `createSourceFile`, which takes it from the
+ * extension the way `tsc` does. Forcing TSX misreads a `.ts` generic arrow
+ * (`async <T>(op) => ...`) as an unclosed JSX element, and every statement after
+ * it silently disappears from the scope.
+ */
 export function buildScope(ts: TsModule, file: string, text: string): ModuleScope {
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const scope: ModuleScope = {
     file,
     source,

@@ -552,3 +552,30 @@ describe('defineApp: keybindings', () => {
     expectRejected(app(`{ ArrowRight: 7 }`), 'expected a command name string');
   });
 });
+
+describe('defineApp: parsing', () => {
+  // Found building image23d: `src/protocol.ts` had a generic arrow between two
+  // exports. Parsed as TSX, `<T>(` opened a JSX element that swallowed the rest
+  // of the file, and `appCommands` came out "unresolved" at the spread in main.ts.
+  const protocolModule = (between: string) => ({
+    'src/protocol.ts': `
+      export const appState = {};
+      ${between}
+      export const appCommands = { ping: { description: 'Ping', run: () => 1 } };`,
+    'src/main.ts': `${IMPORT}
+      import { appCommands, appState } from './protocol';
+      export default defineApp({ id: 'p', name: 'P', state: appState, commands: { ...appCommands } });`,
+  });
+
+  test('a generic arrow in a .ts module does not hide what follows it', () => {
+    const { protocol, errors } = extract(
+      protocolModule('const wrap = async <T>(op: () => Promise<T>): Promise<T> => op();'),
+    );
+    expect(errors).toEqual([]);
+    expect(Object.keys(protocol!.commands)).toEqual(['ping']);
+  });
+
+  test('a syntax error is reported where it is, not as an unresolved name', () => {
+    expectRejected(protocolModule('const broken = ;'), 'src/protocol.ts:3:22: could not be parsed');
+  });
+});

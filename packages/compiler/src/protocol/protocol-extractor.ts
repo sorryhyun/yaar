@@ -16,6 +16,7 @@
 
 import {
   buildScope,
+  firstParseError,
   isRelative,
   resolveModulePath,
   MAX_MODULE_DEPTH,
@@ -90,6 +91,13 @@ export class Extractor {
         line: 1,
         column: 1,
       });
+      return null;
+    }
+    // A module that parsed with errors has lost statements, so a name it does
+    // declare would come out "unresolved" at some importer far from the cause.
+    const parseError = firstParseError(this.ts, scope.source);
+    if (parseError) {
+      this.errors.push(parseError);
       return null;
     }
     this.scopes.set(file, scope);

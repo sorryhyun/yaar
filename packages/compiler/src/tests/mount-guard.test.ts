@@ -71,4 +71,13 @@ describe('scanMountTargets', () => {
   test('a single-argument render is not a mount', () => {
     expect(scan(`render(App);`)).toEqual([]);
   });
+
+  test('a generic arrow earlier in a .ts file does not hide the mount', () => {
+    // Parsed as TSX, `<T>(` opens a JSX element that swallows the rest of the file.
+    const findings = scan(`
+      const wrap = async <T>(op: () => Promise<T>): Promise<T> => op();
+      render(() => App(), document.getElementById('root')!);
+    `);
+    expect(findings.map((f) => f.id)).toEqual(['root']);
+  });
 });

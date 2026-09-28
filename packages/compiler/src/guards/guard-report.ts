@@ -24,11 +24,14 @@ export type TsSourceFile = import('typescript').SourceFile;
 /**
  * Parse an app source file the way every guard needs it.
  *
- * Neither argument is incidental: the scanners call `getText`/`getStart`, which
- * need parent pointers (`setParentNodes: true`), and an app source may be `.tsx`.
+ * The scanners call `getText`/`getStart`, which need parent pointers
+ * (`setParentNodes: true`). The script kind is left to `createSourceFile`, which
+ * takes it from the extension the way `tsc` does: forcing TSX on a `.ts` file
+ * misreads a generic arrow (`<T>(x: T) => x`) as an unclosed JSX element, and the
+ * guards would silently scan nothing after it.
  */
 export function createAppSourceFile(ts: TsModule, fileName: string, source: string): TsSourceFile {
-  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
 }
 
 /** Visit every node under `root`, depth-first. */
