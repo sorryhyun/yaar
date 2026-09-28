@@ -147,3 +147,58 @@ export function transformBox(m: Mat4, min: Vec3, max: Vec3): { min: Vec3; max: V
   }
   return { min: outMin, max: outMax };
 }
+
+/** A unit quaternion as XYZ Euler angles in degrees — three.js's default order. */
+export function quatToEulerDeg(q: ArrayLike<number>): Vec3 {
+  const m = compose([0, 0, 0], [q[0], q[1], q[2], q[3]], [1, 1, 1]);
+  // Row-major names over the column-major array: m13 is row 1, column 3.
+  const m11 = m[0],
+    m12 = m[4],
+    m13 = m[8];
+  const m22 = m[5],
+    m23 = m[9];
+  const m32 = m[6],
+    m33 = m[10];
+  const y = Math.asin(Math.max(-1, Math.min(1, m13)));
+  const [x, z] =
+    Math.abs(m13) < 0.9999999
+      ? [Math.atan2(-m23, m33), Math.atan2(-m12, m11)]
+      : [Math.atan2(m32, m22), 0];
+  const deg = 180 / Math.PI;
+  return [x * deg, y * deg, z * deg];
+}
+
+/** Spherical interpolation along the shorter arc; the result is normalized. */
+export function slerp(a: ArrayLike<number>, b: ArrayLike<number>, s: number): Quat {
+  let [bx, by, bz, bw] = [b[0], b[1], b[2], b[3]];
+  let dot = a[0] * bx + a[1] * by + a[2] * bz + a[3] * bw;
+  if (dot < 0) {
+    [bx, by, bz, bw] = [-bx, -by, -bz, -bw];
+    dot = -dot;
+  }
+  let wa = 1 - s;
+  let wb = s;
+  if (dot < 0.9995) {
+    const theta = Math.acos(Math.min(1, dot));
+    const sin = Math.sin(theta);
+    wa = Math.sin((1 - s) * theta) / sin;
+    wb = Math.sin(s * theta) / sin;
+  }
+  return normalizeQuat([
+    wa * a[0] + wb * bx,
+    wa * a[1] + wb * by,
+    wa * a[2] + wb * bz,
+    wa * a[3] + wb * bw,
+  ]);
+}
+
+export function normalizeQuat(q: ArrayLike<number>): Quat {
+  const len = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  return [q[0] / len, q[1] / len, q[2] / len, q[3] / len];
+}
+
+/** Whether two affine matrices place things the same, to within float32 noise. */
+export function sameMatrix(a: Mat4, b: Mat4, eps = 1e-6): boolean {
+  for (let i = 0; i < 16; i++) if (Math.abs(a[i] - b[i]) > eps) return false;
+  return true;
+}

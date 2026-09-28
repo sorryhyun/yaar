@@ -305,6 +305,232 @@ describe('summarizeGltf', () => {
   });
 });
 
+/**
+ * Two joints and a strip of four vertices: the lower pair weighted to Hip at the origin, the
+ * upper pair to Knee one unit up. Bend turns Knee 90° about X over one second, so the upper
+ * pair swings from y=2 to z=1 — worked by hand: T(0,1,0)·Rx90·T(0,-1,0) on (x, 2, 0).
+ */
+function skinnedFixture() {
+  const ibm = (ty: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, ty, 0, 1];
+  const { bin, views } = packBuffers([
+    new Float32Array([-0.1, 0, 0, 0.1, 0, 0, -0.1, 2, 0, 0.1, 2, 0]), // 0 positions
+    new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), // 1 joints
+    new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), // 2 weights
+    new Float32Array([...ibm(0), ...ibm(-1)]), // 3 inverse bind matrices
+    new Float32Array([0, 1]), // 4 times
+    new Float32Array([0, 0, 0, 1, S, 0, 0, S]), // 5 rotations
+  ]);
+  const json: GltfJson = {
+    asset: { version: '2.0' },
+    scene: 0,
+    scenes: [{ nodes: [0, 2] }],
+    nodes: [
+      { name: 'Hip', children: [1] },
+      { name: 'Knee', translation: [0, 1, 0] },
+      { name: 'Body', mesh: 0, skin: 0 },
+    ],
+    meshes: [
+      {
+        name: 'Leg',
+        primitives: [{ attributes: { POSITION: 0, JOINTS_0: 1, WEIGHTS_0: 2 } }],
+      },
+    ],
+    skins: [{ joints: [0, 1], inverseBindMatrices: 3 }],
+    animations: [
+      {
+        name: 'Bend',
+        samplers: [{ input: 4, output: 5 }],
+        channels: [{ sampler: 0, target: { node: 1, path: 'rotation' } }],
+      },
+    ],
+    accessors: [
+      {
+        bufferView: 0,
+        componentType: 5126,
+        count: 4,
+        type: 'VEC3',
+        min: [-0.1, 0, 0],
+        max: [0.1, 2, 0],
+      },
+      { bufferView: 1, componentType: 5121, count: 4, type: 'VEC4' },
+      { bufferView: 2, componentType: 5126, count: 4, type: 'VEC4' },
+      { bufferView: 3, componentType: 5126, count: 2, type: 'MAT4' },
+      { bufferView: 4, componentType: 5126, count: 2, type: 'SCALAR', min: [0], max: [1] },
+      { bufferView: 5, componentType: 5126, count: 2, type: 'VEC4' },
+    ],
+    bufferViews: views,
+    buffers: [{ byteLength: bin.length }],
+  };
+  return { json, bin };
+}
+
+/**
+ * A rifle authored in centimetres, barrel toward −Z, whose Magazine hides by a scale key
+ * 0.0001 s after the one before — the shape the devtools agent met in real assets.
+ */
+function rifleFixture() {
+  const { bin, views } = packBuffers([
+    new Float32Array([-2, -10, -60, 2, 10, 19]), // 0 positions (a two-corner box)
+    new Float32Array([0, 0.5, 0.5001, 1]), // 1 times
+    new Float32Array([1, 1, 1, 1, 1, 1, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001]), // 2 scales
+  ]);
+  const json: GltfJson = {
+    asset: { version: '2.0', extras: { author: 'hand' } },
+    scene: 0,
+    scenes: [{ name: 'Armory', nodes: [0], extras: { socket: 'Muzzle' } }],
+    nodes: [
+      { name: 'Rifle', mesh: 0, children: [1] },
+      { name: 'Magazine', translation: [0, -5, -10] },
+    ],
+    meshes: [{ name: 'Body', primitives: [{ attributes: { POSITION: 0 } }], extras: { lod: 0 } }],
+    animations: [
+      {
+        name: 'Reload',
+        extras: { events: [{ t: 0.5, name: 'mag_out' }] },
+        samplers: [{ input: 1, output: 2 }],
+        channels: [{ sampler: 0, target: { node: 1, path: 'scale' } }],
+      },
+    ],
+    accessors: [
+      {
+        bufferView: 0,
+        componentType: 5126,
+        count: 2,
+        type: 'VEC3',
+        min: [-2, -10, -60],
+        max: [2, 10, 19],
+      },
+      { bufferView: 1, componentType: 5126, count: 4, type: 'SCALAR', min: [0], max: [1] },
+      { bufferView: 2, componentType: 5126, count: 4, type: 'VEC3' },
+    ],
+    bufferViews: views,
+    buffers: [{ byteLength: bin.length }],
+  };
+  return { json, bin };
+}
+
+describe('summarizeGltf — posing and reading clips', () => {
+  it('poses the model at a time, in world space, parents included', async () => {
+    const { json, bin } = fixture();
+    // At 0.5 s Arm has turned 90° about X and Hand has moved up 1 in Arm's frame, which that
+    // turn points along +Z: Root's scale 2 · ((1,0,0) + (0,0,1)).
+    const s = (await summarizeGltf(glb(json, bin), { pose: 'Reload', at: 0.5 })) as Rec;
+    expect(s.pose.nodes.map((n: Rec) => n.node)).toEqual(['Arm', 'Hand']);
+    const hand = s.pose.nodes[1];
+    expect(hand).toMatchObject({ node: 'Hand', t: [2, 0, 2], keyed: true, s: [2, 2, 2] });
+    expect(s.pose.movedMeshes.map((m: Rec) => m.node)).toEqual(['Arm', 'Hand']);
+    expect(s.notes.some((n: string) => /2 node\(s\) this clip moves/.test(n))).toBe(true);
+  });
+
+  it("samples one node's world path over a clip, naming what moves it", async () => {
+    const { json, bin } = fixture();
+    const s = (await summarizeGltf(glb(json, bin), {
+      pose: 'Reload',
+      node: 'Hand',
+      step: 0.5,
+      euler: true,
+    })) as Rec;
+    expect(s.pose.movedBy).toEqual(['Hand', 'Arm']);
+    expect(s.pose.path.map((r: number[]) => r[0])).toEqual([0, 0.5, 1, 1.2]);
+    expect(s.pose.path[0].slice(1, 4)).toEqual([2, 0, 0]);
+    expect(s.pose.path[1].slice(1, 8)).toEqual([2, 0, 2, 90, 90, 0, 2]);
+    expect(s.pose.travel.min).toEqual([2, 0, 0]);
+  });
+
+  it('refuses a path with no node and a time with no clip', async () => {
+    const { json, bin } = fixture();
+    await expect(summarizeGltf(glb(json, bin), { pose: 'Reload' })).rejects.toThrow(
+      /name that node/,
+    );
+    await expect(summarizeGltf(glb(json, bin), { at: 0.5 })).rejects.toThrow(/`pose` clip/);
+  });
+
+  it('windows and resamples keyframes, rotations as Euler degrees', async () => {
+    const { json, bin } = fixture();
+    const s = (await summarizeGltf(glb(json, bin), {
+      keys: 'Reload',
+      range: '0-0.5',
+      step: 0.25,
+      euler: true,
+    })) as Rec;
+    expect(s.keyframes.window).toEqual([0, 0.5]);
+    expect(s.keyframes.tracks[0].keys).toEqual([
+      [0, 0, 0, 0],
+      [0.25, 45, 0, 0],
+      [0.5, 90, 0, 0],
+    ]);
+    expect(s.keyframes.tracks[1].keys[1]).toEqual([0.25, 0, 0.5, 0]);
+    expect(s.rotations).toMatch(/Euler/);
+    // Raw keys, windowed: only the keys inside it.
+    const raw = (await summarizeGltf(glb(json, bin), { keys: 'Reload', range: '0.4-' })) as Rec;
+    expect(raw.keyframes.tracks[1].keys.map((r: number[]) => r[0])).toEqual([0.5, 1.2]);
+    // The node list shows a rotation as degrees too.
+    const tree = (await summarizeGltf(glb(json, bin), { euler: true })) as Rec;
+    expect(tree.nodes[2]).toMatchObject({ name: 'Hand', rDeg: [0, 90, 0] });
+    expect(tree.nodes[2].r).toBeUndefined();
+  });
+
+  it('leaves out the sections named in omit, and refuses a name it does not know', async () => {
+    const { json, bin } = fixture();
+    const s = (await summarizeGltf(glb(json, bin), { omit: 'meshes, materials,images' })) as Rec;
+    expect(s.meshes).toBeUndefined();
+    expect(s.materials).toBeUndefined();
+    expect(s.images).toBeUndefined();
+    expect(s.bounds.max).toEqual([3, 2, 1]);
+    expect(s.omitted).toEqual(['meshes', 'materials', 'images']);
+    await expect(summarizeGltf(glb(json, bin), { omit: ['mesh'] })).rejects.toThrow(/takes: nodes/);
+  });
+
+  it('shows extras, flags a near-instant hide, and measures units and facing', async () => {
+    const { json, bin } = rifleFixture();
+    const s = (await summarizeGltf(glb(json, bin))) as Rec;
+    expect(s.extras).toEqual({ author: 'hand' });
+    expect(s.scene).toEqual({ name: 'Armory', extras: { socket: 'Muzzle' } });
+    expect(s.meshes[0].extras).toEqual({ lod: 0 });
+    expect(s.animations[0].extras).toEqual({ events: [{ t: 0.5, name: 'mag_out' }] });
+    expect(s.animations[0].channelStats[0].jumps).toEqual([
+      { at: 0.5, dt: 0.0001, to: [0.001, 0.001, 0.001], effect: 'hides' },
+    ]);
+    expect(s.units).toMatch(/not measured/);
+    expect(s.measured[0]).toMatch(/79 units.*centimetres/);
+    expect(s.measured[1]).toMatch(/reaches 60 toward −Z and 19 toward \+Z.*likely −Z/);
+  });
+});
+
+describe('summarizeGltf — skins', () => {
+  it('places a skinned mesh at rest by its bind matrices', async () => {
+    const { json, bin } = skinnedFixture();
+    const s = (await summarizeGltf(glb(json, bin))) as Rec;
+    expect(s.meshes[0].world[0]).toEqual({
+      node: 'Body',
+      min: [-0.1, 0, 0],
+      max: [0.1, 2, 0],
+      size: [0.2, 2, 0],
+      skinned: true,
+    });
+    expect(s.skins[0]).toMatchObject({ joints: 2, rootJoint: 'Hip' });
+  });
+
+  it('skins every vertex through its joints for a posed box', async () => {
+    const { json, bin } = skinnedFixture();
+    const s = (await summarizeGltf(glb(json, bin), { pose: 'Bend', at: 1 })) as Rec;
+    expect(s.pose.movedMeshes).toEqual([
+      {
+        node: 'Body',
+        mesh: 'Leg',
+        min: [-0.1, 0, 0],
+        max: [0.1, 1, 1],
+        size: [0.2, 1, 1],
+        skinned: true,
+      },
+    ]);
+    expect(s.pose.bounds.max).toEqual([0.1, 1, 1]);
+    // Halfway, the slerp puts the upper pair at 45°: (x, 1 + cos45, sin45).
+    const half = (await summarizeGltf(glb(json, bin), { pose: 'Bend', at: 0.5 })) as Rec;
+    expect(half.pose.bounds.max).toEqual([0.1, 1.70711, 0.707107]);
+  });
+});
+
 describe('readAccessor', () => {
   it('normalizes integer components and applies sparse substitution', async () => {
     const { bin, views } = packBuffers([

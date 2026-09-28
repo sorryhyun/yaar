@@ -50,6 +50,12 @@ Read a file by URI.
 | `gltfNode` | `string` | no | glTF/GLB only: scope the model summary to a node's subtree (a name — exact, case-insensitive, or a unique substring — or `"#index"`). Adds per-channel keyframe stats. |
 | `gltfDepth` | `number` | no | glTF/GLB only: how many levels of the node tree to list. |
 | `gltfKeys` | `string` | no | glTF/GLB only: an animation (name or `"#index"`) whose keyframes to return in full, as `[time, ...value]` rows — only under `gltfNode` when that is set. |
+| `gltfPose` | `string` | no | glTF/GLB only: an animation to play. With `gltfAt`, every listed node's world transform and the posed mesh bounds at that time (skinned meshes skinned vertex by vertex); without it, `gltfNode`'s world path over the clip. |
+| `gltfAt` | `number` | no | glTF/GLB only: seconds into the `gltfPose` clip for the snapshot. |
+| `gltfRange` | `string` | no | glTF/GLB only: a time window in seconds, `"0.2-0.8"` (an end may be open), for `gltfKeys` rows and a pose path. |
+| `gltfStep` | `number` | no | glTF/GLB only: resample `gltfKeys` rows (and a pose path) every this many seconds, interpolated as a player would, instead of listing raw keys. |
+| `gltfEuler` | `boolean` | no | glTF/GLB only: rotations as XYZ Euler degrees (three.js's default order) instead of quaternions. |
+| `gltfOmit` | `string` | no | glTF/GLB only: sections to leave out, comma-separated — `nodes`, `meshes`, `materials`, `images`, `animations`, `skins`, `cameras`, `lights`. |
 | `missingOk` | `boolean` | no | Answer an absent file with `null` instead of an error. For when "it isn't there yet" is an expected state — an optional config file on a first run. A file holding a literal `null` is indistinguishable from an absent one; `list` the parent if you must tell them apart. |
 
 **Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
@@ -58,7 +64,7 @@ Read a file by URI.
 
 **Returns (image files):** Base64-encoded image content with MIME type.
 
-**Returns (glTF/GLB models):** A structural summary as line-oriented JSON (`@yaar/lib/gltf`), not the bytes: the node tree with local TRS, each mesh's vertex/triangle counts and local and world bounds (rest pose; a skinned mesh placed by its first joint's bind matrix), materials, image sizes read from their headers, and each animation's duration and the node paths it keys. Per-channel keyframe stats (first/last, min/max, degrees of swing for rotations) appear when the file has at most 64 channels or `gltfNode` scopes the read. A `.gltf`'s sidecar buffers and images resolve against its own folder through storage path resolution — never outside storage, and a remote URI is never fetched. Draco/meshopt-compressed data is reported, not decoded. Files over 256 MB are refused.
+**Returns (glTF/GLB models):** A structural summary as line-oriented JSON (`@yaar/lib/gltf`), not the bytes: the node tree with local TRS, each mesh's vertex/triangle counts and local and world bounds (rest pose; a skinned mesh placed by its first joint's bind matrix), materials, image sizes read from their headers, and each animation's duration and the node paths it keys. Per-channel keyframe stats (first/last, min/max, degrees of swing for rotations, and near-instant `jumps` — two keys under 2 ms apart, with a scale jump to or from ~0 marked as a hide or show) appear when the file has at most 64 channels or `gltfNode` scopes the read. `extras` are shown on the asset, the default scene, nodes, meshes, materials and animations — where glTF files carry event markers. `units` states the glTF convention; `measured` says what the bounds suggest instead (a size that reads as centimetres, which side of the origin a long object reaches toward). `gltfPose` evaluates a clip as a player would (slerped rotations, CUBICSPLINE tangents, STEP holds), parents included, so a node under an animated parent is placed where it really is. A `.gltf`'s sidecar buffers and images resolve against its own folder through storage path resolution — never outside storage, and a remote URI is never fetched. Draco/meshopt-compressed data is reported, not decoded. Files over 256 MB are refused.
 
 **Returns (binary files):** A message explaining the file can't be read as text, with a pointer to the REST API.
 
@@ -380,7 +386,7 @@ All operations resolve paths in order:
 | Text files (`.txt`, `.md`, `.ts`, `.json`, etc.) | Read as UTF-8, line-numbered output |
 | PDF (`.pdf`) | View-first: returns metadata only (page count, byte size) by default. `pdfText` extracts the text layer; `pdfPages` rasterizes a page range via poppler (capped at 20 pages) and re-encodes it to WebP |
 | Images (`.png`, `.jpg`, `.gif`, `.webp`) | Return as base64 image content, re-encoded to WebP |
-| 3D models (`.glb`, `.gltf`) | Structural summary — tree, bounds, materials, animation channels; steered by `gltfNode`/`gltfDepth`/`gltfKeys` |
+| 3D models (`.glb`, `.gltf`) | Structural summary — tree, bounds, materials, animation channels; steered by the `gltf*` read options; `gltfPose` plays a clip into a world-space pose |
 | Other binary | Return explanation message, point to REST API |
 
 A read is a **presentation** read: its consumer is a vision model, so PNG and JPEG bytes

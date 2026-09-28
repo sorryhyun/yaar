@@ -1548,6 +1548,21 @@ interface YaarReadOptions {
   /** glTF/GLB only: an animation (name or "#index") whose keyframes to return in full. */
   gltfKeys?: string;
   /**
+   * glTF/GLB only: an animation to play. With `gltfAt`, every node in world space and the
+   * posed mesh bounds at that time; without, `gltfNode`'s world path over the clip.
+   */
+  gltfPose?: string;
+  /** glTF/GLB only: seconds into the `gltfPose` clip for the snapshot. */
+  gltfAt?: number;
+  /** glTF/GLB only: a time window in seconds, e.g. "0.2-0.8", for keys and pose paths. */
+  gltfRange?: string;
+  /** glTF/GLB only: resample keys (and a pose path) every this many seconds. */
+  gltfStep?: number;
+  /** glTF/GLB only: rotations as XYZ Euler degrees instead of quaternions. */
+  gltfEuler?: boolean;
+  /** glTF/GLB only: sections to leave out, comma-separated, e.g. "meshes,materials,images". */
+  gltfOmit?: string;
+  /**
    * Answer an absent resource with `null` instead of throwing.
    *
    * For the case where "it isn't there yet" is a normal answer — an optional config

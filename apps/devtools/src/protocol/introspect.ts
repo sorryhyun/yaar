@@ -67,12 +67,16 @@ export const introspectCommands = {
   inspectModel: defineAppCommand({
     description:
       'Read a .glb/.gltf model as data: node tree with local TRS, per-mesh local and world ' +
-      'bounds (real sizes in metres), vertex/triangle counts, materials, texture sizes, and ' +
-      'each animation clip with its duration and the node paths it keys. Reads the file ' +
-      'itself — no compile or preview needed. `node` scopes it to a subtree and adds ' +
-      'per-channel keyframe stats (first/last/min/max, degrees of swing for rotations); ' +
-      "`keys` returns one clip's full keyframes. Bounds are the rest pose; morph targets are " +
-      'ignored. The result is line-oriented JSON, one record per line.',
+      'bounds, vertex/triangle counts, materials, texture sizes, extras (where files keep ' +
+      'event markers), and each animation clip with its duration and the node paths it keys. ' +
+      'Reads the file itself — no compile or preview needed. `node` scopes it to a subtree and ' +
+      'adds per-channel keyframe stats (first/last/min/max, degrees of swing, near-instant ' +
+      "jumps such as a hide by scale); `keys` returns one clip's keyframes, windowed by " +
+      '`range` and resampled by `step`. `pose` plays a clip: with `at`, every node in world ' +
+      "space and the posed mesh bounds (skinned meshes included) at that time; without, `node`'s " +
+      'world path over the clip — how you check motion without building. `units` is the glTF ' +
+      'convention; `measured` says what the bounds suggest (centimetres, a −Z front). ' +
+      'Line-oriented JSON, one record per line.',
     params: {
       type: 'object',
       properties: {
@@ -84,7 +88,7 @@ export const introspectCommands = {
           type: 'string',
           description:
             'Node name (exact, case-insensitive, or a unique substring) or "#index": scope ' +
-            'the summary to its subtree.',
+            'the summary to its subtree. The node whose world path `pose` samples.',
         },
         depth: { type: 'number', description: 'Levels of the node tree to list.' },
         keys: {
@@ -93,16 +97,53 @@ export const introspectCommands = {
             'Animation name or "#index": return its keyframes as [time, ...value] rows — ' +
             'only the channels under `node` when that is set.',
         },
+        pose: {
+          type: 'string',
+          description:
+            'Animation name or "#index" to play into a world-space pose: a snapshot with ' +
+            "`at`, else `node`'s world path over the clip.",
+        },
+        at: { type: 'number', description: 'Seconds into the `pose` clip for the snapshot.' },
+        range: {
+          type: 'string',
+          description:
+            'Time window in seconds, e.g. "0.2-0.8" (an end may be open), for `keys` rows ' +
+            'and a pose path.',
+        },
+        step: {
+          type: 'number',
+          description:
+            'Resample `keys` rows (and a pose path) every this many seconds, interpolated as ' +
+            'three.js plays them, instead of listing raw keys.',
+        },
+        euler: {
+          type: 'boolean',
+          description: 'Rotations as XYZ Euler degrees (three.js default order), not quaternions.',
+        },
+        omit: {
+          type: 'string',
+          description:
+            'Sections to leave out, comma-separated: nodes, meshes, materials, images, ' +
+            'animations, skins, cameras, lights.',
+        },
       },
       required: ['path'],
     },
     run: async (p) => {
       const path = String(p.path);
+      const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+      const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
       try {
         return await readModelSummary(path, {
-          ...(typeof p.node === 'string' ? { node: p.node } : {}),
-          ...(typeof p.depth === 'number' ? { depth: p.depth } : {}),
-          ...(typeof p.keys === 'string' ? { keys: p.keys } : {}),
+          node: str(p.node),
+          depth: num(p.depth),
+          keys: str(p.keys),
+          pose: str(p.pose),
+          at: num(p.at),
+          range: str(p.range),
+          step: num(p.step),
+          euler: typeof p.euler === 'boolean' ? p.euler : undefined,
+          omit: Array.isArray(p.omit) ? p.omit.join(',') : str(p.omit),
         });
       } catch (err) {
         throw new AppCommandError(`Failed to inspect model ${path}: ${errMsg(err)}`);

@@ -180,7 +180,8 @@ export function registerVerbTools(server: McpServer): void {
         'Reading a PDF returns its metadata plus a hint to open it in a viewer window — it does ' +
         'NOT ingest the content unless you pass pdfText (text layer) or pdfPages (page images). ' +
         'Reading a .glb/.gltf returns a model summary — node tree with TRS, local and world ' +
-        'bounds per mesh, materials, animation channels — steered by gltfNode/gltfKeys/gltfDepth. ' +
+        'bounds per mesh, materials, animation channels — steered by the gltf* options; gltfPose ' +
+        'plays a clip into a world-space pose. ' +
         'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to read'),
@@ -253,22 +254,46 @@ export function registerVerbTools(server: McpServer): void {
             'glTF/GLB only: an animation name (or "#index") whose keyframes to return in full, ' +
               'as [time, ...value] rows. Combine with gltfNode to keep it to one limb.',
           ),
+        gltfPose: z
+          .string()
+          .optional()
+          .describe(
+            'glTF/GLB only: an animation to play. With gltfAt, every node in world space and ' +
+              "the posed mesh bounds at that time; without, gltfNode's world path over the clip.",
+          ),
+        gltfAt: z
+          .number()
+          .optional()
+          .describe('glTF/GLB only: seconds into the gltfPose clip for the snapshot.'),
+        gltfRange: z
+          .string()
+          .optional()
+          .describe(
+            'glTF/GLB only: a time window in seconds, e.g. "0.2-0.8" (an end may be open), ' +
+              'for gltfKeys rows and a pose path.',
+          ),
+        gltfStep: z
+          .number()
+          .positive()
+          .optional()
+          .describe(
+            'glTF/GLB only: resample gltfKeys rows (and a pose path) every this many seconds.',
+          ),
+        gltfEuler: z
+          .boolean()
+          .optional()
+          .describe('glTF/GLB only: rotations as XYZ Euler degrees instead of quaternions.'),
+        gltfOmit: z
+          .string()
+          .optional()
+          .describe(
+            'glTF/GLB only: sections to leave out, comma-separated — nodes, meshes, ' +
+              'materials, images, animations, skins, cameras, lights.',
+          ),
       },
       _meta: LARGE_RESULT_META,
     },
-    async ({
-      uri,
-      lines,
-      pattern,
-      context,
-      chars,
-      pdfText,
-      pdfPages,
-      rawImage,
-      gltfNode,
-      gltfDepth,
-      gltfKeys,
-    }) =>
+    async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage, ...gltf }) =>
       exec(reg, 'read', uri, undefined, {
         lines,
         pattern,
@@ -277,9 +302,7 @@ export function registerVerbTools(server: McpServer): void {
         pdfText,
         pdfPages,
         rawImage,
-        gltfNode,
-        gltfDepth,
-        gltfKeys,
+        ...gltf,
         // A read that lands on a folder falls back to list — page it as list would.
         defaultLimit: LIST_PAGE_SIZE,
       }),

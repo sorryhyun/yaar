@@ -18,11 +18,22 @@ const CHUNK_BIN = 0x004e4942; // "BIN\0"
 
 /** The parts of the glTF JSON this module reads. Everything is optional: files lie. */
 export interface GltfJson {
-  asset?: { version?: string; generator?: string; copyright?: string; minVersion?: string };
+  asset?: {
+    version?: string;
+    generator?: string;
+    copyright?: string;
+    minVersion?: string;
+    extras?: unknown;
+  };
   scene?: number;
-  scenes?: Array<{ name?: string; nodes?: number[] }>;
+  scenes?: Array<{ name?: string; nodes?: number[]; extras?: unknown }>;
   nodes?: GltfNode[];
-  meshes?: Array<{ name?: string; primitives?: GltfPrimitive[]; weights?: number[] }>;
+  meshes?: Array<{
+    name?: string;
+    primitives?: GltfPrimitive[];
+    weights?: number[];
+    extras?: unknown;
+  }>;
   accessors?: GltfAccessor[];
   bufferViews?: GltfBufferView[];
   buffers?: Array<{ uri?: string; byteLength?: number; name?: string }>;
@@ -121,6 +132,7 @@ export interface GltfMaterial {
   alphaCutoff?: number;
   doubleSided?: boolean;
   extensions?: Record<string, unknown>;
+  extras?: unknown;
 }
 
 export interface GltfAnimation {
@@ -130,6 +142,7 @@ export interface GltfAnimation {
     target?: { node?: number; path?: string; extensions?: Record<string, { pointer?: string }> };
   }>;
   samplers?: Array<{ input?: number; output?: number; interpolation?: string }>;
+  extras?: unknown;
 }
 
 export interface GltfCamera {

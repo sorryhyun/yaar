@@ -29,6 +29,11 @@ import type {
 import { resolveMountPath, mountRootAlias, loadMounts, type ResolvedPath } from './mounts.js';
 // A leaf, shared with window content inlining — see text-extensions.ts for why not here.
 import { isTextFile } from './text-extensions.js';
+import {
+  GLTF_READ_OPTION_HINTS,
+  pickGltfOptions,
+  type GltfReadOptions,
+} from '../lib/read-options.js';
 // Also a leaf, for the same reason: paths that reach into an archive.
 import {
   ARCHIVE_LIMITS,
@@ -165,7 +170,7 @@ async function extractPdfText(
 }
 
 /** Options controlling how {@link storageRead} handles special file types. */
-export interface StorageReadOptions {
+export interface StorageReadOptions extends GltfReadOptions {
   /**
    * Extract a PDF's text layer instead of just metadata. `true` (or "all") reads the whole
    * document; a range string like "1-3" scopes it. Cheapest way to read a text-based PDF.
@@ -182,12 +187,6 @@ export interface StorageReadOptions {
    * to write the bytes back out somewhere.
    */
   rawImage?: boolean;
-  /** glTF/GLB only: scope the model summary to one node's subtree (a name, or "#index"). */
-  gltfNode?: string;
-  /** glTF/GLB only: how many levels of the node tree the summary lists. */
-  gltfDepth?: number;
-  /** glTF/GLB only: an animation (name or "#index") whose keyframes to return in full. */
-  gltfKeys?: string;
 }
 
 /**
@@ -241,6 +240,12 @@ async function gltfReadResult(
       node: opts?.gltfNode,
       depth: opts?.gltfDepth,
       keys: opts?.gltfKeys,
+      pose: opts?.gltfPose,
+      at: opts?.gltfAt,
+      range: opts?.gltfRange,
+      step: opts?.gltfStep,
+      euler: opts?.gltfEuler,
+      omit: opts?.gltfOmit,
       resolveUri: async (uri) => {
         let rel = uri;
         try {
@@ -258,12 +263,8 @@ async function gltfReadResult(
         }
       },
     });
-    if (opts?.gltfNode === undefined && opts?.gltfKeys === undefined) {
-      summary.readOptions = {
-        gltfNode: 'a node name or "#index": scope to its subtree, with per-channel keyframe stats',
-        gltfKeys: 'an animation name: its full keyframes as [time, ...value] rows (with gltfNode, that subtree only)',
-        gltfDepth: 'how many levels of the node tree to list',
-      };
+    if (Object.values(pickGltfOptions(opts)).every((v) => v === undefined)) {
+      summary.readOptions = GLTF_READ_OPTION_HINTS;
     }
     return { success: true, content: formatSummaryJson(summary) };
   } catch (err) {

@@ -22,7 +22,7 @@ import {
   prependNote,
   type VerbResult,
 } from '../lib/verb-result.js';
-import { applyEdit, applyReadOptions } from '../lib/read-options.js';
+import { applyEdit, applyReadOptions, pickGltfOptions } from '../lib/read-options.js';
 import { applyListOptions, type ListOptions } from '../lib/list-options.js';
 import { mimeFromPath } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
@@ -242,9 +242,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         pdfText: options?.pdfText,
         pdfPages: options?.pdfPages,
         rawImage: options?.rawImage,
-        gltfNode: options?.gltfNode,
-        gltfDepth: options?.gltfDepth,
-        gltfKeys: options?.gltfKeys,
+        ...pickGltfOptions(options),
       });
       if (!result.success) {
         // Directory — or an archive, which reads as the folder it stands for → fall through to list

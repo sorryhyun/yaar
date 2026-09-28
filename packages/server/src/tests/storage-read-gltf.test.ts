@@ -97,6 +97,41 @@ describe('storageRead on a glTF model', () => {
     expect(summary.readOptions).toBeUndefined();
   });
 
+  it('passes the pose, window and display options through', async () => {
+    // Reload slides the Magazine's translation from 0 to (0, -0.2, 0) over 2 s, under Rifle's
+    // scale 2: its world y is twice the keyed value.
+    const result = await storageRead(`${DIR}/models/rifle.gltf`, {
+      gltfNode: 'Magazine',
+      gltfPose: 'Reload',
+      gltfStep: 1,
+      gltfOmit: 'meshes,materials',
+    });
+    const summary = JSON.parse(result.content!);
+    expect(summary.pose.path.map((r: number[]) => r.slice(0, 4))).toEqual([
+      [0, 0, 0, 0],
+      [1, 0, -0.2, 0],
+      [2, 0, -0.4, 0],
+    ]);
+    expect(summary.meshes).toBeUndefined();
+    const windowed = JSON.parse(
+      (
+        await storageRead(`${DIR}/models/rifle.gltf`, {
+          gltfKeys: 'Reload',
+          gltfRange: '0.5-1.5',
+          gltfStep: 0.5,
+        })
+      ).content!,
+    );
+    expect(windowed.keyframes.tracks[0].keys.map((r: number[]) => r[0])).toEqual([0.5, 1, 1.5]);
+  });
+
+  it('names every option in the hint a plain read carries', async () => {
+    const summary = JSON.parse((await storageRead(`${DIR}/models/rifle.gltf`)).content!);
+    expect(Object.keys(summary.readOptions)).toEqual(
+      expect.arrayContaining(['gltfPose', 'gltfRange', 'gltfStep', 'gltfEuler', 'gltfOmit']),
+    );
+  });
+
   it('never resolves a sidecar outside storage', async () => {
     const summary = JSON.parse((await storageRead(`${DIR}/models/escape.gltf`)).content!);
     expect(summary.animations[0].channelStats[0].error).toMatch(/not found/);

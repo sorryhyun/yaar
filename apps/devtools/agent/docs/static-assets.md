@@ -31,7 +31,13 @@ files cannot resolve those relative URLs against a `data:` URI — export the
 **self-contained `.glb`** rather than copying the sidecars in. Before fitting, framing or
 animating a model, `inspectModel` it: node names and TRS, each mesh's world bounds (its real
 size), and which nodes every clip keys — `node` for one limb's keyframe stats, `keys` for a
-clip's full keyframes. Never regex a preview's bundle for the base64 to learn any of that.
+clip's keyframes (`range` + `step` to keep it short, `euler` for degrees). To check motion
+before writing any runtime code, `pose` the clip: `at` gives every node's world transform and
+the posed bounds at that moment, and `node` without `at` gives that node's world path —
+parents' animation included, so a Magazine under an animated Rifle is where it really is.
+Event markers usually live in `extras` or in named empty nodes; `jumps` flag near-instant
+keys such as a hide by scale. Trust `measured`, not `units`, for scale and facing. Never regex
+a preview's bundle for the base64 to learn any of that.
 
 **Why not `storage.url(...)`:** the preview runs under a throwaway principal, so anything
 hitting `/api/storage/` resolves against a different identity than the deployed app will

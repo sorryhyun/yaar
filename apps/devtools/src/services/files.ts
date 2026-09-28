@@ -27,6 +27,7 @@ import {
   globToRegExp,
 } from '../lib/paths';
 import { applyEdits, formatRemoved, type EditSpec } from '../lib/edits';
+import { formatModelSummary } from '../lib/model-summary';
 import { listAllFiles } from './fs-walk';
 import { recordChange } from './changes';
 
@@ -193,18 +194,40 @@ export function resolveProjectPath(raw: string): string {
   return path;
 }
 
-/** What `readModelSummary` can steer — the server's `gltfNode` / `gltfDepth` / `gltfKeys`. */
+/**
+ * What `readModelSummary` can steer. These are `inspectModel`'s names; each maps onto the
+ * storage read's `gltf*` option of the same meaning (`node` → `gltfNode`, …).
+ */
 export interface ModelSummaryOptions {
   node?: string;
   depth?: number;
   keys?: string;
+  pose?: string;
+  at?: number;
+  range?: string;
+  step?: number;
+  euler?: boolean;
+  omit?: string;
 }
+
+const GLTF_OPTION_NAMES: Record<keyof ModelSummaryOptions, string> = {
+  node: 'gltfNode',
+  depth: 'gltfDepth',
+  keys: 'gltfKeys',
+  pose: 'gltfPose',
+  at: 'gltfAt',
+  range: 'gltfRange',
+  step: 'gltfStep',
+  euler: 'gltfEuler',
+  omit: 'gltfOmit',
+};
 
 /**
  * A glTF/GLB model's structure — node tree with TRS, local and world bounds per mesh,
- * materials, image sizes, animation channels — as the server's glTF reader summarizes it.
- * `ref` is a project path or a `yaar://storage/...` URI. Nothing is compiled or previewed:
- * the summary comes from the file, so it reaches models no bundle imports.
+ * materials, image sizes, animation channels, and optionally a clip played into a pose —
+ * as the server's glTF reader summarizes it. `ref` is a project path or a
+ * `yaar://storage/...` URI. Nothing is compiled or previewed: the summary comes from the
+ * file, so it reaches models no bundle imports.
  */
 export async function readModelSummary(
   ref: string,
@@ -216,12 +239,12 @@ export async function readModelSummary(
     if (!proj) throw new Error('No active project. Open or create one first.');
     uri = `yaar://apps/self/storage/${projectPath(proj.id, resolveProjectPath(ref))}`;
   }
-  const result = await read(uri, {
-    ...(opts.node !== undefined ? { gltfNode: opts.node } : {}),
-    ...(opts.depth !== undefined ? { gltfDepth: opts.depth } : {}),
-    ...(opts.keys !== undefined ? { gltfKeys: opts.keys } : {}),
-  });
-  return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  const readOpts: Record<string, unknown> = {};
+  for (const [name, gltfName] of Object.entries(GLTF_OPTION_NAMES)) {
+    const v = opts[name as keyof ModelSummaryOptions];
+    if (v !== undefined) readOpts[gltfName] = v;
+  }
+  return formatModelSummary(await read(uri, readOpts as Parameters<typeof read>[1]));
 }
 
 function missingFileError(path: string): Error {
