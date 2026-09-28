@@ -32,7 +32,7 @@ import { getOrtVersion } from '../bundled/ort-version.js';
  * `git show f85e4670:packages/compiler/src/build/build-manifest.ts`. Put the reason for a
  * new bump in its commit message instead.
  */
-export const COMPILER_VERSION = '41';
+export const COMPILER_VERSION = '42';
 
 export interface BuildManifest {
   sourceHash: string;

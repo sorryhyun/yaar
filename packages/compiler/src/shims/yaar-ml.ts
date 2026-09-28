@@ -56,10 +56,19 @@ declare const __YAAR_ORT_VERSION__: string;
  * still ran the cached 1.27 bundle. The route reads only the pathname, so the query is
  * pure cache key. Every runtime URL goes through here, the `.wasm` included: a new
  * bundle driving a cached old `.wasm` would be worse than a stale pair.
+ *
+ * Absolute, not root-relative. ORT hands `wasmPaths` to `import()` / `fetch` verbatim,
+ * and when it decides its proxy worker must be preloaded (`isSameOrigin(scriptSrc)`
+ * false) that worker runs from a `blob:` URL — a base a root-relative specifier cannot
+ * resolve against. Measured on an Android phone without WebGPU: `Failed to resolve
+ * module specifier '/api/ml-runtime/ort-wasm-simd-threaded.mjs?v=1.30.0'` while the
+ * same URL answered 200 (#134). Resolving here, on the iframe's own thread, makes the
+ * URL mean the same thing from every context ORT loads it in.
  */
 function runtimeUrl(file: string): string {
   const v = typeof __YAAR_ORT_VERSION__ === 'string' ? __YAAR_ORT_VERSION__ : '';
-  return `/api/ml-runtime/${file}${v ? `?v=${encodeURIComponent(v)}` : ''}`;
+  return new URL(`/api/ml-runtime/${file}${v ? `?v=${encodeURIComponent(v)}` : ''}`, location.href)
+    .href;
 }
 
 /**
