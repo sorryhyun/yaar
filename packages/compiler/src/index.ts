@@ -32,6 +32,7 @@ export {
   type ThreeRenderer,
 } from './bundled/three-renderer.js';
 export { getBundledLibraryDetail, getDescribableLibraries } from './bundled/describe-library.js';
+export type { LibraryDetailQuery } from './bundled/describe-library.js';
 export {
   ASSET_MIME_TYPES,
   TEXT_ASSET_EXTENSIONS,

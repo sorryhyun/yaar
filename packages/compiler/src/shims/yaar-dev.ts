@@ -227,10 +227,17 @@ export function gitCheckpoint(appId?: string, opts?: { message?: string }) {
   });
 }
 
-export async function bundledLibraries(name?: string) {
-  const url = name
-    ? `/api/dev/bundled-libraries?lib=${encodeURIComponent(name)}`
-    : '/api/dev/bundled-libraries';
+export async function bundledLibraries(
+  name?: string,
+  opts?: { symbol?: string; section?: string; full?: boolean },
+) {
+  const query = new URLSearchParams();
+  if (name) query.set('lib', name);
+  if (opts?.symbol) query.set('symbol', opts.symbol);
+  if (opts?.section) query.set('section', opts.section);
+  if (opts?.full) query.set('full', '1');
+  const qs = query.toString();
+  const url = qs ? `/api/dev/bundled-libraries?${qs}` : '/api/dev/bundled-libraries';
   const res = await fetch(url, { headers: devHeaders() });
   return res.json();
 }

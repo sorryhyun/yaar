@@ -65,9 +65,11 @@ export const introspectCommands = {
   }),
   describeBundledLibrary: defineAppCommand({
     description:
-      'Return type info (methods, interfaces) for anything in the `bundledLibraries` state ' +
-      'key — a @bundled/* library, or "design-tokens", which ships as injected CSS and ' +
-      'answers with the generated list of token and utility-class names.',
+      'Return type info for anything in the `bundledLibraries` state key — a @bundled/* ' +
+      'library, or "design-tokens" (the generated token and utility-class names). A sectioned ' +
+      'library ("yaar", "yaar-web") answers with an index of sections and exports; pass ' +
+      '`symbol` for one export with the types it references, `section` for one section, or ' +
+      '`full: true` for everything.',
     params: {
       type: 'object',
       properties: {
@@ -76,12 +78,25 @@ export const introspectCommands = {
           description:
             'A name from `bundledLibraries`, e.g. "yaar", "anime", "three", "design-tokens".',
         },
+        symbol: {
+          type: 'string',
+          description: 'One export by exact name, e.g. "createSharedSignal".',
+        },
+        section: {
+          type: 'string',
+          description: 'A section title from the index (case-insensitive, partial match).',
+        },
+        full: { type: 'boolean', description: 'The whole declaration instead of the index.' },
       },
       required: ['name'],
     },
     run: async (p) => {
       try {
-        const result = await bundledLibraries(String(p.name));
+        const result = await bundledLibraries(String(p.name), {
+          symbol: typeof p.symbol === 'string' ? p.symbol : undefined,
+          section: typeof p.section === 'string' ? p.section : undefined,
+          full: p.full === true,
+        });
         return result;
       } catch (err) {
         throw new AppCommandError(errMsg(err));

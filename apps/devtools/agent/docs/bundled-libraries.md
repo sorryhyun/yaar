@@ -1,31 +1,26 @@
 ---
 name: bundled-libraries
-description: Read before importing @bundled/* — which library or yaar helper exists, which to prefer over hand-rolling, gated SDKs.
+description: Read before importing @bundled/* — how to look a library up, which helper to prefer over hand-rolling, gated SDKs.
 audience: agent
 ---
 
 ## Bundled Libraries
 
 Import via `@bundled/*`; no npm install. `query("bundledLibraries")` lists what exists, and
-`describeBundledLibrary` returns a library's type declarations with their doc comments —
-entry points, signatures, what is deliberately missing (`solid-js`'s three entry points,
-`three/addons`' loaders). **Read it before writing against a library**; this topic only says
-what exists and which to prefer.
+`describeBundledLibrary` returns a library's declarations with their doc comments — entry
+points, signatures, what is deliberately missing. **Read it before writing against a
+library**; guessed signatures are the usual first-compile failure.
 
-`@bundled/yaar`'s declarations run to ~65KB, so here is its index. Look a name up there
-rather than guessing its signature:
+`yaar` and `yaar-web` answer with an **index** (sections → exports → one-line summaries).
+Pull what you need from it rather than the whole library:
 
-- **Verbs:** `read`, `list`, `invoke`, `describe`, `del`, `subscribe`, `stream`, `httpFetch`.
-- **App shape:** `defineApp`, `defineAppCommand`, `createProtocolContext`, `AppCommandError`,
-  `links`.
-- **Storage and state:** `appStorage`, `appDb`, `createPersistedSignal`,
-  `createSharedSignal`, `createAutosave`.
-- **UI:** `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`,
-  `createCollapsiblePanel`, `onShortcut`, `createKeyState`, `isNarrow`, `isTouch`,
-  `createMediaQuery`, `onSwipe`.
-- **Data:** `sanitizeHtml`, `escapeHtml`, `safeParseOr`, `errMsg`, `wait`,
-  `createStaleGuard`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `dataUrlToBlob`,
-  `bytesToBase64`, `base64ToBytes`, `formatBytes`, `formatDuration`, `formatClock`.
+```ts
+command({ command: "describeBundledLibrary", params: { name: "yaar", symbol: "createSharedSignal" } })
+command({ command: "describeBundledLibrary", params: { name: "yaar", section: "storage" } })
+```
+
+A symbol slice carries every type it references; `full: true` returns everything (~65KB for
+`yaar` — rarely what you want).
 
 **Prefer the helper over hand-rolling, every time** — each exists because an app got the
 hand-rolled version wrong:
@@ -43,5 +38,4 @@ hand-rolled version wrong:
 
 **Gated SDKs** (`@bundled/yaar-dev`, `@bundled/yaar-web`, `@bundled/yaar-media`,
 `@bundled/yaar-ml`) need a matching `"bundles"` entry in `app.json` to import — the bundle
-is the grant, with no permission entry. What each exports is `describeBundledLibrary`'s
-answer.
+is the grant, with no permission entry.

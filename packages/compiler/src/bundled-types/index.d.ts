@@ -1585,6 +1585,8 @@ interface Window {
 // -- @bundled/yaar module --
 
 declare module '@bundled/yaar' {
+  // ── Verbs and network ───────────────────────────────────────────
+
   /**
    * Read the current value/state of a yaar:// resource.
    *
@@ -1636,6 +1638,8 @@ declare module '@bundled/yaar' {
     opts?: { kinds?: string[] },
   ): Promise<() => void>;
 
+  // ── Storage ─────────────────────────────────────────────────────
+
   /**
    * App-scoped storage (wraps yaar://apps/self/storage/ verbs). Scoped to this app: no other
    * installed app can reach it. It is still a plain subtree of YAAR storage
@@ -1660,7 +1664,7 @@ declare module '@bundled/yaar' {
    */
   export const appDb: YaarAppDb;
 
-  /** Re-exported sub-objects from window.yaar. */
+  /** Files by storage-root-relative path — `save`, `read`, `list`, `remove`, `url`; reach is the commons plus what app.json declares. */
   export const storage: YaarStorage;
 
   /**
@@ -1687,11 +1691,20 @@ declare module '@bundled/yaar' {
    */
   export function storagePath(ref: string | undefined | null): string | null;
 
+  // ── Platform objects ────────────────────────────────────────────
+
+  /** Talk to your own app agent and window: `sendInteraction`, `emit` an event, `onDrop`. */
   export const app: YaarApp;
+  /** The desktop's notifications: `list`, `count`, `onChange`. */
   export const notifications: YaarNotifications;
+  /** The screen this app is shown on (form factor, orientation, fullscreen): `get`, `onChange`, `setFullscreen`. */
   export const device: YaarDevice;
+  /** Other windows on the desktop: `read`, `list`, `openUrl`. */
   export const windows: YaarWindows;
+  /** Where the links in your content go: `onOpen` to claim or rewrite one, `open`, `resolve`. */
   export const links: YaarLinks;
+
+  // ── Defining the app ────────────────────────────────────────────
 
   /**
    * The event-channel shape for `defineApp({ events })`, for hand-annotating a
@@ -1820,6 +1833,8 @@ declare module '@bundled/yaar' {
     get(): T;
   };
 
+  // ── Errors, timing and feedback ─────────────────────────────────
+
   /** Returns a promise that resolves after `ms` milliseconds. */
   export function wait(ms: number): Promise<void>;
 
@@ -1892,6 +1907,8 @@ declare module '@bundled/yaar' {
     fn: () => Promise<T>,
     opts?: { success?: string },
   ): Promise<T | undefined>;
+
+  // ── Guards: validation, staleness, untrusted HTML ───────────────
 
   /**
    * Validate untrusted data against a schema; on mismatch log it and return
@@ -2004,6 +2021,8 @@ declare module '@bundled/yaar' {
    */
   export function escapeHtml(s: string): string;
 
+  // ── Files, bytes and formatting ─────────────────────────────────
+
   /**
    * Trigger a browser download of `blob`, named `filename` — the objectURL /
    * `<a download>` / click / revoke dance, with the revoke deferred a tick so it
@@ -2065,6 +2084,8 @@ declare module '@bundled/yaar' {
    * for a "Saved 15:04" label.
    */
   export function formatClock(ts: number | Date, opts?: { seconds?: boolean }): string;
+
+  // ── Images ──────────────────────────────────────────────────────
 
   /** Anything `toWebP` can encode from. A URL string is fetched first. */
   export type ImageSource =
@@ -2375,6 +2396,8 @@ declare module '@bundled/yaar' {
     opts?: RasterizeOptions,
   ): Promise<RasterizeResult>;
 
+  // ── Keyboard and gestures ───────────────────────────────────────
+
   /**
    * Register a keyboard shortcut. Returns a cleanup function.
    *
@@ -2447,6 +2470,8 @@ declare module '@bundled/yaar' {
     options?: SwipeOptions,
   ): () => void;
 
+  // ── Reactive state ──────────────────────────────────────────────
+
   /**
    * Create a Solid.js signal that auto-persists to appStorage.
    * The signal starts with `fallback` and updates once the stored value loads.
@@ -2518,6 +2543,8 @@ declare module '@bundled/yaar' {
     options?: { onRemote?: (value: T, prev: T) => void },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>];
 
+  // ── Responsive layout ───────────────────────────────────────────
+
   /** A signal tracking a CSS media query in this app's frame (false without matchMedia). */
   export function createMediaQuery(query: string): () => boolean;
 
@@ -2531,7 +2558,9 @@ declare module '@bundled/yaar' {
   /** The primary pointer is coarse (a finger): no hover, 44px targets. Reactive. */
   export function isTouch(): boolean;
 
+  /** The media query behind `isNarrow`, for `createMediaQuery` or CSS-in-JS. */
   export const NARROW_QUERY: string;
+  /** The media query behind `isTouch`. */
   export const TOUCH_QUERY: string;
 
   /**
@@ -2570,6 +2599,8 @@ declare module '@bundled/yaar' {
     setResizing(active: boolean): void;
   };
 
+  // ── Document lifecycle ──────────────────────────────────────────
+
   /**
    * The dirty / debounced-save / save-status lifecycle for an autosaving document.
    *
@@ -2589,6 +2620,8 @@ declare module '@bundled/yaar' {
     lastSavedAt: () => number;
     statusLabel: () => string;
   };
+
+  // ── The raw global ──────────────────────────────────────────────
 
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;
@@ -2628,8 +2661,15 @@ declare module '@bundled/yaar-dev' {
   export function deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
   /** Get all available bundled library names. */
   export function bundledLibraries(): Promise<string[]>;
-  /** Get detailed type information for a specific bundled library. */
-  export function bundledLibraries(name: string): Promise<{ name: string; types: string }>;
+  /**
+   * Type information for one bundled library. A library sectioned with `// ── Title ──`
+   * headers (`yaar`, `yaar-web`) answers with its index unless `symbol` (one export plus
+   * the types it references), `section`, or `full` narrows or widens it.
+   */
+  export function bundledLibraries(
+    name: string,
+    opts?: { symbol?: string; section?: string; full?: boolean },
+  ): Promise<{ name: string; types: string }>;
 
   // -- Version history --
   // Every deploy is snapshotted into a per-app shadow git repo, so a bad deploy

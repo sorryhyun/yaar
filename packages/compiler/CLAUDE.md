@@ -36,7 +36,7 @@ src/
 │   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / SHARED_RUNTIME_LIBS / resolveBrowserEntry — data, no Bun API
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 │   ├── three-renderer.ts  # app.json `"three": "webgpu"` — which three build `@bundled/three` means (readThreeRenderer)
-│   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent (+ design-tokens pseudo-library)
+│   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent: index / symbol / section / full (+ design-tokens pseudo-library)
 │   ├── ort-version.ts     # getOrtVersion() + the `define` that stamps it into yaar-ml's `?v=` runtime URLs
 │   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
 ├── guards/
@@ -298,9 +298,10 @@ Two standing bars, because everything this package exports is read by an app-aut
 agent before it is called by an app:
 
 - **No new `@bundled/yaar` export without 3+ existing hand-rolled call sites in the app
-  fleet.** `describeBundledLibrary('yaar')` already returns ~940 lines (~9k tokens) — the
-  largest single describe payload — and every export lengthens the list an agent reads
-  before writing a line. A helper below the bar makes the ones above it harder to find.
+  fleet.** The full `@bundled/yaar` declaration is ~65KB — the largest describe payload by
+  far, which is why `describeBundledLibrary('yaar')` answers with a ~6KB index instead — and
+  every export still lengthens the index an agent reads before writing a line. A helper
+  below the bar makes the ones above it harder to find.
   The last additions cleared it by a wide margin and are the calibration to argue against:
   `safeParseOr` (82 call sites / 22 apps), `tryToast` (~50), `escapeHtml` (6, three of them
   attribute-unsafe), `downloadBlob`/`blobToDataUrl` (6 and 4), `formatBytes`/`formatDuration`/
@@ -338,13 +339,20 @@ that weight, shrink it to what slides-lite uses rather than defending the API).
 readers is [`docs/guides/app-development.md`](../../docs/guides/app-development.md), and the root
 [`CLAUDE.md`](../../CLAUDE.md#compiler--bundled-libraries) carries the category summary.
 
-`getBundledLibraryDetail(name)` (in `bundled/describe-library.ts`) backs the agent-facing
+`getBundledLibraryDetail(name, query)` (in `bundled/describe-library.ts`) backs the agent-facing
 `describeBundledLibrary`. It slices the `declare module '@bundled/<name>…'` blocks out of
 `bundled-types/index.d.ts` and prepends the `Yaar*` declarations they reference, transitively —
-see that file's header for why transitive resolution matters.
+see that file for why transitive resolution matters. A block carrying `// ── Title ──` section
+headers (`yaar`, `yaar-web`) answers with an **index** by default — section → export → first
+doc sentence — and `symbol` / `section` return one slice with exactly the types it references
+(`full: true` is the old whole answer). `describe-library.test.ts` holds the two invariants: the
+index names every export, and a slice never names a module type it does not show.
 
-Two rules about `bundled-types/index.d.ts` itself:
+Three rules about `bundled-types/index.d.ts` itself:
 
+- **In a sectioned block, a new export goes under the section header it belongs to, and its
+  doc comment's first sentence is its index line** — the whole of what an agent reads about it
+  until it asks for more. An export with no doc comment is indexed by its bare signature.
 - **In-block comments in bare `export * from 'pkg'` blocks are part of the tool's output; keep
   them accurate.** A bare re-export tells the agent nothing (it cannot open the upstream package),
   so the `solid-js` blocks name what lives in each entry point and which export to reach for —

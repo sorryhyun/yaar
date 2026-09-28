@@ -147,6 +147,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
 
   // GET /api/dev/bundled-libraries — no auth required (static list)
   // GET /api/dev/bundled-libraries?lib=yaar — returns detailed type info for a specific library
+  //   (a sectioned library like yaar answers with its index; add &symbol=, &section= or &full=1)
   // GET /api/dev/bundled-libraries?lib=design-tokens — returns the generated token reference
   //
   // `design-tokens` deliberately has no branch of its own. It used to return the raw
@@ -158,7 +159,11 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
     const lib = url.searchParams.get('lib');
     if (lib) {
       const { getBundledLibraryDetail } = await import('@yaar/compiler');
-      const detail = getBundledLibraryDetail(lib);
+      const detail = getBundledLibraryDetail(lib, {
+        symbol: url.searchParams.get('symbol') ?? undefined,
+        section: url.searchParams.get('section') ?? undefined,
+        full: ['1', 'true'].includes(url.searchParams.get('full') ?? ''),
+      });
       if (!detail) return errorResponse(`Unknown bundled library: "${lib}"`, 404);
       return jsonResponse({ name: lib, types: detail });
     }
