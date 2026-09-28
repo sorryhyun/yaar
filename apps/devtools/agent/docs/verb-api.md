@@ -29,6 +29,12 @@ one Zod command is enough to take the app's entire manifest with it. Use JSON Sc
 literals in those apps, or keep every `` html`` `` call inside a function so it runs at
 mount. The compile reports this failure by name.
 
+The template is only the common trigger: **any** module-scope work the stub cannot do takes
+the manifest down the same way — audio nodes built at import (music-maker's Tone.js synths
+need a real `AudioContext`), DOM built at import, or `@bundled/yaar-ml`, whose top-level
+`await import('/api/ml-runtime/…')` has no server to answer it. An app importing such a
+module uses JSON Schema for every command — a rule for the app, not a per-command call.
+
 Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`,
 `invoke`, `describe`, `del`. For HTTP, use `httpFetch` from the same barrel — it is `fetch`,
 standard `Response` and all, and cross-origin calls route through the server's proxy

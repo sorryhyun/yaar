@@ -32,8 +32,11 @@ import { animate, createTimeline } from '@bundled/anime';
   `createProtocolContext`, `appStorage`, `appDb`, `sanitizeHtml`, `escapeHtml`,
   `safeParseOr`, `showToast`, `showConfirm`, `showPrompt`, `errMsg`, `AppCommandError`,
   `withLoading`, `tryToast`, `wait`, `createStaleGuard`, `onShortcut`, `createKeyState`,
-  `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `toWebP`,
-  `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`.
+  `createPersistedSignal`, `createSharedSignal` (state every copy of a window follows —
+  the `multi-window-sync` topic), `createCollapsiblePanel`, `createAutosave`, `toWebP`,
+  `downloadBlob`, `blobToDataUrl`, `bytesToBase64`/`base64ToBytes` (chunked — never
+  `btoa(String.fromCharCode(...bytes))`, which overflows the stack on a few MB), `links`,
+  `formatBytes`, `formatDuration`, `formatClock`.
   **Always prefer the helper over hand-rolling**: `showToast` over custom toast HTML,
   `showConfirm` over native `confirm()` (native dialogs block the page *and* any agent
   driving it), `errMsg` over `err instanceof Error`, `safeParseOr` over a
@@ -42,6 +45,6 @@ import { animate, createTimeline } from '@bundled/anime';
   takes `events`, `onCapture` and `onClose` on top of the fields covered in the
   `verb-api` topic.
 
-**Gated SDKs** (`@bundled/yaar-dev`, `@bundled/yaar-web`) need a matching `"bundles"` entry
+**Gated SDKs** (`@bundled/yaar-dev`, `@bundled/yaar-web`, `@bundled/yaar-ml`) need a matching `"bundles"` entry
 in `app.json` to import; what each exports is `describeBundledLibrary`'s answer, not this
 document's.

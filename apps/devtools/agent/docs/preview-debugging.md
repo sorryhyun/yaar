@@ -55,15 +55,21 @@ grant is in force in the preview — a write to a path under `yaar://storage/` r
 there. Two limits: the preview can never reach past
 **Dev Tools' own** permissions (the `uri-reference` topic; a project declaring one it lacks
 gets it dropped, not honoured), and the list is read **when the preview window is created**, so edit `app.json`
-first, then re-open the preview.
-
-**The first headless-browser call after a cold start can come back empty** (`postCount: 0`
-and the like); retry once before concluding the app itself is broken. Cache
-expensive-to-build state (scraping, multi-step fetches) into `appStorage` keyed by source
-URL + TTL, so a remount rehydrates instantly instead of re-running it.
+first, then re-open the preview. Install-time grants such as `subagents` are not in force
+either: a command that spawns sub-agents fails in preview while the surrounding UI works,
+so test pure logic there and the spawning path on the deployed app.
 
 **Confirm network-dependent probe results twice before reporting them as fact.** Scrape
-counts and lazy-load outcomes vary run to run; one read is not evidence.
+counts and lazy-load outcomes vary run to run, and the first headless-browser call after a
+cold start can come back empty; one read is not evidence.
 
 `compile` runs the manifest-drift check automatically whenever a preview is open, surfacing
 `manifestDrift` in its result as a warning, never a build failure.
+
+**A screenshot clones the DOM, and the clone loses inner scroll positions.** Scroll a
+container to an element, capture, and the picture shows the container's top. Assert on
+the scrolled region with `previewQuery`/`previewEval`, or keep the fixture short enough
+not to scroll.
+
+**A black canvas in a screenshot is usually the GPU backbuffer, not a render bug** — the
+`realtime-apps` topic has the capture-command fix.

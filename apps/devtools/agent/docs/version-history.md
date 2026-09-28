@@ -10,5 +10,7 @@ audience: agent
 (`appId`), not a sandbox project. To undo a rollback, restore the hash you rolled back
 *from*. `dist/` and credentials are excluded from history; never try to restore them.
 
-**Diff `against: "repo"` before telling the user an app is done** — it answers "what have we
-changed relative to what the user committed", not just "what changed since the last deploy".
+**For a bundled app, diff `against: "repo"` before telling the user it is done** — it
+answers "what have we changed relative to what the user committed", not just "what changed
+since the last deploy". A user app has no repo copy; the default `snapshot` diff is all
+there is.

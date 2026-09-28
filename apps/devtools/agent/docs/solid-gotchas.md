@@ -1,6 +1,6 @@
 ---
 name: solid-gotchas
-description: Read when a Solid view misrenders or a template throws — the four traps are silent.
+description: Read when a Solid view misrenders, a template throws, a <select> snaps back, or built HTML strings lose closing tags — the traps are silent.
 audience: agent
 ---
 
@@ -28,3 +28,18 @@ audience: agent
 - **HTML entities inside `${}` don't decode** — interpolated strings are set as
   `textContent`, so `&#128247;` renders literally. Use the actual character (📷). Entities
   work only in static template text.
+- **A handler that takes a parameter receives the event in it.** `onclick=${refresh}`
+  where `refresh(pages = 1)` is called as `refresh(mouseEvent)` — no throw, just a
+  `MouseEvent` where a number belonged. Write `onclick=${() => refresh()}`.
+- **A `<select>` inside `Show`/`For` needs `selected` on its options, not only `value`.**
+  Assigning `value` before the `<option>`s exist is a silent no-op, so a subtree rebuilt
+  on a tab switch snaps back to the first option while the signal holds the right id.
+  Bind `` selected=${() => o.id === choice()} `` on each option as well.
+- **The compiler rewrites `</${anything}>` to `</>` in every `.ts` file** — meant for
+  `` html`<${C}>…</${C}>` ``, but it matches plain template strings too, so
+  `` `<${tag}>${v}</${tag}>` `` in an export or serializer ships as `<th>Task</>`, which
+  parsers drop. Source, typecheck and unbundled tests all look right; only `dist` is
+  wrong. Spell closing tags as literals, or build with DOM calls and take `outerHTML`.
+- **A Solid store value cannot cross the protocol.** Returning a `createStore` array or
+  object from a state getter or `run` fails structured clone; copy it (`[...s.items]`,
+  `unwrap()`) at the boundary.

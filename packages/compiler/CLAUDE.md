@@ -271,7 +271,7 @@ fetching something the single-HTML output never carried (a `.glb` import is what
 instead, from both the compile and the schema fold; it checks artifact kinds rather than a
 denylist of extensions, so a new format is covered the day it is imported.
 
-**`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. The fast gate intentionally recognizes the current literal `` html` `` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
+**`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html) — a regex over the file's whole text, so it also hits `</${tag}>` in plain template strings that build HTML for export (word-excel's table export shipped `<th>Task</>`), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. The fast gate intentionally recognizes the current literal `` html` `` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
 
 Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LIBS=1` to print plugin initialization, resolution strategy, and resolved filesystem paths.
 

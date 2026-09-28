@@ -33,9 +33,8 @@ sum of its steps (a 40-step script easily wants 120000+).
 
 ## Script format
 
-A JSON file in the project, `src/test/regression.json` by default. Keep it under `src/`:
-deploy ships `src/`, `agent/` and the root files, so a suite at a top-level `test/` is
-silently dropped from the deployed app.
+A JSON file in the project, `src/test/regression.json` by default. Keep it under `src/` —
+a top-level `test/` is silently dropped by deploy (`app-structure` topic).
 
 ```json
 {
