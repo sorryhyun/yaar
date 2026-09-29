@@ -182,9 +182,11 @@ describe('carry-over into the next launch', () => {
       'noted: 7',
       'what was the number?',
     ]);
-    expect(getWindowRestoreActions(restorable!.messages).map((a) => a.windowId)).toEqual([
-      '0/notes',
-    ]);
+    expect(
+      getWindowRestoreActions(restorable!.messages).map(
+        (a) => (a as { windowId?: string }).windowId,
+      ),
+    ).toEqual(['0/notes']);
   });
 
   it('survives a chain of restarts', async () => {

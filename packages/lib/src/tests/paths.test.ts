@@ -3,7 +3,7 @@
  * substring check on `..` would wrongly reject.
  */
 import { describe, it, expect } from 'bun:test';
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { containedPath, containedRealPath, isContained, isPathWithin } from '../paths.js';
@@ -70,7 +70,9 @@ describe('containedRealPath', () => {
   let dir: string;
 
   it('resolves an existing file the same as containedPath', async () => {
-    dir = await mkdtemp(join(tmpdir(), 'yaar-paths-'));
+    // Real-pathed first: the result is a realpath by design, and on macOS `tmpdir()` is
+    // `/var/…`, a symlink to `/private/var/…`, which would differ from `join(dir, …)`.
+    dir = await realpath(await mkdtemp(join(tmpdir(), 'yaar-paths-')));
     try {
       await writeFile(join(dir, 'file.txt'), 'x');
       expect(await containedRealPath(dir, 'file.txt')).toBe(join(dir, 'file.txt'));
