@@ -70,7 +70,7 @@ const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  *   produces and the permission check still refuses.
  * - `agents/` is guarded twice over by the resource itself — `resolveScope` requires
  *   the URI's appId to equal the appId the *context* says the caller is, and spawning
- *   at all requires `"personas": { "max": N }` in the manifest, which `getAppMeta`
+ *   at all requires `"subagents": { "max": N }` in the manifest, which `getAppMeta`
  *   honours outright for a bundled app and only as far as the user's install-time
  *   grant for an installed one. Watching them still needs `"streams": ["agents"]`,
  *   which answers to the same rule.

@@ -79,8 +79,8 @@ const DESCRIBE = {
     'This app\'s sub-agents ("personas") — AI instances with a system prompt you supply at ' +
     'runtime. Each is a real provider session with its own conversation memory, and each ' +
     'streams token-by-token at yaar://agents/{instanceId}/stream (subscribe with mode:"stream"; ' +
-    'requires "streams": ["agents"] in app.json). Requires "personas": { "max": N } — or ' +
-    '"subagents": { "max": N } — in app.json. None of them hold YAAR verbs, permissions, or a ' +
+    'requires "streams": ["agents"] in app.json). Requires "subagents": { "max": N } in ' +
+    'app.json (the older "personas" key is no longer read). None of them hold YAAR verbs, permissions, or a ' +
     'principal. Spawned without "tools" one receives text and returns text; spawned with them ' +
     'it may call each declared tool, which is dispatched to YOUR OWN iframe as the command ' +
     'persona:{toolName} (with personaId in params) and answers with whatever your handler returns. ' +
