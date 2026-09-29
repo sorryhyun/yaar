@@ -7,8 +7,8 @@
 - The host contract is `packages/shared/src/host-contract.ts`. The desktop window is
   `packages/server/src/desktop-window/`.
 
-Not started: Windows (phase 2) and the Linux go/no-go (phase 3). Android still needs its
-Termux side, its phone-only checks and a release. Claims not yet run are marked **(verify)**.
+Not started: Windows (phase 2) and the Linux go/no-go (phase 3). Android still needs two
+fixes found on a phone, a full run with the server in the phone's own Termux, and a release. Claims not yet run are marked **(verify)**.
 
 **Decision (unchanged):** the *shipped* display is the OS WebView everywhere. **Development
 stays on Chrome.** `make dev`, `claude-dev`, `MOBILE=1` and headless driving all stand on CDP,
@@ -19,7 +19,7 @@ and they keep it.
 | Windows | WebView2 via `webview` + `bun:ffi` | Chromium (Edge) | not started |
 | macOS | WKWebView via `webview` + `bun:ffi` | WebKit | ✅ shipped |
 | Linux | WebKitGTK via `webview` + `bun:ffi`, or stay on Chrome `--app` | WebKit | undecided |
-| Android | host APK (`android.webkit.WebView`) + server in Termux | Chromium | APK built; Termux side and release pending |
+| Android | host APK (`android.webkit.WebView`) + server in Termux | Chromium | APK verified on a phone; fixes and release pending |
 
 ---
 
@@ -88,18 +88,7 @@ Done when: a decision, recorded here.
 
 The APK as built is [android.md](../installations/android.md). Still to do:
 
-**Termux side:**
-- The cold start (tap the icon with no server → RUN_COMMAND runs `yaar` in a Termux session →
-  the desktop) is built but unrun: the emulator has no Termux, and the phone checked has the
-  Google Play Termux, which has no `RunCommandService`. That Termux is supported by hand (the
-  waiting screen says to run `yaar`), not by requiring F-Droid. Still to check, on an F-Droid
-  Termux: that `RUN_COMMAND_SESSION_ACTION` value `1` really keeps Termux in the background.
-- Whether the Play Termux runs the server itself (`install.sh`, `make termux`) and Termux:API
-  is unchecked.
-
-**On a phone** (Galaxy S25, Android 16, WebView 153, 2026-09-29):
-- WebGPU works: Adreno 8xx, `shader-f16` and `subgroups`, a compute round trip correct.
-- `navigator.vibrate` returns true under the `VIBRATE` permission.
+**Fixes** (found on a Galaxy S25, Android 16, WebView 153, 2026-09-29):
 - **Insets are applied twice.** WebView 153 reports the system bars in
   `env(safe-area-inset-*)` (35 px top, 48 px bottom) although the APK already pads by them.
   `applyInsets` returns the insets unconsumed, so the WebView child sees them too. Fix: consume
@@ -108,16 +97,24 @@ The APK as built is [android.md](../installations/android.md). Still to do:
   shell, a reload with no server is answered from the cache, so `onReceivedError` never fires.
   The desktop's reconnect covers it, but the path that restarts Termux is dead. Decide whether
   the app should probe `/health` on its own when the desktop loses its socket.
-- Still unmeasured: bytes over WebMessage as an ArrayBuffer (`WEB_MESSAGE_ARRAY_BUFFER`)
-  instead of base64, for the 128 MiB saves.
-
-**Found on the emulator** (still so on the phone):
 - **Apps built before the host field existed cannot save.** The iframe SDK is compiled into
-  each app's `dist/index.html`. Memo and Anima reported `device.get()` without `host`, so
-  their `downloadBlob()` takes the `<a download>` path with a `blob:` URL. macOS catches that
-  natively, but Android's `DownloadListener` cannot fetch another frame's blob. Fix: rebuild
-  the apps, and make the app build's staleness check include the SDK scripts, so the next
-  SDK change rebuilds them by itself.
+  each app's `dist/index.html`. Memo and Anima report `device.get()` without `host`, so their
+  `downloadBlob()` takes the `<a download>` path with a `blob:` URL, which Android's
+  `DownloadListener` cannot fetch from another frame. Fix: rebuild the apps, and make the app
+  build's staleness check include the SDK scripts, so the next SDK change rebuilds them by
+  itself.
+
+**Still unrun:**
+- The server in the phone's own Termux. The phone checked had the Google Play Termux and no
+  YAAR in it: does that Termux run `install.sh` and `make termux`, and Termux:API? Does `yaar`
+  there reach the app through `termux-open-desktop.sh`? Termux's own `am` was only seen to
+  open the app, not its output, which `view_in` greps.
+- The cold start through `RUN_COMMAND`, on an F-Droid or GitHub Termux. Check that
+  `RUN_COMMAND_SESSION_ACTION` value `1` really keeps Termux in the background.
+- A `VIEW` of a port other than 8000 while the app is open. `am` answered "brought to the
+  front" for the same URL, so check that `onNewIntent` still receives a different one.
+- Bytes over WebMessage as an ArrayBuffer (`WEB_MESSAGE_ARRAY_BUFFER`) instead of base64, for
+  the 128 MiB saves.
 
 **Release:**
 - Build the APK in CI and attach it to GitHub releases, with `install.sh` offering it on

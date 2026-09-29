@@ -267,6 +267,8 @@ exact URL, `http://localhost:8000/`.
 
 The emulator's WebView is the system image's, 124 on API 35, and it cannot update. Checks
 that depend on the WebView version, like WebGPU and the safe-area insets, need a phone.
+On a Galaxy S25 (WebView 153), WebGPU works (Adreno 8xx, with `shader-f16` and `subgroups`)
+and `navigator.vibrate` does too.
 
 ---
 
