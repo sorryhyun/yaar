@@ -13,6 +13,7 @@ import { readSettings } from '../../storage/settings.js';
 import { pickDirectory } from '@yaar/lib/pick-directory';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
+import { appOriginMarks } from '../../features/window/origin-marks.js';
 import { checkEmbeddable } from '../../features/http/embeddable.js';
 import { resolveLinkHandler } from '../../features/config/hooks.js';
 import { requireHost, resolvePrincipal } from '../access.js';
@@ -207,7 +208,9 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     }
     try {
       const token = await generateAppIframeToken(windowId, sessionId, { appId, monitorId });
-      return jsonResponse({ token });
+      // The desktop builds the `window.create` for an app it launches itself, so it needs
+      // the same origin decision an agent's create gets (see features/window/origin-marks.ts).
+      return jsonResponse({ token, ...appOriginMarks(appId) });
     } catch {
       return errorResponse('Failed to generate iframe token');
     }

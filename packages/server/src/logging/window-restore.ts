@@ -8,8 +8,7 @@ import {
   type WindowAction,
 } from '../session/window-state.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
-import { isolatedAppOrigin, isOriginBoundaryActive } from '../http/origin-boundary.js';
-import { resolveAppSource } from '../features/apps/roots.js';
+import { appOriginMarks } from '../features/window/origin-marks.js';
 
 /** Extract appId from resolved paths like /api/apps/{appId}/... */
 function extractAppIdFromPath(path: string): string | null {
@@ -139,19 +138,13 @@ export async function refreshRestoredWindowActions(
       const slashIdx = action.windowId.indexOf('/');
       const monitorId = slashIdx > 0 ? action.windowId.slice(0, slashIdx) : undefined;
 
-      // Same rule as features/window/create.ts: only installed (`source:'user'`) apps
-      // move to the app origin. Stripped rather than merged, so a mark from another run
+      // The app-origin marks are stripped rather than merged, so a mark from another run
       // cannot survive into one whose boundary is off.
-      const isolateOrigin =
-        isOriginBoundaryActive() && !!appId && resolveAppSource(appId) === 'user';
-      const appOrigin = isolateOrigin ? isolatedAppOrigin() : null;
-
       const { isolateOrigin: _stale, appOrigin: _staleOrigin, ...rest } = action;
       return {
         ...rest,
         iframeToken: await generateAppIframeToken(action.windowId, sessionId, { appId, monitorId }),
-        ...(isolateOrigin ? { isolateOrigin: true } : {}),
-        ...(appOrigin ? { appOrigin } : {}),
+        ...appOriginMarks(appId),
       };
     }),
   );

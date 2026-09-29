@@ -237,7 +237,11 @@ export async function launchAppWindow(
     body: JSON.stringify({ windowId: app.id, sessionId, appId: app.id, monitorId }),
   });
   if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
-  const { token } = await res.json();
+  const { token, isolateOrigin, appOrigin } = (await res.json()) as {
+    token?: unknown;
+    isolateOrigin?: unknown;
+    appOrigin?: unknown;
+  };
   if (typeof token !== 'string' || !token) {
     throw new Error('iframe-token response carried no token');
   }
@@ -255,6 +259,10 @@ export async function launchAppWindow(
       content,
       appId: app.id,
       iframeToken: token,
+      // Whether this app runs on the isolated app origin is the server's call (the same
+      // one it makes for an agent's create); the mint hands it back.
+      ...(isolateOrigin === true ? { isolateOrigin: true } : {}),
+      ...(typeof appOrigin === 'string' && appOrigin ? { appOrigin } : {}),
       ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
       ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
       ...(app.frameless ? { frameless: true } : {}),

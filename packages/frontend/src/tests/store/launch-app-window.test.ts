@@ -84,6 +84,20 @@ describe('launchAppWindow', () => {
     expect(opened).toMatchObject({ windowId: 'notes', appId: 'notes', monitorId: MONITOR_ID });
   });
 
+  it('opens on the isolated app origin when the mint says so, and only then', async () => {
+    tokenReply = () =>
+      jsonOk({ token: 't', isolateOrigin: true, appOrigin: 'https://box.ts.net:8443' });
+    await launchAppWindow(NOTES);
+    tokenReply = () => jsonOk({ token: 't' });
+    await launchAppWindow({ id: 'bundled', name: 'Bundled', run: 'yaar://apps/bundled/x.html' });
+
+    const byApp = Object.fromEntries(openedWindows().map((w) => [w.appId, w]));
+    expect(byApp.notes.isolateOrigin).toBe(true);
+    expect(byApp.notes.appOrigin).toBe('https://box.ts.net:8443');
+    expect(byApp.bundled.isolateOrigin).toBeUndefined();
+    expect(byApp.bundled.appOrigin).toBeUndefined();
+  });
+
   it('does not report the window to the agent until the caller does', async () => {
     const opened = await launchAppWindow(NOTES);
     expect(useDesktopStore.getState().pendingInteractions).toHaveLength(0);

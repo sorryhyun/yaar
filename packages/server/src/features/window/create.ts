@@ -23,8 +23,8 @@ import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { readSettings } from '../../storage/settings.js';
-import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
-import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
+import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
+import { appOriginMarks } from './origin-marks.js';
 import { grantsFromPayload, mayDelegateGrants, undelegatedUris } from './delegated-grants.js';
 import { namesInlinableUri, inlineUriContent } from './inline-content.js';
 import type { PermissionEntry } from '../../http/access.js';
@@ -221,21 +221,9 @@ export async function handleCreate(
   const appMeta = appId ? await getAppMeta(appId) : null;
   const { windowSize } = await readSettings();
 
-  // App-origin isolation (docs/guides/remote_mode.md): only installed
-  // (`source:'user'`) apps move to the pinned app origin — bundled apps and
-  // AI-authored HTML are host-authored, not the hostile-app threat, and stay
-  // same-origin. The frontend does the actual origin swap; here we only mark it.
-  const isolateOrigin =
-    isOriginBoundaryActive() &&
-    renderer === 'iframe' &&
-    !!appId &&
-    resolveAppSource(appId) === 'user';
-
-  // Locally the frontend derives the app origin itself (only the browser knows which
-  // port served the document — a dev proxy is not the API port). Over a `proxy-port`
-  // boundary the origin is a published address the server chose, so state it: the
-  // client has no way to compute `https://<magic-dns>:8443` from where it is standing.
-  const appOrigin = isolateOrigin ? isolatedAppOrigin() : null;
+  // App-origin isolation (docs/guides/remote_mode.md). The frontend does the actual
+  // origin swap; here we only mark it.
+  const originMarks = renderer === 'iframe' ? appOriginMarks(appId) : {};
 
   // Pin the monitor now, using the same resolution the emitter will stamp on the create
   // action below. Left to be derived later from the window id, it is ambiguous whenever
@@ -251,8 +239,7 @@ export async function handleCreate(
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),
     ...(appId ? { appId } : {}),
-    ...(isolateOrigin ? { isolateOrigin: true } : {}),
-    ...(appOrigin ? { appOrigin } : {}),
+    ...originMarks,
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
