@@ -9,24 +9,27 @@
 import { readdir, stat } from 'fs/promises';
 import { join, basename } from 'path';
 import { getOrtVersion } from '../bundled/ort-version.js';
+import { computeSdkHash } from '../sdk-scripts.js';
 
 /**
  * Bump this to force a full rebuild of all apps.
  *
- * Staleness is otherwise judged from an app's own src/ and app.json, so a change to
- * something the compiler *injects or emits* — the design tokens stylesheet, an SDK script
- * out of @yaar/shared/iframe-scripts, the bundled `@bundled/yaar` shim, the protocol
- * extraction — leaves every hash identical and reaches no existing dist/. The apps that
- * need such a fix are exactly the installed ones nobody is about to edit, so without a
- * bump it would only reach whichever apps happened to go stale.
+ * Staleness is otherwise judged from an app's own src/ and app.json, plus `sdkHash` for
+ * what the compiler bakes into every dist/ (the SDK scripts out of
+ * @yaar/shared/iframe-scripts and the design tokens stylesheet — `sdk-scripts.ts`). A
+ * change to anything else the compiler *injects or emits* — the bundled `@bundled/yaar`
+ * shim, the protocol extraction, the HTML wrapper — leaves every hash identical and
+ * reaches no existing dist/. The apps that need such a fix are exactly the installed ones
+ * nobody is about to edit, so without a bump it would only reach whichever apps happened
+ * to go stale.
  *
  * "The server injects a newer copy at serve time" is usually not enough, for two reasons:
  * - `installGuard` lets the first copy win, and the one baked into dist/ runs first, so it
  *   shadows the injected upgrade even for a same-origin app.
  * - An origin-isolated app gets nothing injected at all; its dist/ copy is the only one.
  *
- * Not needed for an onnxruntime-web upgrade: the manifest records `ortVersion` and
- * `isAppStale` compares it.
+ * Not needed for an SDK script or token change (`sdkHash`), nor for an onnxruntime-web
+ * upgrade: the manifest records `ortVersion` and `isAppStale` compares it.
  *
  * The reason for every bump up to '41' used to be recorded here; that changelog is at
  * `git show f85e4670:packages/compiler/src/build/build-manifest.ts`. Put the reason for a
@@ -38,6 +41,13 @@ export interface BuildManifest {
   sourceHash: string;
   appJsonHash: string;
   compilerVersion: string;
+  /**
+   * `computeSdkHash()` at build time. An app built before a device-SDK change kept the old
+   * SDK in its dist/ with nothing to mark it stale — which is how Memo and Anima reached
+   * the Android app without `host`, and could not save. Absent in manifests written before
+   * the field existed, which makes those apps stale once.
+   */
+  sdkHash?: string;
   /** The onnxruntime-web version stamped into a `yaar-ml` app's shim; absent for other apps. */
   ortVersion?: string;
   compiledAt: string;
@@ -121,6 +131,7 @@ export async function isAppStale(appPath: string): Promise<boolean> {
   const manifest = await readBuildManifest(appPath);
   if (!manifest) return true;
   if (manifest.compilerVersion !== COMPILER_VERSION) return true;
+  if (manifest.sdkHash !== computeSdkHash()) return true;
   // A yaar-ml app's runtime URLs carry the ORT version it was built against.
   const ortVersion = getOrtVersion();
   if (manifest.ortVersion && ortVersion && manifest.ortVersion !== ortVersion) return true;

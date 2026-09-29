@@ -20,23 +20,9 @@ import {
   writeBuildManifest,
   COMPILER_VERSION,
 } from './build/build-manifest.js';
-import {
-  IFRAME_IME_GUARD_SCRIPT,
-  IFRAME_AUTOFILL_GUARD_SCRIPT,
-  IFRAME_CAPTURE_HELPER_SCRIPT,
-  IFRAME_STORAGE_SDK_SCRIPT,
-  IFRAME_VERB_SDK_SCRIPT,
-  IFRAME_FETCH_PROXY_SCRIPT,
-  IFRAME_APP_PROTOCOL_SCRIPT,
-  IFRAME_CONTEXTMENU_SCRIPT,
-  IFRAME_NOTIFICATIONS_SDK_SCRIPT,
-  IFRAME_DEVICE_SDK_SCRIPT,
-  IFRAME_TEXT_SELECTION_SCRIPT,
-  IFRAME_WINDOWS_SDK_SCRIPT,
-  IFRAME_CONSOLE_CAPTURE_SCRIPT,
-  FONT_SANS,
-} from '@yaar/shared';
+import { FONT_SANS } from '@yaar/shared';
 import { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
+import { computeSdkHash, getSdkScripts } from './sdk-scripts.js';
 import {
   scanTokens,
   formatTokenFindings,
@@ -134,46 +120,6 @@ export function getSandboxPath(sandboxId: string): string {
 
 /** Soft ceiling for a compiled app's single HTML file before we warn (5MB). */
 const LARGE_BUNDLE_WARN_BYTES = 5_000_000;
-
-/**
- * Minified SDK scripts cache. Populated lazily on first compile. Only the
- * minified form is cached — the raw form is an array join.
- */
-let minifiedSdkScripts: string | null = null;
-
-function getRawSdkScripts(): string {
-  return [
-    // First — the guard must be listening before any app code registers handlers
-    IFRAME_IME_GUARD_SCRIPT,
-    IFRAME_AUTOFILL_GUARD_SCRIPT,
-    IFRAME_CAPTURE_HELPER_SCRIPT,
-    IFRAME_STORAGE_SDK_SCRIPT,
-    IFRAME_VERB_SDK_SCRIPT,
-    IFRAME_FETCH_PROXY_SCRIPT,
-    IFRAME_APP_PROTOCOL_SCRIPT,
-    // Baked in rather than injected, because `IframeRenderer` can only inject into a
-    // **same-origin** frame and an origin-isolated app (`source: 'user'`) is not one.
-    // Without it such an app forwarded none of the shell's reserved shortcuts, so
-    // Shift+Tab fell through to the browser's own focus walk inside the frame — the
-    // CLI panel never opened and focus moved to the next control instead. Idempotent
-    // (`installGuard`), so a bundled app that also gets the injected copy is unharmed.
-    IFRAME_CONTEXTMENU_SCRIPT,
-    IFRAME_NOTIFICATIONS_SDK_SCRIPT,
-    IFRAME_DEVICE_SDK_SCRIPT,
-    IFRAME_TEXT_SELECTION_SCRIPT,
-    IFRAME_WINDOWS_SDK_SCRIPT,
-    IFRAME_CONSOLE_CAPTURE_SCRIPT,
-  ].join('\n');
-}
-
-function getSdkScripts(minify: boolean): string {
-  if (!minify) return getRawSdkScripts();
-  if (minifiedSdkScripts === null) {
-    const transpiler = new Bun.Transpiler({ minifyWhitespace: true });
-    minifiedSdkScripts = transpiler.transformSync(getRawSdkScripts()).trim();
-  }
-  return minifiedSdkScripts;
-}
 
 /**
  * Escape JS code for safe embedding inside an HTML `<script>` tag.
@@ -415,6 +361,7 @@ export async function compileTypeScript(
         sourceHash,
         appJsonHash,
         compilerVersion: COMPILER_VERSION,
+        sdkHash: computeSdkHash(),
         ortVersion: bundles?.includes('yaar-ml') ? (getOrtVersion() ?? undefined) : undefined,
         compiledAt: new Date().toISOString(),
       });

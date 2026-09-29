@@ -28,10 +28,11 @@ src/
 ├── paths.ts               # MODULE_ROOT / PACKAGE_ROOT / SHIMS_DIR — the one src-vs-dist derivation
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens()/…Brief() (generated token reference, two tiers)
+├── sdk-scripts.ts         # The iframe SDK scripts baked into every dist/ (getSdkScripts) + computeSdkHash() over them and the tokens
 ├── build/
 │   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs + siblingAssetError
 │   ├── source-cache.ts    # AppSourceCache — one read of each source file per compile, never across two
-│   └── build-manifest.ts  # SHA-256 source/app.json hashing for staleness detection
+│   └── build-manifest.ts  # SHA-256 source/app.json/SDK hashing for staleness detection
 ├── bundled/
 │   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / SHARED_RUNTIME_LIBS / resolveBrowserEntry — data, no Bun API
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
@@ -99,7 +100,7 @@ src/
 4. **SDK injection:** 10 iframe SDK scripts (ime-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame, and an origin-isolated app is not one — without it such an app forwards none of the shell's reserved shortcuts (Shift+Tab, Ctrl+1-9, Ctrl+W)
 5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + `window.__yaar_links__` + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`. The links block is app.json's `"links"` (an origin relative hrefs in this app's content resolve against) and is emitted **for every app, empty or not** — its presence is also how the link guard tells a compiled app from a plain HTML document shown in a window
-7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
+7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, SDK hash, compiler version
 
 Extraction runs *after* bundling (so genuine build errors keep precedence) and *before* the
 HTML wrap, because the wrapper carries the extracted manifest back into the page.
@@ -396,6 +397,13 @@ so an app that never renders a diagram or markdown does not pull the library in 
 ## Build Manifest & Staleness
 
 `isAppStale(appPath)` compares current source/app.json SHA-256 hashes against `dist/.build-manifest.json`. Apps recompile only when stale or compiler version bumps (`COMPILER_VERSION`). A `yaar-ml` app also goes stale when the installed onnxruntime-web differs from the manifest's `ortVersion`.
+
+Every app also goes stale when what the compiler bakes into its dist/ changes: `sdkHash` is
+`computeSdkHash()` (`sdk-scripts.ts`) over the iframe SDK scripts and the tokens stylesheet,
+hashed from the strings rather than files so it matches in the exe. Without it, an SDK change
+reached only apps that happened to be edited — Memo and Anima kept a device SDK with no `host`
+and could not save in the Android app. Anything else the compiler injects (the `@bundled/yaar`
+shim, the HTML wrapper) still needs a `COMPILER_VERSION` bump.
 
 ## Key Patterns
 
