@@ -56,6 +56,7 @@ before changing a default or adding a knob.
 | `YAAR_BROWSER_PROVIDER` | — | **Not a selector** — force-headless opt-out only |
 | `YAAR_BROWSER_STATE_DIR` / `YAAR_BROWSER_EPHEMERAL` | `storage/.browser` / off | Sandbox profile + session records; `=1` makes the profile scratch again |
 | `YAAR_BROWSER_IDLE_MINUTES` | `5` | Idle sweep for browser sessions (`0` disables; a watched session is exempt) |
+| `YAAR_ML_COMPUTE` | `auto` | Where `@bundled/yaar-ml` sessions run: `auto` (server's Chrome for a WebKit page on macOS), `chrome` (always), `local` (never) |
 | `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
 
 ## Directory Structure
@@ -150,6 +151,8 @@ src/
 │   ├── http/             # fetch.ts — proxied HTTP fetch; binary-body.ts — what a *model* gets
 │   │                     #   when the response is bytes (an app still gets the base64 envelope)
 │   ├── market/ session/ skills/ user/   # Marketplace, session ops, skills, clipboard + secret-scan
+│   ├── ml-host/          # Remote ML compute: relay.ts pairs an app's yaar-ml socket with one headless Chrome tab
+│   │                     #   running host-page.client.js (browser JS, served inline) — YAAR_ML_COMPUTE
 │   ├── pdf.ts            # @yaar/lib/pdf bound to this install's poppler — the PDF import site
 │   ├── update/           # Self-update: semver.ts, release.ts, installer.ts, updater.ts
 │   └── window/           # Window create/update/manage, app protocol, app query/command, delegated-grants, subscribe

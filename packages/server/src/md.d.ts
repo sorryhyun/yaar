@@ -8,3 +8,12 @@ declare module '*.md' {
   const text: string;
   export default text;
 }
+
+/**
+ * Browser scripts the server serves inline, imported the same way:
+ * `import script from './x.client.js' with { type: 'text' }` (`features/ml-host`).
+ */
+declare module '*.client.js' {
+  const text: string;
+  export default text;
+}

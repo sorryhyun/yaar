@@ -43,12 +43,13 @@ console.log(out);
 
 | Function | Purpose |
 |---|---|
-| `capabilities()` | `{ webgpu, f16, maxBufferSize, maxStorageBufferBindingSize, estMemoryBudget, adapter }`. Never throws; cached. |
+| `capabilities()` | `{ webgpu, f16, maxBufferSize, maxStorageBufferBindingSize, estMemoryBudget, adapter, remote? }`. Never throws; cached. `remote: true` means sessions run in the server's Chrome and the fields describe its adapter. |
 | `session(model, opts?)` | Create (or return a memoized) `InferenceSession` from a model **URL** or raw `ArrayBuffer`/`Uint8Array`. `opts.backend`: `'webgpu' \| 'wasm' \| 'auto'` (default `auto`). `opts.onProgress` reports weight download. |
-| `run(session, feeds, options?)` | Run inference. `feeds` maps input names → `Tensor`. Resolves to the output map. |
+| `run(session, feeds, options?)` | Run inference. `feeds` maps input names → `Tensor`. Resolves to the output map. `options.keep` names outputs that are only fed to a later run: under remote compute they stay in the server's Chrome as handles (read with `await t.getData()`, never `.data`; free with `t.dispose()`), locally they are ordinary tensors. |
 | `fetchWeights(url, opts?)` | Download weights as an `ArrayBuffer`, IndexedDB-cached by URL, streamed with `opts.onProgress`. `opts.force` re-downloads. A same-origin URL is read directly and not mirrored into IndexedDB. |
 | `prefetchWeights(files, opts?)` | Stream weight files to **disk** server-side (resumable), returning the same-origin URLs to read them back from. See [Prefetch to disk](#prefetch-to-disk). |
 | `weightUrl(dest)` | The `/api/storage/…` URL a prefetched `dest` is read back from. |
+| `weightRange(url, start, end)` | Bytes `[start, end)` of a weight file, as an `externalData` entry's `data`. Prefer it to fetching the slice yourself: when sessions run in the server's Chrome, it reads the range from the server instead of this page uploading it. |
 | `clearCache(url?)` | Evict one cached weight file, or the whole cache. |
 | `dispose(session)` | Release a session's native resources. |
 | `releaseSessions(match)` | Release **and un-memoize** every session whose model URL matches. The correct way to free GPU memory — see [Swapping models](#swapping-models). |
@@ -75,6 +76,14 @@ console.log(out);
   through (no base64 double-buffering of hundreds of MB). The result is cached
   in IndexedDB keyed by URL (HuggingFace `resolve` URLs are revision-pinned, so
   they're treated as immutable — pass `force: true` to refresh).
+- **Remote compute (macOS window).** When the server says so (`YAAR_ML_COMPUTE`, default:
+  a WebKit page on a macOS server), `session()` and `run()` execute in a headless Chrome
+  the server opens for this app page, and the page only exchanges model bytes and tensors
+  with it. The API is unchanged; outputs come back as CPU tensors. Weights named by URL or
+  `weightRange()` are fetched by that tab directly — bytes the app fetched itself have to be
+  uploaded, which for a multi-GB model is most of the load time. Likewise, tensors passed
+  between runs cost a round trip each unless named in `run(…, { keep })`. Raw `ort` use (a worker
+  importing onnxruntime itself) stays local. Details: `docs/reference/server_env.md`.
 - **Single-thread.** YAAR iframes are not cross-origin isolated (no COOP/COEP),
   so `SharedArrayBuffer` — and thus multithreaded wasm — is unavailable. The SDK
   pins `numThreads = 1`. The **WebGPU** execution provider does not need threads,

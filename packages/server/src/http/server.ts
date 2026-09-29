@@ -19,6 +19,7 @@ export function registerDevReloadHandler(handler: () => Response): void {
 }
 import { checkHttpAuth, checkWsAuth } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
+import { handleMlHostRoutes } from '../features/ml-host/relay.js';
 import { generateConnectionId } from '../session/broadcast-center.js';
 import {
   handleApiRoutes,
@@ -178,6 +179,15 @@ function createFetchHandlerInner() {
       const success = server.upgrade(req, { data });
       if (success) return undefined;
       return new Response('Screencast upgrade failed', { status: 500 });
+    }
+
+    // Remote ML compute (features/ml-host/relay.ts): the app's socket (iframe token), and
+    // the server's own Chrome tab and its socket (channel secret). Ahead of the auth gate
+    // and of the app-origin document redirect below — the host page is a document on the
+    // app origin by design.
+    if (url.pathname.startsWith('/api/ml-host/')) {
+      const res = handleMlHostRoutes(req, url, server);
+      if (res !== null) return res;
     }
 
     // YAAR Bridge WebSocket — the companion extension dials out to here (see extension/).

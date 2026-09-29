@@ -2746,9 +2746,15 @@ declare module '@bundled/yaar-ml' {
   /** A minimal onnxruntime-web Tensor. Construct with `new Tensor(...)`. */
   export interface MlTensor {
     readonly type: MlTensorType;
+    /** Not readable on an output kept in the ML host (`run(…, { keep })`) — use `getData()`. */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     readonly data: any;
     readonly dims: readonly number[];
+    /** The data, wherever the tensor lives. The only way to read a kept output. */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getData(): Promise<any>;
+    /** Free the tensor — for a kept output, its copy in the ML host. */
+    dispose(): void;
   }
 
   /** Tensor constructor (subset of onnxruntime-web's Tensor). */
@@ -2783,6 +2789,8 @@ declare module '@bundled/yaar-ml' {
     estMemoryBudget: number;
     /** Human-readable adapter description, when available. */
     adapter?: string;
+    /** True when sessions run in the server's Chrome, not this page; the fields above describe that adapter. */
+    remote?: boolean;
   }
 
   export interface DownloadProgress {
@@ -2853,6 +2861,22 @@ declare module '@bundled/yaar-ml' {
   /** The `/api/storage/…` URL a prefetched `dest` is read back from. */
   export function weightUrl(dest: string): string;
 
+  /** Bytes `[start, end)` of a weight file, as an `externalData` entry's `data`. */
+  export interface WeightRange {
+    readonly url: string;
+    readonly start: number;
+    readonly end: number;
+  }
+
+  /**
+   * Name a slice of a weight file for `externalData` instead of fetching it yourself:
+   * `{ path: 'seg0.data', data: weightRange(sidecarUrl, lo, hi) }`. The SDK fetches it
+   * wherever the session runs — in this page, or in the server's Chrome, which then
+   * reads it straight from the server instead of having the bytes sent from here.
+   * The server must answer the range with 206.
+   */
+  export function weightRange(url: string, start: number, end: number): WeightRange;
+
   /** Remove one cached weight file, or the whole cache when no URL is given. */
   export function clearCache(url?: string): Promise<void>;
 
@@ -2863,10 +2887,16 @@ declare module '@bundled/yaar-ml' {
   ): Promise<InferenceSession>;
 
   /** Run inference: `feeds` maps input names to Tensors; resolves to the output map. */
+  /**
+   * Run inference. `options.keep` names outputs that will only be fed to a later run:
+   * when the session runs in the server's Chrome they stay there as handles and cross
+   * as an id when fed, instead of a round trip. Read a kept output with
+   * `await t.getData()` (not `.data`) and free it with `t.dispose()`.
+   */
   export function run(
     session: InferenceSession,
     feeds: Record<string, MlTensor>,
-    options?: Record<string, unknown>,
+    options?: Record<string, unknown> & { keep?: readonly string[] },
   ): Promise<Record<string, MlTensor>>;
 
   /** Release a session's native resources. */

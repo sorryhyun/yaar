@@ -31,6 +31,7 @@ import {
   handleScreencastClose,
 } from './screencast-handlers.js';
 import { createLogger } from '../observability/log.js';
+import { handleMlOpen, handleMlMessage, handleMlClose } from '../features/ml-host/relay.js';
 
 const log = createLogger('WebSocket');
 
@@ -50,7 +51,7 @@ export interface WebSocketServerOptions {
 
 export interface WsData {
   /** Which WebSocket protocol this connection speaks. Defaults to 'frontend' (the /ws path). */
-  kind: 'frontend' | 'bridge' | 'screencast';
+  kind: 'frontend' | 'bridge' | 'screencast' | 'ml-client' | 'ml-host';
   connectionId: string;
   sessionId: string | null;
   monitorId: string | null;
@@ -64,6 +65,18 @@ export interface WsData {
   /** `kind: 'screencast'` only — JPEG quality and long-edge cap for this stream. */
   screencastQuality?: number;
   screencastMaxWidth?: number;
+  /**
+   * `kind: 'ml-client' | 'ml-host'` only — the two ends of a remote-compute channel
+   * (`features/ml-host/relay.ts`). The client end carries what the app said about
+   * itself on connect; both carry the channel once there is one.
+   */
+  ml?: {
+    channelId?: string;
+    engine?: string | null;
+    ortVersion?: string;
+    iframeToken?: string;
+    appId?: string;
+  };
   /**
    * Serializes this connection's messages against each other, one chain per lane.
    *
@@ -151,6 +164,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
     async open(ws: ServerWebSocket<WsData>) {
       if (ws.data.kind === 'bridge') return handleBridgeOpen(ws);
       if (ws.data.kind === 'screencast') return handleScreencastOpen(ws);
+      if (ws.data.kind === 'ml-client' || ws.data.kind === 'ml-host') return handleMlOpen(ws);
       const { connectionId } = ws.data;
       const broadcastCenter = getBroadcastCenter();
 
@@ -235,6 +249,9 @@ export function createWsHandlers(options: WebSocketServerOptions) {
     message(ws: ServerWebSocket<WsData>, data: string | Buffer) {
       if (ws.data.kind === 'bridge') return handleBridgeMessage(ws, data);
       if (ws.data.kind === 'screencast') return handleScreencastMessage(ws, data);
+      if (ws.data.kind === 'ml-client' || ws.data.kind === 'ml-host') {
+        return handleMlMessage(ws, data);
+      }
 
       let event: ClientEvent | undefined;
       try {
@@ -292,6 +309,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
     close(ws: ServerWebSocket<WsData>) {
       if (ws.data.kind === 'bridge') return handleBridgeClose(ws);
       if (ws.data.kind === 'screencast') return handleScreencastClose(ws);
+      if (ws.data.kind === 'ml-client' || ws.data.kind === 'ml-host') return handleMlClose(ws);
       const { connectionId, sessionId } = ws.data;
       log.info('client disconnected', { connectionId, sessionId });
 

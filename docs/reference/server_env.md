@@ -503,6 +503,51 @@ A box with no Chromium simply goes without, and says so once.
 
 ---
 
+## Remote ML compute
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `YAAR_ML_COMPUTE` | `auto` | Where `@bundled/yaar-ml` sessions run: `auto`, `chrome` or `local` |
+
+**Source:** `packages/server/src/features/ml-host/relay.ts`, `packages/compiler/src/shims/yaar-ml.ts` ("Remote compute")
+
+### Why it exists
+
+On macOS the desktop is YAAR's own WKWebView window, and WebKit's WebGPU runs the same model
+markedly slower than Chrome on the same GPU: anima's DiT step is 3.9 s there and 2.2 s in
+Chrome, with the GPU ~95% busy in both. WebKit has no subgroups and no switch that adds them
+([mac_ml.md](../installations/mac_ml.md)). The server already knows how to run a headless
+Chrome, so a yaar-ml app in the window asks for its sessions to run there instead: the same
+onnxruntime-web, the same app code, a different engine underneath.
+
+### What `auto` means
+
+`auto` offloads when the server is on macOS **and** the page reports itself as WebKit. That pair
+is the measured gap and nothing else is: a Chrome page gains nothing from a second Chrome, and
+Windows (WebView2) and Android WebView are Chromium already. `chrome` offloads every page — what a
+benchmark or a Linux box with a better server GPU wants. `local` turns the feature off.
+
+A decline is silent and total: an old server, no Chrome, a tab that does not come up in 90 s —
+each means the page computes itself, exactly as it did before this existed.
+
+### How it holds together
+
+- **One tab per app page.** The shim's socket (`/api/ml-host/connect`, iframe token, `yaar-ml`
+  bundle required) gets its own headless tab, which dies with it. That ties the model's GPU
+  memory to the app window's lifetime without any bookkeeping.
+- **The tab is the app, not the host.** It is served on the app origin with the app's own iframe
+  token, which it forces onto every same-server URL it fetches, under a CSP no wider than an
+  app's. It can reach exactly what the app could.
+- **Weights are read by the tab, not sent to it.** An `externalData` URL, or a
+  `weightRange(url, start, end)`, is fetched by the tab from the server itself. Only bytes the
+  app already holds are uploaded, in 4 MB chunks at most three in flight: Bun drops frames past
+  16 MB of unsent data on one socket, and the relay ends a channel rather than lose one.
+- **Tensors cross as bytes, unless kept.** A `run` sends its feeds and gets its outputs back as
+  ordinary CPU tensors, so an app sees no difference. Outputs named in `run(…, { keep })` stay
+  in the tab as handles and cross as an id when fed to the next run — what a model split into
+  segments needs, or every activation between them makes a round trip through the page.
+  Numbers in [mac_ml.md](../installations/mac_ml.md).
+
 ## Termux:API (Android)
 
 | Variable | Default | Meaning |

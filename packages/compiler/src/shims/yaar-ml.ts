@@ -283,6 +283,11 @@ export interface MlCapabilities {
   estMemoryBudget: number;
   /** Human-readable adapter description, when the browser exposes it. */
   adapter?: string;
+  /**
+   * True when sessions run in the server's Chrome rather than this page (see "Remote
+   * compute"); the fields above then describe *that* adapter.
+   */
+  remote?: boolean;
 }
 
 export interface DownloadProgress {
@@ -346,6 +351,482 @@ export interface PrefetchOptions {
   pollIntervalMs?: number;
 }
 
+// ── Remote compute ───────────────────────────────────────────────────────────
+//
+// On macOS the desktop is a WKWebView, and WebKit's WebGPU runs the same model markedly
+// slower than Chrome on the same GPU (anima's DiT: 3.9 s/step against 2.2 s). So there,
+// the server offers to run sessions in a headless Chrome of its own, one tab per app
+// page, and this section speaks to it: `createSession` ships the model (and any
+// externalData the app holds as bytes), `run` ships feeds and gets outputs back as
+// ordinary CPU tensors. The app sees the same API either way. The server decides
+// (`YAAR_ML_COMPUTE`, `server/src/features/ml-host/relay.ts`); a decline, an old server,
+// or no Chrome all mean "compute here", exactly as before.
+//
+// Wire format — duplicated in `server/src/features/ml-host/host-page.client.js`, keep the
+// two in step:
+//
+//   frame   = [u8 more][fragment]           more = 1 while further fragments follow
+//   message = [u32 LE headerLen][u32 LE 0][header JSON, padded to 8][buf, padded to 8]…
+
+const REMOTE_FRAGMENT = 4 << 20;
+/** externalData bytes go up in chunks this size, at most REMOTE_WINDOW unanswered. */
+const REMOTE_CHUNK = 4 << 20;
+/** 3 × 4 MB stays under the 16 MB Bun buffers per socket before it drops frames. */
+const REMOTE_WINDOW = 3;
+/** A cold Chrome plus an onnxruntime load; past this the page computes locally. */
+const REMOTE_CONNECT_TIMEOUT_MS = 90_000;
+
+const pad8 = (n: number) => (n + 7) & ~7;
+
+function encodeWire(header: Record<string, unknown>, bufs: Uint8Array[]): Uint8Array {
+  const h = new TextEncoder().encode(
+    JSON.stringify({ ...header, b: bufs.map((b) => b.byteLength) }),
+  );
+  let total = 8 + pad8(h.byteLength);
+  for (const b of bufs) total += pad8(b.byteLength);
+  const out = new Uint8Array(total);
+  new DataView(out.buffer).setUint32(0, h.byteLength, true);
+  out.set(h, 8);
+  let o = 8 + pad8(h.byteLength);
+  for (const b of bufs) {
+    out.set(b, o);
+    o += pad8(b.byteLength);
+  }
+  return out;
+}
+
+function decodeWire(bytes: Uint8Array): { header: any; bufs: Uint8Array[] } {
+  const hlen = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true);
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + hlen)));
+  const bufs: Uint8Array[] = [];
+  let o = 8 + pad8(hlen);
+  for (const len of header.b ?? []) {
+    bufs.push(bytes.subarray(o, o + len));
+    o += pad8(len);
+  }
+  return { header, bufs };
+}
+
+/** What ORT itself would build for each type in this realm (`checkTypedArray`). */
+function typedArrayFor(type: string): any {
+  const map: Record<string, any> = {
+    float32: Float32Array,
+    float64: Float64Array,
+    float16: (globalThis as any).Float16Array ?? Uint16Array,
+    int8: Int8Array,
+    uint8: Uint8Array,
+    int16: Int16Array,
+    uint16: Uint16Array,
+    int32: Int32Array,
+    uint32: Uint32Array,
+    int64: BigInt64Array,
+    uint64: BigUint64Array,
+    bool: Uint8Array,
+    int4: Uint8Array,
+    uint4: Uint8Array,
+  };
+  const C = map[type];
+  if (!C) throw new Error(`yaar-ml: a ${type} tensor cannot cross to the ML host`);
+  return C;
+}
+
+/** Which engine this page runs in — the server's `auto` offloads WebKit only. */
+function pageEngine(): string {
+  const ua = navigator.userAgent;
+  if (/(Chrome|Chromium|CriOS|Edg)\//.test(ua)) return 'chromium'; // HeadlessChrome/ too
+  if (/AppleWebKit\//.test(ua)) return 'webkit';
+  return 'other';
+}
+
+/** Round-trip timings, for measuring what the relay costs. `hostMs` is ORT's own run time. */
+const remoteStats = {
+  runs: 0,
+  runMs: 0,
+  hostMs: 0,
+  upBytes: 0,
+  downBytes: 0,
+  blobBytes: 0,
+  blobMs: 0,
+};
+(globalThis as any).__yaarMlRemoteStats = remoteStats;
+
+class RemoteChannel {
+  caps: MlCapabilities;
+  dead: string | null = null;
+  private ws: WebSocket;
+  private pending = new Map<number, { resolve: (m: any) => void; reject: (e: Error) => void }>();
+  private nextRid = 1;
+  private nextId = 1;
+
+  constructor(ws: WebSocket, caps: MlCapabilities) {
+    this.ws = ws;
+    this.caps = caps;
+  }
+
+  newId(): number {
+    return this.nextId++;
+  }
+
+  onMessage(msg: { header: any; bufs: Uint8Array[] }): void {
+    const h = msg.header;
+    if (h.op === 'gone') return this.die(h.reason ?? 'the ML host ended');
+    const p = this.pending.get(h.rid);
+    if (!p) return;
+    this.pending.delete(h.rid);
+    if (h.error) p.reject(new Error(h.error));
+    else p.resolve(msg);
+  }
+
+  die(reason: string): void {
+    if (this.dead) return;
+    this.dead = reason;
+    for (const p of this.pending.values())
+      p.reject(new Error(`yaar-ml: ML host disconnected (${reason})`));
+    this.pending.clear();
+    try {
+      this.ws.close();
+    } catch {
+      /* already closed */
+    }
+    // The next session() reconnects — to a fresh tab, or to local compute if the server
+    // now declines — and no memo may keep handing out sessions that died with this one.
+    if (_remote) _remote = undefined;
+    _capsPromise = undefined;
+    for (const [key, entry] of [..._sessions]) {
+      entry.promise.then(
+        (s) => {
+          if (s instanceof RemoteSession && s.channel === this) _sessions.delete(key);
+        },
+        () => {},
+      );
+    }
+  }
+
+  request(
+    header: Record<string, unknown>,
+    bufs: Uint8Array[] = [],
+  ): Promise<{ header: any; bufs: Uint8Array[] }> {
+    if (this.dead) return Promise.reject(new Error(`yaar-ml: ML host disconnected (${this.dead})`));
+    const rid = this.nextRid++;
+    const m = encodeWire({ ...header, rid }, bufs);
+    const reply = new Promise<{ header: any; bufs: Uint8Array[] }>((resolve, reject) =>
+      this.pending.set(rid, { resolve, reject }),
+    );
+    // Back to back, no await: fragments of two messages must never interleave.
+    for (let o = 0; ; o += REMOTE_FRAGMENT) {
+      const end = Math.min(o + REMOTE_FRAGMENT, m.byteLength);
+      const f = new Uint8Array(1 + end - o);
+      f[0] = end < m.byteLength ? 1 : 0;
+      f.set(m.subarray(o, end), 1);
+      this.ws.send(f);
+      if (end >= m.byteLength) break;
+    }
+    remoteStats.upBytes += m.byteLength;
+    return reply;
+  }
+}
+
+let _remote: Promise<RemoteChannel | null> | undefined;
+
+function remoteChannel(): Promise<RemoteChannel | null> {
+  _remote ??= openRemoteChannel().catch(() => null);
+  return _remote;
+}
+
+function openRemoteChannel(): Promise<RemoteChannel | null> {
+  const token = (window as unknown as { __YAAR_TOKEN__?: string }).__YAAR_TOKEN__;
+  if (!token || typeof WebSocket === 'undefined') return Promise.resolve(null);
+  const url = new URL('/api/ml-host/connect', location.href);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('__yaar_token', token);
+  url.searchParams.set('engine', pageEngine());
+  const v = typeof __YAAR_ORT_VERSION__ === 'string' ? __YAAR_ORT_VERSION__ : '';
+  if (v) url.searchParams.set('v', v);
+
+  return new Promise((resolve) => {
+    let channel: RemoteChannel | null = null;
+    let settled = false;
+    const settle = (c: RemoteChannel | null, why?: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!c && why) console.info(`[yaar-ml] computing in this page: ${why}`);
+      resolve(c);
+    };
+    const ws = new WebSocket(url.href);
+    ws.binaryType = 'arraybuffer';
+    const timer = setTimeout(() => {
+      settle(null, 'the ML host did not answer in time');
+      ws.close();
+    }, REMOTE_CONNECT_TIMEOUT_MS);
+
+    let parts: Uint8Array[] = [];
+    let size = 0;
+    ws.onmessage = (ev) => {
+      const frame = new Uint8Array(ev.data as ArrayBuffer);
+      parts.push(frame.subarray(1));
+      size += frame.byteLength - 1;
+      if (frame[0] === 1) return;
+      // A fresh buffer puts the message at offset 0, where the padding aligns every tensor.
+      const whole = new Uint8Array(size);
+      let o = 0;
+      for (const p of parts) {
+        whole.set(p, o);
+        o += p.byteLength;
+      }
+      parts = [];
+      size = 0;
+      remoteStats.downBytes += whole.byteLength;
+      const msg = decodeWire(whole);
+      if (channel) return channel.onMessage(msg);
+      if (msg.header.op === 'ready') {
+        channel = new RemoteChannel(ws, { ...msg.header.caps, remote: true });
+        console.info(
+          `[yaar-ml] computing in the server's Chrome (${msg.header.caps?.adapter ?? 'no adapter name'})`,
+        );
+        settle(channel);
+      } else {
+        settle(null, msg.header.reason ?? 'the server declined');
+        ws.close();
+      }
+    };
+    ws.onclose = () => {
+      if (channel) channel.die('socket closed');
+      else settle(null);
+    };
+    ws.onerror = () => {
+      if (!channel) settle(null);
+    };
+  });
+}
+
+/**
+ * Host refs whose handle was collected without a dispose(). Sent as one `drop` per
+ * tick, so a loop that lets a thousand handles go makes one request, not a thousand.
+ */
+const _droppedRefs = new Map<RemoteChannel, number[]>();
+const _handleGc = new FinalizationRegistry<{ channel: RemoteChannel; ref: number }>(
+  ({ channel, ref }) => dropRef(channel, ref),
+);
+
+function dropRef(channel: RemoteChannel, ref: number): void {
+  if (channel.dead) return;
+  const pending = _droppedRefs.get(channel);
+  if (pending) {
+    pending.push(ref);
+    return;
+  }
+  _droppedRefs.set(channel, [ref]);
+  queueMicrotask(() => {
+    const refs = _droppedRefs.get(channel) ?? [];
+    _droppedRefs.delete(channel);
+    if (!channel.dead) channel.request({ op: 'drop', refs }).catch(() => {});
+  });
+}
+
+/**
+ * An output that stayed in the ML host tab (`run(…, { keep })`).
+ *
+ * What it saves is the round trip: anima's DiT runs as 7 segments per step, and every
+ * activation between them came back to this page only to be sent straight out again —
+ * ~480 MB and ~2 s per image, measured. A kept output crosses as its id when fed to
+ * the next run. It has the part of the Tensor surface that holds whether or not the
+ * data is here — `type`, `dims`, `getData()`, `dispose()` — and not `data`, which is
+ * why `keep` is opt-in: in this page's own ORT a kept output is an ordinary tensor,
+ * and code that reads kept outputs through `getData()` works the same both ways.
+ */
+class RemoteTensor {
+  readonly type: string;
+  readonly dims: readonly number[];
+  readonly location = 'remote';
+  private channel: RemoteChannel;
+  private ref: number | null;
+
+  constructor(channel: RemoteChannel, ref: number, type: string, dims: readonly number[]) {
+    this.channel = channel;
+    this.ref = ref;
+    this.type = type;
+    this.dims = dims;
+    _handleGc.register(this, { channel, ref }, this);
+  }
+
+  get size(): number {
+    return this.dims.reduce((a, b) => a * b, 1);
+  }
+
+  get data(): never {
+    throw new Error(
+      'yaar-ml: this output was kept in the ML host (run(…, { keep })); read it with `await t.getData()`',
+    );
+  }
+
+  /** The id to send in place of the bytes, checked against the channel it lives on. */
+  refFor(channel: RemoteChannel, name: string): number {
+    if (this.ref === null) throw new Error(`yaar-ml: input ${name} was disposed`);
+    if (channel !== this.channel || channel.dead) {
+      throw new Error(`yaar-ml: input ${name} belongs to an ML host connection that has ended`);
+    }
+    return this.ref;
+  }
+
+  async getData(): Promise<ArrayBufferView> {
+    const { bufs } = await this.channel.request({
+      op: 'fetch',
+      ref: this.refFor(this.channel, 'tensor'),
+    });
+    const C = typedArrayFor(this.type);
+    const b = bufs[0];
+    return new C(b.buffer, b.byteOffset, b.byteLength / C.BYTES_PER_ELEMENT);
+  }
+
+  dispose(): void {
+    if (this.ref === null) return;
+    _handleGc.unregister(this);
+    dropRef(this.channel, this.ref);
+    this.ref = null;
+  }
+}
+
+/** An InferenceSession whose graph lives in the ML host tab. */
+class RemoteSession {
+  readonly channel: RemoteChannel;
+  readonly sid: number;
+  readonly inputNames: readonly string[];
+  readonly outputNames: readonly string[];
+  private released = false;
+
+  constructor(channel: RemoteChannel, sid: number, inputNames: string[], outputNames: string[]) {
+    this.channel = channel;
+    this.sid = sid;
+    this.inputNames = inputNames;
+    this.outputNames = outputNames;
+  }
+
+  async run(
+    feeds: Record<string, ort.Tensor | RemoteTensor>,
+    options?: ort.InferenceSession.RunOptions,
+    keep?: readonly string[],
+  ): Promise<ort.InferenceSession.OnnxValueMapType> {
+    if (this.released) throw new Error('yaar-ml: session was released');
+    const meta: { n: string; t?: string; d?: readonly number[]; i?: number; ref?: number }[] = [];
+    const bufs: Uint8Array[] = [];
+    for (const [name, t] of Object.entries(feeds)) {
+      if (t instanceof RemoteTensor) {
+        meta.push({ n: name, ref: t.refFor(this.channel, name) });
+        continue;
+      }
+      if (t.location !== 'cpu') throw new Error(`yaar-ml: input ${name} is not a CPU tensor`);
+      if (t.type === 'string')
+        throw new Error(
+          `yaar-ml: input ${name} is a string tensor, which cannot cross to the ML host`,
+        );
+      const d = t.data as ArrayBufferView;
+      meta.push({ n: name, t: t.type, d: t.dims, i: bufs.length });
+      bufs.push(new Uint8Array(d.buffer, d.byteOffset, d.byteLength));
+    }
+    const t0 = performance.now();
+    const { header, bufs: out } = await this.channel.request(
+      {
+        op: 'run',
+        sid: this.sid,
+        feeds: meta,
+        ...(options ? { opts: options } : {}),
+        ...(keep?.length ? { keep } : {}),
+      },
+      bufs,
+    );
+    remoteStats.runs++;
+    remoteStats.runMs += performance.now() - t0;
+    remoteStats.hostMs += header.ms ?? 0;
+    const result: Record<string, ort.Tensor | RemoteTensor> = {};
+    for (const o of header.outs as {
+      n: string;
+      t: string;
+      d: number[];
+      i?: number;
+      ref?: number;
+    }[]) {
+      if (o.ref !== undefined) {
+        result[o.n] = new RemoteTensor(this.channel, o.ref, o.t, o.d);
+        continue;
+      }
+      const C = typedArrayFor(o.t);
+      const b = out[o.i!];
+      result[o.n] = new ort.Tensor(
+        o.t as never,
+        new C(b.buffer, b.byteOffset, b.byteLength / C.BYTES_PER_ELEMENT),
+        o.d,
+      );
+    }
+    return result as ort.InferenceSession.OnnxValueMapType;
+  }
+
+  async release(): Promise<void> {
+    if (this.released) return;
+    this.released = true;
+    if (!this.channel.dead)
+      await this.channel.request({ op: 'release', sid: this.sid }).catch(() => {});
+  }
+}
+
+/** A URL the host tab can fetch: this server's own URLs become paths (the tab adds the app's token). */
+function remoteUrl(u: string): string {
+  const url = new URL(u, location.href);
+  return url.origin === location.origin ? url.pathname + url.search : url.href;
+}
+
+async function uploadBlob(
+  channel: RemoteChannel,
+  data: Blob | ArrayBuffer | ArrayBufferView,
+): Promise<number> {
+  const id = channel.newId();
+  const blob =
+    data instanceof Blob
+      ? data
+      : new Blob([
+          ArrayBuffer.isView(data)
+            ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+            : data,
+        ]);
+  const t0 = performance.now();
+  const inflight: Promise<unknown>[] = [];
+  for (let o = 0; o < blob.size; o += REMOTE_CHUNK) {
+    const chunk = new Uint8Array(await blob.slice(o, o + REMOTE_CHUNK).arrayBuffer());
+    inflight.push(channel.request({ op: 'blob', id, off: o, total: blob.size }, [chunk]));
+    if (inflight.length >= REMOTE_WINDOW) await inflight.shift();
+  }
+  await Promise.all(inflight);
+  // A zero-byte blob sent no chunk; the host treats an unknown id as empty.
+  remoteStats.blobBytes += blob.size;
+  remoteStats.blobMs += performance.now() - t0;
+  return id;
+}
+
+async function createRemoteSession(
+  channel: RemoteChannel,
+  bytes: Uint8Array,
+  backend: Backend,
+  extra?: Record<string, unknown>,
+): Promise<RemoteSession> {
+  const { externalData, executionProviders: _ignored, ...opts } = extra ?? {};
+  const ext: { path: string; url?: string; range?: [number, number]; blob?: number }[] = [];
+  if (Array.isArray(externalData)) {
+    for (const e of externalData) {
+      // The bare-string form is both the fetch URL and the `location` the graph names,
+      // resolved against *this* page; spelled out as `{ path, data }` so it survives
+      // being fetched from another one.
+      if (typeof e === 'string') ext.push({ path: e, url: remoteUrl(e) });
+      else if (typeof e.data === 'string') ext.push({ path: e.path, url: remoteUrl(e.data) });
+      else if (isWeightRange(e.data)) {
+        ext.push({ path: e.path, url: remoteUrl(e.data.url), range: [e.data.start, e.data.end] });
+      } else ext.push({ path: e.path, blob: await uploadBlob(channel, e.data) });
+    }
+  }
+  const sid = channel.newId();
+  const { header } = await channel.request({ op: 'create', sid, backend, opts, ext }, [bytes]);
+  return new RemoteSession(channel, sid, header.inputNames, header.outputNames);
+}
+
 // ── Capabilities ─────────────────────────────────────────────────────────────
 
 const NO_WEBGPU: MlCapabilities = {
@@ -365,43 +846,48 @@ let _capsPromise: Promise<MlCapabilities> | undefined;
 export function capabilities(): Promise<MlCapabilities> {
   if (_capsPromise) return _capsPromise;
   _capsPromise = (async () => {
-    const gpu = (navigator as any).gpu;
-    if (!gpu) return NO_WEBGPU;
-    try {
-      const adapter = await gpu.requestAdapter();
-      if (!adapter) return NO_WEBGPU;
-      const f16 = adapter.features?.has?.('shader-f16') ?? false;
-      const limits = adapter.limits ?? {};
-      const maxBufferSize = Number(limits.maxBufferSize ?? 0);
-      const maxStorageBufferBindingSize = Number(limits.maxStorageBufferBindingSize ?? 0);
-      let adapterName: string | undefined;
-      try {
-        const info =
-          adapter.info ??
-          (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : undefined);
-        if (info) {
-          adapterName =
-            [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') ||
-            undefined;
-        }
-      } catch {
-        /* adapter info is best-effort */
-      }
-      return {
-        webgpu: true,
-        f16,
-        maxBufferSize,
-        // A single storage buffer is the hard per-tensor ceiling; use it as a
-        // conservative single-model budget for "will it fit" checks.
-        maxStorageBufferBindingSize,
-        estMemoryBudget: maxStorageBufferBindingSize,
-        adapter: adapterName,
-      };
-    } catch {
-      return NO_WEBGPU;
-    }
+    const remote = await remoteChannel();
+    if (remote) return remote.caps;
+    return localCapabilities();
   })();
   return _capsPromise;
+}
+
+async function localCapabilities(): Promise<MlCapabilities> {
+  const gpu = (navigator as any).gpu;
+  if (!gpu) return NO_WEBGPU;
+  try {
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) return NO_WEBGPU;
+    const f16 = adapter.features?.has?.('shader-f16') ?? false;
+    const limits = adapter.limits ?? {};
+    const maxBufferSize = Number(limits.maxBufferSize ?? 0);
+    const maxStorageBufferBindingSize = Number(limits.maxStorageBufferBindingSize ?? 0);
+    let adapterName: string | undefined;
+    try {
+      const info =
+        adapter.info ??
+        (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : undefined);
+      if (info) {
+        adapterName =
+          [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') || undefined;
+      }
+    } catch {
+      /* adapter info is best-effort */
+    }
+    return {
+      webgpu: true,
+      f16,
+      maxBufferSize,
+      // A single storage buffer is the hard per-tensor ceiling; use it as a
+      // conservative single-model budget for "will it fit" checks.
+      maxStorageBufferBindingSize,
+      estMemoryBudget: maxStorageBufferBindingSize,
+      adapter: adapterName,
+    };
+  } catch {
+    return NO_WEBGPU;
+  }
 }
 
 // ── IndexedDB weight cache ───────────────────────────────────────────────────
@@ -621,6 +1107,69 @@ export function weightUrl(dest: string): string {
   return '/api/storage/' + dest.split('/').map(encodeURIComponent).join('/');
 }
 
+/** Bytes `[start, end)` of a weight file, as an `externalData` entry's `data`. */
+export interface WeightRange {
+  readonly url: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+const WEIGHT_RANGE = Symbol.for('yaar-ml.weightRange');
+
+/**
+ * Name a slice of a weight file for `externalData` instead of fetching it yourself:
+ * `{ path: 'seg0.data', data: weightRange(sidecarUrl, lo, hi) }`.
+ *
+ * Bytes the app fetched are bytes the app has to hand over, and when the session runs
+ * in the server's Chrome (see "Remote compute") that means pushing them back up the
+ * wire — measured, 15.8 s of anima's 20.5 s DiT load was that upload of a 3.9 GB
+ * sidecar the server already had on disk. A range is a name, not bytes: in this page
+ * the SDK fetches it just as the app would have, and in the ML host the host fetches it
+ * from the server itself.
+ */
+export function weightRange(url: string, start: number, end: number): WeightRange {
+  if (!(Number.isSafeInteger(start) && Number.isSafeInteger(end) && 0 <= start && start <= end)) {
+    throw new Error(`yaar-ml: weightRange(${start}, ${end}) is not a byte range`);
+  }
+  return Object.freeze({ url, start, end, [WEIGHT_RANGE]: true }) as WeightRange;
+}
+
+function isWeightRange(x: unknown): x is WeightRange {
+  return !!x && typeof x === 'object' && (x as Record<symbol, unknown>)[WEIGHT_RANGE] === true;
+}
+
+/** Fetch a range in this page, for a session that runs here. A Blob, as anima's own fetch
+ *  was: it is not bound by the 2 GB ArrayBuffer cap. */
+async function fetchWeightRange(r: WeightRange): Promise<Blob> {
+  const res = await fetch(r.url, { headers: { Range: `bytes=${r.start}-${r.end - 1}` } });
+  if (res.status !== 206) {
+    await res.body?.cancel().catch(() => {});
+    throw new Error(
+      `yaar-ml: range ${r.start}-${r.end - 1} of ${r.url} → HTTP ${res.status} (expected 206)`,
+    );
+  }
+  const blob = await res.blob();
+  if (blob.size !== r.end - r.start) {
+    throw new Error(
+      `yaar-ml: range of ${r.url}: got ${blob.size} bytes, expected ${r.end - r.start}`,
+    );
+  }
+  return blob;
+}
+
+/** Turn every weightRange in `externalData` into bytes, for a session that runs here. */
+async function resolveWeightRanges(
+  extra?: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  const entries = extra?.externalData;
+  if (!Array.isArray(entries) || !entries.some((e) => isWeightRange(e?.data))) return extra;
+  const resolved = [];
+  for (const e of entries) {
+    resolved.push(isWeightRange(e?.data) ? { ...e, data: await fetchWeightRange(e.data) } : e);
+  }
+  return { ...extra, externalData: resolved };
+}
+
 interface JobStatus {
   state: 'idle' | 'downloading' | 'done' | 'error';
   loaded: number;
@@ -762,17 +1311,41 @@ function looksLikeMemoryError(err: unknown): boolean {
   return /buffer|storage|size|memory|out of memory|oom|exceed/i.test(msg);
 }
 
+function tooBigError(caps: MlCapabilities, err: unknown): Error {
+  const ceil = caps.maxStorageBufferBindingSize
+    ? `${Math.floor(caps.maxStorageBufferBindingSize / (1024 * 1024))} MB`
+    : 'unknown';
+  return new Error(
+    `This model is too big for your GPU (max single buffer ≈ ${ceil}). ` +
+      `Try a smaller or more heavily quantized model, or backend: 'wasm'. ` +
+      `(original error: ${String((err as Error)?.message ?? err)})`,
+  );
+}
+
 async function createSession(
   bytes: Uint8Array,
   backend: Backend,
   rawExtra?: Record<string, unknown>,
 ): Promise<ort.InferenceSession> {
+  const remote = await remoteChannel();
+  if (remote) {
+    try {
+      return (await createRemoteSession(
+        remote,
+        bytes,
+        backend,
+        rawExtra,
+      )) as unknown as ort.InferenceSession;
+    } catch (err) {
+      throw backend !== 'wasm' && looksLikeMemoryError(err) ? tooBigError(remote.caps, err) : err;
+    }
+  }
   const providers = await resolveProviders(backend);
   // wasm-only sessions run on the full-CPU flavor — the native-WebGPU artifact's
   // CPU build has fp64 compiled out (see ORT_WASM_URL).
   const rt = providers.includes('webgpu') ? ort : await wasmFlavor();
   // ORT fetches these URLs from its own worker, where the Referer carries no token.
-  const extra = authorizeExternalData(rawExtra);
+  const extra = authorizeExternalData(await resolveWeightRanges(rawExtra));
   // `create` transfers the model buffer to the worker in proxy mode, which detaches
   // it here — so each attempt needs its own copy, or the wasm fallback below would
   // hand ORT an empty model. The graph proto is small (weights ride in externalData).
@@ -784,17 +1357,7 @@ async function createSession(
     });
   } catch (err) {
     if (providers.includes('webgpu')) {
-      const caps = await capabilities();
-      if (looksLikeMemoryError(err)) {
-        const ceil = caps.maxStorageBufferBindingSize
-          ? `${Math.floor(caps.maxStorageBufferBindingSize / (1024 * 1024))} MB`
-          : 'unknown';
-        throw new Error(
-          `This model is too big for your GPU (max single buffer ≈ ${ceil}). ` +
-            `Try a smaller or more heavily quantized model, or backend: 'wasm'. ` +
-            `(original error: ${String((err as Error)?.message ?? err)})`,
-        );
-      }
+      if (looksLikeMemoryError(err)) throw tooBigError(await capabilities(), err);
       // Auto mode: fall back to the CPU wasm backend on any WebGPU failure —
       // on the full-CPU flavor, so the fallback actually has every kernel.
       if (backend === 'auto') {
@@ -869,13 +1432,27 @@ function copyFeeds(feeds: Record<string, ort.Tensor>): Record<string, ort.Tensor
   return out;
 }
 
-/** Run inference. `feeds` maps input names to Tensors; returns the output map. */
+/**
+ * Run inference. `feeds` maps input names to Tensors; returns the output map.
+ *
+ * `options.keep` names outputs that are only going to be fed to a later run. When the
+ * session runs in the server's Chrome they stay there and come back as handles, which
+ * cross as an id when fed — no round trip for an activation passed between segments.
+ * Read a kept output with `await t.getData()` (never `t.data`, which a handle does not
+ * have) and free it with `t.dispose()`; both work on an ordinary tensor too, so code
+ * written that way runs the same wherever the session does.
+ */
 export function run(
   s: ort.InferenceSession,
   feeds: Record<string, ort.Tensor>,
-  options?: ort.InferenceSession.RunOptions,
+  options?: ort.InferenceSession.RunOptions & { keep?: readonly string[] },
 ): Promise<ort.InferenceSession.OnnxValueMapType> {
-  return s.run(ort.env.wasm.proxy ? copyFeeds(feeds) : feeds, options);
+  const { keep, ...ortOptions } = options ?? {};
+  const opts = options ? ortOptions : undefined;
+  // A remote session serializes its feeds, which already leaves the caller's intact.
+  // `keep` only means something there: in this page every output is already here.
+  if (s instanceof RemoteSession) return s.run(feeds, opts, keep);
+  return s.run(ort.env.wasm.proxy ? copyFeeds(feeds) : feeds, opts);
 }
 
 /** Release a session's native resources. Also clears it from the URL memo. */

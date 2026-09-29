@@ -6,7 +6,8 @@ Apps that run models (anima, transcribe, image23d, … through `@bundled/yaar-ml
 *in the page*, on the page's WebGPU. On macOS that page is YAAR's own window, which is WebKit
 ([mac.md](./mac.md)), so ML speed on a Mac is whatever WebKit's WebGPU delivers. This page
 records what that is, measured on 2026-09-29, and how far it sits from the same Mac running
-Chrome. The gap is worth a decision later. Nothing here has been changed yet.
+Chrome — and what YAAR does about it: by default, a yaar-ml app in the window runs its
+sessions in the server's headless Chrome ([Remote compute](#remote-compute-in-the-servers-chrome)).
 
 ---
 
@@ -86,12 +87,44 @@ the two. Either way the WebKit side has no knob to turn.
 
 ---
 
+## Remote compute in the server's Chrome
+
+This is the "compute in a server-side Chrome" option below, landed. Under `YAAR_ML_COMPUTE=auto`
+(the default), a yaar-ml app in the WKWebView window asks the server to run its sessions; the
+server opens one headless Chrome tab for that app page and relays between them. The app's code
+is unchanged: `session()`, `run()` and `capabilities()` behave as before, with outputs back as
+CPU tensors and `capabilities().remote === true`. Design and trust model:
+[server_env.md](../reference/server_env.md#remote-ml-compute).
+
+Measured 2026-09-29, same M1 Pro, anima 0.4.1, 512×512, seed 42, 4 steps, the app in YAAR's
+WKWebView window with `YAAR_ML_COMPUTE=auto`:
+
+| | WKWebView, local | **WKWebView → server Chrome** | Chrome, local |
+|---|---|---|---|
+| DiT step | 3.9 s | **2.2 s** | 2.2 s |
+| VAE decode | 1.4–2.4 s | **0.77 s** | 0.78 s |
+| Warm image | ~17 s | **9.6–9.7 s** | 9.6 s |
+| DiT load (7 segments, 3.9 GB) | — | **2.6 s** | 5.2 s |
+
+- **The window now generates as fast as Chrome itself**, with the same numerics (no NaN,
+  identical latent statistics per step). The relay costs ~0.3 s per image.
+- **Weights are read by Chrome, not uploaded.** anima names each DiT segment's slice of the
+  sidecar with `weightRange()`, so the tab fetches it from the server. When anima still
+  fetched those slices as Blobs and handed the bytes over, the load was 20.5 s, 15.8 s of it
+  the page uploading 3.9 GB at ~250 MB/s. (The 2.6 s was with the file in the OS page cache.)
+- **Activations stay in the tab.** anima runs its segments with `run(…, { keep })`, so the
+  tensors passed between segments never leave Chrome. Before that, a warm image moved ~480 MB
+  of them through the page (274 MB up, 206 MB down) and took 11.5 s at 2.7 s per step; now it
+  moves 60 MB up and 2 MB down.
+- **What does not offload:** code that imports onnxruntime itself (transcribe's Qwen worker)
+  rather than going through `session()`/`run()`.
+
 ## Options, for later
 
 | Option | Gain for anima | Cost |
 |---|---|---|
 | **Keep as is** | none; ~17 s per image | none |
-| **Compute in a server-side Chrome.** The desktop stays in the WebKit window; an ML app's model runs in a hidden Chrome tab the server already knows how to drive (it runs one for the Browser app) | ~1.8×, same ORT and the same app code | Design: splitting an app's UI from its compute, moving tensors or images between them, and Chrome being present, with the WebKit path as fallback. macOS only: Windows (WebView2) and Android WebView are Chromium already, and Linux may stay on Chrome |
+| **Compute in a server-side Chrome** — *landed, see above.* The desktop stays in the WebKit window; an ML app's model runs in a hidden Chrome tab the server already knows how to drive (it runs one for the Browser app) | ~1.8×, same ORT and the same app code | Design: splitting an app's UI from its compute, moving tensors or images between them, and Chrome being present, with the WebKit path as fallback. macOS only: Windows (WebView2) and Android WebView are Chromium already, and Linux may stay on Chrome |
 | **Native** (MLX, CoreML, ORT's CoreML EP, run by the server) | Above Chrome's ~37% of peak; how far above is unmeasured | A second runtime and model conversion, macOS-only in practice. Each other platform would need its own, and Termux has no usable GPU path |
 | **Wait for WebKit subgroups** | Unknown; also depends on how much of the gap is subgroups at all | None, and no timeline |
 
