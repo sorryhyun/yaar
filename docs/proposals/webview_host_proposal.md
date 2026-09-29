@@ -1,6 +1,7 @@
 # Proposal: WebView Hosts — YAAR in Its Own Window on Every Platform
 
-**Status:** phases 1a and 1b implemented on macOS (2026-09-29); phase 2 and later not started.
+**Status:** phases 1a and 1b implemented on macOS and released in 0.22.0 (2026-09-29); on
+macOS install.sh installs `YAAR.app` (§5c). Phase 2 and later not started.
 - The macOS spike (§3) was run on 2026-09-29 on macOS 26.6, and its results are measured.
 - Phases 1a and 1b as built are §5a and §5b.
 - Everything about Windows, Linux and Android is unverified. Claims not yet run are marked
@@ -301,9 +302,9 @@ window within 1.5 s; an unloadable library exits 3 with no "opened" line
 (Cmd+V into the palette, Cmd+W, Cmd+Q — the terminal had no Accessibility grant to script
 keystrokes), and the `.app` microphone prompt.
 
-Not in 1a: the release does not ship `YAAR.app` (install.sh installs the bare binary, which
-opens the window but borrows the terminal's microphone grant); GUI-launched apps get a minimal
-`PATH`, so a provider CLI found only via `PATH` is likely missed from `YAAR.app` **(verify)**.
+Not in 1a: the release did not ship `YAAR.app` — closed by §5c. GUI-launched apps get a
+minimal `PATH`, so a provider CLI found only via `PATH` is likely missed when `YAAR.app` is
+opened from Finder **(verify)**; `yaar` from a terminal inherits the shell's.
 
 ### 5b. Phase 1b as built (2026-09-29)
 
@@ -322,7 +323,47 @@ Verified: in a scripted harness, everything above; in the shipped window by hand
 - The microphone prompt on a fresh grant (`tccutil reset Microphone`, then transcribe's record button in `YAAR.app`).
 - openExternal and the GitHub OAuth popup end to end.
 - A hand check of ⌘W after the fix (the event path is verified: each dispatch closes one YAAR window).
-- **Service worker under the pin (verify):** a harness window kept serving a shell cached in an earlier run while the server served a newer bundle. That would happen if WebKit does not route a service worker's own fetches through the navigation delegate's TLS challenge, so its network-first document fetch always fails and falls back to cache. The shipped window picked up the new bundle, so this is unconfirmed. If it holds, an upgraded exe would show a stale desktop until `?nosw`.
+- **Service worker under the pin — likely explained:** the stale shell matches `01facf81`
+  (every exe build ETagged `index.html` as `"index.html"`, so an upgraded exe answered
+  revalidation with 304), fixed in 0.22.0. Re-check after the next upgrade. Original note: a harness window kept serving a shell cached in an earlier run while the server served a newer bundle. That would happen if WebKit does not route a service worker's own fetches through the navigation delegate's TLS challenge, so its network-first document fetch always fails and falls back to cache. The shipped window picked up the new bundle, so this is unconfirmed. If it holds, an upgraded exe would show a stale desktop until `?nosw`.
+
+### 5c. The installed `YAAR.app` (2026-09-29)
+
+The first 0.22.0 install (bare binary from install.sh) opened the window, and transcribe's
+record button said "Recording needs a secure page". Measured with a probe page reporting
+from its top frame and a `127.0.0.1` iframe:
+
+| Host process | `isSecureContext` | `navigator.mediaDevices` |
+|---|---|---|
+| bare `yaar`, pinned https or plain http; release, local and spike dylibs alike | true | **undefined** |
+| the same binary inside a `.app` whose Info.plist has `NSMicrophoneUsageDescription` | true | present, `getUserMedia` too |
+
+WKWebView gates the whole capture API on the main bundle's usage string, so the 1a note
+that a bare binary "borrows the terminal's microphone grant" was wrong: it has no API to
+ask with. (Why the morning spike under bare `bun` recorded is unexplained.)
+
+So on macOS, install.sh now assembles `~/Applications/YAAR.app` itself (`APP_DIR`
+overrides): the verified binary in `Contents/MacOS`, the apps archive in
+`Resources/apps` with a stamp, an icon from the tag, the Info.plist, an ad-hoc
+signature — all with tools every Mac has, which the Linux release runner does not.
+`~/.local/bin/yaar` becomes a launcher that `exec`s the bundle's executable (a symlink
+would lose the bundle). The first install over a bare one moves the data
+(`config storage session_logs user-apps workspaces .env`) into
+`~/Library/Application Support/YAAR`, setting aside anything already there under
+`.pre-migration-<time>/`. It refuses while `yaar` runs.
+
+- The self-updater follows the bundle: apps go to `Resources/apps` with a new stamp,
+  staging and the old binary stay outside the bundle, and the bundle is re-signed
+  (`features/update/installer.ts`).
+- `macos-bundle-plist.test.ts` keeps install.sh's Info.plist equal to
+  `exe-bundle.js`'s.
+
+Verified against the v0.22.0 assets in a scratch `HOME`: install, migration and
+set-aside, reinstall (no second migration), `codesign --verify --strict`, and the probe
+through the installed launcher: `mediaDevices` and `getUserMedia` present in both frames
+over the pinned https socket. The updater path was run against a copy of that bundle
+with a stubbed release. **Still owed:** the real microphone prompt from the installed
+bundle.
 
 **Regression fixes** (measured in §3, "Follow-up measurements"):
 

@@ -282,10 +282,14 @@ try {
 
 // ── macOS: wrap the binary in YAAR.app ───────────────────────────────
 //
-// The bundle is what gives macOS a name to put on a permission prompt: run bare from a
-// terminal, the binary borrows the terminal's microphone grant, and a shipped exe has none
-// to borrow. So the Info.plist carries NSMicrophoneUsageDescription, and the bundle is
-// signed (ad hoc) because a grant is recorded against the signature.
+// The bundle is what lets the window record at all: WKWebView hides navigator.mediaDevices
+// from every frame of a process whose main bundle has no NSMicrophoneUsageDescription, so
+// a bare binary's window has no microphone API whatever the terminal was granted. The
+// bundle is signed (ad hoc) because a grant is recorded against the signature.
+//
+// install.sh assembles the installed YAAR.app the same way on the user's Mac (the release
+// is built on Linux, which has no codesign); macos-bundle-plist.test.ts keeps the two
+// Info.plists identical.
 //
 // LSUIElement keeps the server process — the bundle's executable, which never opens a
 // window — out of the Dock; the window process it spawns promotes itself to a regular app

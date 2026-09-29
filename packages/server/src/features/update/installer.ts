@@ -16,10 +16,18 @@
  * in a sibling directory of `process.execPath` keeps every rename on the same device,
  * so the moment of replacement stays atomic instead of becoming a copy that can be
  * interrupted halfway.
+ *
+ * **A macOS `.app` is re-signed, and nothing is left inside it but the swap.** Its apps
+ * live in `Contents/Resources/apps` (`macos-bundle.ts` copies them out on the next
+ * launch, keyed by the stamp written here), staging and the old binary go beside the
+ * bundle rather than in it, and the finished bundle is signed again: WebKit and TCC
+ * read the bundle's Info.plist and signature, and a bundle whose sealed contents
+ * changed is one macOS no longer vouches for.
  */
 
-import { chmod, mkdir, rename, rm, stat } from 'node:fs/promises';
+import { chmod, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { BUNDLED_APPS_STAMP } from '../../exe-assets.js';
 import { APPS_ASSET, SUMS_ASSET, assetUrl, parseSums } from './release.js';
 
 /** Reports progress of the current step as a 0..1 fraction, or undefined if unknown. */
@@ -30,15 +38,45 @@ type FetchLike = typeof fetch;
 export interface InstallPaths {
   /** The running executable, replaced by the update. */
   exePath: string;
-  /** Directory holding the exe — also where `apps/` and the staging dir live. */
-  installDir: string;
+  /** The bundled apps the update replaces: `apps/` beside a bare binary. */
+  appsDir: string;
   /** Scratch directory for this run, on the same filesystem as `exePath`. */
   stagingDir: string;
+  /** The macOS `.app` holding `exePath`, re-signed after the swap; null for a bare binary. */
+  macosBundle: string | null;
 }
 
-export function resolveInstallPaths(exePath: string): InstallPaths {
+export function resolveInstallPaths(exePath: string, macosBundle: string | null): InstallPaths {
+  if (macosBundle) {
+    return {
+      exePath,
+      appsDir: join(macosBundle, 'Contents', 'Resources', 'apps'),
+      stagingDir: join(dirname(macosBundle), '.yaar-update'),
+      macosBundle,
+    };
+  }
   const installDir = dirname(exePath);
-  return { exePath, installDir, stagingDir: join(installDir, '.yaar-update') };
+  return {
+    exePath,
+    appsDir: join(installDir, 'apps'),
+    stagingDir: join(installDir, '.yaar-update'),
+    macosBundle: null,
+  };
+}
+
+/** Ad-hoc sign a bundle again after its contents changed. */
+async function resignBundle(bundle: string): Promise<void> {
+  const proc = Bun.spawn(['codesign', '--force', '--sign', '-', bundle], {
+    stdout: 'ignore',
+    stderr: 'pipe',
+  });
+  const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+  if (code !== 0) {
+    throw new Error(
+      `The update is installed, but re-signing ${bundle} failed (${stderr.trim() || `exit ${code}`}). ` +
+        'Reinstall with install.sh so macOS keeps its microphone permission.',
+    );
+  }
 }
 
 /**
@@ -187,7 +225,7 @@ export interface InstallOptions {
 export async function installRelease(opts: InstallOptions): Promise<void> {
   const { tag, binaryAsset, paths } = opts;
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const { exePath, installDir, stagingDir } = paths;
+  const { exePath, appsDir, stagingDir, macosBundle } = paths;
 
   await rm(stagingDir, { recursive: true, force: true });
   await mkdir(stagingDir, { recursive: true });
@@ -207,10 +245,16 @@ export async function installRelease(opts: InstallOptions): Promise<void> {
     opts.onPhase?.('installing', 'Unpacking apps');
     opts.onProgress?.(undefined);
     await extractApps(stagedApps, stagingDir);
+    if (macosBundle) {
+      // A new stamp is what makes the next launch copy these apps out of the bundle.
+      await writeFile(
+        join(stagingDir, 'apps', BUNDLED_APPS_STAMP),
+        `${tag} ${new Date().toISOString()}\n`,
+      );
+    }
 
     // ── Swap apps/ ──
-    const appsDir = join(installDir, 'apps');
-    const appsBackup = join(installDir, 'apps.previous');
+    const appsBackup = `${appsDir}.previous`;
     await rm(appsBackup, { recursive: true, force: true });
     if (await exists(appsDir)) await rename(appsDir, appsBackup);
     try {
@@ -227,8 +271,10 @@ export async function installRelease(opts: InstallOptions): Promise<void> {
     // (POSIX keeps the inode alive; Windows allows the rename but not a delete).
     // The backup is therefore left in place rather than unlinked — this process
     // is still executing it — and the *previous* run's backup is cleared first.
+    // Inside a bundle it goes to staging instead, which is removed below: a stray
+    // file in Contents/MacOS is one more thing the signature would have to cover.
     opts.onPhase?.('installing', 'Replacing the binary');
-    const exeBackup = `${exePath}.previous`;
+    const exeBackup = macosBundle ? join(stagingDir, 'yaar.previous') : `${exePath}.previous`;
     await rm(exeBackup, { force: true }).catch(() => {});
     await rename(exePath, exeBackup);
     try {
@@ -237,6 +283,11 @@ export async function installRelease(opts: InstallOptions): Promise<void> {
     } catch (err) {
       await rename(exeBackup, exePath).catch(() => {});
       throw err;
+    }
+
+    if (macosBundle) {
+      opts.onPhase?.('installing', 'Signing YAAR.app');
+      await resignBundle(macosBundle);
     }
   } finally {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});

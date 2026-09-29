@@ -14,6 +14,7 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { compareVersions, isNewer, normalizeVersion, parseVersion } from './semver.js';
 import { assetNameFor, fetchLatestRelease, parseSums, releaseIsNewer } from './release.js';
+import { resolveInstallPaths } from './installer.js';
 import {
   checkForUpdate,
   getUpdateStatus,
@@ -113,6 +114,31 @@ describe('assetNameFor', () => {
     expect(assetNameFor('win32', 'arm64')).toBeNull();
     expect(assetNameFor('freebsd', 'x64')).toBeNull();
     expect(assetNameFor('linux', 'ia32')).toBeNull();
+  });
+});
+
+// ── install paths ───────────────────────────────────────────────────────
+
+describe('resolveInstallPaths', () => {
+  test('a bare binary keeps apps/ and staging beside itself', () => {
+    expect(resolveInstallPaths('/opt/yaar/yaar', null)).toEqual({
+      exePath: '/opt/yaar/yaar',
+      appsDir: '/opt/yaar/apps',
+      stagingDir: '/opt/yaar/.yaar-update',
+      macosBundle: null,
+    });
+  });
+
+  test('a macOS bundle updates Resources/apps and stages outside itself', () => {
+    // Anything left inside the bundle is one more thing its re-signed seal covers,
+    // and apps beside the exe in Contents/MacOS are never read.
+    const app = '/Users/u/Applications/YAAR.app';
+    expect(resolveInstallPaths(`${app}/Contents/MacOS/yaar`, app)).toEqual({
+      exePath: `${app}/Contents/MacOS/yaar`,
+      appsDir: `${app}/Contents/Resources/apps`,
+      stagingDir: '/Users/u/Applications/.yaar-update',
+      macosBundle: app,
+    });
   });
 });
 

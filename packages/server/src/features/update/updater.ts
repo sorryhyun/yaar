@@ -19,6 +19,7 @@
  */
 
 import { IS_BUNDLED_EXE, YAAR_VERSION } from '../../config.js';
+import { MACOS_APP_BUNDLE } from '../../config/env.js';
 import { assetNameFor, fetchLatestRelease, type ReleaseInfo } from './release.js';
 import { installRelease, resolveInstallPaths } from './installer.js';
 import { isNewer } from './semver.js';
@@ -207,7 +208,7 @@ export async function startInstall(): Promise<UpdateStatus> {
   const tag = status.latest.tag;
   const targetVersion = status.latest.version;
   const asset = status.asset as string;
-  const paths = resolveInstallPaths(process.execPath);
+  const paths = resolveInstallPaths(process.execPath, MACOS_APP_BUNDLE);
 
   progress = { stage: 'verifying', targetVersion, startedAt: Date.now() };
 
