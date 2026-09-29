@@ -148,8 +148,7 @@ moment.
 
 **Every entry costs bytes whether or not an app uses it.** Tree-shaking makes an unused library
 free *per app*. It is never free in the exe, which embeds a prebundled copy of every registry
-entry. That is why an entry needs a concrete first consumer, and why entries with no consumers
-have been retired. Adding one back is one line plus a type block.
+entry. That is why an entry needs a concrete first consumer. Adding one is one line plus a type block.
 
 **Resolution depends on where the compiler runs.** In a repo checkout, an `@bundled/*` import
 resolves to a local shim when there is one, and otherwise to the package's *browser* entry in
@@ -222,9 +221,8 @@ recompiled by:
   manifest, and compiles only if the project has none. Install and restore compile after writing
   the new source.
 
-The SDK hash exists because of a real failure. Staleness used to be judged from an app's own
-files only, so a change to the SDK reached only the apps someone happened to edit. Memo and Anima
-kept shipping an old device SDK and could not save in the Android app. Now any change to the
+The SDK hash exists so a change to the SDK reaches every app, not only the ones someone edits
+(a stale device SDK once left Memo and Anima unable to save in the Android app). Any change to the
 baked-in scripts or tokens makes every app stale once, and the next start rebuilds them all. A
 change to anything else the compiler injects (the `@bundled/yaar` shim, the HTML wrapper) still
 needs a `COMPILER_VERSION` bump. `packages/compiler/CLAUDE.md` keeps that rule.

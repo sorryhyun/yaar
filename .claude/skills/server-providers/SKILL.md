@@ -11,9 +11,9 @@ paths:
 
 **Warm Pool:** Providers pre-initialized at startup. `initWarmPool()` at boot, `acquireWarmProvider()` gets a ready instance, pool auto-replenishes in background.
 
-**Claude:** `claude-sonnet-5`, thinking enabled (4096 max tokens), WebSearch and Task tools, `bypassPermissions`. Each provider keeps a **persistent streaming session**: one long-lived CLI process whose MCP connections survive across turns; turns push messages into the stream and read until the SDK result. A prompt/tools/model change reopens the stream with `resume`. Monitor agents are prewarmed at WebSocket connect (`ContextPool.prewarmMonitorAgent` → `AgentSession.prewarm` → `provider.prewarm`) so the first user message starts on a live process with MCP already connected — the first turn is also gated on MCP connection (bounded 5s) because the CLI no longer waits for HTTP MCP servers in stream-json mode.
+**Claude:** default model `claude-sonnet-5`, adaptive thinking with `display: 'summarized'`, WebSearch and Task tools, `bypassPermissions` (static options: `CLAUDE_STATIC_SDK_OPTIONS` in `config/providers/claude.ts`; per-turn: `providers/claude/sdk-options.ts`). Each provider keeps a **persistent streaming session**: one long-lived CLI process whose MCP connections survive across turns; turns push messages into the stream and read until the SDK result. A prompt/tools/model change reopens the stream with `resume`. Monitor agents are prewarmed at WebSocket connect (`ContextPool.prewarmMonitorAgent` → `AgentSession.prewarm` → `provider.prewarm`) so the first user message starts on a live process with MCP already connected — the first turn is also gated on MCP connection (bounded 5s), since the CLI does not wait for HTTP MCP servers in stream-json mode.
 
-**Codex:** `codex app-server` child process with per-provider WebSocket connections (`--listen ws://`). Settings: `approval_policy=on-request`, `model_reasoning_effort=medium`, `sandbox_mode=danger-full-access`.
+**Codex:** `codex app-server` child process with per-provider WebSocket connections (`--listen ws://`). Settings (`-c` overrides in `config/providers/codex.ts`): `approval_policy=never`, `model_reasoning_effort=high`, `sandbox_mode=danger-full-access`, `web_search=disabled`.
 
 ### The `notice` contract (`providers/notice.ts`)
 
@@ -35,8 +35,7 @@ by `tests/claude-error-notices.test.ts` and `tests/codex-error-notices.test.ts`.
 
 ### Codex packaging
 
-Full regeneration workflow and refusal gates are in the `codex-provider` skill
-(`.claude/skills/codex-provider/SKILL.md`) — read that first.
+Regeneration workflow and refusal gates: the `codex-provider` skill.
 
 `@openai/codex` is declared as an **optional peer dependency** so a Codex user can pin the CLI to
 the lockfile (`bun add @openai/codex`) instead of driving whatever PATH resolves first, while a

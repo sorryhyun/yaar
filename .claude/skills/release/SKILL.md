@@ -7,9 +7,8 @@ description: Cutting a YAAR release or changing CI. Use for release:prepare, ver
 
 ## Branch model
 
-`dev` is where work lands. `main` is the stable, clone-default branch and only receives merges
-from `dev`. Releases are cut by publishing a GitHub draft release targeting `main`. Open PRs
-against `dev` unless the change *is* a release promotion.
+As in the root `CLAUDE.md` (`dev` ← work and PRs; `main` ← merges from `dev` only). Releases are
+cut by publishing a GitHub draft release targeting `main`.
 
 ## CI tiers
 
@@ -17,8 +16,8 @@ against `dev` unless the change *is* a release promotion.
 definition of "is this tree good?", shared by CI and release so they can't drift. Three tiers,
 escalating:
 
-- **baseline** — `dev` gets this: install → build shared+compiler → typecheck → test →
-  check:docs → check:openapi.
+- **baseline** — `dev` gets this: install → build shared+lib+compiler → typecheck → test →
+  check:scripts → check:deps → check:docs → check:openapi.
 - **`full`** — anything touching `main` gets this too: adds lint, format:check, check:apps.
 - **release** — a release adds the version-vs-tag assertion and an artifact smoke test on top
   of `full`.
@@ -26,9 +25,9 @@ escalating:
 Rule of thumb: a check that should guard *every push* goes in the baseline; one that only needs
 to hold at promotion/ship time goes behind `full`.
 
-**Job-id constraint**: `main`'s branch protection requires the `ci / check` status check, so
-`ci.yml`'s job id must stay `check` (reusable-workflow status names are
-`<caller job> / <called job>`). Renaming it silently breaks the required check.
+**Job-id constraint**: `main`'s branch protection requires the `ci / check` status check
+(reusable-workflow status names are `<caller job> / <called job>`), so `ci.yml`'s job id must stay
+`ci` and `checks.yml`'s must stay `check`. Renaming either silently breaks the required check.
 
 ## Branch protection
 

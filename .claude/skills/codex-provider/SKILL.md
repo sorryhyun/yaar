@@ -21,9 +21,8 @@ drift away from the shapes the code was compiled against.
   plus `codex-version.ts` recording `CODEX_GENERATED_FROM`.
 - `packages/server/src/providers/codex/app-server.ts` — the `initialize` handshake that checks
   the live app-server's `userAgent` against the floor.
-- `scripts/codegen/codex-types.js` — regeneration script, run via `make codex-types` (Makefile
-  line ~99), optionally `CODEX_BIN=./my-codex make codex-types` to generate from a specific binary.
-- `src/tests/codex-version.test.ts` — asserts `CODEX_GENERATED_FROM >= CODEX_MIN_VERSION` and
+- `scripts/codegen/codex-types.js` — regeneration script, run via `make codex-types`.
+- `packages/server/src/tests/codex-version.test.ts` — asserts `CODEX_GENERATED_FROM >= CODEX_MIN_VERSION` and
   pins the `@openai/codex` peer range, so the floor can't drift ahead of what was regenerated.
 
 ## Regeneration flow

@@ -7,7 +7,8 @@ the two at read time, with `agent/prompt.md` as opt-in app-specific prompt after
 [`docs/architecture/app_pipeline.md`](../docs/architecture/app_pipeline.md) for how an app builds
 and runs, [`docs/reference/app_manifest_reference.md`](../docs/reference/app_manifest_reference.md)
 for `app.json`, and [`docs/reference/app_protocol_reference.md`](../docs/reference/app_protocol_reference.md)
-for protocol details. For build/compile/verify workflows, use the `app-dev` skill.
+for protocol details. For build/compile/verify workflows, use the `app-dev` skill. The in-app
+(agent-facing) counterpart is the devtools app's own prompt and topics (`apps/devtools/agent/`).
 
 ## App Agent Architecture
 
@@ -20,22 +21,16 @@ iframe action), `relay` (hand off to monitor agent) — plus `direct_message` wh
 declares `"messaging": "all"`. `describe`/`query`/`command` take an optional `appId` for
 cross-app control, gated by the caller's `app.json` `controls` list (**bundled apps only**).
 
-`storage:*` built-ins are held by **every** app agent, no declaration needed: they reach the app's
-own tree (`app/{path}`, which needs no permission) and the commons
-(`shared/{path}` = `yaar://storage/shared/`, granted for being an app). The two relative prefixes
-are how a path says which tree it is in — a bare relative path still means the own tree, and the
-door prints the `app/` form on every listing entry and receipt. Anything further under `yaar://storage/`
-still costs an entry in `app.json`. A `protocol.json` command that persists on the agent's behalf
-is still the better door when the app has one — it keeps the app's own invariants, and the UI reads
-the state it writes. An app can make that door *the* door: a command named `storage:read` /
-`storage:write` / `storage:delete` / `storage:list`, or one aliased to that name, **overrides**
-the built-in for every ungated path — the own tree (`app/{path}`, or bare) and the commons
-(`shared/{path}` / `yaar://storage/shared/…`) — so the agent keeps the spelling it was taught and the app's handler
-answers (`mcp/app-agent/storage-override.ts`). The rest of the shared tree never overrides; its
-permission gate stays between the agent and the bytes.
+`storage:*` built-ins are held by **every** app agent, no declaration needed: the app's own tree
+(`app/{path}`, or a bare relative path) and the commons (`shared/{path}` = `yaar://storage/shared/`).
+Anything further under `yaar://storage/` costs an entry in `app.json`. A `protocol.json` command
+that persists on the agent's behalf is the better door when the app has one (it keeps the app's
+invariants), and an app can make it *the* door: a command named or aliased `storage:read` /
+`storage:write` / `storage:delete` / `storage:list` **overrides** the built-in for the own tree and
+the commons (`mcp/app-agent/storage-override.ts`).
 
-Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
-(`.claude/skills/server-verbs/SKILL.md`); [`packages/server/CLAUDE.md`](../packages/server/CLAUDE.md) for the map.
+Full tool surface, storage rules, lifecycle, and containment: the `server-verbs` skill;
+[`packages/server/CLAUDE.md`](../packages/server/CLAUDE.md) for the map.
 
 ### One window, several copies
 
@@ -64,7 +59,7 @@ read as a prompt: it is instructions to a coding agent editing that directory. T
 what clone and deploy carry — live in `discovery.ts`'s and `docs.ts`'s doc comments.
 
 Key server files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle),
-`agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (the four tools).
+`agents/profiles/app-agent/index.ts` (prompt builder), `mcp/app-agent/` (the four tools).
 
 ## Sub-agents (app-spawned AI instances)
 
@@ -168,9 +163,18 @@ All compiled apps get YAAR CSS custom properties and utility classes injected au
 - **Components**: `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-btn-warning`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item` (interactive row with hover/`.active` states)
 - **Status**: `y-wash-*` (tinted fill), `y-dot` + `y-dot-ok`/`-warn`/`-err`/`-accent`/`-pulse`, `y-progress` + `y-progress-fill` (add `y-progress-indeterminate` to the track for a sliding bar)
 - **Typography**: `y-label` (uppercase muted section header), `y-truncate` (single-line), `y-clamp-2`, `y-clamp-3` (multi-line truncation)
+- **Mono**: `y-font-mono` / `--yaar-font-mono` — never hardcode `'Courier New'`
+- **Document-app chrome** (check before writing a toolbar): `y-appbar`, `y-brand`, `y-doc-field`, `y-editbar`, `y-tgroup`/`y-tsep`, `y-tbtn` (+ `-text`/`-primary`/`-active`), `y-tlabel`, `y-tselect`, `y-chip`, `y-nav-*` (collapsible sidebar). **`y-tbtn` is not `y-btn`**: a toolbar wants the 32px transparent `y-tbtn`. Skeleton: [`yaar_sdk.md`](../docs/guides/yaar_sdk.md#document-app-skeleton)
 - **Scrollbars**: every scrollbar in the app is already styled (the same thin pill the shell uses) — don't hand-roll `::-webkit-scrollbar` rules. `y-scroll` is just `overflow-y: auto`. Retint with `--yaar-scrollbar-thumb` / `--yaar-scrollbar-thumb-hover`; hide one with `scrollbar-width: none`. **Never set `scrollbar-color`** (or a non-`none` `scrollbar-width`): in Chromium either one, inherited, switches the whole subtree back to the native bar.
 
-Always use `var(--yaar-*)` for colors — never hardcode. Use `y-*` utility classes for common patterns.
+Always use `var(--yaar-*)` for colors — never hardcode. Use `y-*` utility classes for common
+patterns; add `y-light` on the root element for a light-themed app. The lists above are a summary —
+the full inventory is `packages/shared/src/design/app-css.ts`; read it before writing chrome CSS.
+
+**Extending vs overriding**: co-apply a local class with a `y-*` class to add only a *delta*
+(`class="y-tbtn tb-btn"`); re-declaring properties the `y-*` class already sets makes it inert.
+Defining a **new** `--yaar-*` token is supported; redefining a shipped one is not — prefix
+app-local properties with your own (`--pe-*`, `--sl-*`).
 
 ## Solid.js Gotchas
 
@@ -179,6 +183,7 @@ Apps use Solid.js with `html` tagged templates (not JSX). Known issues:
 - **Nothing may precede the first tag**: `solid-js/html` discards top-level text that appears before the template's first tag, and a template whose only top-level node is the expression makes it emit `.firstChild` with no parent. So `` html`${x}` ``, `` html`hi ${x}` ``, and `` html`hi` `` throw a stackless `SyntaxError`/`TypeError` from `new Function`, while `` html`lead <b>x</b>` `` silently drops `lead `. Wrap content in an element (`` html`<span>hi ${x}</span>` ``), or return the accessor (`() => x`) instead of wrapping it. The compiler fails the build on all four — see `guards/solid-html-guard.ts`.
 - **`flex: 1` breaks reactivity**: Use `position: absolute; inset: 0` instead
 - **Closing tags**: `</${Component}>` is auto-fixed by compiler plugin to `</>` — but the rewrite is a regex over each `.ts` file's whole text, not just `` html`` `` templates, so a plain template string building HTML (`` `<${tag}>${v}</${tag}>` ``) ships as `<th>Task</>`, which parsers drop. Only `dist` shows it. Spell closing tags as literals in string-built HTML, or build with DOM calls and take `outerHTML`.
+- **HTML entities inside `${}`**: interpolated strings are set as `textContent`, so `&#128247;` renders literally — use the Unicode character.
 - **Zero-arg function props are invoked, not passed through**: `wrapProps` turns any component prop whose interpolated value is a zero-argument function into a reactive getter, so `` html`<${C} foo=${accessor} />` `` hands the component the *current value*, not the accessor — unlike JSX — and `props.foo()` throws. Same mechanism makes a zero-arg event handler fire during render. Wrap it (`foo=${() => accessor}`) so the component receives the callable, or share a module-level signal. Functions with declared parameters (`(e) => …`) pass through untouched.
 
 ## Compiler & Bundled Libraries
@@ -186,9 +191,9 @@ Apps use Solid.js with `html` tagged templates (not JSX). Known issues:
 Apps compile via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`.
 The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and
 the bundled code. `@bundled/*` imports need no `npm install` — including the YAAR SDK
-(`@bundled/yaar`) — and a few gated SDKs (`@bundled/yaar-dev`, `@bundled/yaar-web`,
-`@bundled/yaar-ml`) require an entry under `app.json`'s `"bundles"`, or the compiler rejects the
-import.
+(`@bundled/yaar`) — and the gated `yaar-*` SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`, `yaar-media`)
+require an entry under `app.json`'s `"bundles"`, or the compiler rejects the import. The server
+auto-compiles stale apps at startup (`features/apps/auto-compile.ts`).
 
 The authoritative library list is `BUNDLED_LIBRARIES` in
 `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries`.

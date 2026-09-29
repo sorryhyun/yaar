@@ -38,7 +38,7 @@ The **installed** app. (The *running* instance is `yaar://windows/{windowId}` �
 
 #### The protocol — `yaar://apps/{appId}/protocol`
 
-The compiled `dist/protocol.json` of the **installed** app, addressable at its own granularity. It used to be inlined into `describe` above, which made one answer responsible for two questions an order of magnitude apart in size — identity + SKILL.md is a fixed ~10 KB, the manifest is 41.8 KB for a 52-command app and grows without bound. Their sum crossed the size at which the Claude CLI stops delivering a tool result inline and substitutes a path on disk, and a monitor agent holds the five `yaar://` verbs and no filesystem tools, so that path is a dead end. Split out, each verb answers its own question and the caller picks the size:
+The compiled `dist/protocol.json` of the **installed** app, addressable at its own granularity (a 52-command app's manifest is ~42 KB, past the size at which the Claude CLI swaps a tool result for a disk path a monitor agent cannot open). Each verb answers its own question and the caller picks the size:
 
 | Verb | URI | Effect |
 |------|-----|--------|
@@ -50,26 +50,18 @@ The compiled `dist/protocol.json` of the **installed** app, addressable at its o
 | `list` | `…/protocol/{commands,state}` | The index, narrowed to one section |
 | `invoke`/`delete` | any `…/protocol` path | Refused — a protocol is documentation, and a command needs a running window to act on |
 
-Serving `protocol.json` is safe because it is a build artifact: the compiler writes it from the source AST, `fold-schemas.ts` inlines the Zod param schemas, `dedupe-schemas.ts` hoists what repeats into `$defs`, and deploy re-derives and diffs it. It cannot drift from the code the way a hand-written restatement can.
+Serving `protocol.json` is safe because it is a build artifact (compiler writes it from the source AST; deploy re-derives and diffs it), so it cannot drift from the code.
 
 This is the app **as compiled**. A running instance registers its protocol live and may not agree (a devtools preview routinely does not) — that instance's manual is `describe('yaar://windows/{windowId}')`.
 
 `read`'s `subagents` and `streams` are **post-grant** — the intersection of the manifest with what the user approved at install (`config/app-grants.json`), not what `app.json` declares. An app holding `yaar-dev` can rewrite its own manifest, so the declaration is a request and the grant is the ceiling.
 
-> `yaar://apps/{appId}/state/…` and `/commands/…` are **refused on every verb**, by name. Protocol
+> `yaar://apps/{appId}/state/…` and `/commands/…` are **refused on every verb**, by name: protocol
 > state has no value and a command has nothing to act on until a window is open, and the same app
-> open on two monitors is two states — an `apps/` spelling would name one arbitrarily or name none.
-> Use `yaar://windows/{windowId}/{state,commands}/{key}`. The refusal is deliberately narrow:
-> `storage/`, `db/`, and `agents/` keep all five verbs, since `appStorage` and `appDb` are built
-> entirely on reads and lists under `yaar://apps/self/{storage,db}/`.
->
-> `yaar://apps/{appId}/protocol/commands/{key}` is **not** an exception to this — it is the other
-> side of the same line. The *documentation* of a command is a property of the installed app and is
-> the same on every monitor; the *command* is a thing that runs, and needs an instance to run on.
->
-> Any other sub-path (`yaar://apps/{appId}/hamsters`) is refused too. It used to be silently
-> answered as the bare app, because the app handlers take their id from the first path segment and
-> ignore the rest — a false success with nothing about it that looks wrong.
+> open on two monitors is two states. Use `yaar://windows/{windowId}/{state,commands}/{key}`.
+> `storage/`, `db/`, and `agents/` keep all five verbs (`appStorage` and `appDb` are built on them),
+> and `…/protocol/commands/{key}` is documentation, not an exception. Any other sub-path
+> (`yaar://apps/{appId}/hamsters`) is refused too.
 
 Handlers: `packages/server/src/handlers/apps/` (`register.ts` is the one composite registration —
 `ResourceRegistry` has no middle wildcard).
@@ -196,32 +188,24 @@ The canonical way agents address windows. The monitor is injected automatically 
 | `app_subscribe` | `channels?` (default `["*"]`), `mode?` (`wake`\|`buffer`, default `wake`), `debounceMs?` (default 500, clamped 100–5000) | Subscribe to an app's declared `app.emit()` channels → `{ subscriptionId }` |
 | `app_unsubscribe` | `subscriptionId` | Cancel an `app_subscribe` subscription |
 
-> **Two protocol sources exist**, and `describe` says which it read. `protocol.json` on disk and the
-> iframe's own registration diverge after a deploy without a reload; a manual that doesn't name its
-> source makes that divergence invisible — the agent reads a command list, calls a command the
-> running iframe has never heard of, and the error names neither cause.
+> **Two protocol sources exist**, and `describe` says which it read: `protocol.json` on disk and
+> the iframe's own registration diverge after a deploy without a reload.
 
-> **`invoke` on a command sub-path takes no `action`** — the URI already names the command, so the
-> payload is its params and nothing else. An `action` or a nested `params` in the payload is
-> refused rather than accepted-and-guessed; two spellings of one call with unclear precedence
-> between them is how such lists drift. `timeoutMs` is the one reserved key, because it is
-> transport rather than a param. The `{ action: 'app_query' | 'app_command' }` spellings on the
-> bare window URI remain, and reach the same executor.
+> **`invoke` on a command sub-path takes no `action`** — the URI names the command, so the payload
+> is its params. An `action` or nested `params` is refused. `timeoutMs` is the one reserved key.
+> The `{ action: 'app_query' | 'app_command' }` spellings on the bare window URI reach the same
+> executor.
 
-> `list('yaar://windows/{windowId}')` returns *that window's* keys. It used to ignore the window id
-> and return every window on the monitor, which is what `list('yaar://windows')` is for.
+> `list('yaar://windows/{windowId}')` returns *that window's* keys; `list('yaar://windows')` returns
+> every window on the monitor.
 
 > **`list('yaar://windows')` answers in stacking order, bottom first** — the last link is the window
 > on top. Each line carries `z:{n}` (rank among *this monitor's* windows, `0` at the bottom; a panel
-> says `fixed` instead, since panels do not stack) and `focused` on the one the desktop has focused.
-> Before this, the order was creation order and nothing said what was covering what, so an agent
-> placing a new window had no way to avoid burying the one the user was reading. The server mirrors
-> the desktop's z-order from the actions and interactions it already sees — see
+> says `fixed`, since panels do not stack) and `focused` on the one the desktop has focused. The
+> server mirrors the desktop's z-order from the actions and interactions it already sees — see
 > [OS Actions Reference → Stacking order](./os_actions_reference.md#stacking-order).
 
-**Three state keys belong to the window, not to the app inside it.** `__console` was always one;
-`__content` and `__screenshot` join it, and the set is now listed and described rather than
-mentioned in one param's help text:
+**Three state keys belong to the window, not to the app inside it:**
 
 | Key | Answers | Available on |
 |-----|---------|--------------|
@@ -229,21 +213,15 @@ mentioned in one param's help text:
 | `__screenshot` | a `window.capture` round trip to the frontend | iframe windows |
 | `__console` | the injected app-protocol script's capture buffer | iframe windows |
 
-Two things follow, and both were inconsistencies before:
-
-- **A window with no protocol lists what it has, instead of erroring about what it lacks.**
-  `list('yaar://windows/{markdownWindow}')` used to be an error — "it has no protocol, so nothing
-  under it is addressable" — which answered a question about the *app* when it was asked one about
-  the *window*. It now returns `state/__content`, with a note saying there is no app.
-- **A bare `read` of an iframe window is `__content` + `__screenshot`, and says so.** The screenshot
-  wins (an app window's raw content is a compiled HTML blob), so `content` is replaced by
-  `contentOmitted`, which names the URI holding it. It used to be dropped silently whenever a
-  capture happened to succeed — so the shape of "the window's current value" depended on whether
-  the frontend answered in time, and the half that was dropped was addressable by nothing.
+- A window with no protocol lists what it has: `list('yaar://windows/{markdownWindow}')` returns
+  `state/__content`, with a note saying there is no app.
+- A bare `read` of an iframe window is `__content` + `__screenshot`. The screenshot wins (an app
+  window's raw content is a compiled HTML blob), so `content` is replaced by `contentOmitted`,
+  which names the URI holding it.
 
 The `__` prefix is reserved: an app declaring a state key by one of these names is shadowed, not
 merged. `invoke(..., { action: 'app_query', stateKey: '__content' })` reaches the same answer as
-reading the sub-path, since the schema calls the two equivalent.
+reading the sub-path.
 
 `buildWindowResourceUri` / `parseWindowResourceUri`
 (`packages/server/src/lib/yaar-uri-server.ts`) mint and read these URIs, and
@@ -327,23 +305,18 @@ Callable by every agent tier:
 #### The clipboard is the browser's
 
 YAAR has no clipboard of its own. `read('yaar://user/clipboard')` emits a `user.clipboard.read`
-action, the desktop answers with a `CLIPBOARD_RESPONSE` frame, and the turn is parked in between —
-it is a server→client wait like a prompt or a capture, and it is registered in `ANSWER_EVENT_TYPES`
-for the same reason (see `packages/shared/src/events/routing.ts`). Three consequences:
+action, the desktop answers with a `CLIPBOARD_RESPONSE` frame, and the turn is parked in between
+(registered in `ANSWER_EVENT_TYPES`, `packages/shared/src/events/routing.ts`). Consequences:
 
-- **A refusal is the browser's, not YAAR's.** Reads are gated by the browser's own
-  clipboard permission, so the first one may need the user to allow it in site settings; the
-  answer distinguishes `denied` from `not-focused` (browsers refuse a read to an unfocused tab)
-  because the fixes are different.
-- **Under `REMOTE=1` it is the *viewing* device's clipboard**, not the server host's — the phone's,
-  if the phone is what has the desktop open.
-- **No desktop attached, no clipboard.** A read outside a live session fails immediately rather
-  than waiting out its deadline.
+- **A refusal is the browser's.** Reads are gated by the browser's clipboard permission; the answer
+  distinguishes `denied` from `not-focused` (browsers refuse a read to an unfocused tab).
+- **Under `REMOTE=1` it is the *viewing* device's clipboard**, not the server host's.
+- **No desktop attached, no clipboard.** A read outside a live session fails immediately.
 
 #### Ceilings, and the door past them
 
-A `read` is sized for a conversation, and says so whenever it trims (see
-`packages/server/src/features/user/clipboard.ts` for the constants):
+A `read` is sized for a conversation, and says so whenever it trims (constants:
+`packages/server/src/features/user/clipboard.ts`):
 
 | | `read` | `invoke { action: 'save' }` |
 |---|---|---|
@@ -351,37 +324,21 @@ A `read` is sized for a conversation, and says so whenever it trims (see
 | Image | downscaled to 1600px on its longest edge, ≤4 MB | full resolution, ≤32 MB |
 | Returns | the content | a `yaar://storage/...` URI |
 
-Truncation happens **in the desktop**, before the data crosses the socket — a 4K screenshot is
-~30 MB decoded, and trimming it server-side would still mean moving all of it through a WebSocket
-frame first. `save` is the escape hatch for both "too long" and "too big to look at": it writes the
-whole thing to storage and hands back the URI, so a large paste becomes a file an app can open
-rather than a prompt nobody can afford. An image wins over text when the clipboard holds both — a
-pasted screenshot usually carries a `text/plain` alternative naming the file, and saving that name
-instead of the picture would look like a successful save of the wrong thing.
+Truncation happens **in the desktop**, before the data crosses the socket. `save` writes the whole
+thing to storage and hands back the URI. An image wins over text when the clipboard holds both.
 
 #### Credentials are taken out first
 
-Clipboard **text** is scanned for credentials before it is handed over, and every match is replaced
-with a `[redacted: aws-access-key-id #1]` placeholder naming what was there. The read still
-succeeds and the rest of the content is verbatim — the caller is an LLM, and a refusal makes it
-ask the user to paste the content into the chat instead, which lands the secret in the same
-context window by a route with no scan on it. A read that removed something says so, and the
-detector is `packages/server/src/features/user/secret-scan.ts`.
+Clipboard **text** is scanned before it is handed over, and every match is replaced with a
+`[redacted: aws-access-key-id #1]` placeholder naming what was there (the read still succeeds; a
+read that removed something says so). Detector: `packages/server/src/features/user/secret-scan.ts`.
 
-Three limits are worth knowing before relying on it:
+- **Vendor-prefixed credentials only** — `ghp_`, `sk-ant-`, `AKIA`, `AIza`, `xoxb-`, PEM
+  private-key blocks, JWTs, a password in a connection URL. Unlabeled high-entropy strings pass.
+- **Images are not scanned.**
+- **`save` is scanned too, and writes the redacted text.**
 
-- **It detects vendor-prefixed credentials only** — `ghp_`, `sk-ant-`, `AKIA`, `AIza`, `xoxb-`,
-  PEM private-key blocks, JWTs, a password in a connection URL. An unlabeled high-entropy string,
-  or a `MY_SECRET=hunter2` with no recognizable shape, passes through. This is a floor, not a
-  guarantee: clipboard content is the user's private data whether or not the scan found anything.
-- **Images are not scanned.** A screenshot of an `.env` file goes through as pixels.
-- **`save` is scanned too, and writes the redacted text.** Not an afterthought — `save` returns a
-  URI rather than bytes, so writing the raw clipboard would leave the secret one
-  `read('yaar://storage/...')` away, in a read with no clipboard in it to scan. Both doors go
-  through one gate for exactly this reason.
-
-`YAAR_CLIPBOARD_SECRETS=0` turns the scan off, for an agent whose job *is* the credential
-(rotating a key, debugging an auth header).
+`YAAR_CLIPBOARD_SECRETS=0` turns the scan off ([server_env.md](./server_env.md)).
 
 ### System — `yaar://system/...`
 
@@ -427,7 +384,7 @@ Five verbs. The URI identifies the resource; the verb determines the operation.
 | `invoke` | Mutate, create, or trigger — the universal write/action verb | Resource-specific result |
 | `delete` | Remove a resource | `{ deleted: true }` |
 
-The three are not interchangeable, and the difference is sharpest on apps and windows (above): `describe('yaar://apps/notes')` is Notes' protocol and SKILL.md, `read('yaar://apps/notes')` is what version of it is installed and what it was granted.
+The three are not interchangeable: `describe('yaar://apps/notes')` is Notes' protocol and SKILL.md, `read('yaar://apps/notes')` is what version is installed and what it was granted.
 
 **Describing a URI that names nothing is an error, not a plausible success**, so a `describe` that answers is proof the resource exists. The auto-generated form describes the URI *pattern*, which is an honest answer only when the URI names something — hence the `exists` hook below.
 
@@ -475,7 +432,7 @@ literal.
 
 HTTP requests also flow through the verb layer: `invoke('yaar://http', { url, ... })`, with domain allowlisting at `invoke('yaar://config/domains', { domain })`. `delete('yaar://http')` clears the caller's stored cookie jar (use on app logout).
 
-The response shape depends on who asked, because base64 is useful to one caller and useless to the other. An **app iframe** gets the envelope it can decode — `{ ok, status, headers, body, bodyEncoding: 'base64' }` — which `yaarFetch` turns back into a real `Response`. An **agent** gets text on `body` as before, but a binary body never arrives as base64: an image (identified from its bytes, not its content-type) comes back as an image block, and anything else is omitted with `bodyOmitted`, `bodyBytes`, and a hint. To actually retrieve binary content, the session and monitor agents pass `saveTo` — a path relative to `yaar://storage/` — and get `{ saved: { uri, bytes } }` back to `read` or open. A `saveTo` body is streamed to disk as it arrives rather than assembled in memory, so it is bound by `YAAR_MAX_DOWNLOAD_MB` (512MB) instead of the 10 MB inline cap, and a transfer that fails partway leaves nothing at the destination.
+The response shape depends on who asked. An **app iframe** gets `{ ok, status, headers, body, bodyEncoding: 'base64' }`, which `yaarFetch` turns back into a `Response`. An **agent** gets text on `body`; an image (identified from its bytes) comes back as an image block, and any other binary body is omitted with `bodyOmitted`, `bodyBytes`, and a hint. Session and monitor agents retrieve binary with `saveTo` (a path relative to `yaar://storage/`) and get `{ saved: { uri, bytes } }`; it streams to disk, bounded by `YAAR_MAX_DOWNLOAD_MB` (512MB) rather than the 10 MB inline cap, and a failed transfer leaves nothing at the destination.
 
 ### Batching
 
@@ -543,9 +500,9 @@ Patterns use authority + optional path prefix, matched by specificity (exact > p
 'yaar://config/*'         -> wildcard match under yaar://config/
 ```
 
-**A `/*` wildcard must declare either `exists` or `describe`, and `register()` throws otherwise.** A wildcard is exactly the shape where the id can be wrong, and the auto-generated `describe` answers from the *pattern* — identically for a live resource and one that has never existed. An optional field nobody remembers is how that got in. `exists` returning false makes `describe` answer `No resource at <uri>.`; a handler with its own `describe` owns the check instead. Exact and prefix patterns name a fixed resource and stay exempt.
+**A `/*` wildcard must declare either `exists` or `describe`, and `register()` throws otherwise** — the auto-generated `describe` answers from the *pattern*, identically for a live resource and one that never existed. `exists` returning false makes `describe` answer `No resource at <uri>.`. Exact and prefix patterns are exempt.
 
-`yaar://session/{agents,monitors}/*`, `yaar://config/{mcp,hooks,shortcuts,mounts,app}/*` and `yaar://skills/*` take the hook; `yaar://windows/*`, `yaar://apps/*`, `yaar://storage/*`, `yaar://mcp/*` and `yaar://user/notifications/*` answer for themselves. The last is the one namespace that genuinely cannot say: a notification is an emitted action, not a stored resource — the client owns the toast and dismisses it on its own timer — so its `describe` says so outright rather than reporting a confident yes.
+`yaar://session/{agents,monitors}/*`, `yaar://config/{mcp,hooks,shortcuts,mounts,app}/*` and `yaar://skills/*` take the hook; `yaar://windows/*`, `yaar://apps/*`, `yaar://storage/*`, `yaar://mcp/*` and `yaar://user/notifications/*` answer for themselves (a notification is an emitted action, not a stored resource, so its `describe` says so).
 
 Each domain registers its handlers during server startup (`handlers/config.ts`, `handlers/window.ts`, etc.). For action-bearing resources (browser, agents), the handler dispatches on `payload.action`:
 

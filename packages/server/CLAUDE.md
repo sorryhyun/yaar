@@ -12,19 +12,15 @@ bun run test                   # Every suite, each in the process it needs
 
 ## Tests
 
-`bun run test` is `scripts/run-tests.ts`: it globs **every** `*.test.ts` under `src/` (colocated
-files included — which is why `tsconfig.build.json` excludes them), groups them by
-`scripts/test/partitions.ts`, and spawns one process per partition. The split is load-bearing and
-enforced by `scripts/test/partition-guard.ts`. The partition list, the three rules that follow
-(never depend on the machine; never `mock.module` under `src/tests/loopback/`; assert against the
-narrowest module), and the `ANSWER_EVENT_TYPES` loopback rule: the `yaar-testing` skill (Server
-package specifics) and the rationale headers in `scripts/test/partitions.ts` / `scripts/test/env.ts`.
+`bun run test` is `scripts/run-tests.ts`: one process per partition (`scripts/test/partitions.ts`,
+enforced by `scripts/test/partition-guard.ts`). The partition list, the three rules (a test never
+depends on the machine it runs on; never `mock.module` under `src/tests/loopback/`; assert against
+the narrowest module), and the `ANSWER_EVENT_TYPES` loopback rule: the `yaar-testing` skill.
 
 ## Environment Variables
 
-Names and defaults below. **The reasoning behind each — why a default is what it is, what breaks
-if you flip it — is [`docs/reference/server_env.md`](../../docs/reference/server_env.md).** Read it
-before changing a default or adding a knob.
+Names and defaults. Rationale for each — read it before changing a default or adding a knob:
+[`docs/reference/server_env.md`](../../docs/reference/server_env.md).
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -145,6 +141,7 @@ src/
 │   │                     #   child-process-limit.ts — reads Android's phantom-process toggle, caps monitors while it is on (yaar://system/android)
 │   ├── apps/             # App listing, agent docs loading, manifest.ts (the one app.json read + normalise), changed.ts (notifyAppChanged — every on-disk app change), docs.ts (agent/docs/ topic tier), describe.ts, capabilities.ts (grant ceiling), marketplace, badge
 │   ├── browser/          # CDP browser automation actions
+│   ├── companion/        # companion-tab.ts — the server-side second desktop (YAAR_COMPANION_TAB)
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
 │   ├── fonts/            # The served-face catalog + subsetForText() behind yaar://system/fonts
@@ -154,7 +151,9 @@ src/
 │   ├── ml-host/          # Remote ML compute: relay.ts pairs an app's yaar-ml socket with one headless Chrome tab
 │   │                     #   running host-page.client.js (browser JS, served inline) — YAAR_ML_COMPUTE
 │   ├── pdf.ts            # @yaar/lib/pdf bound to this install's poppler — the PDF import site
+│   ├── remote-control.ts # Claude Remote Control for one monitor agent (reached via /api/remote-control, no yaar:// verb)
 │   ├── update/           # Self-update: semver.ts, release.ts, installer.ts, updater.ts
+│   ├── ytdlp/            # jobs.ts — async yt-dlp download jobs behind yaar://system/ytdlp
 │   └── window/           # Window create/update/manage, app protocol, app query/command, delegated-grants, subscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
 ├── reload/               # Fingerprint-based action cache
@@ -175,23 +174,16 @@ src/
     └── yaar-uri-server.ts    # Server-only URI parsers (content path, window resource, config, session)
 ```
 
-**The rest of `lib/` is now `@yaar/lib`** (`packages/lib/`, its own CLAUDE.md). Anything that
-could be described without the word "YAAR" moved there so that the boundary this directory's
-header claims — "no server internal imports" — is enforced by the module graph rather than by
-reviewers remembering it: `fonts/`, `pdf/`, `tunnel/`, `download/`, `ytdlp/`, `freedpi/`,
-`ssrf.ts`, `image.ts`, `ids.ts`, `errors.ts`, `open-url.ts`, `pick-directory.ts`, `tls/`. Import them
-by subpath (`@yaar/lib/ssrf`, `@yaar/lib/fonts`, …).
+Generic utilities (anything describable without the word "YAAR") live in `@yaar/lib`
+(`packages/lib/CLAUDE.md`), imported by subpath (`@yaar/lib/ssrf`, `@yaar/lib/fonts`, …). Two take
+as a parameter what the server knows:
 
-Two of them take as a parameter what they used to read from `config.js`, which is the shape
-every future extraction takes:
+| Module | Server side |
+| --- | --- |
+| `@yaar/lib/pdf` (`binDir`) | `features/pdf.ts` binds `getPopplerBinDir()` once — **import PDF from there**, not from `@yaar/lib/pdf` |
+| `@yaar/lib/tunnel` (`loadTunnelConfig(configDir)`) | `lifecycle.ts` passes `getConfigDir()` |
 
-| Moved module | Was | Now | Server side |
-| --- | --- | --- | --- |
-| `@yaar/lib/pdf` | `IS_BUNDLED_EXE` | `binDir` option | `features/pdf.ts` binds `getPopplerBinDir()` once — **import PDF from there**, not from `@yaar/lib/pdf` |
-| `@yaar/lib/tunnel` | `getConfigDir()` | `loadTunnelConfig(configDir)` | `lifecycle.ts` passes `getConfigDir()` |
-
-`browser/` stays because it reads `config.js` for the debug port, the profile directory and
-the idle sweep — it is a YAAR subsystem that happens to speak CDP, not a CDP library.
+`lib/browser/` stays in the server because it reads `config.js` (debug port, profile dir, idle sweep).
 
 ## Architecture
 
@@ -221,11 +213,11 @@ SessionHub (singleton registry)
 `LiveSession` is the aggregate root. It owns four collaborators, each reached only through it and given narrow callbacks rather than the session itself:
 
 - `MonitorRegistry` — the authoritative monitor list, id minting (lowest free non-negative integer), `MAX_MONITORS` enforcement (lowered to 2 on Android while child-process restrictions are on — the cap rides every `MONITORS` event as `maxMonitors`), per-connection monitor subscription + viewport, and monitor removal (unsubscribes watchers, then removes the monitor agent).
-- `ClientEventController` — owns the total `ClientEventRoutes` table and every frame handler. `LiveSession.routeMessage()` is still the public entry: it lazily initializes the pool and settles message-id acceptance, then delegates to `ClientEventRouter`.
+- `ClientEventController` — owns the total `ClientEventRoutes` table and every frame handler. `LiveSession.routeMessage()` is the public entry: it lazily initializes the pool and settles message-id acceptance, then delegates to `ClientEventRouter`.
 - `SessionSnapshotService` — window→`window.create` conversion, iframe-token refresh, surface snapshot, busy-agent snapshot. Strictly read-only over injected registries.
 - `AppWindowCoordinator` — per-(session, window) app readiness, command replay on iframe remount, app-channel/`APP_EVENT` routing, bridge-event fan-out to Real Browser windows, and app-protocol request delivery to the frontend.
 
-`LiveSession` still owns the registries, `broadcast()` remains the only server→frontend gateway, and it decides its own cleanup order.
+`LiveSession` owns the registries, `broadcast()` is the only server→frontend gateway, and it decides its own cleanup order.
 
 ### Message Flow
 
@@ -241,15 +233,15 @@ WebSocket → LiveSession.routeMessage()
 
 ### Event Delivery Rule
 
-**All server→frontend events must flow through `LiveSession.broadcast()`**, never directly through `BroadcastCenter.publishToSession()`. `LiveSession.broadcast()` handles monitor-scoped routing.
+**All server→frontend events must flow through `LiveSession.broadcast()`** (which handles monitor-scoped routing), never directly through `BroadcastCenter.publishToSession()` — that bypasses routing and silently fails during active agent streaming.
 
-For non-agent contexts (HTTP routes, proxy) where there is no `LiveSession` reference, use the `actionEmitter` EventEmitter pattern. There are no per-session `actionEmitter.on(...)` listeners: `session/session-event-router.ts` holds exactly ONE process-wide subscription per channel and resolves the destination session by `sessionId`, so listener count stays constant as sessions come and go.
+Non-agent contexts (HTTP routes, proxy) with no `LiveSession` reference use `actionEmitter`. `session/session-event-router.ts` holds exactly ONE process-wide subscription per channel (no per-session `actionEmitter.on(...)` listeners):
 
 1. `actionEmitter.emit('my-event', { sessionId, event })` from the source
 2. `SessionEventRouter`'s one subscription for that channel looks up the `sessionId` and calls the matching `SessionEventSink`
-3. `LiveSession` registers a `SessionEventSink` in its constructor (`sessionEventRouter.attach()`) and detaches it in `cleanup()` (`sessionEventRouter.detach()`, which checks sink identity before removing — a session id is reused across reconnects, so a late `cleanup()` on a stale `LiveSession` must not unsubscribe its replacement)
+3. `LiveSession` registers a `SessionEventSink` in its constructor (`sessionEventRouter.attach()`) and detaches it in `cleanup()` (`sessionEventRouter.detach()` checks sink identity — a session id is reused across reconnects, so a late `cleanup()` on a stale `LiveSession` must not unsubscribe its replacement)
 
-`bridge-event` is the one deliberately-global channel — no `sessionId`, fanned out to every attached sink, each of which decides whether it has a window that cares. See `'app-protocol'`, `'action'`, and the forwarded channels (`'approval-request'`, `'verb-subscription'`, etc.) in `session-event-router.ts` as the reference implementation. Calling `BroadcastCenter.publishToSession()` directly bypasses routing and silently fails during active agent streaming.
+`bridge-event` is the one deliberately-global channel — no `sessionId`, fanned out to every attached sink. Reference implementations: `'app-protocol'`, `'action'`, and the forwarded channels (`'approval-request'`, `'verb-subscription'`, etc.) in `session-event-router.ts`.
 
 ### Event Type Constants
 
@@ -278,73 +270,49 @@ const log = createLogger('AgentSession');
 log.warn('turn overlapped', { role, waitedFor: previousRole });
 ```
 
-The session/monitor/agent/window/app ids are attached automatically, from an
-`AsyncLocalStorage` resolver wired in `lifecycle.ts` (`setLogContextResolver`) — that is the
-whole point, and why a bare `console.log` is refused: it carries none of them. For a class whose
-work happens *outside* an agent turn (`LiveSession`'s connection and pool events), bind the id
-instead: `createLogger('LiveSession').child({ sessionId })`.
+Session/monitor/agent/window/app ids are attached automatically by an `AsyncLocalStorage`
+resolver (`setLogContextResolver`, wired in `lifecycle.ts`) — a bare `console.log` carries none of
+them. For work *outside* an agent turn (`LiveSession`'s connection and pool events), bind the id:
+`createLogger('LiveSession').child({ sessionId })`.
 
 Three rules:
 
 - **Fields, not interpolation.** `log.info('created monitor agent', { monitorId })`, never
-  `` log.info(`created monitor agent for ${monitorId}`) `` — the field is what `YAAR_LOG_FORMAT=json`
-  emits as a queryable key, and the interpolated string is what it cannot.
-- **Ids and counts, never content.** A transcript must not be reachable through a debug switch.
-  The one deliberate excerpt is the tool-error `detail` in `StreamToEventMapper`, kept because "a
-  tool failed" without its text is unactionable, and commented as such at the call site.
+  `` log.info(`created monitor agent for ${monitorId}`) `` — fields are what `YAAR_LOG_FORMAT=json` can query.
+- **Ids and counts, never content.** The one deliberate excerpt is the tool-error `detail` in
+  `StreamToEventMapper`, commented as such at the call site.
 - **The component name comes from `createLogger`, not the string.**
 
-Each level maps to its own console method, so `warn` reaches `console.warn` — several test helpers
-spy on exactly that. The exemptions to `no-console` are listed with their reasons in
-`eslint.config.js`.
+Each level maps to its own console method (`warn` → `console.warn`; test helpers spy on it).
+`no-console` exemptions are listed with reasons in `eslint.config.js`.
 
 ## Providers
 
-**AITransport interface:** `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`, `interrupt()`, `dispose()`.
+The `server-providers` skill (loads when editing `providers/`) covers the `AITransport` contract,
+warm pool, per-provider config, Codex packaging, and the **notice-vs-error rule**: a recoverable
+failure becomes `StreamMessage.type === 'notice'`, never `error` (`error` is terminal and latches
+the turn closed).
 
-**Warm Pool:** Providers pre-initialized at startup. `initWarmPool()` at boot, `acquireWarmProvider()` gets a ready instance, pool auto-replenishes in background.
-
-Per-provider config (models, session persistence, prewarm), the **notice-vs-error contract** (a
-recoverable failure becomes `StreamMessage.type === 'notice'`, never `error` — `error` is terminal
-by contract and latches the turn closed), and Codex packaging (`@openai/codex` optional peer dep,
-vendored-binary resolution): the `server-providers` skill, which loads when editing `providers/`.
-
-**Codex version policy:** an under-versioned CLI is **refused rather than driven** — at codegen,
-at auto-detect in `factory.ts`, and at the `initialize` handshake; a forced `PROVIDER=codex` turns
-the refusal into a refused boot. Gate-by-gate rationale: the `codex-provider` skill and
-`providers/codex/version.ts`.
+**Codex version policy:** an under-versioned CLI is **refused rather than driven** (codegen,
+auto-detect, `initialize` handshake; a forced `PROVIDER=codex` refuses the boot) — the
+`codex-provider` skill.
 
 ## Tools (MCP)
 
-The active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`) are `system`, `verbs`, `app`,
-`messaging`, and `subagent`. The `verbs` server exposes 5 generic tools (`describe`, `read`,
-`list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import
-domain logic from `features/`) via `yaar://` URIs.
+Namespaces (`CORE_SERVERS` in `mcp/server.ts`): `system`, `verbs`, `app`, `messaging`, `subagent`.
+`verbs` exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch via
+`yaar://` URIs to thin handlers in `handlers/`, which import domain logic from `features/`.
 
-| Domain | Namespace | Summary |
-|--------|-----------|---------|
-| `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs |
-| `mcp/system/` | system | reload_cached, list_reload_options |
-| `mcp/app-agent/` | app | describe, query, command, relay (+ direct_message when granted) |
-| `mcp/messaging/` | messaging | Cross-agent direct messaging |
-| `mcp/sub-agent/` | subagent | app-defined tools of the *calling* sub-agent — empty for everyone else |
-
-Everything below this surface lives in the `server-verbs` skill, which loads when editing
-`handlers/`, `mcp/`, or `features/`: the **stateless-only protocol era** (`getModernHandler` in
-`mcp/server.ts` — read its two documented traps first), verb semantics and the
-six false-success rules, the two batching axes, **access tiers** (`access: 'session-principal'`),
-the app protocol and its `$defs` resolution, the app-agent storage door (built in for every
-app, up to the commons),
-monitor ↔ app messaging, sub-agent containment, and self-update (`features/update/`).
+The per-namespace table, the stateless-only protocol era (`getModernHandler` in `mcp/server.ts` —
+read its two documented traps first), verb semantics, batching, **access tiers**
+(`access: 'session-principal'`), the app protocol, app-agent storage, monitor ↔ app messaging,
+sub-agents, and self-update: the `server-verbs` skill (loads when editing `handlers/`, `mcp/`,
+`features/`).
 
 ## REST API
 
-Routes in `http/routes/` — `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` hold the full
-signatures. **A route never invents its own permission check**: it resolves the caller to a
-`Principal` (`resolvePrincipal`) and names the `yaar://` URI + verb it is about to perform
-(`requirePermission`) — the same check `POST /api/verb` runs. The route list, the gate table
-(`requireApp` / `requireHost` / `requireBundle` / `permissionsAllow`), the four token/grant
-invariants, and the MCP principal model: the `server-http` skill, which loads when editing
-`http/`. `http/access.ts`'s header is the authority on what a principal is — read it before
-adding a gate.
+**A route never invents its own permission check**: it resolves the caller to a `Principal`
+(`resolvePrincipal`) and names the `yaar://` URI + verb it performs (`requirePermission`) — the
+same check `POST /api/verb` runs. Route list, gate table, token invariants, MCP principal model:
+the `server-http` skill. `http/access.ts`'s header is the authority on what a principal is.
 

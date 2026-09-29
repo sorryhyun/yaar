@@ -74,11 +74,14 @@ src/
     │   ├── image-cache.ts # createBlobUrlCache + decodeImage — LRU blob URLs, peek, neighbour preload for readers/lightboxes
     │   ├── fonts.ts       # fonts.faces/faceCss/inline — YAAR's faces, subsetted server-side into a data: URL @font-face
     │   ├── rasterize.ts   # rasterize() — DOM → SVG foreignObject → canvas, with the six quiet failures closed
+    │   ├── protocol-context.ts # createProtocolContext — runtime context for statically-declared handlers
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createSharedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, findReferences, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
+    ├── yaar-media.ts      # Gated SDK: mediaUrl() streaming via /api/media-proxy + yt-dlp audio download (requires bundles: ["yaar-media"])
+    ├── lucide.ts          # icons as IconNode data + icon() renderer
     ├── three-addons.ts    # curated examples/jsm surface (three core stays external — one copy)
     ├── anime.ts           # v3→v4 easing name compat wrapper
     ├── mammoth.ts         # CommonJS default-export workaround
@@ -97,7 +100,7 @@ src/
 1. **Entry:** `compileTypeScript(sandboxPath, options)` — expects `src/main.ts`
 2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve. `scanClasses()` reads the same files for `y-*` classes nothing defines and returns them as `warnings` (never a failure)
 3. **Bundle:** `Bun.build()` with 4 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
-4. **SDK injection:** 13 iframe SDK scripts (ime-guard, autofill-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, device, text-selection, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame, and an origin-isolated app is not one — without it such an app forwards none of the shell's reserved shortcuts (Shift+Tab, Ctrl+1-9, Ctrl+W)
+4. **SDK injection:** 13 iframe SDK scripts (ime-guard, autofill-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, device, text-selection, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame (an origin-isolated app would otherwise forward none of the shell's reserved shortcuts)
 5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + `window.__yaar_links__` + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`. The links block is app.json's `"links"` (an origin relative hrefs in this app's content resolve against) and is emitted **for every app, empty or not** — its presence is also how the link guard tells a compiled app from a plain HTML document shown in a window
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, SDK hash, compiler version
@@ -109,10 +112,9 @@ HTML wrap, because the wrapper carries the extracted manifest back into the page
 
 The manifest an agent reads is built from source at compile time, while the manifest the
 app actually serves is built at runtime by the iframe SDK from the same `defineApp({...})`
-config. **Those two must agree.** The failure that matters is one-sided: a command that runs
-fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
-stays green — one real incident shrank 29 commands to 3. Hence the standing rule for this
-subsystem: **refusal over omission.** Silence is the one answer it must never give.
+config. **Those two must agree.** A command that runs but never reaches `dist/protocol.json` is
+invisible to agents while every build signal stays green, hence the standing rule:
+**refusal over omission.**
 
 A descriptor's optional `describe()` is the one field deliberately outside that agreement — it is
 a runtime handler like `get`/`run`, answered per key on demand, so it reaches neither manifest and
@@ -173,9 +175,8 @@ reasoning for each, plus why the Worker's `window`/`document` stubs are load-bea
 
 ### Shared subschemas (`protocol/dedupe-schemas.ts`)
 
-The manual an agent reads has a hard ceiling nobody here controls, and most of the excess is
-*restatement* — one texture-slot shape appeared 5× inside a single `setMaterial`. This pass hoists
-any subschema stated twice into one protocol-level `$defs` and points at it. It runs in
+The manual an agent reads has a hard size ceiling, and most of the excess is *restatement*. This
+pass hoists any subschema stated twice into one protocol-level `$defs` and points at it. It runs in
 `extract-protocol-dir.ts` after **both** readers, so a JSON-literal app that hand-duplicates a
 shape is folded like a Zod one, and the compile and `deploy.ts`'s re-derivation cannot disagree.
 Its counterpart is one option in the fold: `toJSONSchema(..., { reused: 'ref' })`.
@@ -214,10 +215,8 @@ each derives its expectation from the compiler's own output so it cannot drift.
   failing, because which string is a class list is a heuristic. It reads only unambiguous
   class positions (`class=`/`className=` values, `class:` properties, `classList.*()`
   arguments), skips any name it cannot read whole (`y-btn-${v}`, `'y-tone-' + t`), and
-  counts classes the app defines in its own CSS as known. Measured on the fleet at landing:
-  2 true positives, 0 false. It deliberately has **no unused-class check**: apps style DOM
-  that libraries create (`d2h-*`, highlighter tokens), so that check produced dozens of
-  permanent, unfixable warnings.
+  counts classes the app defines in its own CSS as known. It deliberately has **no
+  unused-class check** (apps style DOM that libraries create, e.g. `d2h-*`).
 - **Guard messages must be ASCII**: those raised from a Bun plugin pass through an error
   path that mangles non-ASCII bytes (an em dash arrives as `â`). The rule, the walk, the
   snippet, and the `path:line:col` / `problem:` / `fix:` rendering live once in
@@ -258,21 +257,18 @@ roots import the same `three.core.js` file and Bun dedupes them regardless.
 `import logo from './logo.png'` yields a string usable in `<img src>`, CSS `url()`, `fetch()`,
 `new Audio()`. Covers `ASSET_MIME_TYPES`; `*.png`-style ambient declarations in
 `bundled-types/index.d.ts` keep typecheck green, and `asset-imports.test.ts` asserts the two
-lists are the same set — each half-edit fails later and elsewhere. Written as a plugin because
-Bun's `loader: { '.png': 'dataurl' }` is silently a no-op in the *programmatic* bundler (1.3.14).
-Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total. The same plugin inlines
+lists are the same set. (A plugin because Bun's `loader: { '.png': 'dataurl' }` is a no-op in
+the programmatic bundler.) Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total. The same plugin inlines
 `TEXT_ASSET_EXTENSIONS` (`.html`, `.htm`) as the file's *text* — markup for `innerHTML`/`srcdoc`,
 where a data URI is useless — declared as `const text: string` modules and parity-tested the
 same way. Without it Bun's native HTML loader claims the import and the build fails.
 
-An import of any *other* extension falls through to Bun's default `file` loader, which emits a
-sibling file beside the bundle and reports `success: true` — a green build, then a runtime 403
-fetching something the single-HTML output never carried (a `.glb` import is what found this).
-`siblingAssetError()` in `build/build-app.ts` fails the build on any `kind: 'asset'` artifact
-instead, from both the compile and the schema fold; it checks artifact kinds rather than a
-denylist of extensions, so a new format is covered the day it is imported.
+An import of any *other* extension would fall through to Bun's `file` loader and emit a sibling
+file the single-HTML output never carries (green build, runtime 403). `siblingAssetError()` in
+`build/build-app.ts` fails the build on any `kind: 'asset'` artifact, from both the compile and the
+schema fold — by artifact kind, not an extension denylist.
 
-**`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html) — a regex over the file's whole text, so it also hits `</${tag}>` in plain template strings that build HTML for export (word-excel's table export shipped `<th>Task</>`), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. The fast gate intentionally recognizes the current literal `` html` `` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
+**`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html) — a regex over the file's whole text, so it also hits `</${tag}>` in plain template strings that build HTML (see `apps/CLAUDE.md` Solid gotchas), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. The fast gate intentionally recognizes the current literal `` html` `` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
 
 Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LIBS=1` to print plugin initialization, resolution strategy, and resolved filesystem paths.
 
@@ -280,8 +276,7 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 
 **`findReferences(path, query, { bundles })`** — symbol references and callers, from a TypeScript
 LanguageService built on `sandbox-tsconfig.ts`, the same options and grant-sliced declarations
-typecheck hands tsc. Two readers of one definition is the point: a symbol typecheck resolves and
-references cannot would be two tools describing two programs. Three rules:
+typecheck hands tsc, so both describe the same program. Three rules:
 
 - **Never on the calling thread.** Building a program is synchronous and takes about a second per
   10k lines; the caller is the server's event loop. It runs in one Worker that keeps up to two
@@ -299,38 +294,21 @@ Two standing bars, because everything this package exports is read by an app-aut
 agent before it is called by an app:
 
 - **No new `@bundled/yaar` export without 3+ existing hand-rolled call sites in the app
-  fleet.** The full `@bundled/yaar` declaration is ~65KB — the largest describe payload by
-  far, which is why `describeBundledLibrary('yaar')` answers with a ~6KB index instead — and
-  every export still lengthens the index an agent reads before writing a line. A helper
-  below the bar makes the ones above it harder to find.
-  The last additions cleared it by a wide margin and are the calibration to argue against:
-  `safeParseOr` (82 call sites / 22 apps), `tryToast` (~50), `escapeHtml` (6, three of them
-  attribute-unsafe), `downloadBlob`/`blobToDataUrl` (6 and 4), `formatBytes`/`formatDuration`/
-  `formatClock` (4, 3 and 6, all rendering the same value differently), `dataUrlToBlob`/
-  `base64ToBytes`/`bytesToBase64` (6, 3 and 2 — the return trips of the two above).
-
-  **Count the call sites by contract, not by shape.** The adoption pass that exercised
-  those seven found the audit had overcounted wherever it matched a *shape*: `tryToast`'s
-  ~50 `try/await/catch/showToast` blocks are ~38 real adoptions, because configurations
-  and lab curate a short static failure message rather than surfacing `errMsg(e)`. One of
-  `formatClock`'s six was a formatter with no callers. A grep tells you how many places
-  have the same silhouette; only reading them tells you how many have the same contract,
-  and only the second number belongs in this argument.
+  fleet.** The full declaration is ~65KB (hence `describeBundledLibrary('yaar')` answers with a
+  ~6KB index), and every export lengthens the index an agent reads. **Count call sites by
+  contract, not by shape** — a grep counts the same silhouette; only reading them counts the
+  same contract. Calibration: `safeParseOr` (82 call sites / 22 apps), `tryToast` (~38 real of
+  ~50 matches), `escapeHtml` (6).
 - **No new `BUNDLED_LIBRARIES` entry without a concrete first consumer.** Registry entries
   are prebundled into the standalone exe, so a speculative one costs artifact bytes
-  permanently and narrows nothing. The reverse direction is cheap: one line plus a `.d.ts`
-  block, the moment an app actually needs it.
+  permanently. Adding one later is one line plus a `.d.ts` block.
 
-Both exist because the surface that had to be pruned — `showAlert`, `clsx`, `konva`, `p5`,
-all at zero consumers — got there through locally reasonable set-completion ("we have
-confirm and prompt, so add alert") and anticipation, not through anyone deciding to add
-dead weight. The bar is the cheaper check.
+No set-completion ("we have confirm and prompt, so add alert") and no anticipation — that is how
+`showAlert`, `clsx`, `konva`, `p5` got in and had to be pruned.
 
-Two SDK exports are **frozen** rather than pruned, and should not grow without the demand
-that was missing the first time: `appDb` (168 lines, 9 methods, 2 consumers — kept because
-a document store is a capability, not a convenience) and `createAutosave` (a ~68-line
-dirty/saveFailed/editSeq machine with 1 consumer; if a second app skips it *because* of
-that weight, shrink it to what slides-lite uses rather than defending the API).
+Two SDK exports are **frozen** — don't grow them without new demand: `appDb` (2 consumers, kept
+because a document store is a capability) and `createAutosave` (1 consumer; if a second app
+skips it *because* of its weight, shrink it to what slides-lite uses).
 
 ## Bundled Libraries
 
@@ -343,11 +321,10 @@ readers is [`docs/guides/yaar_sdk.md`](../../docs/guides/yaar_sdk.md#bundled-lib
 
 `getBundledLibraryDetail(name, query)` (in `bundled/describe-library.ts`) backs the agent-facing
 `describeBundledLibrary`. It slices the `declare module '@bundled/<name>…'` blocks out of
-`bundled-types/index.d.ts` and prepends the `Yaar*` declarations they reference, transitively —
-see that file for why transitive resolution matters. A block carrying `// ── Title ──` section
-headers (`yaar`, `yaar-web`) answers with an **index** by default — section → export → first
-doc sentence — and `symbol` / `section` return one slice with exactly the types it references
-(`full: true` is the old whole answer). `describe-library.test.ts` holds the two invariants: the
+`bundled-types/index.d.ts` and prepends the `Yaar*` declarations they reference, transitively. A
+block carrying `// ── Title ──` section headers (`yaar`, `yaar-web`) answers with an **index** by
+default — section → export → first doc sentence — and `symbol` / `section` return one slice with
+exactly the types it references (`full: true` returns the whole block). `describe-library.test.ts` holds the two invariants: the
 index names every export, and a slice never names a module type it does not show.
 
 Three rules about `bundled-types/index.d.ts` itself:
@@ -362,8 +339,8 @@ Three rules about `bundled-types/index.d.ts` itself:
   store-update primitive. `@bundled/mediabunny` carries the same kind of block.
 - Beyond real modules it serves **pseudo-libraries** — describable but not importable.
   `design-tokens` returns `describeDesignTokens()` generated from `YAAR_DESIGN_TOKENS_CSS`. Its
-  short form, `describeDesignTokensBrief()`, is what the App Authoring Contract embeds in
-  `server/agents/profiles/app-agent.ts` — so the always-on copy carries every token *name* while
+  short form, `describeDesignTokensBrief()`, is what the App Authoring Contract embeds in the
+  app agent's prompt (`server/src/agents/profiles/app-agent/index.ts`) — so the always-on copy carries every token *name* while
   values and the long class tail stay one describe away. Both tiers come from the same parse, and
   a test asserts **both** advertise every token the guard accepts, so what the compiler *rejects*
   and what it *tells agents exists* cannot diverge in either tier.
@@ -384,11 +361,10 @@ are worth knowing about before you add a library:
   `defineApp({...})` literal (see Protocol Extraction).
 - **The barrel-collapse cluster** (`uuid`, `zod`, `lodash`, `pixi`, `mediabunny`, and by
   variation `mammoth` and `dompurify`) — one shared Bun defect: **a pure re-export barrel
-  collapses when prebundled directly.** The build still succeeds and the breakage surfaces later
-  in exe mode (mediabunny's 0.66 MB collapsed to a 5.3 KB stub that built green). Routing through
-  a shim makes the package an inner module Bun materializes first. **Any new barrel library needs
-  the same treatment**, and `prebundle-completeness.test.ts` catches it automatically — including
-  the default-export variant, since a library's declared default is now probed.
+  collapses when prebundled directly** — the build succeeds and the breakage surfaces in exe mode.
+  Routing through a shim makes the package an inner module Bun materializes first. **Any new
+  barrel library needs the same treatment**; `prebundle-completeness.test.ts` catches it
+  (including the default-export variant).
 
 The remaining shims (`anime`, `mermaid`, `marked`, `yaar-dev`, `yaar-web`, `yaar-ml`) are per-library
 adaptations; each header states its incident. `mermaid` and `marked` are also where a library's
@@ -401,15 +377,13 @@ so an app that never renders a diagram or markdown does not pull the library in 
 
 Every app also goes stale when what the compiler bakes into its dist/ changes: `sdkHash` is
 `computeSdkHash()` (`sdk-scripts.ts`) over the iframe SDK scripts and the tokens stylesheet,
-hashed from the strings rather than files so it matches in the exe. Without it, an SDK change
-reached only apps that happened to be edited — Memo and Anima kept a device SDK with no `host`
-and could not save in the Android app. Anything else the compiler injects (the `@bundled/yaar`
+hashed from the strings rather than files so it matches in the exe. Anything else the compiler injects (the `@bundled/yaar`
 shim, the HTML wrapper) still needs a `COMPILER_VERSION` bump.
 
 ## Key Patterns
 
 - **Lazy SDK caching:** SDK scripts minified on first compile, reused for all subsequent compiles
-- **One read per compile:** `compileTypeScript` creates an `AppSourceCache` and threads it through the token guard, the bundler's source hook, and protocol extraction — three full reads of `src/` became one. It is scoped to the call: a cache that outlived a compile would hand `dev.ts`'s recompile the previous edit's source, green all the way
+- **One read per compile:** `compileTypeScript` creates an `AppSourceCache` and threads it through the token guard, the bundler's source hook, and protocol extraction. It is scoped to the call — a cache that outlived a compile would hand the next recompile stale source
 - **Refusal over omission:** protocol extraction fails the build rather than emitting a manifest it had to guess around
 - **`</script` escaping:** `generateHtmlWrapper` escapes `</script` sequences in JS to prevent premature tag closing
 - **Deterministic hashing:** Source hash computed from sorted file list for consistent staleness detection

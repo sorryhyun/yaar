@@ -20,6 +20,7 @@ These are the documentation files you maintain:
 | `packages/frontend/CLAUDE.md` | Frontend structure, store slices, WebSocket events, renderers |
 | `packages/shared/CLAUDE.md` | Shared types, OS Actions, WebSocket events, Component DSL, Zod patterns |
 | `packages/compiler/CLAUDE.md` | App compiler: bundled libraries, shims, protocol extraction, typecheck |
+| `packages/lib/CLAUDE.md` | Generic utilities: the no-YAAR-imports rule, contents table |
 | `apps/CLAUDE.md` | Apps-layer conventions: agent docs table, design tokens/y-* reference, Solid gotchas, compiler overview |
 
 You also maintain the `.claude/skills/*/SKILL.md` files the same way — diffed against code, not
@@ -45,7 +46,7 @@ And the agent definition files under `.claude/agents/`:
 | `.claude/agents/frontend.md` | Frontend agent's architecture summary |
 | `.claude/agents/reviewer.md` | Review checklist |
 | `.claude/agents/tester.md` | Test runner instructions |
-| `.claude/agents/app-dev.md` | App development reference: bundled libraries, SDK exports, design tokens |
+| `.claude/agents/app-dev.md` | App-dev agent role, app layout, workflow; points at apps/CLAUDE.md, the app-dev skill, and docs for the rest |
 
 ## Process
 

@@ -206,7 +206,7 @@ agent, steered into the running turn where the provider allows); different apps 
 ### Sub-agents — the app's worker threads
 
 N per (monitor, app), spawned by an app's **iframe** — not by any agent — when the app declares
-`"subagents": { "max": N }` (the older `"personas"` key is retired and refuses spawns). Each is a real provider session with its own memory and a system
+`"subagents": { "max": N }` (the retired `"personas"` key refuses spawns). Each is a real provider session with its own memory and a system
 prompt the app supplies *at runtime*, which is what lets one app run several distinct characters
 concurrently instead of one agent role-playing them in turn. A "persona" is the tool-less case of
 a sub-agent — the name survives because it is the shipped wire format, not because it is a
@@ -342,9 +342,8 @@ design doc. Do not build it for symmetry.
 
 ### Why a tree instead of more tiers
 
-The codebase was on a trajectory of one new pool tier per capability need, each adding a map, a
-verb surface, and a teardown hook — the third tier of plumbing being the second with different
-nouns. Two alternatives were weighed and rejected:
+One new pool tier per capability need would each add a map, a verb surface, and a teardown hook.
+Two alternatives were rejected:
 
 - **Multiple app agents with prompt overrides.** Keying is identical either way, so the map is
   not the cost. The cost is that tool-lessness becomes a runtime flag on a shared type, checked
@@ -569,10 +568,7 @@ Session (1 per conversation)
  └── supports N WebSocket connections (multi-tab)
 ```
 
-**Session** is about persistence and connectivity — it survives tab closes and supports multi-tab.
-**Monitor** is about workspace isolation — independent agent contexts for parallel workflows.
-**Window** is about visualization and interaction — the AI's canvas for showing content and receiving user actions.
-**The agent tree** is about who may do what — each tier anchored to one of those places, holding no more than its owner, and dying with it.
+---
 
 ## Key files
 

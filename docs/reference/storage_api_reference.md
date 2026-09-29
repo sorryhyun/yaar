@@ -64,13 +64,13 @@ Read a file by URI.
 
 **Returns (image files):** Base64-encoded image content with MIME type.
 
-**Returns (glTF/GLB models):** A structural summary as line-oriented JSON (`@yaar/lib/gltf`), not the bytes: the node tree with local TRS, each mesh's vertex/triangle counts and local and world bounds (rest pose; a skinned mesh placed by its first joint's bind matrix), materials, image sizes read from their headers, and each animation's duration and the node paths it keys. Per-channel keyframe stats (first/last, min/max, degrees of swing for rotations, and near-instant `jumps` — two keys under 2 ms apart, with a scale jump to or from ~0 marked as a hide or show) appear when the file has at most 64 channels or `gltfNode` scopes the read. `extras` are shown on the asset, the default scene, nodes, meshes, materials and animations — where glTF files carry event markers. `units` states the glTF convention; `measured` says what the bounds suggest instead (a size that reads as centimetres, which side of the origin a long object reaches toward). `gltfPose` evaluates a clip as a player would (slerped rotations, CUBICSPLINE tangents, STEP holds), parents included, so a node under an animated parent is placed where it really is. A `.gltf`'s sidecar buffers and images resolve against its own folder through storage path resolution — never outside storage, and a remote URI is never fetched. Draco/meshopt-compressed data is reported, not decoded. Files over 256 MB are refused.
+**Returns (glTF/GLB models):** A structural summary as line-oriented JSON (`@yaar/lib/gltf`), not the bytes: the node tree with local TRS, each mesh's vertex/triangle counts and local and world bounds (rest pose), materials, image sizes read from their headers, and each animation's duration and keyed node paths. Per-channel keyframe stats (first/last, min/max, swing for rotations, near-instant `jumps`) appear when the file has at most 64 channels or `gltfNode` scopes the read. `extras` are shown on the asset, scene, nodes, meshes, materials and animations. `units` states the glTF convention; `measured` says what the bounds suggest instead. `gltfPose` evaluates a clip as a player would (slerped rotations, CUBICSPLINE tangents, STEP holds), parents included. A `.gltf`'s sidecar buffers and images resolve against its own folder through storage path resolution — never outside storage, and a remote URI is never fetched. Draco/meshopt-compressed data is reported, not decoded. Files over 256 MB are refused.
 
 **Returns (binary files):** A message explaining the file can't be read as text, with a pointer to the REST API.
 
 **Errors:** Path traversal detected, file not found. Reading a directory falls back to `list` with a note.
 
-A `file not found` is tagged `notFound` on the result and logged with `errorCategory: "not_found"`, which keeps it out of the session's `failureCount`. Absence is a routine answer — before the tag, a first launch reported one session error per optional config file per mount, and that was the bulk of every error the log held. It is still an error and still logged; only the tally skips it. `missingOk` is the way to not produce one at all.
+A `file not found` is tagged `notFound` and logged with `errorCategory: "not_found"`, which keeps it out of the session's `failureCount`; it is still an error. `missingOk` avoids producing one at all.
 
 ### `list`
 
@@ -85,7 +85,7 @@ List directory contents by URI.
 
 Returns `resource_link` entries. Mounted directories appear as virtual entries under `yaar://storage/mounts/`. Listing a file path falls back to `read` with a note.
 
-**Paging.** Through the MCP `list` tool, a folder with no `range` returns its first 200 entries (`LIST_PAGE_SIZE` in `lib/list-options.ts`) behind a note — `Entries 1-200 of 5234. Next page: range "201-400".` — so a mounted folder with thousands of entries does not arrive as one oversized, spilled result. A `read` that falls back to `list` pages the same way. `POST /api/verb` has no default page: an app's `list` (the payload carries `sort`/`order`/`range`) gets the whole folder unless it asks for a range. Other `list` targets ignore these options, with a note saying so. The app agent's built-in `storage:list` (and a `query` that lands on a folder) pages and sorts the same way, from the same `sort`/`order`/`range` in its params — and an app that overrides `storage:list` receives those params too, so its handler can honour them.
+**Paging.** Through the MCP `list` tool, a folder with no `range` returns its first 200 entries (`LIST_PAGE_SIZE` in `lib/list-options.ts`) behind a note — `Entries 1-200 of 5234. Next page: range "201-400".` A `read` that falls back to `list` pages the same way. `POST /api/verb` has no default page: an app's `list` gets the whole folder unless it asks for a range. Other `list` targets ignore these options, with a note. The app agent's built-in `storage:list` pages and sorts the same way, and an app that overrides `storage:list` receives those params too.
 
 **Returns:** Resource links, or `"(empty)"` if the directory has no entries.
 
@@ -201,7 +201,9 @@ Base URL: `/api/storage/{filePath}`
 
 All paths are relative to the storage directory. Path traversal is blocked (HTTP 403). Read-only mounts block POST and DELETE (HTTP 403).
 
-Every storage HTTP call also goes through the access chokepoint (`packages/server/src/http/access.ts`): `resolvePrincipal` resolves the caller to `host` (the desktop, unconfined) or `app` (an iframe token, confined to its `app.json` permissions), then `requirePermission` checks the resolved principal against the storage URI equivalent of the requested path and verb (`read`/`list`/`invoke`/`delete`). This can independently 403 with `"Not permitted: {verb} {uri}"` for an app lacking the grant, on top of the path-traversal and read-only-mount checks above. For app-scoped storage, a request path under `apps/self/` is rewritten to `apps/{appId}/` for the calling app (`storageUriFor` in `access.ts`) before the permission check and the actual file resolution, so an app can address its own storage as `self` without needing its literal id.
+Every storage HTTP call also goes through the access chokepoint (`packages/server/src/http/access.ts`): `resolvePrincipal` resolves the caller to `host` (the desktop, unconfined) or `app` (an iframe token, confined to its `app.json` permissions), then `requirePermission` checks it against the storage URI equivalent of the path and verb (`read`/`list`/`invoke`/`delete`), which can 403 with `"Not permitted: {verb} {uri}"`. A path under `apps/self/` is rewritten to `apps/{appId}/` for the calling app (`storageUriFor`) before the check.
+
+**Write and delete name their file by the URL path only.** Any query parameter other than the credentials (`__yaar_token`, `token`) on POST/DELETE is a 400. GET query strings are unaffected.
 
 ### GET — Serve file
 
@@ -389,16 +391,7 @@ All operations resolve paths in order:
 | 3D models (`.glb`, `.gltf`) | Structural summary — tree, bounds, materials, animation channels; steered by the `gltf*` read options; `gltfPose` plays a clip into a world-space pose |
 | Other binary | Return explanation message, point to REST API |
 
-A read is a **presentation** read: its consumer is a vision model, so PNG and JPEG bytes
-are re-encoded to WebP on the way out (`packages/lib/src/image.ts`, `toWebPForModel`) — typically 60–80%
-smaller at a quality the model cannot tell apart. The file on disk is never rewritten, and
-the content block reports the MIME type the bytes actually are, so read it rather than
-assuming the extension. Three cases pass through untouched: WebP (already the target), GIF
-(a single-frame encode would drop the animation), and a re-encode that came out larger.
-
-Pass `rawImage: true` to `read` for the stored bytes exactly as they are — for when the
-pixels themselves are the subject rather than the content. `GET /api/storage/<path>` is
-unaffected and always serves the original file.
+A read is a **presentation** read: PNG and JPEG bytes are re-encoded to WebP on the way out (`packages/lib/src/image.ts`, `toWebPForModel`; typically 60–80% smaller). The file on disk is never rewritten, and the content block reports the MIME type the bytes actually are. WebP, GIF (a single-frame encode would drop the animation), and a re-encode that came out larger pass through untouched. Pass `rawImage: true` to `read` for the stored bytes; `GET /api/storage/<path>` always serves the original file.
 
 ---
 
@@ -462,15 +455,15 @@ Non-image files are uploaded to `storage/files/` with sanitized filenames.
 
 **Source:** `packages/shared/src/iframe-scripts/storage-sdk.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
 
-Apps access storage via `@bundled/yaar` imports. The underlying SDK is injected automatically. Three shapes, and which one to reach for is decided by who else should be able to read the file:
+Apps access storage via `@bundled/yaar` imports (the SDK is injected automatically). Which shape to use depends on who else should read the file:
 
 | Import | Tree | Who else can read it |
 |---|---|---|
-| `appStorage` | `apps/self/…` | no other installed app — but it is a plain subtree, addressable as `yaar://storage/apps/{appId}/`, so the user, the Storage app and agents all see it |
+| `appStorage` | `apps/self/…` | no other installed app — but it is a plain subtree (`yaar://storage/apps/{appId}/`), so the user, the Storage app and agents all see it |
 | `sharedStorage` | `shared/{appId}/…` | every app, and agents |
 | `storage` | the whole storage root | — it is the raw, unscoped API |
 
-Reach for `storage` when you hold a path *someone else* produced (an image under `shared/anima/`, a file under `mounts/`); reach for `sharedStorage` when this app is producing something for others to find.
+Use `storage` for a path *someone else* produced (`shared/anima/`, `mounts/`); `sharedStorage` when this app produces something for others to find.
 
 `storage` (raw, `window.yaar.storage` — dispatches straight to `/api/storage/*`):
 
@@ -496,13 +489,11 @@ Reach for `storage` when you hold a path *someone else* produced (an image under
 | `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }`. `path` is relative to the app's own storage root, so it can be handed straight back to `read`/`save`. `size`/`modifiedAt` carry the same values as `StorageEntry` above but are optional here — a directory has no size. |
 | `remove` | `(path) → Promise<void>` | Delete file. |
 
-`sharedStorage` (the commons, scoped to this app's directory in it — `packages/compiler/src/shims/yaar/shared-storage.ts`). `yaar://storage/shared/` is granted to every app for being an app, and the convention is one directory per producing app; this is that directory, without each app writing it out as a constant.
+`sharedStorage` (the commons, scoped to this app's directory in it — `packages/compiler/src/shims/yaar/shared-storage.ts`). `yaar://storage/shared/` is granted to every app, by convention one directory per producing app.
 
-**Which directory is yours is decided by the server.** Paths go out spelled `shared/self/…` and `resolveSelf` expands them against the calling principal, exactly as it does for `apps/self`. The name used to be built in the iframe from the id passed to `defineApp` — which is the shipped app's id even under a devtools preview, so a preview published into the *live* app's directory beside real user files. One principal now decides both trees.
+**The server decides which directory is yours:** paths go out spelled `shared/self/…` and `resolveSelf` expands them against the calling principal, as for `apps/self` (so a devtools preview publishes into its own directory, not the live app's).
 
-Names are subpaths (`'renders/final.png'`), a leading slash is ignored, and `..` is refused. A name that already spells out this app's own commons directory — in any dialect — is taken as-is rather than nested a second time, so a path from `list()` round-trips. A name in *another* app's directory, or in another top-level tree (`apps/`, `mounts/`, `temp/`, `files/`), is refused by name rather than nested; use `storage` to reach those deliberately.
-
-Nothing here needs the app's id, so module scope is fine — `defineApp` does not have to have run.
+Names are subpaths (`'renders/final.png'`); a leading slash is ignored and `..` is refused. A name already spelling this app's commons directory is taken as-is, so a path from `list()` round-trips. A name in *another* app's directory or another top-level tree (`apps/`, `mounts/`, `temp/`, `files/`) is refused; use `storage` to reach those. Module scope is fine — `defineApp` need not have run.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -517,7 +508,7 @@ Nothing here needs the app's id, so module scope is fine — `defineApp` does no
 | `remove` | `(name) → Promise<void>` | Delete. |
 | `publish` | `(from, options?) → Promise<{path, uri, name}>` | Copy a file already in storage into this app's commons directory. `from` accepts any spelling of a stored file; `options.as` names it, defaulting to `from`'s basename. |
 
-`publish` copies **server-side** — `from` is a reference, not bytes. Reading a file out and writing it back through `save()` routes it through the iframe, and for an image an agent then asks about, through a model context; anima's ~550KB PNG is the case that made this a method:
+`publish` copies **server-side** — `from` is a reference, not bytes, so a large file never routes through the iframe or a model context:
 
 ```typescript
 import { sharedStorage } from '@bundled/yaar';
@@ -552,6 +543,7 @@ interface Settings {
   iconSize: 'small' | 'medium' | 'large';
   theme: 'dark' | 'light';
   handedness: 'right' | 'left';  // phone: the status badge sits in the opposite top corner
+  windowSize: 'small' | 'medium' | 'large';  // size of a window nothing else sizes; ignored on a phone
   allowAllApps: boolean;
   remote: boolean;       // Remote-mode preference, read at boot and applied to process.env.REMOTE
                           // (an explicit REMOTE env var overrides it); takes effect on restart

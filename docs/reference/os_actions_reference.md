@@ -32,6 +32,7 @@ Create a new window on the desktop.
 **Behavior:**
 - Bounds are clamped to the viewport.
 - Default placement (when the caller leaves position unset) cascades from a centered origin, starting below the agent status bar and clear of the command palette (`WINDOW_PLACEMENT`, `packages/shared/src/actions.ts`).
+- Default size (when neither the caller nor `app.json` sizes it) is the user's `windowSize` preset — small 640×480, medium 820×600 (default), large 1040×740 — shrunk to the usable viewport (`defaultWindowSize()`).
 - Variant determines z-order layer: panels are excluded from stacking, widgets stack below standard windows.
 - Standard windows steal focus on creation unless `minimized` is true.
 
@@ -46,7 +47,7 @@ Close and remove a window.
 
 If the closed window was focused, focus moves to the topmost remaining window.
 
-Closing a window also settles every app-protocol request still addressed to it, as `closed` rather than as a timeout — see [App Protocol](./app_protocol_reference.md). A command that closes its own window can never be answered, and waiting out its deadline reports "the app did not respond" for an operation that succeeded.
+Closing a window also settles every app-protocol request still addressed to it, as `closed` rather than as a timeout — see [App Protocol](./app_protocol_reference.md).
 
 Refused while another agent holds the window's lock.
 
@@ -63,7 +64,7 @@ Re-mount a window's content without destroying the window.
 - The iframe's in-memory state does **not** survive. Anything an app needs across a reload belongs in `appStorage`/`appDb`.
 - Refused while another agent holds the window's lock, like `window.close`.
 
-This is how a window picks up a redeployed bundle without losing its app agent's context. A deploy closes the app's other windows but cannot close the one it was issued from (see `features/apps/retire.ts`), which is reported back as `staleWindow`; reloading that window is the non-destructive fix.
+This is how a window picks up a redeployed bundle without losing its app agent's context: a deploy cannot close the window it was issued from (`features/apps/retire.ts`; reported as `staleWindow`), and reloading it is the non-destructive fix.
 
 ### `window.focus`
 
@@ -79,7 +80,7 @@ Bring a window to the front.
 - Panels are unaffected.
 - Unminimizes the window if it was minimized.
 
-This is the only action that changes stacking apart from `window.create` (which puts the new window on top of its layer) and `window.close`. The server mirrors the result — see [Window State](#window-state) — so an agent can read which window is on top without asking the desktop.
+This is the only action that changes stacking apart from `window.create` and `window.close`. The server mirrors the result — see [Window State](#window-state).
 
 ### `window.minimize`
 
@@ -216,13 +217,11 @@ Capture a window's content as a PNG screenshot.
 | `windowId` | `string` | yes |
 | `requestId` | `string` | required in practice |
 
-Async operation. Sends a `yaar:capture-request` postMessage to the window's iframe and awaits a `yaar:capture-response` (2s timeout); the injected capture script handles canvas and DOM (via `foreignObject`) capture using the browser's native CSS engine. There is no fallback tier — if the iframe doesn't respond in time, or responds with no image data, capture fails outright. Returns base64 PNG via `RENDERING_FEEDBACK` (`success: true, imageData`) on success, or `success: false` with an `error`/`captureFailure` reason (e.g. `no-response`) on failure. `requestId` is typed optional but is not: `packages/frontend/src/store/desktop.ts`'s handler only calls `captureWindow` `if (requestId)` — an action sent without it returns early with no capture and no warning.
+Async. Sends a `yaar:capture-request` postMessage to the window's iframe and awaits a `yaar:capture-response` (2s timeout); the injected capture script handles canvas and DOM (via `foreignObject`) capture. There is no fallback tier — no response in time, or no image data, fails outright. Returns base64 PNG via `RENDERING_FEEDBACK` (`success: true, imageData`), or `success: false` with an `error`/`captureFailure` reason (e.g. `no-response`). `requestId` is typed optional but required in practice: the handler in `packages/frontend/src/store/desktop.ts` returns early without it.
 
 ### Window State
 
-The actions above mutate state the actions themselves never spell out. Two types hold it, and they
-are deliberately not the same shape — the server tracks what it must re-emit on restore, the
-frontend tracks what it must draw.
+The actions above mutate state held in two deliberately different shapes — the server tracks what it must re-emit on restore, the frontend tracks what it must draw.
 
 **`WindowState`** (`packages/shared/src/actions.ts`) — the server's record, and what session restore
 replays. It extends `WindowPresentation` (`appId`, `variant`, `dockEdge`, `frameless`,
@@ -275,19 +274,7 @@ bottom:
 
 ### Built-in Window State Keys
 
-Three state keys belong to the *window* rather than to the app inside it, and they are readable
-without any action at all. `__` is reserved: an app state key by one of these names is shadowed.
-
-| Key | Answers | Available on |
-|-----|---------|--------------|
-| `__content` | the window registry — no capture, no round trip to the app | every window |
-| `__screenshot` | a `window.capture` round trip to the frontend | iframe windows |
-| `__console` | the injected app-protocol script's capture buffer | iframe windows |
-
-They are addressed as `yaar://windows/{windowId}/state/__content` and friends. A bare
-`read('yaar://windows/{windowId}')` is metadata + `__content`, or metadata + `__screenshot` on an
-iframe window (with `contentOmitted` naming where the content went). Full verb table:
-[URI Reference → Windows](./uri_reference.md#windows--yaarwindowswindowid).
+`__content`, `__screenshot` and `__console` belong to the *window*, not the app inside it, and are readable without any action (`yaar://windows/{windowId}/state/__content` etc.). `__` is reserved: an app state key by one of these names is shadowed. Table and the bare-`read` behavior: [URI Reference → Windows](./uri_reference.md#windows--yaarwindowswindowid).
 
 ---
 
@@ -394,7 +381,7 @@ Take a dialog off the screen without an answer.
 | `id` | `string` | yes | ID of the dialog to close |
 | `reason` | `'timeout'` | no | Why it left the screen. `'timeout'` means the server stopped waiting for an answer. |
 
-A confirm dialog has a deadline the user can't see. When it passes, the server stops listening and the waiting tool is told "denied" — `dialog.close` clears the dialog from the screen so its buttons don't stay wired to a request that no longer exists.
+A confirm dialog has a deadline the user can't see; when it passes the waiting tool is told "denied" and `dialog.close` clears the stale dialog.
 
 ---
 
@@ -484,6 +471,7 @@ Update desktop-wide settings.
 | `iconSize` | `'small' \| 'medium' \| 'large'` | Optional desktop icon size |
 | `theme` | `'dark' \| 'light'` | Optional color theme |
 | `handedness` | `'right' \| 'left'` | Optional hand holding the phone; the phone's status badge sits in the opposite top corner |
+| `windowSize` | `'small' \| 'medium' \| 'large'` | Optional size preset for a window nothing else sizes (see `window.create`); a phone ignores it |
 
 ---
 
@@ -642,15 +630,7 @@ The user's response is sent back via `USER_PROMPT_RESPONSE` client event.
 
 ## Clipboard Actions
 
-The clipboard is the browser's, not the server's, and that is the whole shape of these actions.
-Under `REMOTE=1` the machine running YAAR and the machine holding the clipboard are routinely not
-the same machine; even locally, only the page has `navigator.clipboard`. So every clipboard
-operation is a round trip — this action out, a `CLIPBOARD_RESPONSE` client event back, matched on
-`id`. Neither action touches store state (`handleClipboardAction` in
-`packages/frontend/src/lib/clipboard.ts`).
-
-Every ceiling below is set by the server and applied by the desktop, so an oversized clipboard is
-trimmed *before* it crosses the socket rather than after.
+The clipboard is the browser's, not the server's (under `REMOTE=1` they are routinely different machines; even locally only the page has `navigator.clipboard`). Every operation is a round trip — this action out, a `CLIPBOARD_RESPONSE` client event back, matched on `id`. Neither action touches store state (`handleClipboardAction` in `packages/frontend/src/lib/clipboard.ts`). Ceilings are set by the server and applied by the desktop, so an oversized clipboard is trimmed *before* it crosses the socket.
 
 ### `user.clipboard.read`
 
@@ -672,14 +652,11 @@ trimmed *before* it crosses the socket rather than after.
 | `text` | `string` | yes |
 
 **`CLIPBOARD_RESPONSE`** (`packages/shared/src/events/client.ts`) carries `requestId`, `ok`, and
-then `text` / `totalChars` / `truncated` / `image`, or a machine-readable `reason`: `denied`,
-`not-focused`, `unsupported`, `empty`, `too-large`, `failed`. They are not interchangeable — a
-denied read is fixed by granting clipboard access, an unfocused one by clicking the desktop first,
-an empty one by copying something.
+then `text` / `totalChars` / `truncated` / `image`, or a `reason`: `denied` (grant clipboard access),
+`not-focused` (click the desktop first), `unsupported`, `empty`, `too-large`, `failed`.
 
-Clipboard **text** is scanned for vendor-prefixed credentials on the server before it reaches an
-agent (`YAAR_CLIPBOARD_SECRETS`, on by default); images are not scanned. See
-`packages/server/CLAUDE.md`.
+Clipboard **text** is scanned for credentials on the server before it reaches an agent; see
+[URI Reference](./uri_reference.md#credentials-are-taken-out-first).
 
 ---
 
@@ -701,8 +678,7 @@ type OSAction =
 
 ## Validation Helpers
 
-Narrowing an `OSAction` is done by discriminating on `type` directly (`action.type.startsWith('window.')`,
-or a `switch` on the literal) — the family-level `is*Action` guards were removed once no caller used them.
+Narrow an `OSAction` by discriminating on `type` directly (`action.type.startsWith('window.')`, or a `switch` on the literal).
 
 | Function | Purpose |
 |----------|---------|

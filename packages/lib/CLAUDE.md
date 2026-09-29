@@ -3,10 +3,7 @@
 The utilities YAAR uses that are **not about YAAR**.
 
 Everything here is bytes-in/bytes-out or process-shaped. None of it knows what a session, a
-monitor, a window, an app or an agent is; none of it has ever heard of an OS Action. It was
-`packages/server/src/lib/` until the boundary the server's own CLAUDE.md described in prose —
-"standalone utilities with no server internal dependencies" — became something the module
-graph enforces rather than something a reviewer has to remember.
+monitor, a window, an app, an agent or an OS Action is — and the module graph enforces it.
 
 ## The rule
 
@@ -16,17 +13,11 @@ are node/bun built-ins, `@yaar/shared`, third-party packages, and other `@yaar/l
 It does **not** belong here if it reads `config/`, resolves a storage path, knows an access
 tier, or needs the server's logger. Those are decisions about *this* application, and the
 inversion is always the same shape: take the answer as a parameter and let the server pass it.
-Two live examples —
+Two live examples: `pdf/poppler-pdf.ts` takes `binDir` (`IS_BUNDLED_EXE` is the server's fact;
+`packages/server/src/features/pdf.ts` binds it once), and `tunnel/config.ts`'s
+`loadTunnelConfig(configDir)` takes the directory (which also lets its test use a temp dir).
 
-- `pdf/poppler-pdf.ts` takes `binDir`. It cannot tell a source checkout from a bundled exe;
-  `IS_BUNDLED_EXE` is the server's fact. `packages/server/src/features/pdf.ts` binds it once
-  so no call site has to remember.
-- `tunnel/config.ts`'s `loadTunnelConfig(configDir)` takes the directory. Where YAAR keeps its
-  config is YAAR's question; the parser only wants a path — which is also what lets its test
-  point at a temp dir without touching the environment.
-
-Nothing here may import from `@yaar/server`. That is the whole point, and the dependency
-direction is one-way forever.
+**Nothing here may import from `@yaar/server`.** The dependency direction is one-way.
 
 ## Contents
 

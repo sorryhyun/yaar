@@ -7,10 +7,10 @@ paths:
   - "packages/server/src/features/**"
 ---
 
-This skill covers the YAAR server's MCP tool and URI verb layer: the 5 generic verbs, the two
-the one protocol era the endpoint serves, verb semantics, batching, access tiers, the App Protocol,
-app-agent storage declarations, monitor/app-agent communication, sub-agents, and the self-update
-feature. The content below is carried over verbatim from `packages/server/CLAUDE.md`.
+This skill covers the YAAR server's MCP tool and URI verb layer: the 5 generic verbs, the one
+protocol era the endpoint serves, verb semantics, batching, access tiers, the App Protocol,
+app-agent storage, monitor/app-agent communication, sub-agents, and self-update. The directory map
+is `packages/server/CLAUDE.md`.
 
 ## Tools (MCP)
 
@@ -48,12 +48,9 @@ alone is a no-op).
 **Two traps that will cost you a day each are documented at `getModernHandler` in
 `mcp/server.ts` — read it before touching this.** Pinned by `tests/mcp-protocol-eras.test.ts`.
 
-**A client that cannot negotiate up is refused, not downgraded.** The 2025-era stateful leg —
-session map, idle eviction, GET-stream keep-alive, and the one read of an SDK-private
-`_streamMapping` — was deleted, and with it the silent fallback that made a stale CLI or a
-renamed gate cost nothing. `refuseLegacyEra` answers such a client with a message naming both
-provider gates; that log line is the diagnostic, and it means a spawn config or a binary is
-wrong, never that the tool call was.
+**A client that cannot negotiate up is refused, not downgraded** — there is no stateful 2025-era
+fallback. `refuseLegacyEra` answers it with a message naming both provider gates; that log line
+means a spawn config or a binary is wrong, never that the tool call was.
 
 ### Verb semantics
 
@@ -95,17 +92,15 @@ Only one of the two axes exists at each door: brace expansion is the MCP `exec` 
 Every agent carries a principal `role` (`session` / `monitor` / `app`) on its `AgentContext`. A
 handler may declare `access: 'session-principal'` — and every pattern under `yaar://session` gets
 it whether declared or not, because `ResourceRegistry.register()` derives it from the prefix
-(`isSessionPattern`; it was once forgotten on `yaar://session/agents`). `ResourceRegistry.execute()`
-then applies **one** definition:
+(`isSessionPattern`). `ResourceRegistry.execute()` then applies **one** definition:
 
 > A caller satisfies `access: 'session-principal'` iff its role is `session` **or** it is a
 > token-backed bundled system app (`AgentContext.systemApp`).
 
 Everything else is refused — default-deny, so `undefined` is neither. **That gate is the
-authority**: both doors into the verb layer end there (MCP tools and `POST /api/verb`), which is
-why it, not `http/access.ts`, defines the tier. `access.ts`'s `isSessionUri` refusal stays as the
-cheap early 403 and applies the same widening — the two used to answer in different currencies,
-so a bundled system app was admitted by one door and 403'd by the other.
+authority**: both doors into the verb layer end there (MCP tools and `POST /api/verb`), so it, not
+`http/access.ts`, defines the tier. `access.ts`'s `isSessionUri` refusal is the cheap early 403 and
+must apply the same widening.
 
 `agents/roles.ts` owns both the prefixes a role is minted with and the parse that maps one onto a
 tier, so the string and the gate that reads it cannot drift. `systemApp` is set by
@@ -126,11 +121,9 @@ every manifest read would pay for every key.
 **A protocol has two honest sizes, and they get two doors.** `describe('yaar://apps/{id}')` answers
 "what is this app"; the protocol is its own resource (`handlers/apps/protocol-resource.ts`) where
 `describe` is counts and doors, `list` is the index, `read` is the manifest, and
-`read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. So the
-index is *what `list` means*, not a degradation a byte budget switches on, and nothing is truncated
-behind a caller's back. The incident that forced the split is recorded in
-`handlers/apps/protocol-resource.ts`'s header; the CLI result-size cliff behind it is named and
-moved in `mcp/result-size.ts`.
+`read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. The index
+is *what `list` means*, never a truncation (rationale: `handlers/apps/protocol-resource.ts`'s
+header; the CLI result-size cliff: `mcp/result-size.ts`).
 
 **A schema may point at the manifest, so every reader has to follow the pointer.** The compiler
 hoists a repeated shape into `manifest.$defs` and leaves `{"$ref": "#/$defs/x"}` at each use.
@@ -138,7 +131,7 @@ hoists a repeated shape into `manifest.$defs` and leaves `{"$ref": "#/$defs/x"}`
 the table is `any`) and `selfContained` for any door that hands one descriptor's schema on
 **alone**. The three seams that pass `$defs`: `list` on a window (`handlers/window.ts`), the
 per-command `describe` (`features/window/app-protocol.ts`), and the app agent's prompt
-(`agents/profiles/app-agent.ts`). A descriptor's *top-level* schema is never hoisted, so
+(`agents/profiles/app-agent/index.ts`). A descriptor's *top-level* schema is never hoisted, so
 `params.properties`/`required` are always readable without a hop.
 
 **A reserved payload key (`action`/`params`/`timeoutMs`) is checked against the command's schema,
@@ -158,25 +151,21 @@ still the own tree — the prefixes changed what the door *prints*, not what it 
 app-scoped listing entry, write receipt and delete receipt carries `app/` (`appScopedRef`), so two
 relative paths sitting in one agent context can be told apart by reading them.
 
-They were declaration-gated for one release — `declaresSharedStorage`, now deleted. The rule read
-well (a capability the author never declared is not one the agent should hold) and cost more than
-it bought: no manifest declares the app's *own* tree, since there is nothing to declare, so the
-gate disarmed the apps that had done nothing unusual, and it drew its line through the middle of an
-app rather than around it — the same app's **iframe** wrote that tree freely through
-`@bundled/yaar` throughout.
-
 - **The prompt** — both storage sections are rendered for every app, at the single site in
   `agents/profiles/app-agent/index.ts` that assembles them into *either* prompt branch (a
-  `prompt.md` app issues the same payloads, and the two sections drifted apart once already). The
-  shared section is generated from that app's declared entries, so it either lists what the app
+  `prompt.md` app issues the same payloads). The shared section is generated from that app's declared entries, so it either lists what the app
   reaches beyond the commons or says plainly that it reaches nothing further.
 - **The handler** — `authorizeSharedStorage` on every shared-tree call, and nothing on the
   app-scoped branch: a relative path is confined to `storage/apps/{appId}/` by
   `scopedAppStoragePath`, which is the whole check it needs.
 
-There is deliberately **no third copy in the tool descriptions**: a description is written once for
-every caller, so it could never render *this* app's declared reach — the one thing the shared
-section exists to show. `query`/`command` mention storage nowhere.
+There is deliberately **no third copy in the tool descriptions** (written once for every caller,
+they could never render *this* app's reach) — `query`/`command` mention storage nowhere.
+
+**An app can override a built-in** (`mcp/app-agent/storage-override.ts`): a protocol command named
+`storage:read`/`write`/`delete`/`list`, or aliased to that name, is handed the call instead, params
+intact — for every ungated path (the own tree and the commons). The rest of the shared tree never
+overrides; its permission gate stays between the agent and the bytes.
 
 **Past the commons, a declaration is still owed**, and it is not a blanket one: `permissionsAllow`
 decides each call per path and per verb, so `{ uri: "yaar://storage/reports/", verbs:
@@ -228,6 +217,6 @@ a sibling of `process.execPath`, never `os.tmpdir()` (the swap is `rename(2)`);
 `getUpdateStatus()` reports the *first* blocker. Installing never restarts the server; the
 previous binary is left beside the new one as `yaar.previous`.
 
-Adding `system` to `YaarAuthority` (`packages/shared/src/yaar-uri.ts`) is what makes the URI
-resolvable — `resolveUri`'s fallback and its bare-authority regex both list it, alongside `skills`
-and `mcp`, as an authority with no dedicated parser.
+`system` is a `YaarAuthority` (`packages/shared/src/yaar-uri.ts`) with no dedicated parser, like
+`skills` and `mcp` — `resolveUri`'s fallback and its bare-authority regex must both list such an
+authority for its URIs to resolve.

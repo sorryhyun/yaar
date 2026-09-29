@@ -24,7 +24,7 @@ You review code changes for correctness, security, and consistency with YAAR's a
   - Server-side handlers: `packages/server/src/handlers/` (the 5 generic URI verbs — describe/read/list/invoke/delete — importing domain logic from `features/`) and tool registration in `packages/server/src/mcp/`
   - Frontend `applyAction()` reducer in `packages/frontend/src/store/desktop.ts`
 - WebSocket events in `packages/shared/src/events/` (`routing.ts`/`client.ts`/`server.ts`) must match:
-  - Server emit calls — always through `LiveSession.broadcast()` (never `BroadcastCenter.publishToSession()` directly); non-agent contexts emit via `actionEmitter`, routed by `session/session-event-router.ts`
+  - Server emit calls — the Event Delivery Rule in `packages/server/CLAUDE.md` (`LiveSession.broadcast()`, never `BroadcastCenter.publishToSession()`)
   - Frontend hook handlers in `packages/frontend/src/hooks/useAgentConnection.ts` (decomposed into `hooks/use-agent-connection/`)
 
 ### Zod v4 Patterns
@@ -42,7 +42,7 @@ You review code changes for correctness, security, and consistency with YAAR's a
 - Agent lifecycle: proper `dispose()` on disconnect
 - Context tape: correct branching for window forks
 - Semaphore: agent limiter (`agents/limiter.ts`, `getAgentLimiter()`) limits respected
-- BroadcastCenter: no dangling subscriptions; no code path calls `BroadcastCenter.publishToSession()` directly instead of `LiveSession.broadcast()`
+- BroadcastCenter: no dangling subscriptions
 
 ### Code Quality
 - ESM imports use `.js` extensions (server)

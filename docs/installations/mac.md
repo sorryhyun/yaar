@@ -80,8 +80,7 @@ The window can only record audio from inside a bundle. WKWebView hides
 `navigator.mediaDevices` from every frame of a process whose main bundle has no
 `NSMicrophoneUsageDescription`. It is not a permission it refuses; the API simply does not
 exist in the page, and `isSecureContext` is still true. A bare binary has no Info.plist, so
-transcribe and any other recording app fail before macOS is ever asked. This was measured on
-0.22.0, whose installer still shipped a bare binary.
+transcribe and any other recording app fail before macOS is ever asked.
 
 The bundle also gives macOS something to file the permission under. The microphone grant is
 recorded against the bundle id `io.github.sorryhyun.yaar` and its signature, and the prompt

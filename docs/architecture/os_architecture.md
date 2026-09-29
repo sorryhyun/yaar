@@ -189,7 +189,7 @@ Four IPC mechanisms:
 
 **`InteractionTimeline`** (`agents/interaction-timeline.ts`) — Unified chronological log of user UI interactions and AI action summaries. Drained into `<timeline>` XML by `ContextAssemblyPolicy` and prepended to the next monitor agent prompt. Deduplicates redundant events (e.g., focus before resize).
 
-**App Protocol** — Bidirectional agent↔iframe communication for apps that opt in via `defineApp()` (the compiler extracts a `dist/protocol.json` manifest from the source; its presence, not any `app.json` flag, is what turns support on — `"appProtocol": true` is a legacy field the deploy path strips). Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](../reference/app_protocol_reference.md).
+**App Protocol** — Bidirectional agent↔iframe communication for apps that opt in via `defineApp()` (the compiler extracts `dist/protocol.json`; its presence is what turns support on). Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](../reference/app_protocol_reference.md).
 
 ---
 
@@ -199,7 +199,7 @@ Convention-based: each folder in `apps/` is an app. `app.json` provides metadata
 
 Hidden apps (`"hidden": true`) inject their description into the system prompt automatically — system-level capabilities the AI always knows about. Install/uninstall flows through the marketplace resources under `yaar://apps/`.
 
-See the Apps System section in the root `CLAUDE.md` for the full schema.
+Schema: [`app_manifest_reference.md`](../reference/app_manifest_reference.md).
 
 Apps that run models get an accelerator runtime rather than a process of their own: `@bundled/yaar-ml` runs ONNX on the page's WebGPU, with runtime artifacts and weights served by the server and, on macOS, compute optionally offloaded to the server's Chrome. See [`ml_runtime.md`](./ml_runtime.md).
 

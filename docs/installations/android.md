@@ -142,13 +142,7 @@ The launcher runs it too, so a checkout whose SDK has moved since still starts.
 
 ### How the server ends
 
-`start.sh` runs the server in a process group of its own, so the only thing that stops it is
-`start.sh`'s cleanup trap. On Android a launcher usually dies by SIGKILL: Termux kills a closed
-session's processes that way, and so does the phantom-process killer. A trap does not run on
-SIGKILL. So the launcher passes its own PID as `YAAR_LAUNCHER_PID`, and the server checks every
-two seconds and shuts down normally once the launcher is gone
-([`server_env.md`](../reference/server_env.md#yaar_launcher_pid)). Otherwise an orphan would
-keep port 8000, and the app would keep opening it.
+`start.sh` runs the server in a process group of its own, and a launcher on Android usually dies by SIGKILL (Termux, the phantom-process killer), which skips `start.sh`'s cleanup trap. So the launcher passes its own PID as `YAAR_LAUNCHER_PID` and the server shuts down normally once it is gone ([`server_env.md`](../reference/server_env.md#yaar_launcher_pid)); otherwise an orphan would keep port 8000.
 
 ### Android's phantom-process killer
 
@@ -171,33 +165,11 @@ can read, so the server knows which state it is in (`features/android/child-proc
 
 ### The companion desktop
 
-When you switch apps, Android hides YAAR's page and then freezes it. After that, anything the
-server asks the page stops answering, `__screenshot` included. The socket does not show this:
-a frozen page's socket stays open.
-
-So the server parks a **companion desktop**: a second, always-visible desktop in a headless
-Termux Chromium. Chromium is a child of Termux, so it is on the server's side of the freeze.
-It uses the desktop layout, so every window stays mounted, and it answers app commands only
-while your own page cannot. It needs `chromium-browser` on `PATH`, which install.sh installs
-from Termux's `x11-repo`. Without it, the server does without, and says so once. Details:
-[`server_env.md` → Companion desktop](../reference/server_env.md#companion-desktop).
+Android hides YAAR's page when you switch apps and then freezes it; anything the server asks the page (`__screenshot` included) stops answering, though the socket stays open. So the server parks a **companion desktop**: a second, always-visible desktop in a headless Termux Chromium (a child of Termux, so on the server's side of the freeze). It uses the desktop layout and answers app commands only while your own page cannot. It needs `chromium-browser` on `PATH` (install.sh installs it from `x11-repo`); without it the server does without and says so once. Details: [`server_env.md` → Companion desktop](../reference/server_env.md#companion-desktop).
 
 ### Termux:API
 
-With both the `termux-api` package and the Termux:API app, the server uses the phone itself
-(`features/android/`, over `@yaar/lib/termux`):
-
-- While nobody is looking at the desktop (the companion does not count), notifications,
-  permission dialogs, questions and finished monitor turns are mirrored into the Android
-  notification shade. A tap runs `termux-open-desktop.sh`, and coming back clears them.
-- The clipboard is the phone's real one, with no browser focus rule. Text only: an empty text
-  read still asks the browser, in case it holds an image.
-- Storage files gain `invoke { action: "share" }`, which opens Android's share sheet.
-
-With the package but not the app, every `termux-*` command hangs instead of failing. So the
-server makes one call at startup (`termux-battery-status`) and turns the integration on only if
-it answers in time. Every later call has its own deadline too.
-Details: [`server_env.md` → Termux:API](../reference/server_env.md#termuxapi-android).
+With both the `termux-api` package and the Termux:API app, the server uses the phone itself (`features/android/`, over `@yaar/lib/termux`): notifications, permission dialogs, questions and finished monitor turns are mirrored into the notification shade while nobody is looking at the desktop (a tap runs `termux-open-desktop.sh`); the clipboard is the phone's real one (text only); and storage files gain `invoke { action: "share" }`. The integration turns on only if a startup `termux-battery-status` call answers in time. Details: [`server_env.md` → Termux:API](../reference/server_env.md#termuxapi-android).
 
 ---
 
@@ -341,16 +313,9 @@ The page's `env(safe-area-inset-*)` could not be trusted with them: WebView 124 
 emulator reported the cutout there (51 px at the top) and never the navigation bar, so the
 gesture bar sat on the shell's input.
 
-The padding view then **consumes** the insets, so the WebView under it never sees them. It
-used to pass them on, and WebView 153 on the Galaxy S25 does turn the bars into `env()`
-(35 px at the top, 48 px at the bottom). The shell's `env()` rules then padded a second time:
-an empty band above a maximized window, and below the command sheet's handle. With the insets
-consumed, WebView 124 on the emulator reads `env()` as 0 on all four sides. The S25 is still
-to re-measure ([proposal](../proposals/webview_host_proposal.md#4-android-what-is-left)).
+The padding view then **consumes** the insets, so the WebView never sees them: WebView 153 on the Galaxy S25 turns the bars into `env()` (35 px top, 48 px bottom), which would make the shell's `env()` rules pad a second time. With them consumed, WebView 124 on the emulator reads `env()` as 0 on all four sides. The S25 is still to re-measure ([proposal](../proposals/webview_host_proposal.md#4-android-what-is-left)).
 
-It goes through androidx.core's `WindowInsetsCompat`, because the platform's
-`WindowInsets.Type` and `Window.setDecorFitsSystemWindows` are API 30 and the app runs from
-29. Called directly, as they once were, they fail `onCreate` on Android 10.
+It goes through androidx.core's `WindowInsetsCompat`, because the platform's `WindowInsets.Type` and `Window.setDecorFitsSystemWindows` are API 30 and the app runs from 29 (called directly they fail `onCreate` on Android 10).
 
 ### How it ends
 

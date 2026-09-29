@@ -6,9 +6,7 @@ How a change travels from `dev` to a published release, and which checks guard e
 
 ## Branches
 
-`dev` is where work lands; `main` is the stable branch (the default, so it is what `git clone`
-gives you) and only receives merges from `dev`; releases are cut by publishing a GitHub draft
-release targeting `main`. Open PRs against `dev` unless the change is a release promotion.
+`dev` is where work lands; `main` is the stable, default branch and only receives merges from `dev`. Releases are cut by publishing a GitHub draft release targeting `main`. PRs go against `dev` unless promoting a release.
 
 ## CI (`.github/workflows/ci.yml` → `checks.yml`)
 
@@ -43,10 +41,7 @@ already carries a green `ci / check` from its `dev` run. Note that push satisfie
 
 ## Cutting a release
 
-`bun run release:prepare <version>` stamps the version on `dev` (this replaced a workflow that
-committed the bump straight to `main`; it can't, now that `main` requires a status a `GITHUB_TOKEN`
-push never produces), the bump is promoted to `main` like any other change, then a draft release
-targeting `main` is published.
+`bun run release:prepare <version>` stamps the version on `dev` (a bump cannot be committed straight to `main`, which requires a status a `GITHUB_TOKEN` push never produces), the bump is promoted to `main` like any other change, then a draft release targeting `main` is published.
 
 - `release-draft-check.yml` warns while the release is still a draft if the target commit's version
   disagrees with the tag.
@@ -88,7 +83,4 @@ CI/release pin the version in `.bun-version` (via setup-bun's `bun-version-file`
 states the supported *floor*; the two are intentionally different numbers — the floor may lag the
 version CI builds with, and usually does.
 
-They are equal at 1.4.2 today, which is not the steady state. The floor was raised to meet the
-build version because the standalone exe is built with `--bytecode`, and cross-compiling that
-(`scripts/build/exe-bundle.js` produces all three targets from one machine) needs Bun >= 1.4.1.
-A later bump to `.bun-version` alone does not have to move the floor with it.
+The floor was raised to meet the build version because the standalone exe is built with `--bytecode`, and cross-compiling that (`scripts/build/exe-bundle.js` builds all three targets from one machine) needs Bun >= 1.4.1. A later bump to `.bun-version` alone need not move the floor.

@@ -1,6 +1,6 @@
 # Claude vs Codex: Provider Behavioral Differences
 
-YAAR supports two AI providers behind a unified `AITransport` interface. While the agent orchestration layer (`ContextPool`, `AgentPool`, policies) treats them identically, the providers themselves differ significantly in architecture, session management, and capabilities.
+YAAR supports two AI providers behind a unified `AITransport` interface. The agent orchestration layer (`ContextPool`, `AgentPool`, policies) treats them identically; the providers differ in architecture, session management, and capabilities.
 
 ## Architecture
 
@@ -15,9 +15,8 @@ YAAR Server Process
             └── MCP-connect gating on the first turn (bounded wait)
 ```
 
-- **In-process, persistent-streaming design**: Each provider opens a long-lived CLI process via `sdkQuery()` fed by an `InputChannel`; the process and its MCP connections survive across turns instead of respawning per query
-- **Per-instance `busy` locking**: A provider's persistent session tracks `busy`, so a second turn arriving while one is in flight closes and reopens the stream (or waits) rather than racing it — concurrent turns on the *same* provider are serialized, not parallel
-- **Cross-instance parallelism**: Separate `ClaudeSessionProvider` instances (one per agent) each own their own persistent stream, so different agents still run truly in parallel with no cross-instance coordination needed
+- **Persistent streaming**: each provider opens a long-lived CLI process via `sdkQuery()` fed by an `InputChannel`; the process and its MCP connections survive across turns
+- **Per-instance `busy` locking**: a second turn on the *same* provider closes and reopens the stream (or waits) rather than racing it; separate provider instances (one per agent) run truly in parallel
 
 ### Codex (`CodexProvider`)
 
@@ -33,9 +32,8 @@ YAAR Server Process
         └── turn/start   → run a turn
 ```
 
-- **Child process**: `codex app-server` is a separate process spawned via `spawn()` with WebSocket transport
-- **Shared process, own connections**: One `AppServer` process is shared, but each provider gets its own WebSocket connection via `appServer.createConnection()`
-- **True parallelism**: Each connection carries its own notifications/requests, so multiple turns can run simultaneously (no turn serialization needed)
+- **Shared process, own connections**: one `codex app-server` child (WebSocket transport) is shared; each provider gets its own WebSocket connection via `appServer.createConnection()`, so multiple turns run in parallel
+- The `AppServer` lives as long as `WarmPool` keeps it (it also holds a control client for auth/account operations); providers close only their own connection on dispose
 
 ## Session Management
 
@@ -70,9 +68,6 @@ const { thread: forked } = await appServer.threadFork({ threadId, baseInstructio
 await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] });
 ```
 
-- Threads are explicitly created and managed via JSON-RPC
-- `thread/start` creates a fresh thread with base instructions
-- `thread/resume` reconnects to a previously saved thread
 - A thread's instructions, model and MCP servers are fixed when it is opened. When any of the
   three changes between turns — and the system prompt carries the environment section, so
   installing an app is enough — the provider **forks** the current thread onto the new setup,
@@ -95,24 +90,11 @@ Both providers support injecting additional user input into an active turn, allo
 
 ### Claude: `streamInput()`
 
-The Agent SDK's `Query` object exposes `streamInput()` for sending user messages into an active query. Requires streaming input mode (async generator prompt):
-
-```typescript
-// query() always uses async generator for streaming input mode
-const promptInput = async function*() {
-  yield { type: 'user', message: { role: 'user', content: prompt } };
-};
-const stream = sdkQuery({ prompt: promptInput, options });
-
-// Mid-turn: inject additional input
-await stream.streamInput(async function*() {
-  yield { type: 'user', message: { role: 'user', content: 'Actually, change approach...' } };
-}());
-```
+The Agent SDK's `Query.streamInput()` sends user messages into an active query (requires streaming input mode: an async generator prompt, which `query()` always uses).
 
 ### Codex: `turn/steer`
 
-A dedicated JSON-RPC method that appends input to an in-flight turn:
+A JSON-RPC method that appends input to an in-flight turn:
 
 ```json
 → {"method": "turn/steer", "params": {"threadId": "thread_abc", "input": [{"type": "text", "text": "Actually..."}], "expectedTurnId": "turn_xyz"}, "id": 5}
@@ -138,33 +120,11 @@ Both providers support warmup for faster first response, but the mechanism diffe
 
 ### Claude Warmup
 
-```
-WebSocket connect → ContextPool.prewarmMonitorAgent()
-  → AgentSession.prewarm()
-  → ClaudeSessionProvider.prewarm(options)
-    → openPersistentSession() — opens the persistent stream with the exact
-      SDK options (systemPrompt, mcpServers, model) the first turn will use
-    → await session.mcpReady — waits for MCP servers to connect (bounded)
-    → "Prewarmed persistent stream (MCP connected)"
-```
-
-Warmup pre-opens the long-lived CLI process and waits for its MCP connections, so the first real user message lands on an already-running stream instead of paying process-spawn and MCP-handshake latency. A prompt/tools/model change later still reopens the stream with `resume`, carrying the conversation over.
+`WebSocket connect → ContextPool.prewarmMonitorAgent() → AgentSession.prewarm() → ClaudeSessionProvider.prewarm(options)` opens the persistent stream with the exact SDK options (systemPrompt, mcpServers, model) the first turn will use and waits (bounded) for `session.mcpReady`. The first real message lands on a running stream; a later prompt/tools/model change reopens it with `resume`.
 
 ### Codex Warmup
 
-```
-Server startup → WarmPool.initialize()
-  → ensureCodexAppServer()
-    → spawn('codex', ['app-server', '--listen', 'ws://...', ...flags])
-    → connectControlClient() (WS connect + initialize handshake)
-    → checkAndLoginCodex() (auth via control client)
-  → new CodexProvider(appServer)
-  → warmup()
-    → appServer.createConnection() (new WS + initialize)
-    → Provider has its own dedicated connection
-```
-
-Codex warmup starts the child process and establishes a dedicated WebSocket connection for the provider. Thread creation happens on first query. This is lighter than Claude's warmup but means the first query pays the thread creation cost.
+`WarmPool.initialize() → ensureCodexAppServer()` (spawn `codex app-server --listen ws://…`, `connectControlClient()`, `checkAndLoginCodex()`) `→ new CodexProvider(appServer) → warmup()` (a dedicated WS connection + initialize). Thread creation happens on the first query, so the first query pays it.
 
 ## MCP Integration
 
@@ -214,49 +174,21 @@ replacing it, so anything declared there could never be taken away from a thread
 | Sandbox | N/A | `danger-full-access` |
 | Personality | Default | Feature disabled outright (`features.personality=false`) — no personality value is ever set |
 | Permissions | `bypassPermissions` | `approval_policy = "never"` |
-| Multi-agent | Task tool (profile-based delegation) | Native Codex multi-agent/collab features disabled (`features.multi_agent=false`, `features.collaboration_modes=false`) — orchestration stays YAAR-tracked, not Codex-internal. Also disabled: `apply_patch_freeform`, `unified_exec`, `code_mode`, `fast_mode`, `skill_mcp_dependency_install`, `image_generation`, `computer_use`, `browser_use`, `skill_search`, `workspace_dependencies`, `memories`, `apps`, `goals` (Codex's own plan tracker — YAAR neither reads nor renders it), and the whole plugin tier (`plugins`, `plugin_sharing`, `remote_plugin`) — see `DISABLED_FEATURES` in `config/providers/codex.ts`. Both rosters are logged at launch (`[codex] feature opt-outs/opt-ins`). **`multi_agent=false` is not what stops it** — the model preset outranks the feature flags, so `gpt-5.6-terra`'s `multi_agent_version = "v2"` won until `model_catalog_json` rewrote it to `"disabled"` (`buildDirectToolModeCatalog()`). That is what removes the six `collaboration.*` tools; the `features.multi_agent_v2.*_hint_text=""` entries only silence the prompting, and remain as the fallback for when the catalog rewrite fails open |
-| Code mode | N/A | Off via the **model catalog**, not the flag: `gpt-5.6-terra` ships `tool_mode = "code_mode_only"`, and `effective_tool_mode()` reads the model before the features, so `features.code_mode=false` was inert and YAAR's agents really were running model-authored JS against `ALL_TOOLS` / `tools.mcp__verbs__invoke`. `model_catalog_json` pins `tool_mode = "direct"`. The flag stays as the fallback path; `code_mode_host` stays on because turning it off leaves a broken `exec` rather than no `exec` |
+| Multi-agent | Task tool (profile-based delegation) | Native Codex multi-agent/collab features disabled (`features.multi_agent=false`, `features.collaboration_modes=false`) — orchestration stays YAAR-tracked, not Codex-internal. Also disabled: `apply_patch_freeform`, `unified_exec`, `code_mode`, `fast_mode`, `skill_mcp_dependency_install`, `image_generation`, `computer_use`, `browser_use`, `skill_search`, `workspace_dependencies`, `memories`, `apps`, `goals` (Codex's own plan tracker — YAAR neither reads nor renders it), and the whole plugin tier (`plugins`, `plugin_sharing`, `remote_plugin`) — see `DISABLED_FEATURES` in `config/providers/codex.ts`. Both rosters are logged at launch (`[codex] feature opt-outs/opt-ins`). **`multi_agent=false` is not what stops it** — the model preset outranks the feature flags (`gpt-5.6-terra`'s `multi_agent_version = "v2"`), so `model_catalog_json` rewrites it to `"disabled"` (`buildDirectToolModeCatalog()`), which removes the six `collaboration.*` tools; the `features.multi_agent_v2.*_hint_text=""` entries only silence the prompting and remain as the fallback if the catalog rewrite fails open |
+| Code mode | N/A | Off via the **model catalog**, not the flag: `gpt-5.6-terra` ships `tool_mode = "code_mode_only"` and `effective_tool_mode()` reads the model before the features, so `features.code_mode=false` is inert. `model_catalog_json` pins `tool_mode = "direct"`. The flag stays as the fallback; `code_mode_host` stays on because turning it off leaves a broken `exec` rather than no `exec` |
 | MCP protocol era | `MCP_SDK_GENERATION=v2` + `MCP_PROTOCOL_NEGOTIATION=auto` (both required) | `features.mcp_2026_07_28=true` (`ENABLED_FEATURES`) — the gate for HTTP MCP servers, which is all of YAAR's. `CODEX_MCP_PROTOCOL_VERSION` is the stdio-server equivalent and does **not** move these |
 
-Both rows are load-bearing rather than tuning: YAAR's MCP endpoint serves revision **2026-07-28 only**, so a provider that does not negotiate up is refused (`[MCP] refused legacy protocol era`) and loses every tool, instead of quietly falling back as it did while the 2025-era leg existed.
+The MCP-era row is load-bearing: YAAR's MCP endpoint serves revision **2026-07-28 only**, so a provider that does not negotiate up is refused (`[MCP] refused legacy protocol era`) and loses every tool.
 
 ## Image Handling
 
 ### Claude
 
-Images are captured as WebP on the frontend (via Canvas `toDataURL('image/webp')`), then sent as multimodal content blocks:
-
-```typescript
-// Images arrive as WebP data URLs from the frontend
-// Build multimodal prompt via async generator
-promptInput = async function*() {
-  yield {
-    type: 'user',
-    message: {
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/webp', data: '...' } },
-        { type: 'text', text: prompt },
-      ],
-    },
-  };
-};
-```
+Images are captured as WebP on the frontend (Canvas `toDataURL('image/webp')`) and sent as multimodal content blocks (`{ type: 'image', source: { type: 'base64', media_type: 'image/webp', data } }` alongside the text block, in an async-generator prompt).
 
 ### Codex
 
-Images are passed directly as data URLs in the input array:
-
-```typescript
-const input = [
-  { type: 'text', text: prompt, text_elements: [] },
-  { type: 'image', url: 'data:image/png;base64,...' },
-];
-
-await appServer.turnStart({ threadId, input });
-```
-
-No conversion or compression is applied.
+Images are passed directly as data URLs in the `turn/start` input array (`{ type: 'image', url: 'data:image/png;base64,...' }`), with no conversion or compression.
 
 ## Stream Message Mapping
 
@@ -282,10 +214,7 @@ Maps from JSON-RPC notification methods:
 
 ## Error Recovery
 
-Both SDKs report trouble on far more channels than they report *fatal* trouble on, and both were
-once read for the fatal one alone. The rule that governs the mapping — **a recoverable failure
-becomes `StreamMessage.type === 'notice'`, never `error`, because `error` is terminal by
-contract** — is stated in the `server-providers` skill
+Both SDKs report trouble on far more channels than they report *fatal* trouble on. The rule — **a recoverable failure becomes `StreamMessage.type === 'notice'`, never `error`, because `error` is terminal by contract** — is stated in the `server-providers` skill
 ([`.claude/skills/server-providers/SKILL.md`](../../.claude/skills/server-providers/SKILL.md#the-notice-contract-providersnoticets)).
 This section is the per-provider channel vocabulary.
 
@@ -322,21 +251,15 @@ Retry and interruption:
 
 ### Codex
 
-The load-bearing channel is **`ErrorNotification.willRetry`** (`providers/codex/errors.ts`). Every
-`error` notification used to map to a terminal message, which latched the turn closed *and* tripped
-the `done` short-circuit in `CodexProvider`'s read loop — so a transient failure the app-server was
-about to retry ended the turn, and the retry's answer was never read.
+The load-bearing channel is **`ErrorNotification.willRetry`** (`providers/codex/errors.ts`): `willRetry: true` is a notice, not a terminal message, and **the mapper and the loop must agree** — `provider.ts` skips its turn-done check for the same case, or a transient failure the app-server is about to retry ends the turn and the retry's answer is never read.
 
-`willRetry: true` is now a notice, and **the mapper and the loop must agree**: `provider.ts` skips
-its turn-done check for the same case. Changing one without the other reintroduces the bug.
+Other channels:
 
-Beyond that:
-
-| Channel | Was | Now |
-|---|---|---|
-| `warning`, `guardianWarning`, `configWarning`, `deprecationNotice` | fell through to `console.debug` | notice |
-| `account/rateLimits/updated`, `model/rerouted` | in `IGNORED_METHODS` by name | notice |
-| Turn failure | reduced to `TurnError.message`, discarding the typed `CodexErrorInfo` beside it | both carried (`CodexErrorInfo` codes: `contextWindowExceeded`, `cyberPolicy`, `misalignmentPolicyViolation`, …) |
+| Channel | Maps to |
+|---|---|
+| `warning`, `guardianWarning`, `configWarning`, `deprecationNotice` | notice |
+| `account/rateLimits/updated`, `model/rerouted` | notice |
+| Turn failure | `TurnError.message` plus the typed `CodexErrorInfo` (`contextWindowExceeded`, `cyberPolicy`, `misalignmentPolicyViolation`, …) |
 
 `NOTICE_METHODS` exists so a handled method's *quiet* state (`status: 'ready'`, a gauge below its
 limit) is not logged as unhandled. Covered by `tests/codex-error-notices.test.ts`.
@@ -354,29 +277,6 @@ Process and connection resilience:
 - Any other refused request ends the turn with `errorCode` set to the JSON-RPC 2.0 code's name
   (`jsonrpc_invalid_params`, `jsonrpc_internal_error`, …; `jsonRpcErrorCode` in `codex/errors.ts`)
 - Each provider checks `client.isConnected` before queries; stale connections are detected via `isAvailable()`
-
-## Shared Process Architecture (Codex-specific)
-
-The Codex provider uses a shared `AppServer` with per-provider WebSocket connections:
-
-```
-WarmPool (owns the AppServer singleton)
-├── AppServer (one process, WebSocket listener on port 4510)
-│   ├── Control client (WS conn for auth/account operations)
-│   └── Process lifecycle management (spawn, stop)
-├── CodexProvider (monitor agent, monitor 0)
-│   └── Own WS connection → own thread → own turns
-├── CodexProvider (app agent)
-│   └── Own WS connection → own thread → own turns
-└── CodexProvider (ephemeral agent)
-    └── Own WS connection → own thread → own turns
-```
-
-This means:
-1. **Fast provider creation**: New CodexProviders get a new WS connection without spawning a new process
-2. **Thread isolation**: Each provider gets its own thread within the shared process
-3. **True parallelism**: Each WS connection carries its own notifications/requests, so multiple turns can run simultaneously
-4. **Shared lifecycle**: The AppServer lives as long as WarmPool keeps it; providers just close their own connections on dispose
 
 ## Key Files
 

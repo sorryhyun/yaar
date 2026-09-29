@@ -14,8 +14,8 @@ Shared types between frontend and server.
     **one** state key or command (`AppDescribeRequest`/`AppDescribeResponse`, `APP_MSG.describe*`)
     from an optional `describe()` the app attaches to that entry. `doc: null` is a real answer —
     the key exists and the app defines no `describe()` for it, so the server falls back to the
-    manifest's static `description`; only a key that is absent is an error. It is answered on
-    demand and never folded into the manifest, or the cheapest call would pay for every key.
+    manifest's static `description`; only a key that is absent is an error. Answered on demand,
+    never folded into the manifest.
   - `AppManifest.$defs` carries subschemas more than one descriptor shares; every
     `{"$ref": "#/$defs/name"}` inside a `params`/`returns`/state `schema` resolves against it,
     so **the manifest is the schema document**. Filled by the compiler
@@ -25,14 +25,11 @@ Shared types between frontend and server.
   - A command's `params` JSON Schema is **enforced** by the iframe bridge before the handler
     runs: a missing `required` key or a key absent from `properties` is rejected naming both
     the wrong keys and the accepted ones. `additionalProperties: true` opts a pass-through
-    command out; a command that declares no `properties` stays free-form. The schema was
-    previously advisory, so an undeclared key was dropped in silence and the handler failed
-    later with a message about its own logic (devtools' `copyFile` called with
-    `{source, destination}` reported "Source and destination are the same path").
+    command out; a command that declares no `properties` stays free-form.
 - `yaar-uri.ts` - Shared URI utilities: `parseYaarUri`, `buildYaarUri`, `resolveContentUri`, `extractAppId`, `parseFileUri`, `parseBareWindowUri`, `expandBraceUri`, plus the devtools preview identity helpers (`PREVIEW_APP_PREFIX`, `previewAppId`, `isPreviewAppId`)
 - `fonts.ts` / `browser.ts` - Wire contracts of `yaar://system/fonts` and `POST /api/browser` (plain interfaces, no Zod). The server builds them; the app-facing `@bundled/yaar*` declarations in `compiler/src/bundled-types/index.d.ts` restate them, and `bundled-types-parity.test.ts` proves the restatement identical
 - `host-contract.ts` - `YaarHost`, the `window.yaarHost` a native desktop window (YAAR's own WebView host, `packages/server/src/desktop-window/`) injects into the main frame only, and `YAAR_HOST_BINDING`, the raw webview binding its adapter calls. Types and constants only. No host (Chrome, dev) means every call site keeps its browser path; see the frontend's `lib/host.ts`. Per platform: `docs/installations/mac.md`, `docs/installations/android.md` (the APK speaks the same contract over androidx.webkit's WebMessage channel). App iframes never see the host object: the device handshake (`yaar:device-update`, `iframe-scripts/device-sdk.ts`) carries only `host: { platform, caps } | null`, and an app's `downloadBlob()` posts `APP_MSG.download` (`yaar:download`, bytes transferred, capped at `HOST_DOWNLOAD_MAX_BYTES`) for the shell to save through the host
-- `capture-scale.ts` - `captureScale(w, h)`: image pixels per CSS pixel for a screen capture, aimed at a 1568px long edge (what a vision model resizes to) and clamped to 1–3×. Both capture paths use it — `iframe-scripts/capture.ts` for a window's `__screenshot` and the frontend's `captureMonitorScreenshot` for the whole monitor — because a `foreignObject` render is resolution-independent, so on the phone shell (~412 CSS px) the extra scale is detail the agent reading the picture did not have. The injected script restates the formula in ES5 with the constants interpolated; `capture-scale.test.ts` proves the two cannot disagree
+- `capture-scale.ts` - `captureScale(w, h)`: image pixels per CSS pixel for a screen capture, aimed at a 1568px long edge (what a vision model resizes to) and clamped to 1–3×. Both capture paths use it — `iframe-scripts/capture.ts` for a window's `__screenshot` and the frontend's `captureMonitorScreenshot` for the whole monitor. The injected script restates the formula in ES5 with the constants interpolated; `capture-scale.test.ts` proves the two cannot disagree
 - `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk, device-sdk, text-selection, ime-guard, console-capture, prelude)
   - `ime-guard.ts` - swallows the composing-IME keydowns (notably Enter) a capture-phase `window` listener sees before any app handler, so a submit-on-Enter app doesn't fire early and double on commit
   - `text-selection.ts` - the phone's own text selection inside an app (#123): on `data-form-factor="mobile"` app content is `user-select: none` (fields excepted), a long-press selects a word as a `::highlight`, and the range is reported to the desktop (`APP_MSG.textSelection`), which draws the handles and menu and answers with `APP_MSG.textSelectionCommand`. Its behaviour is tested from the frontend (`tests/lib/frameTextSelectionScript.test.ts`), since it needs a DOM
@@ -41,9 +38,7 @@ Shared types between frontend and server.
   - `windows-sdk.ts` owns **everything about a link leaving an app**: `openUrl`, the
     `window.open` override, the click guard that keeps an anchor from navigating the app's own
     document, and the `yaar.links` surface (`open`/`onOpen`/`resolve`) an app configures all
-    three through. It was split across two scripts once, and the halves disagreed about which
-    links they covered — which is what apps then hand-rolled a third policy to fix. The guard
-    arms on `window.__yaar_links__` (emitted for every compiled app, carrying app.json's
+    three through — keep it in this one script. The guard arms on `window.__yaar_links__` (emitted for every compiled app, carrying app.json's
     `"links"`) or on `window.__yaarAppRegistered`, so a plain HTML document previewed in a
     window still browses in place.
 
@@ -61,10 +56,9 @@ Window actions (create, close, reload, focus, minimize, maximize, restore, move,
 
 See `src/events/client.ts` and `src/events/server.ts` for full Client→Server and Server→Client event types.
 
-`UserMessageEvent` carries an optional `target?: 'monitor' | 'session'` (default `'monitor'`): set
-to `'session'` by the CLI-panel toggle to route the message to the session agent (the user's
-deputy, which can drive the real browser via `yaar://session/browser`) instead of the monitor
-agent.
+`UserMessageEvent` carries an optional `target?: 'monitor' | 'session'` (default `'monitor'`); the
+CLI-panel toggle sets `'session'` to route the message to the session agent (see the frontend's
+CLI Panel section).
 
 ## Component DSL
 
@@ -79,8 +73,8 @@ Layout via `ComponentLayout`: `{ components: Component[], cols?: number | number
 ## Adding a New OS Action
 
 1. Define action type in `src/actions.ts`
-2. Handle in `applyAction()` in `@yaar/frontend`
-3. Add MCP tool in `@yaar/server` if needed
+2. Route it in `@yaar/frontend`'s `store/desktop.ts` (`applySyncAction`, or `asyncActionRunner` if it reaches outside the store)
+3. Emit it server-side (a `handlers/` verb over `features/` logic) if the agent needs it
 
 ## Zod Schema Guidelines (v4)
 
@@ -131,6 +125,3 @@ Two entry points, and the split is enforced by what each file imports rather tha
 
 Adding a schema to the barrel silently re-adds ~100KB of Zod to the browser bundle. The check is
 `grep -c zod packages/frontend/dist/main-*.js` after a build — it should stay at 0.
-
-- **Frontend**: Import types + type guards (lighter bundle)
-- **Server**: Import schemas from `@yaar/shared/schemas` for MCP tool validation

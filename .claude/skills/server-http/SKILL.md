@@ -5,17 +5,16 @@ paths:
   - "packages/server/src/http/**"
 ---
 
-This skill covers the YAAR server's HTTP layer: the REST route list and the access chokepoint
+This skill covers the YAAR server's HTTP layer: the REST routes and the access chokepoint
 (`http/access.ts`) — principals, permission gates, delegated grants, and iframe/MCP token
-handling. The content below is carried over verbatim from `packages/server/CLAUDE.md`.
+handling.
 
 ## REST API
 
-Routes in `http/routes/`: `GET /health`, `GET /api/version`, `/api/providers`, `/api/apps`,
-`/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`,
-`/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/embeddable`,
-`/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See
-`routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.
+Routes live in `http/routes/` (one file per area: `api.ts`, `verb.ts`, `files.ts`, `dev.ts`,
+`browser.ts`, `bridge.ts`, `ml-runtime.ts`, `media-proxy.ts`, `remote-control.ts`, …). The generated
+route list is `docs/reference/openapi.yaml` (`bun run generate:openapi`; CI fails on drift via
+`check:openapi`).
 
 ### The access chokepoint (`http/access.ts`)
 
@@ -29,8 +28,7 @@ const denied = requirePermission(principal, 'yaar://config/domains', 'invoke');
 if (denied) return denied;
 ```
 
-This is the same check `POST /api/verb` runs, shared rather than duplicated — the REST routes used
-to reach storage, config, and session logs with no check at all.
+This is the same check `POST /api/verb` runs, shared rather than duplicated.
 
 - **`host`** — the desktop (no iframe token). Unconfined; in `REMOTE=1` it has already proven the remote token in `auth.ts`.
 - **`app`** — an iframe token. Confined to its app.json `permissions`, plus auto-granted self-storage, the commons, and whatever a caller granted to its window at runtime.
@@ -50,8 +48,8 @@ attributes a request** — read it before adding a gate. The gates it exports:
 
 Four invariants worth knowing before you touch any of it:
 
-- **The token is identity; `WindowStateRegistry` is authority.** A token carries who an iframe *is*; everything a caller granted *to this window* at runtime lives on `WindowStateRegistry.delegatedGrants`, read per request through `setWindowGrantResolver`. A token is not durable and a window is — every reconnect re-mints one, so authority baked in at mint time vanished on the first page refresh.
-- **Three producers, one home.** Delegated grants (`features/window/delegated-grants.ts` — its 65-line header is the full story), caller-supplied `permissions` on `window.create`, and the window's own document. Each narrows; the registry only stores.
+- **The token is identity; `WindowStateRegistry` is authority.** A token carries who an iframe *is*; everything a caller granted *to this window* at runtime lives on `WindowStateRegistry.delegatedGrants`, read per request through `setWindowGrantResolver`. A token is re-minted on every reconnect; the window persists.
+- **Three producers, one home.** Delegated grants (`features/window/delegated-grants.ts` — its header is the full story), caller-supplied `permissions` on `window.create`, and the window's own document. Each narrows; the registry only stores.
 - **A token dies with its window.** `revokeTokensForWindow` is wired into `LiveSession`'s `setOnWindowClose`, registered in the **constructor** because windows outlive the pool.
 - **The copy shape is shared** (`handlers/storage-copy.ts`). `invoke { action: 'copy', from }` reads a URI the caller did not name as its target, so `POST /api/verb` re-checks `read` on `from` — per element, since a batched invoke is N calls the registry runs without returning to the door.
 

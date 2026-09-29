@@ -42,18 +42,15 @@ one without, so it must not lose the mechanics):
    substituted, always first: what YAAR is and the app agent's role in it. Then
    `agent/prompt.md` if the app ships one. The intro is the only place identity is stated,
    so an app's `prompt.md` describes the app and how to drive it — no "You are …". The lookup
-   (and the `app.json` `"agent": { "prompt": … }` path override, legacy fallbacks, and the
-   deliberate retirement of `AGENTS.md` as a prompt source) is `AGENT_DOCS` in
-   `features/apps/discovery.ts`.
+   (the `app.json` `"agent": { "prompt": … }` path override and legacy fallbacks) is
+   `AGENT_DOCS` in `features/apps/discovery.ts`.
 2. **Payload-literals rule** (`profiles/prompts/payload-literals.md`) — always appended.
    The write-literal-characters / never-hand-escape contract for tool arguments.
 3. **Storage sections — both, for every app.** The static app-scoped section
    (`prompts/app-storage.md`) plus a **generated** shared-storage section rendered from the
    app's own declared grants, so the verbs the prompt promises are the verbs the door
-   admits. Every app agent holds its own tree and the commons, so both sections are
-   unconditional; what varies is the generated half, which either lists what the app.json
-   reaches beyond the commons or says plainly that it reaches nothing further. Appended at
-   one site above the branch — they drifted apart once when only one was.
+   admits. Both are unconditional; the generated half either lists what `app.json` reaches
+   beyond the commons or says it reaches nothing further.
 4. **Protocol manifest** — generated from the app's `protocol.json`: state keys (read with
    `query`), then command signatures rendered by `renderSignature` with the compiler-hoisted
    `$defs`, the same renderer `describe` answers with. The two headings name the verb for

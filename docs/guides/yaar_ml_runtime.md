@@ -77,11 +77,9 @@ Raw `ort` use (a worker importing onnxruntime itself) always stays local.
 
 ## Prefetch to disk
 
-The IndexedDB cache is the right default: one call, no server state, nothing to
-clean up. But it is the *browser's* cache — clearing site data drops it, quota
-pressure evicts it, and nothing in it survives to another tab's first paint. For a
-model you want to pull once and keep, `prefetchWeights` streams it to this
-machine's storage instead:
+The IndexedDB cache is the browser's: clearing site data or quota pressure drops it. For a
+model you want to pull once and keep, `prefetchWeights` streams it to this machine's storage
+instead:
 
 ```typescript
 import { prefetchWeights, session } from '@bundled/yaar-ml';
@@ -94,12 +92,10 @@ const [modelUrl] = await prefetchWeights(
 const s = await session(modelUrl); // reads off disk, no second copy in IndexedDB
 ```
 
-- The browser never touches the bytes. `POST /api/storage/{path}` buffers the whole
-  body under `MAX_UPLOAD_SIZE` (50 MB), so the *server* streams remote → disk over
-  parallel Range requests and the SDK polls for progress.
+- The *server* streams remote → disk over parallel Range requests; the SDK polls for progress
+  (why: [ML Runtime architecture](../architecture/ml_runtime.md)).
 - **Resumable.** An interrupted transfer leaves a `.part` and picks up where it
-  stopped. Files already on disk complete instantly, so calling this on every boot
-  is the intended usage — it is "make sure the model is here", not an installer.
+  stopped. Files already on disk complete instantly, so call it on every boot.
 - `dest` is storage-relative and `apps/self/` resolves to your app's own directory.
   The destination is permission-checked like any other storage write, so an app can
   only prefetch into somewhere it may already write.

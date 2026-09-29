@@ -1,14 +1,12 @@
 # Server Environment Variables
 
-Every knob the server reads, with the reasoning behind the ones whose default is load-bearing.
-The short table — name, default, one line — lives in
+Every knob the server reads. The short table lives in
 [`packages/server/CLAUDE.md`](../../packages/server/CLAUDE.md); this is where a variable gets its
 full story.
 
 A test run reads none of these from the developer's machine: `scripts/test/env.ts` scrubs the
 whole `YAAR_*` prefix plus the knobs listed below, and points config/storage/session-logs at temp
-dirs. A suite that only passes on a clean checkout is a suite that fails on someone's laptop and
-passes in review.
+dirs.
 
 **Source:** `packages/server/src/config/env.ts`, `packages/server/src/config/paths.ts`, `scripts/test/env.ts`
 
@@ -34,12 +32,10 @@ passes in review.
 ### `YAAR_MOCK_AGENT`
 
 `YAAR_MOCK_AGENT=1` makes `instantiateProvider` return a `MockTransport` for every agent,
-reporting the provider type it stands in for so provider-keyed branches stay on their real
-path. Only the model is replaced: the turn still runs inside its agent context, its stream
-still goes through `StreamToEventMapper`, and the windows it opens go through the same
-`yaar://windows` invoke the MCP tool reaches. That is what makes it a load generator rather
-than a UI fixture — `make mobile-bench` uses it to measure the phone shell with the model's
-latency and choices held still. It models Termux, so it runs with the companion desktop on.
+reporting the provider type it stands in for. Only the model is replaced: the turn still runs
+inside its agent context, through `StreamToEventMapper`, and its windows go through the same
+`yaar://windows` invoke — a load generator, not a UI fixture (`make mobile-bench`). It models
+Termux, so it runs with the companion desktop on.
 
 A turn is steered from its prompt: `perf windows=6 text=600 apps=memo` streams 600 characters,
 then opens six windows rotating markdown → table → component → iframe app. A prompt with no
@@ -50,20 +46,11 @@ then opens six windows rotating markdown → table → component → iframe app.
 ### `YAAR_REACT_PROD`
 
 Whether the dev bundler (every launch that is not `REMOTE=1` and not the bundled exe —
-`make termux` included) builds the frontend against React's **production** build. React's
-development build captures an owner stack for every element it creates, and on the phone
-shell that doubled the render cost: `make mobile-bench` measured a 6-window turn at 273ms of
-renderer script in dev and 118ms in prod, and four swipes at 386ms against 122ms (4x CPU
-throttle), with 300ms of long tasks gone entirely.
-
-On a desktop the dev warnings are worth that, so the default stays development there. On
-Android it is production, because `make termux` *is* how YAAR runs on a phone — there is no
-release build behind it to measure or ship instead. `make mobile-bench` pins it on so it
-measures what a phone gets; `YAAR_REACT_PROD=0 make mobile-bench` measures the dev build.
-
-The release build (`packages/frontend/build.ts`) always defines `NODE_ENV=production`.
-Before that, it did not: Bun inlines `process.env.NODE_ENV` from the *building* process's
-environment, and `minify: true` does not set it, so every release shipped React's dev build.
+`make termux` included) builds the frontend against React's **production** build. The dev build
+doubled the phone shell's render cost (`make mobile-bench`: 6-window turn 273ms vs 118ms of
+renderer script). Default is development on a desktop, production on Android.
+`make mobile-bench` pins it on; `YAAR_REACT_PROD=0 make mobile-bench` measures the dev build. The
+release build (`packages/frontend/build.ts`) always defines `NODE_ENV=production`.
 
 **Source:** `packages/server/src/http/dev-bundler.ts` (`reactProduction`), `packages/frontend/build.ts`
 
@@ -73,16 +60,13 @@ The PID of whatever launched the server. The server checks on it every two secon
 down the normal way once it is gone; unset, nothing is watched. `start-termux.sh` sets it to
 itself.
 
-It exists because `start.sh` runs the server as a background job under `set -m`, in a process
-group of its own, so the terminal's hangup never reaches it: the only thing that stops the
-server is `start.sh`'s cleanup trap. A trap does not run on SIGKILL, and on Android that is
-how a launcher usually dies — Termux kills a closed session's process outright, and so does the
-phantom-process killer. Before this, the server lived on as an orphan on port 8000, the next
-`yaar` quietly took 8001, and the installed app, bound to 8000, kept opening the orphan.
+`start.sh` runs the server in a process group of its own, so a terminal hangup never reaches it
+and only `start.sh`'s cleanup trap stops it — which does not run on SIGKILL, how Termux and the
+phantom-process killer end a launcher. Without the watchdog the server lived on as an orphan on
+port 8000.
 
-Where there is a `/proc`, "gone" also covers the PID being recycled: the check compares the
-process's start time, not just whether the PID answers. The variable is removed from the
-environment once read, so the agents the server spawns do not inherit it.
+Where there is a `/proc`, "gone" also covers PID recycling (start time is compared). The variable
+is removed from the environment once read, so spawned agents do not inherit it.
 
 **Source:** `packages/server/src/launcher-watchdog.ts`, `scripts/dev/start-termux.sh`
 
@@ -93,19 +77,17 @@ Where the bundled exe shows the desktop. On macOS the binary carries a native We
 re-spawns itself as `yaar --window <url> --parent <pid>` to own a WKWebView window; closing that
 window shuts the server down, and the window closes itself if the server dies first. Any
 failure before the window appears (no library for the platform, a library that will not load,
-no WebView to be had) falls back to what every exe did before — Chrome/Edge `--app`, then the
-default browser — so `YAAR_WEBVIEW=0` is only needed to *choose* Chrome.
+no WebView to be had) falls back to Chrome/Edge `--app`, then the default browser — so
+`YAAR_WEBVIEW=0` is only needed to *choose* Chrome. Windows and Linux builds carry no library yet.
+Development never goes through here — `make dev` and friends open Chrome, over CDP.
 
-The window loads the local h2 socket, `https://localhost:<tlsPort>`, as the Chrome path does.
-WebKit has no equivalent of Chromium's SPKI flag, so the server passes the pin as
-`--trust-spki <pin>` and the window's own delegate accepts that one self-signed key on a
-loopback host (desktop, isolated app frames on `127.0.0.1`, and `wss:` alike); anything else
-gets the system trust store. With no TLS socket (no `openssl` to mint the certificate) the window
-loads plain `http://localhost:<port>` and is back to HTTP/1.1's six connections per host.
-Windows and Linux builds carry no library yet and go straight to Chrome. Development never goes
-through here — `make dev` and friends open Chrome, over CDP, as always.
+The window loads the local h2 socket, `https://localhost:<tlsPort>`. WebKit has no equivalent of
+Chromium's SPKI flag, so the server passes the pin as `--trust-spki <pin>` and the window's
+delegate accepts that one self-signed key on a loopback host (desktop, isolated app frames on
+`127.0.0.1`, and `wss:`); anything else gets the system trust store. With no TLS socket (no
+`openssl`) the window loads plain `http://localhost:<port>` (HTTP/1.1, six connections per host).
 
-The top frame of the desktop origin — and nothing else — gets `window.yaarHost` (the contract in
+The top frame of the desktop origin — and nothing else — gets `window.yaarHost` (contract:
 `packages/shared/src/host-contract.ts`): bridge downloads into `~/Downloads`, clipboard read and
 write, and opening http(s)/mailto URLs in the default browser. The window itself also saves
 `<a download>` and attachment downloads into `~/Downloads` (never over an existing file), opens
@@ -113,15 +95,14 @@ off-machine `window.open`/`target=_blank` links in the default browser and scrip
 window of their own, and grants the microphone and camera to `localhost`/`127.0.0.1` only once
 macOS has granted them to YAAR.
 
-`YAAR_WEBVIEW_LIB` points the window at a different library build, for trying a fresh
-`dist/native/macos/libwebview.dylib` against an installed binary. The embedded copy is otherwise
-written to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` (dlopen cannot read the exe's
-virtual filesystem) — once per build, since the name carries a hash of the bytes.
+`YAAR_WEBVIEW_LIB` points the window at a different library build. The embedded copy is otherwise
+written to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` (dlopen cannot read the exe's virtual
+filesystem), once per build.
 
 A `YAAR.app` (built on a Mac by `bun run build:exe:bundle:macos`) keeps its data in
-`~/Library/Application Support/YAAR` rather than beside the binary — `.env`, `config/`,
-`storage/`, `session_logs/`, `apps/`, `user-apps/` — because writing into a signed bundle
-breaks the signature macOS records permission grants (the microphone) against.
+`~/Library/Application Support/YAAR` (`.env`, `config/`, `storage/`, `session_logs/`, `apps/`,
+`user-apps/`) rather than beside the binary, because writing into a signed bundle breaks the
+signature macOS records permission grants against.
 
 **Source:** `packages/server/src/desktop-window/`, `packages/lib/src/webview/`,
 `packages/lib/src/webview/native/webview_extras.mm`, `packages/server/src/macos-bundle.ts`,
@@ -133,9 +114,7 @@ breaks the signature macOS records permission grants (the microphone) against.
 (`FABLE_MODEL`), and pins every agent below it to Opus: the session agent, every app agent
 whatever its `agentType`, and every sub-agent, including one spawned with an explicit `model`.
 Off, the usual tiers apply (monitor and session agent Opus, apps Sonnet unless declared).
-
-The flag is read per turn (`isFableMode()`), so the prewarmed monitor stream and the first real
-turn agree. Under `PROVIDER=codex` (e.g. `FABLE=1 make codex-dev`) Fable maps to `gpt-6-astra`
+The flag is read per turn (`isFableMode()`). Under `PROVIDER=codex` Fable maps to `gpt-6-astra`
 and Opus to `gpt-5.6-sol`, so the monitor agent runs on Astra and app and sub-agents move from
 Terra to Sol.
 
@@ -147,12 +126,9 @@ Codex's own variable, inherited by the spawn — and read by YAAR *before* it, b
 `getCodexAppServerArgs()` derives one `-c mcp_servers.<name>.enabled=false` per server that
 `$CODEX_HOME/config.toml` declares (`detectUserMcpServers()`).
 
-That list has to be **detected, not written down**: naming a server the config does not declare
-leaves codex with a table holding only `enabled`, and it refuses to boot with
-`invalid transport in mcp_servers.<name>`.
-
-Pinned to an empty temp dir by the test env so the spawn args do not depend on whether the
-developer has the ChatGPT desktop app installed.
+The list is **detected, not written down**: naming a server the config does not declare makes
+codex refuse to boot with `invalid transport in mcp_servers.<name>`. Pinned to an empty temp dir
+by the test env.
 
 **Source:** `packages/server/src/config/providers/codex.ts`
 
@@ -168,30 +144,20 @@ developer has the ChatGPT desktop app installed.
 | `YAAR_USER_APPS` | `user-apps/` | Marketplace-install root |
 | `YAAR_WORKSPACE` | — | Pre-fill all four from `workspaces/<name>/` |
 
-All four path vars are pinned to temp dirs by `scripts/test/env.ts`. A suite that builds a
-`SessionLogger` mints a log directory — which is how `session_logs/` used to collect
-`app-persona-…` logs from a plain `bun run test` — and app discovery scanning the developer's
-real `user-apps/` is how a test passes locally and means something different in CI.
+All four path vars are pinned to temp dirs by `scripts/test/env.ts`.
 
 ### `YAAR_WORKSPACE`
 
 A workspace *is* the bundle of the four path overrides and nothing more:
-`YAAR_WORKSPACE=game-dev` is shorthand for pointing storage, config, session logs and user-apps
-at `workspaces/game-dev/`, so a whole experiment lives in one disposable, git-ignored directory
-and the default roots stay untouched. Fill-in-if-unset — an individually set path var still wins,
-which is also what keeps the test env's explicit pins authoritative.
-
-Two behaviors follow from an active workspace rather than from the path vars themselves:
+`YAAR_WORKSPACE=game-dev` points storage, config, session logs and user-apps at
+`workspaces/game-dev/`. Fill-in-if-unset — an individually set path var still wins.
 
 - **New deploys land in the workspace's user-apps root**, not the tracked `apps/` tree
-  (`DEPLOY_ROOT` in `features/apps/roots.ts`). An experiment that writes into `apps/` dirties
-  the repo, which is the exact thing the workspace exists to prevent. Existing apps still
-  update in place wherever `resolveAppDir()` finds them, and bundled apps remain visible —
-  the workspace layers over the base install, it does not replace it.
-- **An invalid name refuses boot** rather than falling back to the default roots: silently
-  writing an experiment's state into the directories the workspace was protecting is the one
-  failure mode the feature cannot have. A name is one path segment — a letter or digit, then
-  letters, digits, dots, hyphens or underscores (`workspaceNameRefusal`).
+  (`DEPLOY_ROOT` in `features/apps/roots.ts`). Existing apps still update in place wherever
+  `resolveAppDir()` finds them, and bundled apps remain visible.
+- **An invalid name refuses boot** rather than falling back to the default roots. A name is one
+  path segment — a letter or digit, then letters, digits, dots, hyphens or underscores
+  (`workspaceNameRefusal`).
 
 Applied in `config/env.ts` after `loadRootEnv()` and before `loadPersistedRemote()`, so
 `YAAR_WORKSPACE` can come from the root `.env`, and the persisted `remote` preference is read
@@ -201,22 +167,17 @@ from the workspace's own settings.json.
 
 ### `YAAR_KEEP_EMPTY_SESSIONS`
 
-`1` keeps session logs that recorded nothing. Off by default because `createSession()` runs at
-boot, so a click before the first message is still logged — meaning every launch the user closed
-without typing left a directory behind, in `yaar://history/` and `GET /api/sessions` as much as
-on disk. The launch that would add the next one sweeps them first.
-
-What counts as empty (exactly the created shape, every log zero-length) and what protects a
-concurrently-running instance's log (the creating `pid` in `metadata.json`, plus a 5-minute grace
-window) is `logging/prune.ts`.
+`1` keeps session logs that recorded nothing. Off by default: `createSession()` runs at boot, so
+every launch closed without typing would otherwise leave a directory behind (in
+`yaar://history/` and `GET /api/sessions` too). The next launch sweeps them first. What counts as
+empty and what protects a concurrently-running instance's log (creating `pid` in `metadata.json`,
+5-minute grace) is `logging/prune.ts`.
 
 **Source:** `packages/server/src/logging/prune.ts`
 
 ### `YAAR_SKIP_DOTENV`
 
-`1` skips loading the root `.env`. Set by `scripts/test/env.ts`: a test run pins every knob
-explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk
-back through.
+`1` skips loading the root `.env`. Set by `scripts/test/env.ts`.
 
 ---
 
@@ -227,15 +188,10 @@ back through.
 | `YAAR_LOG_LEVEL` | `info` | Floor for `observability/log.ts` — `debug` \| `info` \| `warn` \| `error` |
 | `YAAR_LOG_FORMAT` | `pretty` | `pretty` or `json` |
 
-`debug` being off by default is the one visibility change the console→logger conversion made:
-everything that used to be `console.log` is `info` and still prints, but genuinely chatty lines
-(codex item/started, the Claude SDK message trace, `entered agent context`) were demoted and now
-need `YAAR_LOG_LEVEL=debug`.
-
-`pretty` is the terminal format the `[Component] message` lines always had, plus `key=value`
-fields and the monitor/agent ids. `json` is one object per line carrying **every** context id
-(session, monitor, agent, window, app) and an ISO timestamp. Both are scrubbed by the test env's
-`YAAR_` prefix sweep, so a suite never inherits a developer's setting.
+Chatty lines (codex item/started, the Claude SDK message trace, `entered agent context`) need
+`YAAR_LOG_LEVEL=debug`. `pretty` is the `[Component] message` terminal format plus `key=value`
+fields and the monitor/agent ids; `json` is one object per line carrying every context id
+(session, monitor, agent, window, app) and an ISO timestamp.
 
 **Source:** `packages/server/src/observability/log.ts`
 
@@ -261,15 +217,12 @@ Redacts vendor-prefixed credentials (API keys, tokens, PEM private keys, passwor
 URLs) out of clipboard **text** before it reaches an agent. Applied in `features/user/clipboard.ts`
 so it covers `read` *and* `save`.
 
-Guarding only `read` would not be a guard: `save` writes to storage and returns a URI, so a raw
-write leaves the secret one `read('yaar://storage/...')` away.
-
-Redaction rather than refusal, because a refused read makes an LLM ask the user to paste the
-content into the chat instead — same context window, no scan.
+Applied to `save` as well as `read`, since `save` writes to storage and returns a URI. Redaction
+rather than refusal, because a refused read makes an LLM ask the user to paste the content
+instead.
 
 Detection is prefix-anchored only: no entropy tier, no labeled-assignment tier, no checksum
-verification (a checksum can only ever *reject* a match, so a bug in it leaks). Images are not
-scanned at all. The opt-out is for agents whose job is the credential itself.
+verification. Images are not scanned. The opt-out is for agents whose job is the credential itself.
 
 **Source:** `packages/server/src/features/user/secret-scan.ts`, `packages/server/src/features/user/clipboard.ts`
 
@@ -278,15 +231,10 @@ scanned at all. The opt-out is for agents whose job is the credential itself.
 Pre-grants clipboard read/write to the desktop origin in the debuggable Chrome over CDP, so
 `yaar://user/clipboard` never shows the user a permission prompt.
 `lib/browser/clipboard-grant.ts` holds a browser-level CDP connection open for the process's life
-to do it — the override is scoped to the DevTools *connection*, not the profile, so there is no
-launch flag or config file that can replace it (the header records the measurements).
-
-Deliberately grants only `DESKTOP_ORIGIN_HOST`, never `APP_ORIGIN_HOST`: the app origin is where
-isolated app iframes live, and a grant there would hand every installed app the user's clipboard
-past its `app.json` permissions.
-
-The opt-out exists because with this on, any agent turn reads the clipboard with no prompt and no
-visible indication.
+(the override is scoped to the DevTools *connection*, so no launch flag or config file can replace
+it). Grants only `DESKTOP_ORIGIN_HOST`, never `APP_ORIGIN_HOST`: a grant on the app origin would
+hand every installed app the clipboard past its `app.json` permissions. The opt-out exists
+because with this on, any agent turn reads the clipboard with no prompt.
 
 **Source:** `packages/server/src/lib/browser/clipboard-grant.ts`
 
@@ -315,123 +263,52 @@ code, tunnel). See [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
 
 ### `YAAR_FREEDPI` — on by default (`=0` disables)
 
-Some networks block HTTPS by reading the hostname out of the ClientHello — which is
-plaintext — and injecting a TCP reset. Nothing is wrong with DNS and nothing is wrong with
-the route; the handshake is simply shot in the head every time. The server starts a
-loopback `CONNECT` proxy and points its two outbound paths at it: Chrome gets
-`--proxy-server`, and `safeFetch` gets `fetch`'s `proxy` option.
+Some networks block HTTPS by reading the hostname out of the plaintext ClientHello and injecting
+a TCP reset. The server starts a loopback `CONNECT` proxy and points its two outbound paths at
+it: Chrome gets `--proxy-server` (plus `--disable-quic` — HTTP/3 is UDP and would go around the
+proxy), and `safeFetch` gets `fetch`'s `proxy` option.
 
-The countermeasures are a ladder, tried cheapest first, and every host climbs only as far
-as it has to (`Route` in `packages/lib/src/freedpi/types.ts`):
+**The ladder.** Every host starts on `direct` (an unblocked network pays one loopback hop). Only a
+reset that *looks injected* — the connection opened, carried our first flight, and died without a
+byte back — moves a host up a rung (`Route` in `packages/lib/src/freedpi/types.ts`):
 
 1. **`tlsrec`** — rewrite the ClientHello as two TLS *records*, cut inside the hostname.
-   A middlebox that reassembles TCP still gets the whole stream, but a parser that reads
-   the SNI out of the first record finds a truncated name. Costs nothing — measured on
-   SK Broadband (AS9318), 2026-08, a blocked host went from a 40ms reset to a ~120ms
-   handshake, indistinguishable from an unblocked one.
-2. **`bypass`** — cut the hello into two TCP *segments* inside the hostname, and hold the
-   second one back until the middlebox's reassembly buffer has expired. This is the rung
-   for a box that both reassembles and parses across records; it is the one that costs
-   `stallMs`.
+2. **`bypass`** — cut the hello into two TCP *segments* inside the hostname and hold the second
+   back for `stallMs` (default 3000) until the middlebox's reassembly buffer expires.
 
-### Why it is on by default
+The rung that served a host is remembered; a further reset on it climbs again. The retry is
+invisible because a client whose handshake was reset has seen nothing, so the proxy replays the
+identical ClientHello (`canReplay` refuses after any server bytes). Verdicts expire after 30
+minutes, and the table is bounded and never written to disk.
 
-It was opt-in, on the reasoning that a censorship-circumvention tool should not arrive
-unrequested. That reasoning had the failure mode backwards. A host killed by SNI reset
-does not present as censorship — it presents as YAAR being broken on that site — so the
-people the bypass was written for were exactly the ones who would never think to turn it
-on. You cannot recognise a blocked host without something to compare it against.
+`stallMs` was measured on one network (SK Broadband, AS9318, 2026-08: 0–1000ms reset every time,
+2500ms intermittent, 3000ms six of six). Treat a bypass that stops working as a number to
+re-measure, not a bug.
 
-It is affordable as a default because the ladder makes it cost nothing until it is used.
-Every host starts on `direct`, so an unblocked network pays one extra loopback hop and
-keeps its latency; only a host that gets an injected-looking reset climbs, and only that
-host pays. What *is* unconditional is name resolution — see below — and, in Chrome,
-HTTP/3.
+**DoH first, not DoH only.** Resolution goes to DoH (Cloudflare) because a censor that resets on
+SNI usually poisons DNS on the same path. Every outbound connection is resolved in
+`packages/lib/src/freedpi/resolve.ts`, so a DoH failure (captive portal, blocked `1.1.1.1`,
+offline, AAAA-only name) falls back to the system resolver instead of failing the dial. Because
+that fallback can return v6, `refusalForAddress` carries the v6 rules `packages/lib/src/ssrf.ts`
+does not: `fc00::/7`, `::`, and `::ffff:` v4-mapped addresses (unwrapped to the v4 rule).
 
-Turn it off with `YAAR_FREEDPI=0` if you need the system resolver's own answers (split
-DNS, an internal zone reached by a public-looking name) or Chrome's HTTP/3.
+**SSRF is re-checked.** `validateUrl` sees only the hostname a caller passed; the address actually
+dialed is the DoH answer. The proxy re-applies the same rules to it and also refuses loopback,
+which `safeFetch` allows — an open `CONNECT` listener lives for the whole run.
 
-### DoH first, not DoH only
-
-Resolution goes to DoH (Cloudflare) rather than the system resolver, because a censor
-that resets on SNI usually poisons DNS on the same path; a system answer would be the
-block page's address and no amount of fragmentation would help.
-
-Being the default changes what a DoH *failure* has to mean. Every outbound connection the
-server makes is now resolved in `packages/lib/src/freedpi/resolve.ts`, so a DoH endpoint that is
-unreachable — captive portal, a network that blocks `1.1.1.1`, plain offline — would take
-all of them down, and a name with only an `AAAA` record would never resolve at all
-(`type=A` is what is asked for). So a DoH failure falls back to the system resolver
-instead of failing the dial.
-
-The fallback cannot leave you worse off than not having the proxy: a poisoned system
-answer resets the connection and the caller sees the failure it would have seen anyway,
-whereas refusing to answer turns a working direct path into a 502. Because the fallback
-can return a v6 address where DoH never could, `refusalForAddress` carries the v6 rules
-`packages/lib/src/ssrf.ts` does not — `fc00::/7`, `::`, and `::ffff:` v4-mapped addresses, which it
-unwraps so they are refused by the same rule as the bare v4 form.
-
-### The stall is a measurement, not a constant
-
-`stallMs` only applies on the `bypass` rung, and defaults to 3000. That number came from
-measuring one network — SK Broadband (AS9318), 2026-08 — where TCP fragmentation with no
-delay, and with delays up to 1000ms, was reset every time; 2500ms succeeded intermittently;
-3000ms succeeded six times out of six. (The same network is defeated by the record split,
-which is why `tlsrec` is tried first; the stall is there for a box that is not.)
-It describes that middlebox's buffer lifetime and nothing more. Another ISP will have a
-different one, and the same ISP can change it. Treat a bypass that stops working as a
-number to re-measure rather than a bug.
-
-### Why hosts are learned instead of configured
-
-Three seconds on every handshake would make the browser feel broken, and a hand-maintained
-domain list goes stale the moment a censor's list does. So every host starts on the direct
-path, and only a reset that *looks injected* — the connection opened, carried our first
-flight, and died without one byte coming back — moves it to the bypass. Ordinary traffic
-keeps its latency; a blocked host climbs the ladder once and the rung that served it is
-remembered — a further reset on that rung climbs again.
-
-That is affordable only because the retry is invisible. A client whose TLS handshake was
-reset is still waiting for a ServerHello and has seen nothing, so the proxy opens a fresh
-connection and replays the identical ClientHello on the next rung. One byte delivered and
-that stops being safe, which is why `canReplay` refuses after any server bytes.
-
-Verdicts expire (30 minutes) so an ISP that changes its policy is noticed, and the table is
-bounded and never written to disk — a stale verdict read at boot would apply the stall to a
-host that may no longer need it, with nothing prompting a re-test.
-
-### Chrome must also be told to stop using QUIC
-
-`--disable-quic` is passed alongside `--proxy-server`. HTTP/3 is UDP/443 and never enters an
-HTTP proxy, so without it Chrome negotiates QUIC and goes around the bypass entirely — which
-presents as the bypass mysteriously not working.
-
-### It re-checks SSRF, because `validateUrl` can no longer see the target
-
-`validateUrl` inspects the hostname a caller passed. Once traffic is tunnelled, the address
-actually dialed is the one the proxy resolved over DoH, which no earlier check has seen — so
-a public hostname whose A record points into private space would sail through. The proxy
-therefore re-applies the same rules to the resolved address, and refuses loopback as well,
-which `safeFetch` deliberately allows: an open `CONNECT` listener lives for the whole server
-run, and anything local that finds the port inherits its reach.
+`YAAR_FREEDPI=0` is for needing the system resolver's answers (split DNS, internal zones) or
+Chrome's HTTP/3.
 
 **Source:** `packages/lib/src/freedpi/`, `packages/lib/src/ssrf.ts`,
 `packages/server/src/lib/browser/chrome.ts`, `packages/server/src/lifecycle.ts`
 
-### Why the download ceiling is separate from the inline one
+### The download ceiling vs the inline one
 
-`yaar://http` has two ceilings because it answers two different questions. The inline cap
-(`MAX_RESPONSE_SIZE`, a fixed 10MB) is not about the network at all — it bounds what ends up
-*in a context*: base64 an app has to decode, or bytes a model would have to read. `saveTo`
-puts the body on disk and hands back a path, so none of that applies and the only thing left
-to bound is the disk. Sharing one number meant the parameter that exists to fetch something
-large was refused for being large (issue #90).
-
-Bytes under `saveTo` are piped to a `.part-*` file as they arrive and renamed into place at
-the end, so nothing the size of the download is ever held in memory and a transfer that dies
-halfway leaves nothing at the destination. The 30-second request budget also becomes a
-*stall* timeout there — restarted on each chunk — since a legitimate 500MB transfer outlives
-any fixed one while a dead connection still has to be noticed.
+`yaar://http` has two ceilings. The inline cap (`MAX_RESPONSE_SIZE`, a fixed 10MB) bounds what
+ends up *in a context*. `saveTo` puts the body on disk and hands back a path, so only the disk
+needs bounding (`YAAR_MAX_DOWNLOAD_MB`). Bytes are piped to a `.part-*` file and renamed into
+place at the end, so nothing is held in memory and a dead transfer leaves nothing at the
+destination. The 30-second request budget becomes a *stall* timeout there, restarted on each chunk.
 
 **Source:** `packages/server/src/features/http/fetch.ts`, `packages/server/src/handlers/http.ts`
 
@@ -445,59 +322,39 @@ any fixed one while a dead connection still has to be noticed.
 
 ### Why it exists
 
-A phone does not keep a backgrounded tab running. Switch to another app and Android first
-hides YAAR's tab, then freezes it — and every read that is a **round trip into the page**
-stops answering. `__screenshot` is the one that hurts, because it is rasterized inside the
-app's own iframe, so the agent building an app loses the ability to look at what it built
-the moment the user glances at another app.
+A phone freezes a backgrounded tab, and every read that is a **round trip into the page** stops
+answering — notably `__screenshot`, rasterized inside the app's iframe. The socket does not say so:
+a real Chrome frozen with `Page.setWebLifecycleState` kept it open for **264s** in front of a page
+that could not execute a line (`packages/server/src/session/client-presence.ts`).
 
-The socket does not tell you this has happened. Measured against a real Chrome frozen with
-`Page.setWebLifecycleState`, it stayed open for **264s** in front of a page that could not
-execute a line, with the server reporting the client connected throughout
-(`packages/server/src/session/client-presence.ts`).
+A second, always-visible desktop answers what the phone cannot, with no new mechanism:
 
-### Why a second client is the whole fix
-
-Nothing about the capture path is per-connection:
-
-- An action goes to **every** connection in the session (`BroadcastCenter.publishToSession`)
-  and the first feedback wins (`ActionEmitter.emitActionWithFeedback`).
-- `clientAwayNote` owes no explanation while **any** connection is visible — one that could
-  have answered means the silence was never a backgrounded tab.
-- A socket that asks for no particular session gets the default one, which is the user's
-  (`SessionHub.attach`).
-
-So a second desktop that is always visible answers what the phone cannot, with no new
-mechanism and nothing for the phone's client to do differently.
+- An action goes to **every** connection in the session (`BroadcastCenter.publishToSession`) and
+  the first feedback wins (`ActionEmitter.emitActionWithFeedback`).
+- `clientAwayNote` owes no explanation while **any** connection is visible.
+- A socket that asks for no particular session gets the default one, the user's (`SessionHub.attach`).
 
 ### Why the default is Android-only
 
-On a phone the client and the server are the same device, so "the user switched apps" is the
-ordinary case. Termux keeps running while they are elsewhere (given a wake lock), and
-Chromium there is a child of that process tree — putting the companion on the **server** side
-of the freeze. Chromium under Termux needs `--browser-subprocess-path` to spawn renderers at
-all, which `lib/browser/chrome.ts` already handles.
+On a phone client and server are the same device, so "the user switched apps" is the ordinary
+case; Termux keeps running (with a wake lock) and Chromium there is a child of it, on the
+**server** side of the freeze (it needs `--browser-subprocess-path`, handled in
+`lib/browser/chrome.ts`). Elsewhere a companion costs a Chromium process plus a second live iframe
+for every open app window, so an app with side effects on mount runs them twice.
 
-Everywhere else the user's own window is right there and visible, and a companion is not free:
-a Chromium process, plus a second live iframe for every open app window — so an app with
-side effects on mount runs them twice. It is not paid for unless it is buying something.
+### Load-bearing details
 
-### Two details that are load-bearing
+- **`?ui=desktop`.** The phone shell renders one window at a time; the desktop layout keeps every
+  window mounted, so a capture of any window finds it.
+- **Pinned against the idle sweep** (`BrowserSession.pinned`), or `cleanupIdle` would collect it
+  just when it is needed.
+- **`companion=1`, and a socket that says `role=companion`.** App protocol commands go to one copy
+  of each window; the companion is the **fallback** responder — a user's tab in front answers, the
+  companion covers while that tab cannot run script, and the window moves back once the tab has
+  been in front for `userTabSettleMs` (`AppWindowCoordinator.rankResponders` / `settledUserTab`).
+  State an app must show on both copies goes in `createSharedSignal` (see `apps/CLAUDE.md`).
 
-- **`?ui=desktop`.** The phone shell renders one window at a time as a full-screen card, so a
-  capture of any other window would find nothing in the DOM. Nobody looks at the companion, and
-  the desktop layout is the one that keeps every window mounted.
-- **Pinned against the idle sweep.** Nothing touches this tab between captures, so `cleanupIdle`
-  would collect it precisely when it is about to be needed (`BrowserSession.pinned`).
-- **`companion=1`, and a socket that says `role=companion`.** App protocol commands go to one
-  copy of each window, and the companion is the one copy nobody looks at: ranked first, as the
-  tab that never backgrounds, it ran every command while the phone showed nothing happening. So
-  it is the **fallback** responder — a user's tab in front answers, the companion covers while
-  that tab cannot run script, and the window moves back once the tab has been in front for
-  `userTabSettleMs` (`AppWindowCoordinator.rankResponders` / `settledUserTab`). State an app
-  must show on both copies regardless goes in `createSharedSignal` (see `apps/CLAUDE.md`).
-
-A box with no Chromium simply goes without, and says so once.
+A box with no Chromium goes without, and says so once.
 
 **Source:** `packages/server/src/features/companion/companion-tab.ts`
 
@@ -514,39 +371,30 @@ A box with no Chromium simply goes without, and says so once.
 ### Why it exists
 
 On macOS the desktop is YAAR's own WKWebView window, and WebKit's WebGPU runs the same model
-markedly slower than Chrome on the same GPU: anima's DiT step is 3.9 s there and 2.2 s in
-Chrome, with the GPU ~95% busy in both. WebKit has no subgroups and no switch that adds them
-([mac_ml.md](../installations/mac_ml.md)). The server already knows how to run a headless
-Chrome, so a yaar-ml app in the window asks for its sessions to run there instead: the same
-onnxruntime-web, the same app code, a different engine underneath.
+markedly slower than Chrome on the same GPU (anima's DiT step: 3.9 s vs 2.2 s;
+[mac_ml.md](../installations/mac_ml.md)). A yaar-ml app in the window asks for its sessions to run
+in the server's headless Chrome instead: same onnxruntime-web, same app code. Design:
+[ml_runtime.md](../architecture/ml_runtime.md).
 
 ### What `auto` means
 
-`auto` offloads when the server is on macOS **and** the page reports itself as WebKit. That pair
-is the measured gap and nothing else is: a Chrome page gains nothing from a second Chrome, and
-Windows (WebView2) and Android WebView are Chromium already. `chrome` offloads every page — what a
-benchmark or a Linux box with a better server GPU wants. `local` turns the feature off.
-
-A decline is silent and total: an old server, no Chrome, a tab that does not come up in time (the server waits 60 s for it, the page 90 s) —
-each means the page computes itself, exactly as it did before this existed.
+`auto` offloads when the server is on macOS **and** the page reports itself as WebKit. `chrome`
+offloads every page (a benchmark, or a Linux box with a better server GPU). `local` turns the
+feature off. A decline is silent and total (old server, no Chrome, a tab that does not come up —
+the server waits 60 s, the page 90 s): the page computes itself.
 
 ### How it holds together
 
 - **One tab per app page.** The shim's socket (`/api/ml-host/connect`, iframe token, `yaar-ml`
-  bundle required) gets its own headless tab, which dies with it. That ties the model's GPU
-  memory to the app window's lifetime without any bookkeeping.
-- **The tab is the app, not the host.** It is served on the app origin with the app's own iframe
-  token, which it forces onto every same-server URL it fetches, under a CSP no wider than an
-  app's. It can reach exactly what the app could.
-- **Weights are read by the tab, not sent to it.** An `externalData` URL, or a
-  `weightRange(url, start, end)`, is fetched by the tab from the server itself. Only bytes the
-  app already holds are uploaded, in 4 MB chunks at most three in flight: Bun drops frames past
-  16 MB of unsent data on one socket, and the relay ends a channel rather than lose one.
-- **Tensors cross as bytes, unless kept.** A `run` sends its feeds and gets its outputs back as
-  ordinary CPU tensors, so an app sees no difference. Outputs named in `run(…, { keep })` stay
-  in the tab as handles and cross as an id when fed to the next run — what a model split into
-  segments needs, or every activation between them makes a round trip through the page.
-  Numbers in [mac_ml.md](../installations/mac_ml.md).
+  bundle required) gets its own headless tab, which dies with it.
+- **The tab is the app, not the host.** Served on the app origin with the app's own iframe token
+  (forced onto every same-server URL it fetches), under a CSP no wider than an app's.
+- **Weights are read by the tab, not sent to it.** An `externalData` URL or
+  `weightRange(url, start, end)` is fetched by the tab. Bytes the app already holds are uploaded
+  in 4 MB chunks, at most three in flight (Bun drops frames past 16 MB of unsent data).
+- **Tensors cross as bytes, unless kept.** Outputs named in `run(…, { keep })` stay in the tab as
+  handles and cross as an id when fed to the next run. Numbers in
+  [mac_ml.md](../installations/mac_ml.md).
 
 ## Termux:API (Android)
 
@@ -556,44 +404,24 @@ each means the page computes itself, exactly as it did before this existed.
 
 ### Why it exists
 
-On a phone the server and the user's device are the same machine, and the desktop is a tab
-that Android freezes whenever the user switches apps. The companion desktop keeps the
-*server's* reads answering through that; this keeps the *user* informed. While no person is
-looking at the session (`isUserWatching` — the companion does not count), agent
-notifications, permission dialogs, questions and finished monitor turns are mirrored into
-the Android notification shade. Tapping one opens the desktop, and coming back takes them
-all down. A permission dialog is the case that matters most: it has a deadline, and one
-nobody sees is a denial.
+The companion desktop keeps the *server's* reads answering while Android freezes the tab; this
+keeps the *user* informed. While no person is looking at the session (`isUserWatching` — the
+companion does not count), agent notifications, permission dialogs, questions and finished monitor
+turns are mirrored into the Android notification shade. Tapping one opens the desktop, and coming
+back takes them all down. A permission dialog has a deadline, and one nobody sees is a denial.
 
-The same client serves the clipboard (the phone's real one, with no browser focus rule —
-text only, so an empty text read still asks the browser in case it holds an image; gated
-by `YAAR_CLIPBOARD_GRANT`) and `invoke { action: "share" }` on a storage file, which opens
-Android's share sheet and exists only on Android.
+The same client serves the clipboard (the phone's real one, text only, so an empty text read still
+asks the browser in case it holds an image; gated by `YAAR_CLIPBOARD_GRANT`) and
+`invoke { action: "share" }` on a storage file, which opens Android's share sheet.
 
 ### Why "on" means "if it answers"
 
-Termux:API is a separate app **and** a separate package. With the package installed and the
-app missing, every `termux-*` command waits forever instead of failing, so a `which` says
-nothing. The server makes one harmless call at startup (`termux-battery-status`) and uses
-Termux:API only if it answers in time; every later call has its own deadline too. Without
-it, nothing changes.
+Termux:API is a separate app **and** a separate package; with the package installed and the app
+missing, every `termux-*` command waits forever. So the server makes one call at startup
+(`termux-battery-status`) and uses Termux:API only if it answers in time; every later call has its
+own deadline. Without it, nothing changes.
 
-The launcher (`scripts/dev/start-termux.sh`) separately takes a `termux-wake-lock` for as
-long as the server runs, so Android does not doze Termux with the screen off. That command
-ships with Termux itself and needs no extra app. The launcher is single-instance
-(`$TMPDIR/yaar-termux.pid`): a second launch opens the running desktop and exits, so the lock
-is taken once and never released under a live server. `install.sh` also drops
-`~/.shortcuts/YAAR`, which the Termux:Widget app shows as a home-screen button.
-
-The launcher opens the desktop in the **installed app** when there is one: "Install app" in
-Chrome mints a WebAPK (`org.chromium.webapk.*`), found by asking the package manager which
-activities handle the desktop URL. Otherwise it opens in **Chrome** when that is installed,
-not the default browser: on a Galaxy that is Samsung Internet, which warns "can't be
-downloaded securely" on every plain-http download — `localhost` included, measured — where
-Chrome counts loopback as secure. A home-screen app runs in the browser that installed it,
-so this is also where "Install app" lands. `YAAR_TERMUX_BROWSER=<package>` picks another
-browser; empty means the default one. Notification taps go through the same opener
-(`scripts/dev/termux-open-desktop.sh`), so they land in the app too.
+The launcher (`scripts/dev/start-termux.sh`) separately takes a `termux-wake-lock` for as long as the server runs and is single-instance (`$TMPDIR/yaar-termux.pid`). Where it opens the desktop (installed app, Chrome, `YAAR_TERMUX_BROWSER=<package>`; empty means the default browser) is in [android.md](../installations/android.md#where-the-desktop-opens).
 
 Setup and day-to-day use: [`docs/guides/termux.md`](../guides/termux.md).
 
@@ -610,23 +438,16 @@ Setup and day-to-day use: [`docs/guides/termux.md`](../guides/termux.md).
 | `MONITOR_MAX_OUTPUT_PER_MIN` | `100000` | Monitor output rate limit |
 | `APP_AGENT_IDLE_MINUTES` | `60` | Idle minutes before an app agent is reclaimed (`0` disables) |
 
-### Why `APP_AGENT_IDLE_MINUTES` exists
+### `APP_AGENT_IDLE_MINUTES`
 
-Closing an app's **last** window on a monitor already retires its agent, so this is the backstop
-for the app left open and unused. App agents had no other reclaim path — not window close, only
-`fresh: true`, monitor removal, explicit delete, or session teardown — so against a process-global
-`MAX_AGENTS` of 10, apps opened once and left alone held their slots until restart.
+The backstop for an app left open and unused: closing an app's **last** window on a monitor already
+retires its agent, but nothing else reclaimed slots against the process-global `MAX_AGENTS`.
+Reaping ends the agent's provider session (memory goes with it) but leaves its sub-agents alone;
+their owner is the (monitor, app) pair, so only a last-window close, monitor removal, or teardown
+takes those.
 
-Reaping ends the agent's provider session, so its memory goes with it (the same thing `fresh: true`
-and a last-window close both do deliberately). Reaping leaves its sub-agents alone, because their
-owner is the (monitor, app) pair — only a last-window close, monitor removal, or teardown takes
-those.
-
-The default is an hour, not the fifteen minutes it started at: "idle" here means the *user* has
-been away, and on a phone that is every app switch. Fifteen minutes in another app was enough to
-come back to an agent with no memory, whose successor — told only that a predecessor had existed —
-re-did work that had already landed, in the reported case cloning a repository a second time under
-a new id. An hour is still far shorter than the "never" this exists to rule out.
+The default is an hour because "idle" means the *user* is away, and on a phone that is every app
+switch; a shorter window left a successor agent re-doing work that had already landed.
 
 **Source:** `packages/server/src/agents/agent-pool.ts`
 
@@ -645,34 +466,27 @@ a new id. An hour is still far shorter than the "never" this exists to rule out.
 
 ### The sandbox browser keeps its profile
 
-The headless sandbox Chrome launches against `storage/.browser/profile`, and that directory
-**survives shutdown**. A site you signed into in the sandbox is still signed in tomorrow, which is
-what makes reviving a session worth anything — a revived tab that came back to a login screen
-would be a new tab with extra steps. `storage/.browser/sessions.json` holds the records that make
-the revive possible: id, page, bound window.
+The headless sandbox Chrome launches against `storage/.browser/profile`, which **survives
+shutdown**, so a site signed into in the sandbox stays signed in. `storage/.browser/sessions.json`
+holds the records (id, page, bound window) that make revive possible. It is still a sandbox, not
+your Chrome profile; only `getLocalBrowser()` touches that.
 
-It is still a sandbox, not your Chrome profile. Only `getLocalBrowser()` touches that.
+`YAAR_BROWSER_EPHEMERAL=1` uses a `mkdtemp` dir wiped on cleanup instead — for a sandbox that
+should forget between runs, and for two YAAR instances sharing a checkout (Chrome holds a
+singleton lock on a profile directory).
 
-`YAAR_BROWSER_EPHEMERAL=1` restores the pre-P1 behaviour — a `mkdtemp` dir wiped on cleanup. Set
-it when the sandbox should forget between runs, and when two YAAR instances share a checkout:
-Chrome holds a singleton lock on a profile directory, so the second launch would otherwise wait on
-the first.
+### `YAAR_BROWSER_IDLE_MINUTES`
 
-### `YAAR_BROWSER_IDLE_MINUTES` and what "idle" means
-
-The sweep closes a session's *socket*, not its record — the id keeps naming its page, and the next
+The sweep closes a session's *socket*, not its record: the id keeps naming its page, and the next
 window (or `invoke(…, { action: 'revive' })`) brings it back. A session with a live screencast
-viewer is exempt however long it sits: someone reading a long page is not idle, and taking the
-canvas out from under them was the pre-P1 behaviour.
+viewer is exempt.
 
-### `YAAR_BROWSER_PROVIDER` is no longer a selector
+### `YAAR_BROWSER_PROVIDER` is not a selector
 
-`POST /api/browser` is always the headless sandbox (`getHeadlessBrowser()`). The user's real
-Chrome is reached only through the session-agent door `yaar://session/browser`
-(`getLocalBrowser()`), which auto-attaches whenever a debuggable Chrome is reachable.
-
-The variable survives only as a **force-headless opt-out**: set `=headless` to keep the agent away
-from your real browser, and the session door uses the sandbox too.
+`POST /api/browser` is always the headless sandbox (`getHeadlessBrowser()`). The user's real Chrome
+is reached only through `yaar://session/browser` (`getLocalBrowser()`), which auto-attaches
+whenever a debuggable Chrome is reachable. The variable is a **force-headless opt-out**:
+`=headless` keeps the agent away from your real browser, and the session door uses the sandbox too.
 
 `CHROME_DEBUG_PORT` is the port the user launched Chrome with via `--remote-debugging-port`.
 

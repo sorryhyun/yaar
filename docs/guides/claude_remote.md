@@ -60,8 +60,8 @@ claude.ai is talking to.
 
 ### One reader for the stream (`turn-router.ts`)
 
-A YAAR turn used to read the stream itself: push a message, pull `stream.next()` until the
-`result`. That only works while YAAR is the only one that can start a turn. Now a **pump**
+Reading the stream inside a turn (push a message, pull `stream.next()` until the `result`)
+only works while YAAR is the only one that can start a turn. So a **pump**
 reads the stream for as long as the process lives, and `TurnRouter` decides where each frame
 goes:
 
@@ -74,7 +74,7 @@ goes:
 - When a YAAR message is folded into a claude.ai turn, that turn's `result` lists it in
   `user_message_uuids`. The waiting YAAR reader is released instead of waiting forever.
 - With the bridge off, nothing is ever detached. Frames with no reader wait for the next
-  turn, which is what reading the stream from inside the turn used to do with them.
+  turn.
 
 The CLI runs with `--replay-user-messages`, so a claude.ai turn's text arrives as a replayed
 `user` frame (`isReplay`, `origin.kind: "human"`). The detached turn is announced with that

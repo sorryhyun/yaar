@@ -20,9 +20,7 @@ paths:
   (see below); a mixed path is refused.
 - Full run: `bun run test` (root `package.json`, = `bun run --filter '*' test`) — what CI runs
   (`.github/workflows/checks.yml`, job `check`).
-- `packages/server` alone fans out further: its `test` script is
-  `bun run scripts/run-tests.ts`, not a plain `bun test` — it globs every `*.test.ts` under
-  `src/`, groups by partition, and spawns one process per group concurrently. Don't `cd` into
+- `packages/server` fans out further (see Server package specifics). Don't `cd` into
   `packages/server` and run bare `bun test src/tests`; use the package's own `test` script.
 
 ## Partitioning
@@ -39,28 +37,20 @@ each — the moment a second partition appears in one process. It's wired via `b
 and `packages/server/bunfig.toml`. Full incident history and rationale:
 `scripts/test/partitions.ts` header.
 
-`mock.module` used to be a fourth reason — process-global, no teardown, so every file installing
-one got its own process. `bun test --isolate` clears the module registry between files, which
-retired that rule and 15 processes with it. **The dependency on `--isolate` is not the server's
-alone.** Any suite mixing a `mock.module` file with a file that imports the same module for real
-needs it: the frontend ran without it and four component tests that stub
-`@/hooks/useAgentConnection` broke `reset-delivery.test.tsx`, three files later in sort order,
-which failed pointing at a hook that was fine. `frontend`, `compiler` and `tests` therefore pass
-`--isolate` in their own `test` scripts. Two consequences worth knowing: the `units` partition
-now **depends on** `--isolate` (the runner passes it explicitly), and the guard cannot fire inside
-an isolated process at all — each file there gets a fresh global, a fresh `process.env`, and a
-`Bun.argv` naming only itself, so it can't tell a second file exists. The guard covers the plain
-`bun test <path>` form, which is what you type.
+**`mock.module` needs `--isolate`.** It is process-global with no teardown, so any suite mixing a
+`mock.module` file with a file that imports the same module for real leaks the stub into later
+files (the frontend's `@/hooks/useAgentConnection` stubs broke `reset-delivery.test.tsx`).
+`bun test --isolate` gives each file a fresh module registry; `frontend`, `compiler` and `tests`
+pass it in their `test` scripts, and the server's `units` partition **depends on** it (the runner
+passes it explicitly). The guard cannot fire inside an isolated process (each file sees only
+itself), so it covers the plain `bun test <path>` form.
 
 **`--parallel` is off, everywhere, on purpose.** It implies `--isolate`, but the two are separate
-fields on a `Partition` precisely so that isolation can be kept without it: on a suite this size
-`--parallel` crashes a worker roughly one run in ten, and a worker killed by `SIGSEGV`/`SIGABRT`
-aborts the entire run — which surfaces as dozens of failures with *no* failing case named, not as
-a red assertion. It is an open Bun bug (oven-sh/bun#41357, #41055; a 1.4.1 regression, still
-present on 1.4.2), not anything in this repo, so don't go looking for the test that "caused" it.
-Serial `--isolate` costs the units group ~13s and costs `bun run test` nothing, because the
-compiler package is the long pole. If a run ever does report a crashed worker, re-run it and
-check whether Bun has shipped a fix before changing any test.
+fields on a `Partition` so isolation can be kept without it: `--parallel` crashes a worker roughly
+one run in ten, and a `SIGSEGV`/`SIGABRT` worker aborts the whole run as dozens of failures with
+*no* failing case named. That is an open Bun bug (oven-sh/bun#41357, #41055), not a test in this
+repo. If a run reports a crashed worker, re-run it and check whether Bun has shipped a fix before
+changing any test.
 
 If a run is refused, don't fight it — run the printed commands separately, or use
 `bun run test` / the package's own `test` script, which already partition correctly.
@@ -89,7 +79,8 @@ under `src/tests/remote/`.
 
 `bun run test` in `packages/server` is `scripts/run-tests.ts`. It globs **every** `*.test.ts` under
 `src/` (colocated files included — which is why `tsconfig.build.json` excludes `**/*.test.ts`), groups them by
-`scripts/test/partitions.ts`, and spawns one process per group, concurrently. The partitions:
+`scripts/test/partitions.ts`, and spawns one process per group, concurrently. Arguments don't pass
+through it, so target a single file with `bun test <path>` instead. The partitions:
 
 1. `units` — one `--isolate` process for everything not named below, including every file that
    calls `mock.module`. Isolated (each file gets a fresh global) but sequential — see the
@@ -108,9 +99,8 @@ Three rules follow:
   a `config/` file, or a path, pin it in the test (or add it to the scrub list in
   `scripts/test/env.ts`) rather than inheriting whatever the developer has. A suite that only
   passes on a clean checkout is a suite that will fail on someone's laptop and pass in review.
-- **Never add `mock.module` under `src/tests/loopback/`.** Not a leakage rule any more —
-  `--isolate` settled that — but the harness's whole claim is that it boots the real stack, and it
-  substitutes through real seams instead: the provider via `ContextPool`'s `acquireProvider`, the
+- **Never add `mock.module` under `src/tests/loopback/`.** The harness's whole claim is that it
+  boots the real stack; it substitutes through real seams instead: the provider via `ContextPool`'s `acquireProvider`, the
   logger via the `sessionLogger` option, the deadlines via `setDeadlinesForTest()` (`config.ts`),
   the config dir via `YAAR_CONFIG`. (`loopback` is also a non-isolated process, so a stub there
   really would still leak.)

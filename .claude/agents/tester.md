@@ -18,15 +18,14 @@ You run tests, type checks, and linting after code changes and report the result
 bun run --filter @yaar/frontend test               # Frontend tests
 bun run --filter @yaar/server test                  # Server tests (unit + remote + loopback + realfs, one process per partition)
 bun run --filter @yaar/shared test                  # Shared tests
+bun run --filter @yaar/lib test                     # Generic utilities tests
 bun run --filter @yaar/compiler test                # Compiler tests
 bun run --filter @yaar/tests test                   # Integration/security tests (packages/tests/)
 
 # Full suite — what CI runs
 bun run test
 
-# Targeted tests — run bun test directly with a path or -t pattern (single-partition only)
-# (the server's `test` script is a composite that fans out per partition; args don't pass
-# through it, so target a specific file/pattern instead of `bun test src/tests`)
+# Targeted tests — bun test with a path or -t pattern (single-partition only)
 cd packages/server && bun test src/tests/limiter.test.ts
 cd packages/frontend && bun test -t store
 
@@ -59,7 +58,5 @@ If all tests pass, say so briefly with the count.
 
 ## Tips
 
-- Frontend tests use **happy-dom** (not jsdom) + Testing Library — no stylesheets/CSS/layout, never trust a visual assertion; DOMPurify's `sanitize()` also misbehaves under happy-dom (strips elements a real browser keeps)
-- Every `bun test` preloads `scripts/test/env.ts`, which scrubs `YAAR_*` env vars and points storage/config/session-logs at temp dirs — a failure should never be blamed on "the machine"
-- `bun run typecheck` runs `tsc --noEmit` across all packages — catches cross-package type errors
+- Env pinning means a failure is never "the machine"; happy-dom and DOMPurify caveats: the skill above
 - If a test is flaky (passes on retry), note it as flaky

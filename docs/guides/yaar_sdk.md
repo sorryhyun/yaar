@@ -95,7 +95,7 @@ notifications and pushed frames. Which door does what is
 - **`yaar://session/*` is not reachable from an app**, whatever `app.json` says — only bundled
   `kind: "system"` apps are admitted. That includes `yaar://session/browser`, the user's real
   browser; an app that browses uses `@bundled/yaar-web` and the headless sandbox.
-- On a storage `read` where absence is expected, pass `{ missingOk: true }`: it answers `null`
+- On a storage or config `read` where absence is expected, pass `{ missingOk: true }`: it answers `null`
   instead of throwing, and a caught throw is still an error the session recorded.
 
 ## Bundled Libraries
@@ -454,6 +454,7 @@ User-supplied tokens and per-app config live at `yaar://config/app/{appId}`, sto
 ```typescript
 await invoke('yaar://config/app/moltbook', { config: { api_key: '…' } }); // save
 const cfg = await read('yaar://config/app/moltbook');                     // throws until set
+const maybe = await read('yaar://config/app/moltbook', { missingOk: true }); // null until set
 await del('yaar://config/app/moltbook');
 ```
 

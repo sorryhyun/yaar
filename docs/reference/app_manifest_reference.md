@@ -64,7 +64,7 @@ in a checkout is picked up without a restart.
 
 | Field | Type | When absent | Read by / effect |
 |---|---|---|---|
-| `agentType` | `string` | Sonnet tier | The **model** the app agent runs on: `"haiku"`, `"sonnet"`, `"opus"`, or any full model id. Under Codex, `opus` and `sonnet` map to Codex tiers, and `haiku` or an unknown id falls back to the Codex default. `FABLE=1` pins every app agent to Opus whatever this says (`agents/profiles/model-tiers.ts`) |
+| `agentType` | `string` | Sonnet tier | The **model** the app agent runs on: `"haiku"`, `"sonnet"`, `"opus"`, or any full model id. Under Codex, `opus` maps to `gpt-5.6-sol`, `sonnet` and `haiku` to `gpt-5.6-terra`, and an unknown id falls back to the Codex default. `FABLE=1` pins every app agent to Opus whatever this says (`agents/profiles/model-tiers.ts`) |
 | `agent` | `{ prompt?, hint?, skill? }` (string paths) | `agent/prompt.md`, `agent/hint.md`, `agent/SKILL.md` | Where the agent docs live, relative to the app folder. An absolute path, or one containing `..`, is ignored and the default is used. Clone and deploy copy the docs from these paths. Read through `agentDocPaths()` in `discovery.ts`, not `normalizeManifest` |
 | `messaging` | `"all"` | Monitor and user only | Gives the app agent `direct_message` to other apps' agents and windows |
 | `controls` | `(string \| { appId, commands?, minimized? })[]` | None | **Bundled apps only**; on an installed app it is dropped. Lists other apps this app's agent may `describe`/`query`/`command` by passing their `appId`. `commands` restricts the target to the named commands (omitted means all). If the target has no window on the caller's monitor, one is opened. `minimized: true` opens it minimized |
@@ -73,7 +73,7 @@ in a checkout is picked up without a restart.
 
 | Field | Type | When absent | Read by / effect |
 |---|---|---|---|
-| `permissions` | `(string \| { uri, verbs? })[]` | Only the implicit grants below | URIs the app's iframe (and its agent, for storage) may reach beyond itself. A string entry allows every verb. An object entry allows only `verbs`. **If `verbs` is present but not an array of strings, it is dropped and the entry allows every verb.** On an installed app, any entry reaching into another app's private storage is capped to the shared tree. Carried on the iframe token. Matching rules: [URI Reference → Permission Enforcement](./uri_reference.md#permission-enforcement) |
+| `permissions` | `(string \| { uri, verbs? })[]` | Only the implicit grants below | URIs the app's iframe (and its agent, for storage) may reach beyond itself. A string entry allows every verb. An object entry allows only `verbs`. **If `verbs` is present but not an array of strings, the whole entry is dropped (it grants nothing); an unknown verb name is ignored. Either is logged with the app id, refused by deploy, and fails `check:apps`.** On an installed app, any entry reaching into another app's private storage is capped to the shared tree. Carried on the iframe token. Matching rules: [URI Reference → Permission Enforcement](./uri_reference.md#permission-enforcement) |
 | `bundles` | `string[]` | No gated SDKs | Gated `@bundled/*` SDKs the app may import. The gated set is every registry name starting with `yaar-`: `yaar-dev`, `yaar-web`, `yaar-ml`, `yaar-media`. Enforced by the bundler, by the typecheck, and at runtime by the server doors those SDKs use (the list rides on the iframe token). Shown in the install dialog. Non-string entries are dropped |
 | `streams` | `string[]` | None | Streamable sources the app may subscribe to. The only source is `"agents"`, which covers `yaar://agents/{id}/stream`. **Approved at install**: see [Entitlement by source](#entitlement-by-source) |
 | `subagents` | `{ max: number }` | No sub-agents | How many sub-agents the app may run per (monitor, app). `max` is clamped to 16. A `max` that is not an integer, or is ≤ 0, reads as absent. Extra keys are ignored. **Approved at install** |
@@ -145,7 +145,7 @@ Unknown keys pass through untouched.
 
 | Key | Status |
 |---|---|
-| `hidden` | Legacy. `true` is still read as `createShortcut: false`. Deploy **deletes** it without writing `createShortcut: false` in its place, so a redeployed app that relied on it gets a desktop shortcut again. Use `createShortcut` |
+| `hidden` | Legacy. `true` is still read as `createShortcut: false`. Deploy rewrites `hidden: true` as `createShortcut: false`. Use `createShortcut` |
 | `personas` | Retired spelling of `subagents`. Not read. An app that still uses it gets no sub-agents, the server logs a warning naming the rename, and the spawn refusal says "rename", not "add" |
 | `appProtocol`, `protocol` | Not read. Deploy strips them. An app opts into the protocol by calling `defineApp()`, and the manifest is `dist/protocol.json` |
 | `id` | Not read. The key is `appId` |

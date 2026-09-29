@@ -382,10 +382,9 @@ orchestration. The snippets fall into five groups:
 - **Extraction:** `EXTRACT_CONTENT`, `EXTRACT_IMAGES`, `FIND_MAIN_CONTENT`, `ANNOTATE_ELEMENTS`
 - **Live-mode support:** `CARET_RECT`
 
-`SETTLE` is the one to know about. Each interaction used to sleep for a fixed time. Now each waits
-until the DOM has been quiet for 100 ms, and the old sleep is kept as the upper bound (`SETTLE_CAP`
-in `session.ts`). An interaction on a page that settles quickly returns early, and the worst case is
-the same as before.
+`SETTLE` is the one to know about. Each interaction waits until the DOM has been quiet for
+100 ms, capped by a fixed upper bound (`SETTLE_CAP` in `session.ts`). A page that settles quickly
+returns early.
 
 ---
 

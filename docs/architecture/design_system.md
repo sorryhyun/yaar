@@ -25,9 +25,7 @@ To change the visual language: edit `packages/shared/src/design/tokens.ts`, run
 ## Decisions
 
 - **Palette: GitHub-dark**, one family across the OS shell and app iframes.
-  Decided 2026-07 (previously the shell was Catppuccin Mocha, apps GitHub-dark,
-  and the component DSL Tailwind — three palettes for one semantic was the main
-  thing this system exists to prevent).
+  Three palettes for one semantic is the main thing this system exists to prevent.
 - **Semantics are identical across layers.** Accent, success, error, warning,
   text tiers, spacing, radius, shadows, and the type ramp mean the same thing and
   render the same value in shell chrome and app content. Only background *tint*
@@ -176,8 +174,5 @@ Two limits worth knowing before trusting a card:
 - **A comment only wakes a live session.** Close the terminal and comments queue up
   silently; the next session has to go read them.
 
-The claude.ai/design project this used to publish to is gone. `DesignSync` has no method
-that reads comments — `list_projects / get_project / list_files / get_file /
-finalize_plan / write_files / delete_files / register_assets / unregister_assets /
-create_project / report_validate` — so that path could only ever push, and a design
-system you cannot answer is a slide deck.
+Publishing to claude.ai/design is not used: `DesignSync` has no method that reads
+comments, so that path could only push, and a design system you cannot answer is a slide deck.
