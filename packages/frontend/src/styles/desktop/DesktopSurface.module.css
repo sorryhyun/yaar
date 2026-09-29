@@ -300,17 +300,27 @@
   border-color: var(--color-danger);
 }
 
-/* Desktop Icons */
+/* Desktop Icons.
+   Top-to-bottom columns that wrap left-to-right, spelled as a *row* wrap in a vertical
+   writing mode rather than `flex-direction: column; flex-wrap: wrap`. WebKit (Safari, the
+   macOS WebView window) never widens a column-wrap container for its extra columns: this
+   one is absolutely positioned with no width, so it shrank to one column and the rest
+   became a one-icon-wide horizontal scroller. A row wrap's block size — here, its width —
+   grows with its lines in every engine. Each icon turns its own text back horizontal. */
 .desktopIcons {
   position: absolute;
   top: 72px;
   left: var(--space-5);
+  writing-mode: vertical-lr;
   display: flex;
-  flex-direction: column;
   flex-wrap: wrap;
   gap: var(--icon-grid-gap, 16px);
   max-height: calc(100vh - 160px);
   overflow-x: auto;
+}
+
+.desktopIcons > * {
+  writing-mode: horizontal-tb;
 }
 
 /* Shown in place of the icon grid when /api/apps or /api/shortcuts failed and we
@@ -672,6 +682,7 @@
   right: var(--space-2);
   bottom: var(--palette-h, 0px);
   max-height: none;
+  writing-mode: horizontal-tb;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: start;
