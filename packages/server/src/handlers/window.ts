@@ -71,6 +71,7 @@ import {
 import { getMonitorId, requireMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { genId } from '@yaar/lib/ids';
+import { captureForModel } from '@yaar/lib/image';
 import { valueOf } from '../session/pending-store.js';
 import { defineActions } from './define-actions.js';
 import { createLogger } from '../observability/log.js';
@@ -446,7 +447,7 @@ export function registerWindowHandlers(
             (away ? ` ${away}` : ''),
         );
       }
-      const image = { type: 'image' as const, data: imageData, mimeType: 'image/webp' };
+      const image = { type: 'image' as const, ...(await captureForModel(imageData)) };
       // The caveats lead, because they change how the image below should be read.
       const caveats = [
         ...(captureDegraded ? [describeCaptureDegraded(captureDegraded)] : []),
@@ -1094,7 +1095,7 @@ export function registerWindowHandlers(
                   mimeType: 'application/json',
                 },
               },
-              { type: 'image', data: imageData, mimeType: 'image/webp' },
+              { type: 'image', ...(await captureForModel(imageData)) },
             ],
           };
         }

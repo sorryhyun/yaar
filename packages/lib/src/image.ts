@@ -2,10 +2,11 @@
  * Image utilities: data-URL parsing, and the one re-encode that happens on the way
  * into a model context.
  *
- * Screenshots are already WebP by the time they get here — captured that way on the
+ * Screenshots are normally WebP by the time they get here — captured that way on the
  * frontend (`iframe-scripts/capture.ts`) and requested that way over CDP
- * (the server's `lib/browser/session.ts`). The two paths that were not are files
- * read off disk and PDF pages rasterized by poppler, and both feed a *vision model*, not a
+ * (the server's `lib/browser/session.ts`). The paths that are not: files read off disk,
+ * PDF pages rasterized by poppler, and a frontend capture on an engine that cannot encode
+ * WebP (WebKit hands back PNG). All of them feed a *vision model*, not a
  * pixel-diff: a lossless PNG spends context tokens, upload latency and API cost on
  * fidelity nothing downstream can use.
  */
@@ -78,4 +79,42 @@ export async function toWebPForModel(
   } catch {
     return { data, mimeType };
   }
+}
+
+/**
+ * The image type the bytes themselves say they are, from their magic number, or null.
+ *
+ * For images whose label cannot be trusted. A canvas asked for `image/webp` hands back
+ * PNG on an engine that cannot encode WebP (WebKit), and a caller that stamped the type
+ * it *asked* for sent PNG bytes to a model as WebP.
+ */
+export function sniffImageMediaType(bytes: Uint8Array): ImageMediaType | null {
+  const at = (offset: number, ascii: string) =>
+    bytes.length >= offset + ascii.length &&
+    [...ascii].every((ch, i) => bytes[offset + i] === ch.charCodeAt(0));
+  if (at(0, '\x89PNG')) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (at(0, 'GIF8')) return 'image/gif';
+  if (at(0, 'RIFF') && at(8, 'WEBP')) return 'image/webp';
+  return null;
+}
+
+/**
+ * A captured image (base64, no `data:` prefix) made ready for a model: its real type read
+ * off the bytes, and PNG/JPEG re-encoded to WebP by {@link toWebPForModel}. Returns the
+ * input untouched when it is already WebP, which is every capture on Chromium.
+ */
+export async function captureForModel(base64: string): Promise<{ data: string; mimeType: string }> {
+  // Only the header is needed to tell the formats apart; 16 base64 chars are 12 bytes.
+  const head = Buffer.from(base64.slice(0, 16), 'base64');
+  const mimeType = sniffImageMediaType(head);
+  if (mimeType === 'image/webp') return { data: base64, mimeType };
+  // Bytes no sniffer recognizes: keep the label every capture has always had, since an
+  // image content block must name an image type. No worse than before, and no capture
+  // path produces them.
+  if (!mimeType) return { data: base64, mimeType: 'image/webp' };
+  const encoded = await toWebPForModel(Buffer.from(base64, 'base64'), mimeType);
+  return { data: encoded.data.toString('base64'), mimeType: encoded.mimeType };
 }

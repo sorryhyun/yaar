@@ -16,6 +16,9 @@ async function convertToWebP(file: File): Promise<File> {
   bitmap.close();
 
   const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.95 });
+  // An engine that cannot encode WebP (WebKit) returns PNG instead. Keep the original then,
+  // rather than uploading PNG bytes named and typed as WebP.
+  if (blob.type !== 'image/webp') return file;
   const name = file.name.replace(/\.[^.]+$/, '.webp');
   return new File([blob], name, { type: 'image/webp' });
 }

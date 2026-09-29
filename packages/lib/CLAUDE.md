@@ -44,7 +44,7 @@ direction is one-way forever.
 | `ytdlp/` | Optional yt-dlp binary wrapper — discovered on PATH, never bundled |
 | `errors.ts` | `errMessage(unknown)` |
 | `ids.ts` | `genId` / `genStamp` |
-| `image.ts` | Data-URL parsing, and `toWebPForModel()` — the re-encode applied on the way into a model context |
+| `image.ts` | Data-URL parsing, `sniffImageMediaType()` (type from magic number), `toWebPForModel()` — the re-encode applied on the way into a model context — and `captureForModel()`, which applies both to a capture whose label cannot be trusted |
 | `json-file.ts` | `createDebouncedJsonFile()` — debounced, atomic (tmp + rename), serialized JSON writer, with `flush()` |
 | `open-url.ts` | Open a URL in the user's browser |
 | `paths.ts` | `containedPath`/`isContained`/`isPathWithin`/`containedRealPath` — path containment, the `isAbsolute(rel)` form (a substring `includes('..')` check wrongly rejects a name like `a..b`) |
