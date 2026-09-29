@@ -130,7 +130,7 @@ A dedicated JSON-RPC method that appends input to an in-flight turn:
 
 ### Server Integration
 
-Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the monitor agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/architecture/common_flow.md`](../architecture/common_flow.md) for the full concurrency strategy.
+Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the monitor agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/architecture/monitor_and_windows_guide.md`](../architecture/monitor_and_windows_guide.md#message-flow) for the full concurrency strategy.
 
 ## Warmup
 
@@ -168,7 +168,7 @@ Codex warmup starts the child process and establishes a dedicated WebSocket conn
 
 ## MCP Integration
 
-Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging`, `subagent` (5 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`/`list_reload_options`; `subagent` carries the calling [sub-agent](../architecture/agent_tree.md)'s app-declared tools and is empty for every other caller.
+Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging`, `subagent` (5 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`/`list_reload_options`; `subagent` carries the calling [sub-agent](../architecture/monitor_and_windows_guide.md#the-four-laws)'s app-declared tools and is empty for every other caller.
 
 ### Claude
 
@@ -285,7 +285,8 @@ Maps from JSON-RPC notification methods:
 Both SDKs report trouble on far more channels than they report *fatal* trouble on, and both were
 once read for the fatal one alone. The rule that governs the mapping — **a recoverable failure
 becomes `StreamMessage.type === 'notice'`, never `error`, because `error` is terminal by
-contract** — is stated in [`packages/server/CLAUDE.md`](../../packages/server/CLAUDE.md#the-notice-contract-providersnoticets).
+contract** — is stated in the `server-providers` skill
+([`.claude/skills/server-providers/SKILL.md`](../../.claude/skills/server-providers/SKILL.md#the-notice-contract-providersnoticets)).
 This section is the per-provider channel vocabulary.
 
 **Source:** `packages/server/src/providers/notice.ts`, `packages/server/src/providers/claude/errors.ts`, `packages/server/src/providers/codex/errors.ts`

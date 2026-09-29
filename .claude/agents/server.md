@@ -26,7 +26,7 @@ SessionHub (singleton registry)
         │   ├── Session Agent (lazy singleton — cross-monitor oversight + real-browser principal)
         │   ├── Monitor Agents (one per monitor), Ephemeral Agents
         │   ├── App Agents (one per monitorId::appId)
-        │   └── Sub-agents (app-spawned, tool-less or iframe-only — see agent_tree.md)
+        │   └── Sub-agents (app-spawned, tool-less or iframe-only — see docs/architecture/monitor_and_windows_guide.md)
         └── Agents (dynamic role assignment)
             └── AgentSession → AITransport
 ```

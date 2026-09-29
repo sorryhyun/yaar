@@ -2,7 +2,7 @@
 
 YAAR maps directly to operating system concepts. This document makes that mapping explicit.
 
-For runtime details, see the linked docs in each section. For the Session/Monitor/Window hierarchy, see [`monitor_and_windows_guide.md`](./monitor_and_windows_guide.md). For message flow diagrams, see [`common_flow.md`](./common_flow.md).
+For runtime details, see the linked docs in each section. For the Session/Monitor/Window hierarchy, the agent tree that runs in it, and message flow diagrams, see [`monitor_and_windows_guide.md`](./monitor_and_windows_guide.md).
 
 ## Quick Reference
 
@@ -11,7 +11,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Kernel | `LiveSession` + `ContextPool` | `yaar://session` | `session/live-session.ts`, `agents/context-pool.ts` |
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
 | Process types | Session (root), monitor (init), app (daemon), ephemeral (one-shot), sub-agent (thread) | `yaar://agents/{instanceId}` | `agents/profiles/` |
-| Threading model | The agent tree (key extends owner's, disposal cascades) | — | [`agent_tree.md`](./agent_tree.md) |
+| Threading model | The agent tree (key extends owner's, disposal cascades) | — | [`monitor_and_windows_guide.md`](./monitor_and_windows_guide.md#agents) |
 | Scheduler | `MonitorQueuePolicy`, `MonitorBudgetPolicy`, `AppTaskProcessor`'s per-app queues | — | `agents/context-pool-policies/`, `agents/app-task-processor.ts` |
 | Syscalls | 5 URI verbs + system tools (5 MCP namespaces) | — | `mcp/server.ts` |
 | Instruction set | System prompt (~94 lines) | — | `agents/system-prompt.ts` |
@@ -21,6 +21,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Display server | `BroadcastCenter` | — | `session/broadcast-center.ts` |
 | IPC | `ActionEmitter`, `InteractionTimeline`, App Protocol | — | `session/action-emitter.ts`, `agents/interaction-timeline.ts` |
 | Device drivers | `AITransport` implementations | — | `providers/types.ts`, `providers/claude/`, `providers/codex/` |
+| Browser (CDP device) | Sandbox Chrome + the user's Chrome, sessions as processes | `yaar://system/browsers`, `yaar://session/browser` | `lib/browser/`, `features/browser/` — see [`browser_automation.md`](./browser_automation.md) |
 | Desktop environment | React frontend + Zustand store | — | `packages/frontend/` |
 | Package manager | Apps marketplace | `yaar://apps/` | `features/market/`, `handlers/apps.ts`, `handlers/apps/` |
 | User interaction | Notifications, prompts, clipboard | `yaar://user/` | `handlers/user.ts` |
@@ -56,9 +57,9 @@ Agents are processes. `AgentPool` manages their lifecycle.
 | **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) | `yaar://agents/{instanceId}` |
 | **Sub-agent** | Thread of an app process | N per (monitor, app); dies with the app's last window on that monitor | `monitorId::appId::subId` | `yaar://apps/self/agents/{personaId}` |
 
-These are not four independent registries but one **ownership tree** — session → monitor → app → sub-agent — where each tier's key extends its owner's, addressing goes *through* the owner, and disposal cascades downward. `list('yaar://session/agents')` returns both the flat roster and the nested tree. See [`agent_tree.md`](./agent_tree.md) for the four invariants every node obeys and the rule for placing a new one.
+These are not four independent registries but one **ownership tree** — session → monitor → app → sub-agent — where each tier's key extends its owner's, addressing goes *through* the owner, and disposal cascades downward. `list('yaar://session/agents')` returns both the flat roster and the nested tree. See [the four laws](./monitor_and_windows_guide.md#the-four-laws) for the four invariants every node obeys and the rule for placing a new one.
 
-Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. Sub-agents hold no principal at all — see [The Agent Tree](./agent_tree.md) for the full containment rule.
+Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. Sub-agents hold no principal at all — see [the agent tree](./monitor_and_windows_guide.md#agents) for the full containment rule.
 
 Monitor agents can also spawn **task subagents** via the `Task` tool (like `fork()`). These are *provider-internal* — YAAR only enables the builtin (`providers/claude/sdk-options.ts`; Codex uses the roles in `agents/profiles/index.ts`, `CODEX_AGENT_ROLES`) and they never enter `AgentPool`. Distinct from the app-spawned **sub-agent** tier above, which does.
 
@@ -199,6 +200,8 @@ Convention-based: each folder in `apps/` is an app. `app.json` provides metadata
 Hidden apps (`"hidden": true`) inject their description into the system prompt automatically — system-level capabilities the AI always knows about. Install/uninstall flows through the marketplace resources under `yaar://apps/`.
 
 See the Apps System section in the root `CLAUDE.md` for the full schema.
+
+Apps that run models get an accelerator runtime rather than a process of their own: `@bundled/yaar-ml` runs ONNX on the page's WebGPU, with runtime artifacts and weights served by the server and, on macOS, compute optionally offloaded to the server's Chrome. See [`ml_runtime.md`](./ml_runtime.md).
 
 ---
 

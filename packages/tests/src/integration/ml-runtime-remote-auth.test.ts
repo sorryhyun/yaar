@@ -2,8 +2,8 @@
  * REMOTE mode must not gate onnxruntime's own artifacts.
  *
  * `@bundled/yaar-ml` was unreachable in every installed build, and this gate is why.
- * `IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE` — so a bundled exe is
- * *always* remote — and `isStaticAsset()` refuses everything under `/api/`, so
+ * `IS_REMOTE` was then `process.env.REMOTE === '1' || IS_BUNDLED_EXE` — so a bundled exe
+ * was *always* remote — and `isStaticAsset()` refuses everything under `/api/`, so
  * `/api/ml-runtime/*` demanded a token. onnxruntime fetches those artifacts itself
  * from `ort.env.wasm.wasmPaths` and has no hook to attach one, so the import 401'd
  * and the app rendered a blank window. The route had always *believed* it was open

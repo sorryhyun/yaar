@@ -57,37 +57,23 @@ console.log(out);
 
 ## How it works (platform plumbing)
 
-- **Runtime artifacts.** onnxruntime-web loads its `.wasm` binaries at runtime.
-  The SDK points `ort.env.wasm.wasmPaths` at `/api/ml-runtime/`, a static route
-  (immutable, hard-cached). In dev it serves from the installed
-  `onnxruntime-web/dist`; a standalone exe has no `node_modules`, so
-  `build/exe-bundle.js` embeds the artifacts the SDK pins — the native-WebGPU
-  flavor (`ort.webgpu.bundle.min.mjs` + the asyncify `.mjs`/`.wasm` pair) plus the
-  full-CPU flavor wasm-only sessions run on (`ort.wasm.bundle.min.mjs` + the plain
-  `.mjs`/`.wasm` pair; the asyncify build has fp64 kernels compiled out), ~38MB in
-  all — into the binary and the route serves them from there. `YAAR_ML_RUNTIME_DIR`
-  overrides both. If you change `ORT_URL`/`ORT_WASM_URL` or the backend in the
-  shim, update `ML_RUNTIME_ARTIFACTS` in the build script to match — it fails the
-  build rather than shipping a binary whose ML route 404s.
-- **Weights.** Deployed apps run under CSP `connect-src 'self'`, so the SDK
-  fetches weights through the same-origin **streaming** proxy `/api/ml-weights?url=…`
-  instead of hitting the model host cross-origin. The proxy enforces SSRF
-  protection + the `curl_allowed_domains.yaml` allowlist and streams the body
-  through (no base64 double-buffering of hundreds of MB). The result is cached
-  in IndexedDB keyed by URL (HuggingFace `resolve` URLs are revision-pinned, so
-  they're treated as immutable — pass `force: true` to refresh).
-- **Remote compute (macOS window).** When the server says so (`YAAR_ML_COMPUTE`, default:
-  a WebKit page on a macOS server), `session()` and `run()` execute in a headless Chrome
-  the server opens for this app page, and the page only exchanges model bytes and tensors
-  with it. The API is unchanged; outputs come back as CPU tensors. Weights named by URL or
-  `weightRange()` are fetched by that tab directly — bytes the app fetched itself have to be
-  uploaded, which for a multi-GB model is most of the load time. Likewise, tensors passed
-  between runs cost a round trip each unless named in `run(…, { keep })`. Raw `ort` use (a worker
-  importing onnxruntime itself) stays local. Details: `docs/reference/server_env.md`.
-- **Single-thread.** YAAR iframes are not cross-origin isolated (no COOP/COEP),
-  so `SharedArrayBuffer` — and thus multithreaded wasm — is unavailable. The SDK
-  pins `numThreads = 1`. The **WebGPU** execution provider does not need threads,
-  so the primary path is unaffected; single-thread wasm is only the fallback.
+The SDK loads onnxruntime-web at runtime from the server's `/api/ml-runtime/` route. Every URL
+carries `?v=<ortVersion>`, so an ORT upgrade reaches browsers. Weights come through a same-origin
+streaming proxy (`/api/ml-weights`, SSRF-guarded and allowlisted) into an IndexedDB cache, or onto
+disk with `prefetchWeights`. Sessions run single-threaded (no COOP/COEP) on an ORT worker. On a
+macOS server with a WebKit page (`YAAR_ML_COMPUTE`), `session()`/`run()` run in the server's
+headless Chrome instead, with the same API. Design and rationale:
+[ML Runtime architecture](../architecture/ml_runtime.md).
+
+Two things you need to act on under remote compute:
+
+- **Name weights, don't fetch them.** Give `externalData` a URL or a `weightRange()`, and the
+  server's Chrome reads it from the server. Bytes your app fetched itself have to be uploaded,
+  which for a multi-GB model is most of the load time.
+- **`keep` activations passed between runs.** Without it, each one makes a round trip through
+  the page. Read kept outputs with `await t.getData()`, never `.data`.
+
+Raw `ort` use (a worker importing onnxruntime itself) always stays local.
 
 ## Prefetch to disk
 
@@ -174,11 +160,13 @@ IndexedDB cache self-evicts oldest-first past a ~4 GB budget.
 - **Feature-detect first.** Call `capabilities()` and degrade gracefully when
   `webgpu` is false — `backend: 'auto'` already falls back to wasm, but wasm is
   much slower, so tell the user.
-- **Allowlist.** If `allow_all_domains` is off, add the model host to
-  `config/curl_allowed_domains.yaml` or the weights download returns 403.
-- **Bundle size.** onnxruntime-web's JS glue adds ~400 KB to a compiled app; the
-  `.wasm` artifacts (13–27 MB) are served once from `/api/ml-runtime/` and cached
-  by the browser.
+- **Allowlist.** If `allow_all_domains` is off and the model host is not in
+  `config/curl_allowed_domains.yaml`, the first weights download asks the user
+  ("Allow Domain Access") and adds the host if approved. It fails only when the
+  user denies, or there is no session to ask — pre-list the host for headless use.
+- **Bundle size.** Nothing: the SDK imports only ORT's types and loads the module
+  (~118 KB) at runtime from `/api/ml-runtime/`. The `.wasm` binaries (~27 MB for
+  WebGPU, ~14 MB for CPU) are served from there once and cached by the browser.
 
 - **Snap dynamic dimensions to a handful of buckets.** The WebGPU execution
   provider compiles its kernels **per concrete input shape**. Any model with a
@@ -215,5 +203,6 @@ IndexedDB cache self-evicts oldest-first past a ~4 GB budget.
 ## Server / config knobs
 
 - `YAAR_ML_RUNTIME_DIR` — override where the ORT `.wasm`/`.mjs` artifacts are
-  served from (defaults to the installed package's `dist/`, or `./ml-runtime/`
-  next to a bundled exe).
+  served from. Defaults to the installed package's `dist/`; a bundled exe serves
+  the copy embedded in the binary, and an `./ml-runtime/` folder beside it only
+  fills in files missing from that copy.

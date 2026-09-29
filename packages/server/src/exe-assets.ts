@@ -32,7 +32,7 @@ export const EMBEDDED_ASSET_DIRS = {
   frontend: 'frontend',
   /** `dist/bundled-libs` — the prebundled `@bundled/*` libraries apps compile against. */
   bundledLibs: 'bundled-libs',
-  /** The three onnxruntime-web artifacts served at `/api/ml-runtime/`. */
+  /** The onnxruntime-web artifacts (both flavors) served at `/api/ml-runtime/`. */
   mlRuntime: 'ml-runtime',
   /**
    * Native libraries loaded through `bun:ffi` — today the desktop window's WebView

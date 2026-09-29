@@ -230,7 +230,7 @@ the windowId.
    scope `handleWindowClose` to the key; dispose `multi` agents on close; keep `activeWindows`
    for `single` apps only; extend `agentRole`.
 5. `agents/context-pool.ts` — update `findWindowForAgent` / `getActiveAppWindow` per §3.
-6. Docs — `packages/server/CLAUDE.md` (app agent key), `docs/guides/app-development.md` (`windowMode`).
+6. Docs — `packages/server/CLAUDE.md` (app agent key), `docs/reference/app_manifest_reference.md` (`windowMode`).
 7. Mark document-shaped bundled apps (`pdf-viewer`, `storage`, …) `"windowMode": "multi"` once
    verified.
 

@@ -1,8 +1,8 @@
 /**
  * HeadlessServerBrowser — a BrowserProvider backed by a private server-side Chrome.
  *
- * Lazy-launches one headless Chrome process and creates isolated tabs
- * keyed by browserId (auto-incrementing integer). Enforces a max concurrent
+ * Lazy-launches one headless Chrome process and opens tabs — one shared profile and
+ * cookie jar, not separate browser contexts — keyed by browserId (auto-incrementing integer). Enforces a max concurrent
  * limit and auto-closes sessions idle for too long.
  *
  * Uses the system Chrome/Edge — no bundled browser binary needed. This is the

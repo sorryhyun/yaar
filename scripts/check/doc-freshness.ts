@@ -38,7 +38,7 @@ const REPO_ROOT = resolve(import.meta.dir, '..', '..');
  * row here by *enumerating* the list — add one only if it does, and prefer
  * pointing at the registry over adding a fourth copy to keep in sync.
  */
-const BUNDLED_LIBRARY_DOCS = ['docs/guides/app-development.md', 'docs/ko/app-development.md'];
+const BUNDLED_LIBRARY_DOCS = ['docs/guides/yaar_sdk.md'];
 
 /** Section headings that introduce a prose list of `@bundled/*` imports, per locale. */
 const BUNDLED_LIBRARY_HEADING = /^#{2,6}\s+.*(Bundled Libraries|번들 라이브러리)\s*$/;

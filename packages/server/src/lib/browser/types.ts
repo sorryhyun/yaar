@@ -78,7 +78,7 @@ export type BrowserTabEvent =
  *  - `HeadlessServerBrowser` — launches a private server-side Chrome (the default;
  *    correct for headless / cloud / no-display / Claude-in-Claude / eval runs).
  *  - `LocalUserBrowser` — attaches to the user's own running Chrome (real cookies,
- *    real logins, real tabs). [planned]
+ *    real logins, real tabs).
  *
  * Both produce `BrowserSession` instances, which already abstract a single CDP
  * target — so the session layer is shared verbatim across providers.

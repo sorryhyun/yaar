@@ -106,7 +106,7 @@ a GitHub Discussion) describing:
 The reason is cost of ownership. Every new library, surface, or compiler path is
 something the project maintains, secures, and keeps working across releases
 forever. A lot of what looks like a core feature can live as a YAAR **app**
-instead (see [`docs/guides/app-development.md`](./docs/guides/app-development.md)) —
+instead (see [`docs/guides/yaar_sdk.md`](./docs/guides/yaar_sdk.md)) —
 apps get the bundled libraries, the SDK, and the design system without expanding
 the core's surface area. Part of the discussion is figuring out whether your idea
 should be an app, a core change, or not built at all.

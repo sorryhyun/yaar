@@ -11,7 +11,7 @@
  * making an agent, disposing one, and the global limiter's answer — and all three arrive
  * as constructor callbacks. What is left here is the tier's own rules: the cap, the
  * reservation, the turn, and who reclaims whom. See
- * [`docs/architecture/agent_tree.md`](../../../../docs/architecture/agent_tree.md) for
+ * [`docs/architecture/monitor_and_windows_guide.md`](../../../../docs/architecture/monitor_and_windows_guide.md#the-four-laws) for
  * the four laws every node must satisfy.
  *
  * Containment is written once in `profiles/sub-agent.ts` and never composed at a call

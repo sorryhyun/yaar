@@ -56,28 +56,23 @@ console.log(out);
 
 ## 동작 원리 (플랫폼 배관)
 
-- **런타임 아티팩트.** onnxruntime-web은 런타임에 자신의 `.wasm` 바이너리를 로드합니다.
-  SDK는 `ort.env.wasm.wasmPaths`를 정적 라우트인 `/api/ml-runtime/`(불변, 강하게 캐시됨)로
-  지정합니다. 개발 모드에서는 설치된 `onnxruntime-web/dist`에서 서빙되며, 독립 실행형 exe는
-  `node_modules`가 없으므로 `build/exe-bundle.js`가 SDK가 고정하는 아티팩트 — 네이티브
-  WebGPU 플레이버(`ort.webgpu.bundle.min.mjs` + asyncify `.mjs`/`.wasm` 쌍)와 wasm 전용
-  세션이 사용하는 풀 CPU 플레이버(`ort.wasm.bundle.min.mjs` + 일반 `.mjs`/`.wasm` 쌍;
-  asyncify 빌드는 fp64 커널이 빠져 있습니다), 합쳐서 약 38MB — 를 바이너리 안에
-  내장하고 라우트는 거기서 서빙합니다. `YAAR_ML_RUNTIME_DIR`가 둘 다 오버라이드합니다.
-  shim에서 `ORT_URL`/`ORT_WASM_URL`이나 백엔드를 바꾸면, 빌드 스크립트의 `ML_RUNTIME_ARTIFACTS`도 맞춰
-  업데이트하세요 — 그러지 않으면 ML 라우트가 404를 내는 바이너리를 배포하는 대신 빌드가
-  실패합니다.
-- **가중치.** 배포된 앱은 `connect-src 'self'` CSP 아래에서 실행되므로, SDK는 모델 호스트에
-  크로스 오리진으로 직접 접근하는 대신 동일 오리진 **스트리밍** 프록시
-  `/api/ml-weights?url=…`를 통해 가중치를 가져옵니다. 이 프록시는 SSRF 방지와
-  `curl_allowed_domains.yaml` 허용 목록을 적용하고 본문을 그대로 스트리밍합니다(수백 MB를
-  base64로 이중 버퍼링하지 않습니다). 결과는 URL을 키로 IndexedDB에 캐시됩니다
-  (HuggingFace `resolve` URL은 리비전 고정이므로 불변으로 취급됩니다 — 새로 고치려면
-  `force: true`를 넘기세요).
-- **단일 스레드.** YAAR iframe은 크로스 오리진 격리되어 있지 않으므로(COOP/COEP 없음),
-  `SharedArrayBuffer` — 따라서 멀티스레드 wasm — 를 사용할 수 없습니다. SDK는
-  `numThreads = 1`로 고정합니다. **WebGPU** 실행 프로바이더는 스레드가 필요 없으므로
-  주 경로는 영향받지 않으며, 단일 스레드 wasm은 폴백에서만 쓰입니다.
+SDK는 onnxruntime-web을 런타임에 서버의 `/api/ml-runtime/` 라우트에서 불러옵니다. 모든 URL에
+`?v=<ortVersion>`이 붙기 때문에 ORT를 업그레이드하면 브라우저에도 반영됩니다. 가중치는 동일
+오리진 스트리밍 프록시(`/api/ml-weights`, SSRF 방지와 허용 목록 적용)를 거쳐 IndexedDB 캐시에
+들어가거나, `prefetchWeights`로 디스크에 저장됩니다. 세션은 ORT 워커에서 단일 스레드로
+실행됩니다(COOP/COEP 없음). macOS 서버에서 WebKit 페이지가 쓰는 경우(`YAAR_ML_COMPUTE`)에는
+`session()`/`run()`이 같은 API 그대로 서버의 헤드리스 Chrome에서 실행됩니다. 설계와 그 이유:
+[ML 런타임 아키텍처](../architecture/ml_runtime.md) (영문).
+
+원격 연산에서 앱이 직접 챙겨야 할 것이 두 가지 있습니다:
+
+- **가중치는 직접 가져오지 말고 이름으로 넘기세요.** `externalData`에 URL이나
+  `weightRange()`를 주면 서버의 Chrome이 서버에서 직접 읽습니다. 앱이 직접 가져온 바이트는
+  업로드해야 하는데, 수 GB 모델이라면 로드 시간의 대부분이 여기에 들어갑니다.
+- **실행 사이에 넘기는 활성값은 `keep`으로 지정하세요.** 지정하지 않으면 활성값마다 페이지를
+  한 번씩 왕복합니다. 남겨 둔 출력은 `.data`가 아니라 `await t.getData()`로 읽으세요.
+
+`ort`를 직접 쓰는 코드(onnxruntime을 직접 import하는 워커)는 항상 로컬에서 실행됩니다.
 
 ## 디스크로 프리페치
 
@@ -163,12 +158,13 @@ Tier 1은 두 개의 상한선에 의해 제약됩니다:
 - **먼저 기능을 감지하세요.** `capabilities()`를 호출하고 `webgpu`가 false일 때 우아하게
   성능을 낮추세요 — `backend: 'auto'`가 이미 wasm으로 폴백하지만, wasm은 훨씬 느리므로
   사용자에게 알려주세요.
-- **허용 목록.** `allow_all_domains`가 꺼져 있다면, 모델 호스트를
-  `config/curl_allowed_domains.yaml`에 추가하세요. 그러지 않으면 가중치 다운로드가 403을
-  반환합니다.
-- **번들 크기.** onnxruntime-web의 JS 글루 코드는 컴파일된 앱에 약 400KB를 추가하며,
-  `.wasm` 아티팩트(13–27MB)는 `/api/ml-runtime/`에서 한 번만 서빙되고 브라우저에
-  캐시됩니다.
+- **허용 목록.** `allow_all_domains`가 꺼져 있고 모델 호스트가
+  `config/curl_allowed_domains.yaml`에 없으면, 첫 가중치 다운로드 때 사용자에게 묻고
+  ("Allow Domain Access") 승인되면 호스트를 추가합니다. 사용자가 거부하거나 물어볼 세션이
+  없을 때만 실패하니, 헤드리스로 쓸 때는 호스트를 미리 등록하세요.
+- **번들 크기.** 늘어나지 않습니다. SDK는 ORT의 타입만 import하고 모듈(약 118KB)은
+  런타임에 `/api/ml-runtime/`에서 불러옵니다. `.wasm` 바이너리(WebGPU 약 27MB, CPU 약
+  14MB)는 거기서 한 번 서빙되고 브라우저에 캐시됩니다.
 
 - **동적 차원을 몇 개의 버킷에 맞춰 스냅하세요.** WebGPU 실행 프로바이더는 **구체적인 입력
   형태마다** 커널을 컴파일합니다. 동적 차원을 가진 모델 — 대부분의 시퀀스 모델과 비전
@@ -203,5 +199,6 @@ Tier 1은 두 개의 상한선에 의해 제약됩니다:
 
 ## 서버 / 설정 옵션
 
-- `YAAR_ML_RUNTIME_DIR` — ORT `.wasm`/`.mjs` 아티팩트가 서빙되는 위치를 오버라이드합니다
-  (기본값은 설치된 패키지의 `dist/`, 또는 번들 exe 옆의 `./ml-runtime/`).
+- `YAAR_ML_RUNTIME_DIR` — ORT `.wasm`/`.mjs` 아티팩트가 서빙되는 위치를 오버라이드합니다.
+  기본값은 설치된 패키지의 `dist/`이고, 번들 exe는 바이너리에 내장된 사본을 서빙하며 옆의
+  `./ml-runtime/` 폴더는 그 사본에 없는 파일만 채웁니다.

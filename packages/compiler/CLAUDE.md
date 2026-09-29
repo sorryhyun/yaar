@@ -97,7 +97,7 @@ src/
 1. **Entry:** `compileTypeScript(sandboxPath, options)` — expects `src/main.ts`
 2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve. `scanClasses()` reads the same files for `y-*` classes nothing defines and returns them as `warnings` (never a failure)
 3. **Bundle:** `Bun.build()` with 4 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
-4. **SDK injection:** 10 iframe SDK scripts (ime-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame, and an origin-isolated app is not one — without it such an app forwards none of the shell's reserved shortcuts (Shift+Tab, Ctrl+1-9, Ctrl+W)
+4. **SDK injection:** 13 iframe SDK scripts (ime-guard, autofill-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, device, text-selection, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame, and an origin-isolated app is not one — without it such an app forwards none of the shell's reserved shortcuts (Shift+Tab, Ctrl+1-9, Ctrl+W)
 5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + `window.__yaar_links__` + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`. The links block is app.json's `"links"` (an origin relative hrefs in this app's content resolve against) and is emitted **for every app, empty or not** — its presence is also how the link guard tells a compiled app from a plain HTML document shown in a window
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, SDK hash, compiler version
@@ -232,7 +232,7 @@ each derives its expectation from the compiler's own output so it cannot drift.
 4. Fallback (`Bun.resolveSync`)
 5. Disk (`bundled-libs/` next to exe)
 
-Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires explicit `"bundles"` in app.json.
+Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`, `yaar-media` — `GATED_BUNDLED_LIBRARIES`) requires explicit `"bundles"` in app.json.
 
 Bare imports of a **shared runtime** (`SHARED_RUNTIME_LIBS`: solid-js and its sub-packages, plus
 `three`) are intercepted and pointed at the one shared bundle. Both are correctness rules, not size
@@ -337,8 +337,9 @@ that weight, shrink it to what slides-lite uses rather than defending the API).
 **`BUNDLED_LIBRARIES` in `bundled/registry.ts` is the authoritative list** — also served at
 `GET /api/dev/bundled-libraries`, and linted against the docs by
 `scripts/check/doc-freshness.ts`. Don't keep a copy here — the enumerated, lint-checked list for
-readers is [`docs/guides/app-development.md`](../../docs/guides/app-development.md), and the root
-[`CLAUDE.md`](../../CLAUDE.md#compiler--bundled-libraries) carries the category summary.
+readers is [`docs/guides/yaar_sdk.md`](../../docs/guides/yaar_sdk.md#bundled-libraries), the mechanism is
+[`docs/architecture/app_pipeline.md`](../../docs/architecture/app_pipeline.md), and the root
+[`CLAUDE.md`](../../CLAUDE.md#apps-system) points at the registry.
 
 `getBundledLibraryDetail(name, query)` (in `bundled/describe-library.ts`) backs the agent-facing
 `describeBundledLibrary`. It slices the `declare module '@bundled/<name>…'` blocks out of

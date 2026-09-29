@@ -24,10 +24,11 @@ so what you write into the project survives the deploy and comes back on the nex
 - **`agent/hint.md`** — injected into the *monitor* agent's prompt, not this one. Says
   *when* to route work here, not how it works. 1–3 sentences. Auto-syncs with
   install/uninstall.
-- **`agent/SKILL.md`** — no prompt reads it. It is the hand-written manual
-  `describe('yaar://apps/{id}')` returns, so its reader is whichever agent is deciding how
-  to drive the app: workflows, ordering constraints, the concepts a caller needs to build
-  valid params, when *not* to use the app. Anything longer than a hint's few sentences
+- **`agent/SKILL.md`** — no prompt reads it. `describe('yaar://apps/{id}')` lists only its
+  `##` headings, and `read('yaar://apps/{id}/skill')` serves it whole — so name each section
+  for what it helps with; the headings are all a caller sees before deciding to read on. Its
+  reader is whichever agent is deciding how to drive the app: workflows, ordering
+  constraints, the concepts a caller needs to build valid params, when *not* to use the app. Anything longer than a hint's few sentences
   belongs here rather than in `agent/hint.md` — the monitor agent pays for a hint on every
   turn and reaches a SKILL.md only when it asks. Never restate `protocol.json` in it: the
   protocol is served beside it at `yaar://apps/{id}/protocol`, and `scripts/check/apps.ts`

@@ -146,8 +146,7 @@ function mlHeaders(): Record<string, string> {
  * `externalData` URL is fetched from a context that carries neither of the two things a
  * weight route asks for:
  *
- * - **The REMOTE token.** In REMOTE mode — which every bundled exe is (`IS_REMOTE =
- *   REMOTE === '1' || IS_BUNDLED_EXE`) — `/api/storage/*` demands it, and an app's own
+ * - **The REMOTE token.** In REMOTE mode (`REMOTE=1`) `/api/storage/*` demands it, and an app's own
  *   `fetch` only passes because the browser sends the iframe's URL (which carries
  *   `?token=`) as `Referer`. ORT's worker fetches with `/api/ml-runtime/ort…mjs` as its
  *   Referer, so it 401s.

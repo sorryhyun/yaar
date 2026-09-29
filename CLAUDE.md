@@ -160,14 +160,14 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
     - `session-policies/` — `StreamToEventMapper` (maps a provider stream to server events; emitted OS Actions are delivered by `LiveSession.handleEmittedAction`)
     - `context-pool-policies/` — `MonitorQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `MonitorBudgetPolicy`, `WindowSubscriptionPolicy` (handle task queuing, prompt assembly, monitor rate limits, and window change notifications)
 
-See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/architecture/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/reference/claude_codex.md` for provider behavioral differences. See `docs/guides/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/guides/remote_mode.md` for network access.
+See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. It also covers the agent tree (session → monitor → app → sub-agent), message flow, and what each agent remembers. See `docs/reference/claude_codex.md` for provider behavioral differences. See `docs/guides/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/guides/remote_mode.md` for network access.
 
 ### Server Subsystems
 
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — What is left after the generic half moved to `@yaar/lib`: utilities that need server internals and so cannot leave.
-  - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability). Sessions are named and process-shaped: a persisted profile, a record that outlives the socket (`session-store.ts`), an idle sweep that spares a watched tab, and crash-restart with URL replay. Listed and killable at `yaar://system/browsers`. Stays here because it reads `config.js` for the debug port, the profile dir and the idle sweep — a YAAR subsystem that speaks CDP, not a CDP library
+  - `browser/` — CDP browser automation (sandbox Chrome + the user's Chrome, sessions as processes). See [`docs/architecture/browser_automation.md`](./docs/architecture/browser_automation.md). Stays here because it reads `config.js` for the debug port, the profile dir and the idle sweep — a YAAR subsystem that speaks CDP, not a CDP library
   - `yaar-uri-server.ts`, `schema-refs.ts`, `command-signature.ts`, `protocol-index.ts`, `format-interaction.ts`, `format-verb-log.ts` — all of them about YAAR's own URIs, protocols and logs
 - **`@yaar/lib`** (`packages/lib/`, a separate package) — the generic half, imported by subpath:
   - `@yaar/lib/pdf` — PDF rendering via poppler. Takes `binDir`; the server binds it once in `features/pdf.ts`, which is where server code imports PDF from
@@ -231,9 +231,12 @@ exception registry, and that review loop: [`docs/architecture/design_system.md`]
 Convention-based: each folder in `apps/` becomes an app (`app.json` metadata, `protocol.json`
 agent-iframe protocol, compiled via Bun into one self-contained HTML file). Conventions —
 app-agent architecture, agent docs, design tokens, Solid gotchas, bundled libraries — live in
-[`apps/CLAUDE.md`](./apps/CLAUDE.md); build/verify workflows in the `app-dev` skill. Guides:
-[`docs/guides/app-development.md`](./docs/guides/app-development.md) (URI verbs),
-[`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md).
+[`apps/CLAUDE.md`](./apps/CLAUDE.md); build/verify workflows in the `app-dev` skill. Docs:
+[`docs/architecture/app_pipeline.md`](./docs/architecture/app_pipeline.md) (bundled libraries → compile → deploy),
+[`docs/guides/yaar_sdk.md`](./docs/guides/yaar_sdk.md) (the SDK, for app authors),
+[`docs/reference/app_manifest_reference.md`](./docs/reference/app_manifest_reference.md) (`app.json`),
+[`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md). The
+agent-facing counterpart is the devtools app's own prompt and topics (`apps/devtools/agent/`).
 
 The authoritative bundled-library list is `BUNDLED_LIBRARIES` in
 `packages/compiler/src/bundled/registry.ts` — linted by `scripts/check/doc-freshness.ts`; don't

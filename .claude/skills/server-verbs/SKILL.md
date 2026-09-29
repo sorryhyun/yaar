@@ -210,7 +210,7 @@ The containment rules, each documented in full at the named site:
 
 `subAgentKey(monitorId, appId, subId)` extends the app agent's key, which extends the monitor's —
 session → monitor → app → sub-agent is one tree, addressed through the owner and torn down with it.
-See [`docs/architecture/agent_tree.md`](../../../docs/architecture/agent_tree.md) for the four laws
+See [`docs/architecture/monitor_and_windows_guide.md`](../../../docs/architecture/monitor_and_windows_guide.md#the-four-laws) for the four laws
 every new node must satisfy and the triage rule for placing one.
 
 ## Self-update (`features/update/`)

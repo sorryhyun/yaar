@@ -55,6 +55,6 @@ apps/my-app/
 ```
 
 `app.json` is parsed leniently (unknown/wrong-typed fields are silently ignored — a typo fails
-quietly). Full field table and the three app shapes (compiled / API-based / prompt-only manual):
-[`docs/guides/app-development.md`](../../../docs/guides/app-development.md) (`app.json`
-Reference, App Types sections).
+quietly). Full field table: [`docs/reference/app_manifest_reference.md`](../../../docs/reference/app_manifest_reference.md);
+the three app shapes (compiled / API-based / prompt-only manual) and the build pipeline:
+[`docs/architecture/app_pipeline.md`](../../../docs/architecture/app_pipeline.md).

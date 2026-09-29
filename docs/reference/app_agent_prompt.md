@@ -5,7 +5,7 @@
 This covers the *common* app-agent tier: the one persistent agent per `(monitor, app)` pair,
 created on the first interaction with an app's window and reused after (`AppAgentRegistry`,
 keyed `{monitorId}::{appId}`). Sub-agents are a different tier — their prompt is supplied by
-the owning app at spawn time (see `docs/architecture/agent_tree.md`); nothing below applies
+the owning app at spawn time (see `docs/architecture/monitor_and_windows_guide.md`); nothing below applies
 to them except the role prefix.
 
 ## The profile

@@ -19,8 +19,8 @@ Agent calls invoke(window, { action: 'app_query' | 'app_command' }) or a scoped 
 
 An app opts in simply by registering with `export default defineApp({...})` (imported from
 `@bundled/yaar`) inside the iframe — that's the whole signal the compiler and runtime look for.
-(An `"appProtocol": true` field in `app.json` is not read anywhere; the compiler's `deploy.ts`
-strips it as legacy.)
+(An `"appProtocol": true` field in `app.json` is not read anywhere; the server's deploy path
+(`packages/server/src/features/dev/deploy.ts`) strips it as legacy.)
 
 ---
 
@@ -367,7 +367,7 @@ The SDK is available via `@bundled/yaar`. Import `defineApp` to register, and `a
 
 `export default defineApp({ id, name, state, commands, view })` is the one authoring
 entrypoint; it registers once at module scope, before mounting the view. See
-[`docs/guides/app-development.md`](../guides/app-development.md#registering-in-your-app--defineapp).
+[`docs/guides/yaar_sdk.md`](../guides/yaar_sdk.md#registering-in-your-app--defineapp).
 The former low-level `app.register()` is removed — its registration entry is now private to
 `defineApp`, and calling the public name throws.
 

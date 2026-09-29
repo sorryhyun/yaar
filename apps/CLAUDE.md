@@ -3,8 +3,10 @@
 Convention-based: each folder here is one app. `app.json` for metadata/permissions/protocol
 manifest, `protocol.json` (generated) for agent-iframe communication — AI context is built from
 the two at read time, with `agent/prompt.md` as opt-in app-specific prompt after the shared intro. See
-[`docs/guides/app-development.md`](../docs/guides/app-development.md) for the full URI-verb
-reference and [`docs/reference/app_protocol_reference.md`](../docs/reference/app_protocol_reference.md)
+[`docs/guides/yaar_sdk.md`](../docs/guides/yaar_sdk.md) for the SDK,
+[`docs/architecture/app_pipeline.md`](../docs/architecture/app_pipeline.md) for how an app builds
+and runs, [`docs/reference/app_manifest_reference.md`](../docs/reference/app_manifest_reference.md)
+for `app.json`, and [`docs/reference/app_protocol_reference.md`](../docs/reference/app_protocol_reference.md)
 for protocol details. For build/compile/verify workflows, use the `app-dev` skill.
 
 ## App Agent Architecture
@@ -75,7 +77,7 @@ may only be given tool names that route back to the app's own iframe.
 (unlike `controls`, which stays bundled-only) — the declaration is a *request*, recorded in
 `config/app-grants.json` and applied as a **ceiling**.
 
-Design record and the four laws every new node must satisfy: [`docs/architecture/agent_tree.md`](../docs/architecture/agent_tree.md).
+Design record and the four laws every new node must satisfy: [`docs/architecture/monitor_and_windows_guide.md`](../docs/architecture/monitor_and_windows_guide.md#the-four-laws).
 
 ## Links out of an app
 
@@ -194,8 +196,9 @@ Point at it rather than enumerating it; `scripts/check/doc-freshness.ts` lints d
 list for drift.
 
 Notable libraries: `mermaid` — `renderMermaid()` returns token-themed, already-sanitized SVG; at
-3.3 MB it is by far the largest, so import it only where diagrams are drawn. `dompurify` —
-mandatory for any externally-sourced HTML. `mediabunny` — read/write/convert mp4/webm/mp3/wav,
+3.3 MB it is by far the largest, so import it only where diagrams are drawn. Externally-sourced HTML
+goes through `sanitizeHtml` (or `renderMarkdown`) from `@bundled/yaar` — never import `dompurify`
+directly. `mediabunny` — read/write/convert mp4/webm/mp3/wav,
 frame-accurate and not real-time-bound like `MediaRecorder`. `lucide` — icons: import by name
 (`Trash2`, `FolderOpen`) and render with `icon()`; never hand-copy an SVG path, and write a
 domain glyph Lucide lacks as an `IconNode` rendered by the same call. Compiler internals (shims, guards,

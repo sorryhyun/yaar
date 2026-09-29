@@ -1,6 +1,6 @@
 ---
 name: external-fetch
-description: Read before httpFetch of big files, rate-limited sites or hotlinked images, or putting a fetched URL in href/src — proxy caps, scraping traps.
+description: Read before httpFetch of big files, rate-limited sites, hotlinked images or logins, or putting a fetched URL in href/src — proxy caps, traps.
 audience: agent
 ---
 
@@ -89,6 +89,13 @@ stored its token at `token`, read the placeholder back, and put it in
 Store `{ "value": "…" }` at `token.json`, and gate every header build on a positive
 charset check (`/^[A-Za-z0-9_.~+/=-]+$/`) so any unusable value reads as signed-out.
 *Seen in:* github `src/secret.ts`.
+
+### Logout clears the proxy's cookie jar
+
+Cookies from a cross-origin `httpFetch` live server-side, in one jar per (session, app).
+Deleting the app's stored session only makes it *look* logged out: later requests still carry
+the upstream session. On logout also `await del('yaar://http')`, which clears this app's jar
+and no other.
 
 ### Two sources, one record type: go through accessors
 

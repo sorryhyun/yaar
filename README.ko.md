@@ -123,7 +123,7 @@ make dev          # 브라우저가 자동으로 열립니다
 - **게이트된 SDK** — `app.json`에 선언하면 열립니다: `yaar-dev`(컴파일/배포), `yaar-web`(브라우저 자동화), `yaar-ml`(브라우저 내 ONNX 추론)
 - **YAAR Market** — 카탈로그에서 설치하거나 직접 게시. 마켓은 소스를 배포하고, 설치는 로컬에서 컴파일합니다
 
-자세한 내용은 [앱 개발 가이드](./docs/ko/app-development.md)를 보세요.
+자세한 내용은 [YAAR SDK 가이드](./docs/guides/yaar_sdk.md)(영문)를 보세요.
 
 ## 신뢰 모델
 

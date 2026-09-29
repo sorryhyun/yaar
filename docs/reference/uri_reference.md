@@ -88,8 +88,8 @@ subtrees are auto-granted (`SELF_GRANTS` in `http/iframe-tokens.ts`) — no `per
 needed for those specifically. (Other `apps/self/...` resources, and the app resource itself,
 are not auto-granted.)
 
-For the invariants these obey see [The Agent Tree](../architecture/agent_tree.md); for the
-how-to see the [App Development Guide](../guides/app-development.md#sub-agents-personas).
+For the invariants these obey see [The Agent Tree](../architecture/monitor_and_windows_guide.md#the-four-laws); for the
+how-to see the [YAAR SDK Guide](../guides/yaar_sdk.md#sub-agents-personas).
 Handler: `packages/server/src/handlers/apps/agents-resource.ts`.
 
 | Verb | URI | Effect |
@@ -282,11 +282,11 @@ app/window agent hands work back to its monitor through its own `relay` tool, no
 | URI | Description |
 |-----|-------------|
 | `yaar://session` | Current session info (platform, uptime, stats) |
-| `yaar://session/agents` | All active agents. `list` returns two views of the same roster: `agents` (flat) and `tree` (nested by ownership — session → monitor → app → sub-agent). A `tree` node with `id: null` is an owner slot nobody occupies, e.g. an app whose sub-agents exist but whose own agent was never needed. See [The Agent Tree](../architecture/agent_tree.md) |
+| `yaar://session/agents` | All active agents. `list` returns two views of the same roster: `agents` (flat) and `tree` (nested by ownership — session → monitor → app → sub-agent). A `tree` node with `id: null` is an owner slot nobody occupies, e.g. an app whose sub-agents exist but whose own agent was never needed. See [The Agent Tree](../architecture/monitor_and_windows_guide.md#the-four-laws) |
 | `yaar://session/agents/{agentId}` | Agent by instance ID — read for info; invoke with `{ action: 'interrupt' }` (any agent) or `{ action: 'relay', message }` (only on `.../monitor` — hands a message from an app/window agent back to its monitor agent); delete disposes the session agent (`id === 'session'`) or an app agent (by instanceId or appId) |
 | `yaar://session/agents/session` | The session agent itself (invoke with `audit` / `coordinate` / `query`) |
 | `yaar://session/monitors/{monitorId}` | Monitor status and control (see below) |
-| `yaar://session/browser` | The user's real Chrome (the only door to it) |
+| `yaar://session/browser` | The user's real Chrome — the only CDP door to it (the Real Browser app reaches it through the Bridge extension instead) |
 | `yaar://session/context` | Context state |
 
 Past session logs are **not** under `yaar://session/...` — they're the separate top-level
@@ -385,9 +385,11 @@ Three limits are worth knowing before relying on it:
 
 ### System — `yaar://system/...`
 
-The running installation itself, rather than anything inside a session. Not session-principal:
+The running installation itself, rather than anything inside a session. Not session-principal —
 an app that declares the permission can call it (the Configurations app does — this is what its
-**Updates** tab renders), and so can every agent tier.
+**Updates** tab renders), and so can every agent tier — with one exception: acting on a single
+sandbox browser session (`yaar://system/browsers/{id}`) is session-principal, so one app cannot
+end another window's session because it was granted the prefix.
 
 | URI | Verb | Description |
 |-----|------|-------------|
@@ -395,6 +397,10 @@ an app that declares the permission can call it (the Configurations app does —
 | `yaar://system/update` | `read` | Running version, build shape, last check result, live install progress. **Never touches the network** — safe to poll |
 | `yaar://system/update` | `invoke` `{ action: 'check', force? }` | Ask GitHub for the latest release. Cached 5 minutes; `force` bypasses the cache |
 | `yaar://system/update` | `invoke` `{ action: 'install' }` | Download the latest release, verify it against the release's `SHA256SUMS`, and swap it in. Returns once the work has *started* — poll `read` for the outcome |
+| `yaar://system/browsers` | `list`, `read` | Sandbox browser sessions (the server-side Chrome only, never the user's): id, page, `state` (`live` / `suspended` / `crashed`), whether it is watched, idle time. `list` adds `chromeRunning`, `maxSessions`, `liveSessions` |
+| `yaar://system/browsers/{id}` | `read` | One session. **Session-principal** |
+| `yaar://system/browsers/{id}` | `invoke` `{ action: 'revive' }` | Put a socket back behind a suspended id — the page is re-navigated and the persisted profile still holds its cookies. **Session-principal** |
+| `yaar://system/browsers/{id}` | `delete` | Kill the session, closing the window showing it. **Session-principal** |
 
 `install` refuses synchronously (rather than failing later in the progress state) when there is
 nothing to install, when GitHub was unreachable, or when this build cannot install updates at all
@@ -403,7 +409,7 @@ nothing to install, when GitHub was unreachable, or when this build cannot insta
 mismatch, or a release with no `SHA256SUMS`, is a hard failure: nothing unverified is installed.
 Installing never restarts YAAR; the user does that.
 
-**Source:** `packages/server/src/features/update/`, `packages/server/src/handlers/system.ts`
+**Source:** `packages/server/src/features/update/`, `packages/server/src/handlers/system.ts`. How browser sessions work: [Browser Automation](../architecture/browser_automation.md)
 
 ---
 
@@ -622,10 +628,10 @@ Iframe apps call verbs via HTTP (`POST /api/verb`), gated by a per-window token 
 Window created (server)
   → generateIframeToken(windowId, sessionId, appId, permissions)
   → Token included in window.create OS action payload
-  → Frontend injects token into iframe (same-origin only):
-     1. URL query param: ?__yaar_token=<token>
-     2. Script injection: window.__YAAR_TOKEN__ = '<token>'
-  → Cross-origin iframes cannot receive tokens (no verb access)
+  → Frontend hands the token to the iframe:
+     1. URL query param: ?__yaar_token=<token>   (same-origin frames and origin-isolated apps)
+     2. Script injection: window.__YAAR_TOKEN__ = '<token>'   (same-origin frames only)
+  → Any other cross-origin iframe receives no token (no verb access)
   → Iframe SDK reads token from either source
   → All /api/verb requests include X-Iframe-Token header
   → Token expires after 24 hours (auto-cleaned)

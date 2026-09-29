@@ -130,7 +130,7 @@ Apps are plain TypeScript with batteries included:
 - **Gated SDKs** — declare them in `app.json` to unlock `yaar-dev` (compile/deploy), `yaar-web` (browser automation), `yaar-ml` (in-browser ONNX inference)
 - **YAAR Market** — install from the catalog or publish your own; the market ships source, and installs compile locally
 
-See the [App Development Guide](./docs/guides/app-development.md).
+See [Building Apps with the YAAR SDK](./docs/guides/yaar_sdk.md) and, for how an app is built and run, [Apps: from source to a running window](./docs/architecture/app_pipeline.md).
 
 ## Trust model
 

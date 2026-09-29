@@ -6,7 +6,7 @@
 (`storage/apps/{appId}/data.db`), exposed as a Mongo-style collection API. It sits alongside the
 file-based `appStorage` API — use `appDb` for structured, queryable records (notes, feeds, settings
 objects) and `appStorage` for binary blobs and simple single-file state. Usage guide:
-[app-development.md](../guides/app-development.md#app-scoped-database-appdb).
+[yaar_sdk.md](../guides/yaar_sdk.md#app-scoped-database-appdb).
 
 ---
 

@@ -527,7 +527,7 @@ is the measured gap and nothing else is: a Chrome page gains nothing from a seco
 Windows (WebView2) and Android WebView are Chromium already. `chrome` offloads every page — what a
 benchmark or a Linux box with a better server GPU wants. `local` turns the feature off.
 
-A decline is silent and total: an old server, no Chrome, a tab that does not come up in 90 s —
+A decline is silent and total: an old server, no Chrome, a tab that does not come up in time (the server waits 60 s for it, the page 90 s) —
 each means the page computes itself, exactly as it did before this existed.
 
 ### How it holds together

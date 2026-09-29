@@ -18,6 +18,11 @@ the caller's timeout fires first and reads as failure.
   updates as the job advances, not only at the end. For a push instead of a poll, emit a
   completion event the caller can subscribe to **before** starting (anima's
   `batchComplete`).
+- When the waiting caller is the app's **own** agent, finish with
+  `app.emit(channel, result, { wakeAgent: true })`: it wakes that agent with the result, so
+  it can end its turn after starting the job instead of blocking. It never creates an agent,
+  and it is per emit, so a job the user started from the UI emits without the flag and wakes
+  nobody. Payloads past ~16K serialized chars are cut; emit a handle to read instead.
 - The command's description says the results are *not* in the reply. anima's hint
   spells out "don't tell the user results are ready off the start acknowledgement" —
   without it the monitor agent does exactly that.
