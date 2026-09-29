@@ -1181,6 +1181,13 @@ interface YaarDeviceState {
    * palette. Only ever true on `mobile`, and only while the card is the one on top.
    */
   fullscreen: boolean;
+  /**
+   * What YAAR's own desktop window offers (`platform`: `macos`, `windows`, …; `caps`:
+   * `download`, `clipboard`, …), or `null` in a browser tab. Lets an app word a message for
+   * both — e.g. a refused microphone is fixed in System Settings in the window, in the
+   * address bar's site settings in a browser.
+   */
+  host: { platform: string; caps: string[] } | null;
 }
 
 /**
@@ -2047,7 +2054,9 @@ declare module '@bundled/yaar' {
   /**
    * Trigger a browser download of `blob`, named `filename` — the objectURL /
    * `<a download>` / click / revoke dance, with the revoke deferred a tick so it
-   * cannot race the download it just scheduled.
+   * cannot race the download it just scheduled. Inside YAAR's own desktop window, where
+   * an `<a download>` in an app frame saves nothing, the blob is handed to the shell to
+   * save instead (a toast says where it landed).
    */
   export function downloadBlob(blob: Blob, filename: string): void;
 

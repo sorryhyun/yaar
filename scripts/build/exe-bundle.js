@@ -5,6 +5,17 @@
  * Usage:
  *   bun scripts/build/exe-bundle.js --target windows
  *   bun scripts/build/exe-bundle.js --target linux
+ *   bun scripts/build/exe-bundle.js --target macos [--require-webview]
+ *
+ * `--arch` defaults to this machine's for linux and macos (so a macOS build on Apple
+ * silicon is not an x64 binary under Rosetta), and to x64 for windows, the only one shipped.
+ *
+ * A macos build embeds the native WebView library the desktop window loads
+ * (`scripts/build/webview-native.ts`): built on the spot on a macOS host, taken prebuilt
+ * from `dist/native/macos/` anywhere else. Missing, it is a warning — the binary then opens
+ * Chrome/Edge like the other targets — unless `--require-webview` makes it an error, which
+ * is how the release job stops a macOS binary shipping without its window. On a macOS host
+ * the build also wraps the binary in `dist/YAAR.app`, signed ad hoc.
  *
  * The three asset trees — the built frontend, the prebundled `@bundled/*` libraries, and
  * the onnxruntime-web artifacts — ride inside the binary via `bun build --compile --asset`,
@@ -29,12 +40,13 @@
 import { execFileSync } from 'child_process';
 import {
   readdirSync, readFileSync, existsSync,
-  mkdirSync, rmSync, symlinkSync, linkSync, copyFileSync,
+  mkdirSync, rmSync, symlinkSync, linkSync, copyFileSync, cpSync, writeFileSync,
 } from 'fs';
-import { join, dirname, relative } from 'path';
+import { basename, join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 
-import { EMBEDDED_ASSET_DIRS } from '../../packages/server/src/exe-assets.ts';
+import { BUNDLED_APPS_STAMP, EMBEDDED_ASSET_DIRS } from '../../packages/server/src/exe-assets.ts';
+import { webviewLibraryPath } from './webview-native.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..', '..');
@@ -50,7 +62,8 @@ function getArg(name) {
 
 const target = getArg('target') ?? 'linux';
 
-const arch = getArg('arch') ?? 'x64';
+const arch =
+  getArg('arch') ?? (target !== 'windows' && process.arch === 'arm64' ? 'arm64' : 'x64');
 
 const bunTargets = {
   'windows-x64': 'bun-windows-x64',
@@ -174,6 +187,28 @@ function stageDir(name, target) {
 const assetPaths = [stageDir(EMBEDDED_ASSET_DIRS.frontend, frontendDist)];
 if (hasBundledLibs) assetPaths.push(stageDir(EMBEDDED_ASSET_DIRS.bundledLibs, bundledLibsDir));
 
+// ── Native WebView library (macOS) ─────────────────────────────────
+
+let webviewLib = null;
+if (target === 'macos') {
+  webviewLib = webviewLibraryPath('darwin');
+  if (process.platform === 'darwin') {
+    execFileSync('bun', [join(__dirname, 'webview-native.ts')], { cwd: rootDir, stdio: 'inherit' });
+  }
+  if (!existsSync(webviewLib)) {
+    const msg = `WebView library not found at ${webviewLib} (build it on macOS: bun scripts/build/webview-native.ts).`;
+    if (args.includes('--require-webview')) {
+      console.error(msg);
+      process.exit(1);
+    }
+    console.warn(`Warning: ${msg}`);
+    console.warn('This binary will open Chrome/Edge instead of its own window.');
+    webviewLib = null;
+  } else {
+    console.log('Embedding the WebView library...');
+  }
+}
+
 const mlStaging = join(assetsDir, EMBEDDED_ASSET_DIRS.mlRuntime);
 mkdirSync(mlStaging, { recursive: true });
 for (const { name, absPath } of mlRuntimeFiles) {
@@ -187,6 +222,13 @@ for (const { name, absPath } of mlRuntimeFiles) {
   }
 }
 assetPaths.push(mlStaging);
+
+if (webviewLib) {
+  const nativeStaging = join(assetsDir, EMBEDDED_ASSET_DIRS.native);
+  mkdirSync(nativeStaging, { recursive: true });
+  copyFileSync(webviewLib, join(nativeStaging, basename(webviewLib)));
+  assetPaths.push(nativeStaging);
+}
 
 // ── Build ────────────────────────────────────────────────────────────
 
@@ -236,4 +278,75 @@ try {
   // The link farm has served its purpose; leaving it would put a symlink to the frontend
   // build inside `dist/`, which the release step archives.
   rmSync(assetsDir, { recursive: true, force: true });
+}
+
+// ── macOS: wrap the binary in YAAR.app ───────────────────────────────
+//
+// The bundle is what gives macOS a name to put on a permission prompt: run bare from a
+// terminal, the binary borrows the terminal's microphone grant, and a shipped exe has none
+// to borrow. So the Info.plist carries NSMicrophoneUsageDescription, and the bundle is
+// signed (ad hoc) because a grant is recorded against the signature.
+//
+// LSUIElement keeps the server process — the bundle's executable, which never opens a
+// window — out of the Dock; the window process it spawns promotes itself to a regular app
+// (packages/lib/native/webview_extras.mm), so there is exactly one Dock icon.
+//
+// The bundle's data lives in ~/Library/Application Support/YAAR, not beside the binary
+// (config/env.ts), and its apps ride read-only in Resources/ (macos-bundle.ts copies them
+// out). macOS-host only: `codesign`, `sips` and `iconutil` are macOS tools.
+
+if (target === 'macos' && process.platform === 'darwin') {
+  const app = join(rootDir, 'dist', 'YAAR.app');
+  const contents = join(app, 'Contents');
+  rmSync(app, { recursive: true, force: true });
+  mkdirSync(join(contents, 'MacOS'), { recursive: true });
+  mkdirSync(join(contents, 'Resources'), { recursive: true });
+  copyFileSync(outfile, join(contents, 'MacOS', exeName));
+
+  const appsDir = join(rootDir, 'apps');
+  if (existsSync(appsDir)) {
+    const shipped = join(contents, 'Resources', 'apps');
+    cpSync(appsDir, shipped, { recursive: true });
+    writeFileSync(join(shipped, BUNDLED_APPS_STAMP), `${pkgVersion} ${new Date().toISOString()}\n`);
+  }
+
+  const iconPng = join(rootDir, 'packages', 'frontend', 'public', 'icon-512.png');
+  let iconKeys = '';
+  if (existsSync(iconPng)) {
+    const iconset = join(rootDir, 'dist', '.YAAR.iconset');
+    rmSync(iconset, { recursive: true, force: true });
+    mkdirSync(iconset);
+    for (const size of [16, 32, 128, 256, 512]) {
+      for (const [scale, px] of [['', size], ['@2x', size * 2]]) {
+        if (px > 512) continue;
+        execFileSync('sips', ['-z', String(px), String(px), iconPng, '--out',
+          join(iconset, `icon_${size}x${size}${scale}.png`)], { stdio: 'ignore' });
+      }
+    }
+    execFileSync('iconutil', ['-c', 'icns', iconset, '-o', join(contents, 'Resources', 'YAAR.icns')]);
+    rmSync(iconset, { recursive: true, force: true });
+    iconKeys = '  <key>CFBundleIconFile</key><string>YAAR</string>\n';
+  }
+
+  writeFileSync(join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>YAAR</string>
+  <key>CFBundleDisplayName</key><string>YAAR</string>
+  <key>CFBundleIdentifier</key><string>io.github.sorryhyun.yaar</string>
+  <key>CFBundleExecutable</key><string>${exeName}</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${pkgVersion}</string>
+  <key>CFBundleVersion</key><string>${pkgVersion}</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>YAAR apps record audio when you ask them to, for example to transcribe speech.</string>
+${iconKeys}</dict>
+</plist>
+`);
+
+  execFileSync('codesign', ['--force', '--sign', '-', app], { stdio: 'inherit' });
+  console.log(`Built: ${app}`);
 }

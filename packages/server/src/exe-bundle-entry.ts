@@ -35,6 +35,14 @@ installEmbeddedAssetMaps();
 
 void (async () => {
   try {
+    // `yaar --window <url>` is the exe re-spawned to own the desktop window, not a second
+    // server: route it away before any server module loads (desktop-window/host.ts).
+    if (process.argv.includes('--window')) {
+      const { runWindowProcess } = await import('./desktop-window/host.js');
+      runWindowProcess(process.argv);
+    }
+    const { seedBundledApps } = await import('./macos-bundle.js');
+    seedBundledApps();
     await import('./exe-entry.js');
   } catch (err) {
     console.error('[yaar] failed to start:', err);

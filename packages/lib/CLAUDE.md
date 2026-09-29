@@ -41,6 +41,7 @@ direction is one-way forever.
 | `termux/` | Termux:API client (notification, clipboard, share sheet, toast) — every call timed, because a missing Termux:API app makes the commands hang rather than fail |
 | `tls/` | Self-signed loopback certificate (via `openssl`) + its Chromium SPKI hash, for a local h2 socket |
 | `tunnel/` | Tailscale Serve tunnel driver and `config/tunnel.json` parsing |
+| `webview/` | One native window with a WebView in it, via `bun:ffi` over the vendored webview/webview C API (`native/`, built by `scripts/build/webview-native.ts`). `runWebviewWindow()` blocks its thread until the window closes — the caller is a process that does nothing else. Page bindings (synchronous handlers, gated to the top frame of one origin), downloads, popups, loopback-only capture grants and a loopback SPKI pin live in `native/webview_extras.mm` |
 | `ytdlp/` | Optional yt-dlp binary wrapper — discovered on PATH, never bundled |
 | `errors.ts` | `errMessage(unknown)` |
 | `ids.ts` | `genId` / `genStamp` |

@@ -26,6 +26,7 @@ import {
 } from '@/types';
 import type { ClipboardImagePayload, ClipboardResponseEvent } from '@yaar/shared';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
+import { hostWith } from '@/lib/host';
 
 type ClipboardFailure = Pick<ClipboardResponseEvent, 'reason' | 'error'>;
 
@@ -171,6 +172,20 @@ function isFailure(v: ClipboardImagePayload | ClipboardFailure): v is ClipboardF
 async function readClipboard(
   action: UserClipboardReadAction,
 ): Promise<Omit<ClipboardResponseEvent, 'type' | 'requestId'>> {
+  // In YAAR's own window WKWebView refuses `navigator.clipboard.read*` outright (a
+  // NotAllowedError no user grant clears), so the host reads it natively. It carries text
+  // only: an image request gets whatever text is there, and no focus check applies.
+  const host = hostWith('clipboard');
+  if (host) {
+    try {
+      const text = await host.clipboard.readText();
+      if (!text) return { ok: false, reason: 'empty' };
+      return { ok: true, ...truncateClipboardText(text, action.maxChars) };
+    } catch (err) {
+      return { ok: false, ...classifyClipboardError(err) };
+    }
+  }
+
   if (!navigator.clipboard) {
     return { ok: false, reason: 'unsupported', error: 'navigator.clipboard is unavailable' };
   }

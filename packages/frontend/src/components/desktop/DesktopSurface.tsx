@@ -38,8 +38,10 @@ import {
   editableHoldsText,
   handleShellShortcut,
   monitorStepDirection,
+  resolveCloseTopWindow,
   shouldConfirmUnload,
 } from '@/lib/shellShortcuts';
+import { getHost } from '@/lib/host';
 import { DRAGGING_CSS_CLASS, WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../window/WindowFrame';
@@ -122,6 +124,17 @@ export function DesktopSurface() {
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
+  }, []);
+
+  // ⌘W in YAAR's own macOS window. Chrome keeps ⌘W as its own uncancellable menu key, which
+  // is why the shell's close key is Ctrl+W; the native window hands ⌘W to the page instead
+  // (after any frame that wanted it has passed), so here it closes the top window too.
+  useEffect(() => {
+    return getHost()?.on('closeWindow', () => {
+      const state = useDesktopStore.getState();
+      const target = resolveCloseTopWindow(state);
+      if (target) state.userCloseWindow(target);
+    });
   }, []);
 
   // Shift+Left/Right steps along the monitor strip, making a new monitor off the right

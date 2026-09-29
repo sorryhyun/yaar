@@ -14,6 +14,11 @@
  * answer lands the state is a local guess — `desktop`, and whatever `screen.orientation`
  * says — which is what a frame opened outside YAAR keeps.
  *
+ * `host` is what YAAR's own desktop window offers, or null in a browser: the shell reports
+ * it (the frame cannot see `window.yaarHost`, which lives in the main frame only) so an app
+ * knows whether its downloads are saved by the shell (`downloadBlob`) and which platform's
+ * settings to point a user at.
+ *
  * Mirrored onto `<html data-form-factor data-orientation>` and a present-or-absent
  * `data-fullscreen`, so app CSS can branch on it without script.
  */
@@ -32,7 +37,7 @@ export const IFRAME_DEVICE_SDK_SCRIPT = `
     return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
   }
 
-  var state = { formFactor: 'desktop', orientation: localOrientation(), fullscreen: false };
+  var state = { formFactor: 'desktop', orientation: localOrientation(), fullscreen: false, host: null };
   var callbacks = [];
 
   function mirror() {
@@ -45,7 +50,12 @@ export const IFRAME_DEVICE_SDK_SCRIPT = `
   }
 
   function snapshot() {
-    return { formFactor: state.formFactor, orientation: state.orientation, fullscreen: state.fullscreen };
+    return {
+      formFactor: state.formFactor,
+      orientation: state.orientation,
+      fullscreen: state.fullscreen,
+      host: state.host
+    };
   }
 
   mirror();
@@ -56,12 +66,16 @@ export const IFRAME_DEVICE_SDK_SCRIPT = `
     var formFactor = d.formFactor === 'mobile' ? 'mobile' : 'desktop';
     var orientation = d.orientation === 'landscape' ? 'landscape' : 'portrait';
     var fullscreen = d.fullscreen === true;
+    var host = d.host && typeof d.host.platform === 'string' && Array.isArray(d.host.caps)
+      ? { platform: d.host.platform, caps: d.host.caps.filter(function(c) { return typeof c === 'string'; }) }
+      : null;
     if (
       formFactor === state.formFactor &&
       orientation === state.orientation &&
-      fullscreen === state.fullscreen
+      fullscreen === state.fullscreen &&
+      JSON.stringify(host) === JSON.stringify(state.host)
     ) return;
-    state = { formFactor: formFactor, orientation: orientation, fullscreen: fullscreen };
+    state = { formFactor: formFactor, orientation: orientation, fullscreen: fullscreen, host: host };
     mirror();
     for (var i = 0; i < callbacks.length; i++) {
       try { callbacks[i](snapshot()); } catch(err) {}

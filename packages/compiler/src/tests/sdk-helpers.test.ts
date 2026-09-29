@@ -263,6 +263,34 @@ describe('downloadBlob', () => {
   });
 });
 
+describe('downloadBlob inside the native window', () => {
+  test('hands the blob to the shell instead of clicking an anchor', async () => {
+    const g = globalThis as any;
+    const posted: any[] = [];
+    const savedWindow = g.window;
+    g.window = { parent: { postMessage: (...a: any[]) => posted.push(a) } };
+    g.yaar = { device: { get: () => ({ host: { platform: 'macos', caps: ['download'] } }) } };
+    const before = anchors.length;
+    try {
+      downloadBlob(new Blob(['hi'], { type: 'text/plain' }), 'notes.txt');
+      await new Promise((r) => setTimeout(r, 0));
+    } finally {
+      delete g.yaar;
+      g.window = savedWindow;
+      if (savedWindow === undefined) delete g.window;
+    }
+    expect(anchors).toHaveLength(before);
+    expect(posted).toHaveLength(1);
+    const [msg, origin, transfer] = posted[0];
+    expect(msg.type).toBe('yaar:download');
+    expect(msg.name).toBe('notes.txt');
+    expect(msg.mime.startsWith('text/plain')).toBe(true);
+    expect(new TextDecoder().decode(msg.bytes)).toBe('hi');
+    expect(origin).toBe('*');
+    expect(transfer).toEqual([msg.bytes]);
+  });
+});
+
 describe('blobToDataUrl', () => {
   test('reads a blob into a data: URL carrying its MIME type', async () => {
     const url = await blobToDataUrl(new Blob(['hi'], { type: 'text/plain' }));

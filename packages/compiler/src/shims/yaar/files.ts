@@ -29,6 +29,21 @@
  * the fetch of the very URL that was just handed to the browser.
  */
 export function downloadBlob(blob: Blob, filename: string): void {
+  // In YAAR's own window the frame's `<a download>` goes nowhere, and the native host is
+  // main-frame only: the shell (which the device state says can save) does it for us.
+  const host = globalThis.yaar?.device?.get?.().host;
+  if (host?.caps?.includes('download') && window.parent && window.parent !== window) {
+    void blob
+      .arrayBuffer()
+      .then((bytes) =>
+        window.parent.postMessage(
+          { type: 'yaar:download', name: filename, mime: blob.type, bytes },
+          '*',
+          [bytes],
+        ),
+      );
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

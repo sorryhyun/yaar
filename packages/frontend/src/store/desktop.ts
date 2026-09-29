@@ -66,6 +66,7 @@ import {
   initWindowsSdkHandler,
   initNotificationBroadcaster,
   initDeviceBroadcaster,
+  initHostDownloadHandler,
 } from './iframe-bridge';
 
 /**
@@ -544,3 +545,4 @@ initIframeMessageHandlers();
 initWindowsSdkHandler();
 initNotificationBroadcaster();
 initDeviceBroadcaster();
+initHostDownloadHandler();

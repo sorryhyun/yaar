@@ -3,13 +3,38 @@
  */
 import { tryIframeSelfCapture } from '@/store';
 import type { WindowModel } from '@/types/state';
+import { useDesktopStore } from '@/store';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
+import { hostSaveToast, hostWith, saveViaHost } from '@/lib/host';
 
-function triggerDownload(blob: Blob, filename: string) {
+function sanitizeFilename(filename: string) {
+  return filename.replace(/[/\\?%*:|"<>]/g, '-');
+}
+
+/** Save through the native window's host, and say where it landed (or why it did not). */
+async function saveWithHost(
+  host: NonNullable<ReturnType<typeof hostWith>>,
+  blob: Blob,
+  filename: string,
+) {
+  const name = sanitizeFilename(filename);
+  const result = await saveViaHost(host, {
+    name,
+    mime: blob.type || 'application/octet-stream',
+    bytes: await blob.arrayBuffer(),
+  });
+  useDesktopStore.getState().applyActions([hostSaveToast(name, result)]);
+}
+
+async function triggerDownload(blob: Blob, filename: string) {
+  // A WKWebView drops an `<a download>` on the floor; the host saves the file instead.
+  const host = hostWith('download');
+  if (host) return saveWithHost(host, blob, filename);
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename.replace(/[/\\?%*:|"<>]/g, '-');
+  a.download = sanitizeFilename(filename);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -64,7 +89,7 @@ export async function exportContent(
             const doc = el.contentDocument;
             if (doc) {
               const html = doc.documentElement.outerHTML;
-              triggerDownload(new Blob([html], { type: 'text/html' }), `${title}.html`);
+              await triggerDownload(new Blob([html], { type: 'text/html' }), `${title}.html`);
               return;
             }
           } catch {
@@ -77,7 +102,7 @@ export async function exportContent(
             if (imageData) {
               const res = await fetch(imageData);
               const pngBlob = await res.blob();
-              triggerDownload(pngBlob, `${title}.png`);
+              await triggerDownload(pngBlob, `${title}.png`);
               return;
             }
           }
@@ -96,5 +121,5 @@ export async function exportContent(
       filename = `${title}.json`;
   }
 
-  triggerDownload(blob, filename);
+  await triggerDownload(blob, filename);
 }

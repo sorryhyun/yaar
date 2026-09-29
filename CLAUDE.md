@@ -48,7 +48,8 @@ bun run test                         # Everything (what CI runs)
 # Standalone executable (requires Bun)
 bun run build:exe                # Build Windows executable
 bun run build:exe:bundle:linux   # Build Linux executable
-bun run build:exe:bundle:macos   # Build macOS executable
+bun run build:exe:bundle:macos   # Build macOS executable (on a Mac: also dist/YAAR.app)
+bun scripts/build/webview-native.ts  # Build the exe's native WebView library (macOS; build:exe:bundle:macos runs it)
 ```
 
 Test runs are environment-pinned (every `bun test` preloads `scripts/test/env.ts`, so a run
@@ -71,6 +72,7 @@ happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 - `YAAR_COMPANION_TAB` - park a second, always-visible desktop in a server-side browser, so `__screenshot` and other page round trips keep answering while the user's own client is backgrounded. On by default on Android (where the phone is both client and server), off elsewhere; `1`/`0` force it. See `docs/reference/server_env.md`
 - `MOBILE` - `1` makes that Chrome a phone: its own profile, a phone-shaped window, and — over CDP, from `scripts/dev/emulate-mobile.ts` — mouse drags arriving as real touch events, which is the only way the phone shell's gestures are testable on a PC. Nothing pins `?ui=`: a coarse pointer in a narrow window is what the shell's own media query asks for, so a desktop layout means the emulation did not land. Viewport from `YAAR_MOBILE_VIEWPORT=WxH` (default `412x915`). Also turns on `YAAR_COMPANION_TAB`, and `curl -X POST localhost:9231/background` (then `/foreground`) backgrounds the phone the way Android does (hidden, then frozen). Set by `make claude-dev-mobile`; works on any target (`MOBILE=1 make codex-dev`)
 - `YAAR_FREEDPI` - routes outbound TLS through a local fragmenting CONNECT proxy to get past SNI-matching DPI. **On by default**, `0` turns it off; hosts are learned, not configured, so an unblocked network pays a loopback hop and nothing else. See `docs/reference/server_env.md`
+- `YAAR_WEBVIEW` - bundled exe only: `0` opens Chrome/Edge `--app` instead of YAAR's own WebView window (macOS builds carry one; any failure before it appears falls back anyway). See `docs/reference/server_env.md`.
 - `CLAUDE_CODE_PATH` - Absolute path to the `claude` binary. Overrides discovery (bundled exe → `~/.local/bin/claude` → `PATH`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - Inherited by the spawned `claude` CLI for non-interactive auth (alternative to `claude login`).
 

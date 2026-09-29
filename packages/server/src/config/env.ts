@@ -7,7 +7,8 @@
  * constant anywhere that does not (transitively) import this file.
  */
 
-import { join, dirname } from 'path';
+import { basename, join, dirname } from 'path';
+import { homedir } from 'os';
 import { existsSync, readFileSync } from 'fs';
 
 /**
@@ -53,13 +54,34 @@ export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BU
 const __dirname = import.meta.dir;
 
 /**
+ * The macOS `.app` the exe is running from — `…/YAAR.app` for an executable at
+ * `…/YAAR.app/Contents/MacOS/yaar` — or null for a bare binary and for a source checkout.
+ */
+export const MACOS_APP_BUNDLE: string | null = (() => {
+  if (!IS_BUNDLED_EXE || process.platform !== 'darwin') return null;
+  const macosDir = dirname(process.execPath);
+  const contents = dirname(macosDir);
+  const bundle = dirname(contents);
+  return basename(macosDir) === 'MacOS' && basename(contents) === 'Contents' && bundle.endsWith('.app')
+    ? bundle
+    : null;
+})();
+
+/**
  * Project root directory.
  * - Bundled exe: directory containing the executable
+ * - Bundled exe inside a macOS `.app`: `~/Library/Application Support/YAAR`. Everything
+ *   hangs off this root — config, storage, session logs, apps, `.env` — and the bundle is
+ *   no place for any of it: writing inside a signed bundle breaks its signature, which is
+ *   what macOS ties a granted permission (the microphone) to. The bundle carries its
+ *   apps in `Contents/Resources/apps`; `macos-bundle.ts` copies them here.
  * - Development: 4 levels up from src/config/ (packages/server/src/config → project root)
  */
-export const PROJECT_ROOT = IS_BUNDLED_EXE
-  ? dirname(process.execPath)
-  : join(__dirname, '..', '..', '..', '..');
+export const PROJECT_ROOT = MACOS_APP_BUNDLE
+  ? join(homedir(), 'Library', 'Application Support', 'YAAR')
+  : IS_BUNDLED_EXE
+    ? dirname(process.execPath)
+    : join(__dirname, '..', '..', '..', '..');
 
 /** Directory of this module — the base for dev-time package resolution. */
 export const CONFIG_MODULE_DIR = __dirname;

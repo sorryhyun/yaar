@@ -85,7 +85,9 @@ type RoutedMessageKey =
   // IFRAME_DEVICE_SDK_SCRIPT — `yaar.device.setFullscreen`, and the initial-state
   // `yaar.device` request (answered by posting `deviceUpdate` back, no requestId).
   | 'deviceSetFullscreen'
-  | 'deviceRequest';
+  | 'deviceRequest'
+  // `downloadBlob` inside YAAR's native window — the shell saves it through the host.
+  | 'download';
 
 export type YaarMessageType = (typeof APP_MSG)[RoutedMessageKey];
 

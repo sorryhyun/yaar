@@ -38,3 +38,5 @@ export * from './browser.js';
 // The one unit both screen captures resolve their canvas size in — no Zod, no DOM.
 export * from './capture-scale.js';
 export * from './design/index.js';
+// window.yaarHost — what YAAR's own desktop window offers the page. Types only.
+export * from './host-contract.js';

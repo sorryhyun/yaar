@@ -52,11 +52,14 @@ export default tseslint.config(
     //                     the JSON it prints); routing that through a logger breaks it.
     //  - codex/version.ts — dependency-free on purpose; `scripts/codegen/codex-types.js`
     //                     imports it directly. Its `warn` parameter is the seam.
+    //  - desktop-window/host.ts — the `yaar --window` process, which never boots the server
+    //                     and whose stdout is the "window opened" signal launch.ts reads.
     files: [
       'src/lifecycle.ts',
       'src/main.ts',
       'src/exe-entry.ts',
       'src/exe-bundle-entry.ts',
+      'src/desktop-window/host.ts',
       'src/http/dev-bundle-worker.ts',
       'src/providers/codex/version.ts',
     ],

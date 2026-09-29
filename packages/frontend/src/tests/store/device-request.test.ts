@@ -95,6 +95,7 @@ describe('answering a device request', () => {
         formFactor: 'mobile',
         orientation: 'landscape',
         fullscreen: true,
+        host: null,
       },
     ]);
     expect(frameA.received).toEqual([
@@ -103,6 +104,7 @@ describe('answering a device request', () => {
         formFactor: 'mobile',
         orientation: 'landscape',
         fullscreen: false,
+        host: null,
       },
     ]);
   });
@@ -111,5 +113,20 @@ describe('answering a device request', () => {
     const stray = mountFrame(null);
     postFrom(stray.contentWindow, { type: APP_MSG.deviceRequest });
     expect(stray.received).toEqual([]);
+  });
+
+  it('tells the frame what the native window offers, never the host itself', () => {
+    const w = window as unknown as { yaarHost?: unknown };
+    w.yaarHost = { version: 1, platform: 'macos', caps: ['download'], download() {} };
+    try {
+      const frame = mountFrame(openCard('a'));
+      postFrom(frame.contentWindow, { type: APP_MSG.deviceRequest });
+      expect((frame.received[0] as { host: unknown }).host).toEqual({
+        platform: 'macos',
+        caps: ['download'],
+      });
+    } finally {
+      delete w.yaarHost;
+    }
   });
 });

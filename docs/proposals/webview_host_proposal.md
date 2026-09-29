@@ -1,7 +1,8 @@
 # Proposal: WebView Hosts — YAAR in Its Own Window on Every Platform
 
-**Status:** draft, not implemented.
+**Status:** phases 1a and 1b implemented on macOS (2026-09-29); phase 2 and later not started.
 - The macOS spike (§3) was run on 2026-09-29 on macOS 26.6, and its results are measured.
+- Phases 1a and 1b as built are §5a and §5b.
 - Everything about Windows, Linux and Android is unverified. Claims not yet run are marked
   **(verify)**.
 
@@ -271,12 +272,57 @@ from the first public build, because a signature change forces users to uninstal
 | Phase | Deliverable | Done when |
 |---|---|---|
 | **0. macOS spike, closed out** | §3; the host-independent fixes below; one WebKit run with an actually isolated app, the file chooser clicked by hand, a side-by-side against Chrome | The spike ✅ 2026-09-29; the WebKit re-run ✅ (isolation, capture mime, transcribe recording and disk weights). Open: the file chooser, the side-by-side |
-| **1a. Desktop window, no bridge** | Vendored `webview.h` (unpatched), `yaar --window` process, window-exit → server shutdown, exe fallback chain; an app bundle whose `Info.plist` carries `NSMicrophoneUsageDescription` (launched from a terminal, the spike borrowed the terminal's microphone permission; a shipped exe has none to borrow) | `bun run build:exe:bundle:macos` opens in WKWebView; closing it stops the server; a missing dylib falls back to `--app`; the macOS microphone prompt names YAAR |
+| **1a. Desktop window, no bridge** (§5a) | Vendored `webview.h` (unpatched), `yaar --window` process, window-exit → server shutdown, exe fallback chain; an app bundle whose `Info.plist` carries `NSMicrophoneUsageDescription` (launched from a terminal, the spike borrowed the terminal's microphone permission; a shipped exe has none to borrow) | `bun run build:exe:bundle:macos` opens in WKWebView; closing it stops the server; a missing dylib falls back to `--app`; the macOS microphone prompt names YAAR |
 | **1b. Contract + patches** | `host-contract.ts` + `lib/host.ts`; header patches (download delegate, new-window, clipboard, and a `requestMediaCapturePermissionForOrigin:` UI-delegate method that asks macOS for access itself and grants only the two local origins); downloads and clipboard routed through the host; the TLS patch below; app permission messages that do not point at an address bar the window lacks (transcribe's refusal toast) | A day of normal use needs no Chrome window; on a fresh install, transcribe's record button raises the macOS prompt on its first press; the regression criteria below pass in WKWebView |
 | **2. Windows** | The same exe on WebView2, flags via env | §3's table re-run on a Windows box, plus CDP to the display |
 | **3. Linux go/no-go** | Epiphany smoke test → WebKitGTK host or stay on `--app` | A decision, recorded here |
 | **4. Android host** | APK: WebView + §4 inventory + RUN_COMMAND launch | A cold tap on the icon → desktop, with Termux never opened by hand |
 | **5. Android extras** | DevTools bridge, companion spike, home launcher | Each measured before it lands |
+
+### 5a. Phase 1a as built (2026-09-29)
+
+| Piece | Where |
+|---|---|
+| `webview.h` 0.12.0, byte-identical, sha256 in its README | `packages/lib/native/webview/` |
+| YAAR's Cocoa additions, compiled into the same dylib: a main menu (Edit, so Cmd+C/V/X/A/Z reach the web view at all; Quit, Hide, Minimize, Close, Full Screen), a regular activation policy even inside an `LSUIElement` bundle, a frame autosave, and exit-with-parent (a kqueue proc source, so a SIGKILLed server takes its window with it) | `packages/lib/native/webview_extras.mm` |
+| Universal (arm64 + x86_64) dylib, 264 KB | `scripts/build/webview-native.ts` → `dist/native/macos/libwebview.dylib` |
+| FFI binding, `runWebviewWindow()` | `@yaar/lib/webview` |
+| `yaar --window <url> --parent <pid>`, routed in `exe-bundle-entry.ts` before any server module loads; reports `yaar-window-opened` on stdout | `packages/server/src/desktop-window/host.ts` |
+| Server side: spawn, wait up to 20 s for the line, else fall back to Chrome `--app` → default browser; window exit → SIGTERM → `lifecycle.shutdown()` | `desktop-window/launch.ts`, `exe-entry.ts` |
+| Embedded in the exe (`native/` asset dir), extracted to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` | `exe-assets.ts`, `desktop-window/library.ts` |
+| `dist/YAAR.app` on a macOS host: `NSMicrophoneUsageDescription`, `LSUIElement` (the server process stays out of the Dock), icon, ad-hoc signature. Data in `~/Library/Application Support/YAAR`; apps shipped in `Resources/apps` and copied out per build | `scripts/build/exe-bundle.js`, `config/env.ts` (`MACOS_APP_BUNDLE`), `macos-bundle.ts` |
+| Release: a `macos-latest` job builds the dylib; the Linux job embeds it with `--require-webview` | `.github/workflows/release.yml` (**not yet run in CI**) |
+| `YAAR_WEBVIEW=0` / `YAAR_WEBVIEW_DEVTOOLS=1` / `YAAR_WEBVIEW_LIB` | `docs/reference/server_env.md` |
+
+Verified with the built arm64 binary: the desktop renders and connects in the window; killing
+the window process shuts the server down and frees the port; killing `--parent` closes the
+window within 1.5 s; an unloadable library exits 3 with no "opened" line
+(the fallback trigger); spawn to open is ~240 ms. **Still owed:** a hand check of the menu
+(Cmd+V into the palette, Cmd+W, Cmd+Q — the terminal had no Accessibility grant to script
+keystrokes), and the `.app` microphone prompt.
+
+Not in 1a: the release does not ship `YAAR.app` (install.sh installs the bare binary, which
+opens the window but borrows the terminal's microphone grant); GUI-launched apps get a minimal
+`PATH`, so a provider CLI found only via `PATH` is likely missed from `YAAR.app` **(verify)**.
+
+### 5b. Phase 1b as built (2026-09-29)
+
+- **Contract**: `packages/shared/src/host-contract.ts`; frontend `lib/host.ts` (`getHost`, `hostWith`, `saveViaHost`). No host → every call site keeps its browser path.
+- **Host adapter**: `desktop-window/host-bridge.ts` — the init script defining a frozen `window.yaarHost` (top frame, desktop origin only) over one binding, `__yaarHostInvoke`, answered synchronously on the UI thread: download → `~/Downloads` never overwriting, clipboard via NSPasteboard, openExternal for http/https/mailto only.
+- **Binding gate**: webview.h injects scripts main-frame-only, but `window.webkit.messageHandlers.__webview__` is visible to every frame, and an app iframe was measured forging a binding call through it. `webview_extras.mm` wraps the header's message handler so only the top frame of the desktop origin gets through.
+- **Native** (`webview_extras.mm`, a proxy that takes the UI and navigation delegate slots and forwards the rest): WKDownloadDelegate (`a[download]` incl. blob: from app iframes, `Content-Disposition: attachment`, un-showable types); new windows (off-machine http(s) → default browser, blank/loopback/blob: → a popup window with no bindings); microphone for `localhost`/`127.0.0.1` only, asking macOS first; local TLS pinned by SPKI.
+- **h2**: the window loads `https://localhost:<tlsPort>`; document, resources, the WebSocket and isolated app iframes on `https://127.0.0.1:<tlsPort>` all go through the pin (12 concurrent requests in flight, measured).
+- **App frames**: the device handshake carries `host: {platform, caps} | null`; `downloadBlob()` posts `yaar:download` (bytes transferred, 128 MiB cap) and the shell saves through the host.
+- **⌘W**: closes the top YAAR window, not the native one. A hand check found the 1a menu's ⌘W closing the native window, and with it the desktop and the server. The Close Window item now dispatches `yaarhost:closeWindow` in the top frame (`closeKeyEvent`, `webview_extras_route_close_key`), after the page has had the keydown, and the shell answers `yaarHost.on('closeWindow')` with the same top-window rule as Ctrl+W. The red close button still quits.
+- **transcribe**: the refusal message names System Settings → Privacy & Security → Microphone under a macOS host.
+
+Verified: in a scripted harness, everything above; in the shipped window by hand, window export → host save → "Saved to …" toast.
+
+**Still owed:**
+- The microphone prompt on a fresh grant (`tccutil reset Microphone`, then transcribe's record button in `YAAR.app`).
+- openExternal and the GitHub OAuth popup end to end.
+- A hand check of ⌘W after the fix (the event path is verified: each dispatch closes one YAAR window).
+- **Service worker under the pin (verify):** a harness window kept serving a shell cached in an earlier run while the server served a newer bundle. That would happen if WebKit does not route a service worker's own fetches through the navigation delegate's TLS challenge, so its network-first document fetch always fails and falls back to cache. The shipped window picked up the new bundle, so this is unconfirmed. If it holds, an upgraded exe would show a stale desktop until `?nosw`.
 
 **Regression fixes** (measured in §3, "Follow-up measurements"):
 
@@ -284,7 +330,7 @@ from the first public build, because a signature change forces users to uninstal
 |---|---|---|---|
 | Captures are PNG bytes labeled `image/webp` | 0 ✅ | The server reads the type off the bytes and re-encodes PNG/JPEG to WebP (`captureForModel` in `@yaar/lib/image`), in both `__screenshot` returns. `uploadImage.ts` keeps the original file when the canvas did not produce WebP. `clipboard.ts` already used the blob's own type; the drawing and monitor captures travel as data URLs whose prefix is honest. | A `__screenshot` read in WKWebView returns an image whose mime matches its bytes |
 | Isolated apps' localStorage and IndexedDB do not survive a launch | — | None needed for weights (§3). Why WebKit kept the Cache API but not IndexedDB is still unexplained. It only matters if an app starts keeping state there, which belongs in app storage anyway. | — |
-| HTTP/1.1's six connections per host | 1b | The `didReceiveAuthenticationChallenge` patch that pins the local SPKI, so the window loads the h2 socket | The window's document is served from `https://localhost:<tlsPort>` over h2 |
+| HTTP/1.1's six connections per host | 1b ✅ | The `didReceiveAuthenticationChallenge` patch that pins the local SPKI, so the window loads the h2 socket | The window's document is served from `https://localhost:<tlsPort>` over h2 |
 
 **Non-goals:**
 - Replacing Chrome in development or headless driving.

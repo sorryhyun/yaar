@@ -60,8 +60,31 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
       full: true
 
+  # The macOS desktop window's WebView library links the system WebKit and Cocoa
+  # frameworks, so only a Mac can build it. It is one universal (arm64 + x86_64)
+  # dylib, handed to the release job, which embeds it in both macOS binaries.
+  webview-macos:
+    needs: resolve
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun scripts/build/webview-native.ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webview-macos
+          path: dist/native/macos/libwebview.dylib
+          if-no-files-found: error
+
   release:
-    needs: [resolve, verify]
+    needs: [resolve, verify, webview-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -182,14 +205,21 @@ jobs:
           bun scripts/build/exe-bundle.js --target linux --arch arm64
           mv dist/yaar dist/yaar-linux-arm64
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: webview-macos
+          path: dist/native/macos
+
+      # --require-webview: a macOS binary without its library would still run, in
+      # Chrome, which is exactly why it must not ship that way unnoticed.
       - name: Build macOS x64
         run: |
-          bun scripts/build/exe-bundle.js --target macos --arch x64
+          bun scripts/build/exe-bundle.js --target macos --arch x64 --require-webview
           mv dist/yaar dist/yaar-macos-x64
 
       - name: Build macOS arm64 (Apple Silicon)
         run: |
-          bun scripts/build/exe-bundle.js --target macos --arch arm64
+          bun scripts/build/exe-bundle.js --target macos --arch arm64 --require-webview
           mv dist/yaar dist/yaar-macos-arm64
 
       # A manifest of what this release actually contains, generated after every

@@ -15,7 +15,7 @@
  * `Bun.embeddedFiles`. `--asset` does that directly, so the maps are built here, at
  * startup, by reading back what is actually in the binary.
  *
- * The *shape* of the three globals is deliberately unchanged: every consumer
+ * The *shape* of the globals is deliberately unchanged: every consumer
  * (`http/routes/static.ts`, `config/assets.ts`, the compiler's
  * `bundled/plugins.ts`) still receives `Record<key, path>` of paths `Bun.file()` can
  * read, and `__YAAR_BUNDLED_LIBS` being defined still doubles as the compiler's
@@ -34,7 +34,20 @@ export const EMBEDDED_ASSET_DIRS = {
   bundledLibs: 'bundled-libs',
   /** The three onnxruntime-web artifacts served at `/api/ml-runtime/`. */
   mlRuntime: 'ml-runtime',
+  /**
+   * Native libraries loaded through `bun:ffi` — today the desktop window's WebView
+   * (`desktop-window/library.ts`), which extracts it to disk first: `dlopen` cannot read
+   * the virtual filesystem.
+   */
+  native: 'native',
 } as const;
+
+/**
+ * A macOS `.app` build's bundled apps (`Contents/Resources/apps`) carry this file, naming
+ * the build that wrote them; `macos-bundle.ts` copies the apps out whenever it differs from
+ * the copy already installed. Written by `exe-bundle.js`.
+ */
+export const BUNDLED_APPS_STAMP = '.bundle-stamp';
 
 /**
  * Candidate roots for the executable's virtual filesystem, most trustworthy first.
@@ -143,4 +156,8 @@ export function installEmbeddedAssetMaps(): void {
 
   // ML keys are bare artifact file names, which is what `/api/ml-runtime/:name` receives.
   globals.__YAAR_ML_RUNTIME = embeddedUnder(EMBEDDED_ASSET_DIRS.mlRuntime, root);
+
+  // Native keys are library file names (`libwebview.dylib`). Empty on a target the build
+  // had no library for, which reads as "no WebView host here".
+  globals.__YAAR_NATIVE = embeddedUnder(EMBEDDED_ASSET_DIRS.native, root);
 }

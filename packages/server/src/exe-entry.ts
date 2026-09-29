@@ -3,8 +3,9 @@
  * YAAR Standalone Executable Entry Point
  *
  * This file is the entry point for the bundled .exe.
- * It imports and starts the server, then auto-opens in app mode
- * (Chrome/Edge --app flag for a standalone window without browser chrome).
+ * It imports and starts the server, then opens the desktop — in YAAR's own WebView window
+ * where this build carries one (desktop-window/), else Chrome/Edge in --app mode, else
+ * the default browser.
  */
 
 import { platform, tmpdir } from 'os';
@@ -16,7 +17,8 @@ import { ready } from './main.js';
 
 import { getRemoteToken } from './http/auth.js';
 import { getLocalTlsEndpoint } from './http/local-tls.js';
-import { getPort } from './config.js';
+import { DESKTOP_ORIGIN_HOST, getPort } from './config.js';
+import { openDesktopWindow } from './desktop-window/launch.js';
 import { LINUX_WEBGPU_FLAGS } from './lib/browser/webgpu-flags.js';
 import { hideConsole } from './hide-console.js';
 
@@ -72,6 +74,27 @@ function getBaseUrl(): string {
 function getAppUrl(base = getBaseUrl()): string {
   const token = getRemoteToken();
   return token ? `${base}/#remote=${token}` : base;
+}
+
+/**
+ * Open the desktop: YAAR's own window first, then a Chromium --app window, then the
+ * default browser.
+ *
+ * The WebView window loads the desktop from `localhost`, the desktop side of the
+ * app-origin boundary — over the local TLS socket when it is up, as the Chromium path
+ * does, so the window gets h2 instead of HTTP/1.1's six connections per host. WebKit has
+ * no SPKI flag, so the pin travels to the window process, whose delegate checks it.
+ */
+async function openDesktop() {
+  const tls = getLocalTlsEndpoint();
+  const url = tls
+    ? getAppUrl(`https://${DESKTOP_ORIGIN_HOST}:${tls.port}`)
+    : getAppUrl(`http://${DESKTOP_ORIGIN_HOST}:${getPort()}`);
+  if (await openDesktopWindow(url, { trustSpki: tls?.spki })) {
+    hideConsole();
+    return;
+  }
+  openAppWindow();
 }
 
 /**
@@ -171,8 +194,8 @@ function openAppWindow() {
 
 // `.then`, not a top-level `await`: this file is the exe's entry and the exe is built
 // with `--bytecode`, which emits CommonJS — where top-level `await` is a syntax error.
-// A throw from `openAppWindow()` still lands in the `catch`, as it did inside the `try`.
-void ready.then(openAppWindow).catch((err: unknown) => {
+// A throw from `openDesktop()` still lands in the `catch`, as it did inside the `try`.
+void ready.then(openDesktop).catch((err: unknown) => {
   console.error('Server failed to start:', err);
   process.exit(1);
 });

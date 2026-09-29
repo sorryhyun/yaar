@@ -27,6 +27,9 @@ passes in review.
 | `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock — no model, no tokens (`make mobile-bench`) |
 | `YAAR_REACT_PROD` | on for Android, off elsewhere | Dev bundler ships React's production build (`1` forces on, `0` off) |
 | `YAAR_LAUNCHER_PID` | unset | Shut down once this process is gone (set by `make termux`) |
+| `YAAR_WEBVIEW` | on | Bundled exe only: open the desktop in YAAR's own WebView window where the build carries one (`0` goes straight to Chrome/Edge `--app`) |
+| `YAAR_WEBVIEW_DEVTOOLS` | off | `=1`: the WebView window gets right-click → Inspect (and Safari's Develop menu on macOS) |
+| `YAAR_WEBVIEW_LIB` | unset | Load the WebView library from this path instead of the exe's embedded copy |
 
 ### `YAAR_MOCK_AGENT`
 
@@ -82,6 +85,47 @@ process's start time, not just whether the PID answers. The variable is removed 
 environment once read, so the agents the server spawns do not inherit it.
 
 **Source:** `packages/server/src/launcher-watchdog.ts`, `scripts/dev/start-termux.sh`
+
+### `YAAR_WEBVIEW`
+
+Where the bundled exe shows the desktop. On macOS the binary carries a native WebView library
+(`libwebview.dylib`, built from `packages/lib/native/` by `scripts/build/webview-native.ts`) and
+re-spawns itself as `yaar --window <url> --parent <pid>` to own a WKWebView window; closing that
+window shuts the server down, and the window closes itself if the server dies first. Any
+failure before the window appears (no library for the platform, a library that will not load,
+no WebView to be had) falls back to what every exe did before — Chrome/Edge `--app`, then the
+default browser — so `YAAR_WEBVIEW=0` is only needed to *choose* Chrome.
+
+The window loads the local h2 socket, `https://localhost:<tlsPort>`, as the Chrome path does.
+WebKit has no equivalent of Chromium's SPKI flag, so the server passes the pin as
+`--trust-spki <pin>` and the window's own delegate accepts that one self-signed key on a
+loopback host (desktop, isolated app frames on `127.0.0.1`, and `wss:` alike); anything else
+gets the system trust store. With no TLS socket (no `openssl` to mint the certificate) the window
+loads plain `http://localhost:<port>` and is back to HTTP/1.1's six connections per host.
+Windows and Linux builds carry no library yet and go straight to Chrome. Development never goes
+through here — `make dev` and friends open Chrome, over CDP, as always.
+
+The top frame of the desktop origin — and nothing else — gets `window.yaarHost` (the contract in
+`packages/shared/src/host-contract.ts`): bridge downloads into `~/Downloads`, clipboard read and
+write, and opening http(s)/mailto URLs in the default browser. The window itself also saves
+`<a download>` and attachment downloads into `~/Downloads` (never over an existing file), opens
+off-machine `window.open`/`target=_blank` links in the default browser and script popups in a
+window of their own, and grants the microphone and camera to `localhost`/`127.0.0.1` only once
+macOS has granted them to YAAR.
+
+`YAAR_WEBVIEW_LIB` points the window at a different library build, for trying a fresh
+`dist/native/macos/libwebview.dylib` against an installed binary. The embedded copy is otherwise
+written to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` (dlopen cannot read the exe's
+virtual filesystem) — once per build, since the name carries a hash of the bytes.
+
+A `YAAR.app` (built on a Mac by `bun run build:exe:bundle:macos`) keeps its data in
+`~/Library/Application Support/YAAR` rather than beside the binary — `.env`, `config/`,
+`storage/`, `session_logs/`, `apps/`, `user-apps/` — because writing into a signed bundle
+breaks the signature macOS records permission grants (the microphone) against.
+
+**Source:** `packages/server/src/desktop-window/`, `packages/lib/src/webview/`,
+`packages/lib/native/webview_extras.mm`, `packages/server/src/macos-bundle.ts`,
+`docs/proposals/webview_host_proposal.md`
 
 ### `FABLE`
 

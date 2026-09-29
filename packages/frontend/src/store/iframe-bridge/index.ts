@@ -29,3 +29,4 @@ export type { InstalledApp } from './open-url';
 export { initWindowsSdkHandler } from './windows-sdk';
 export { initNotificationBroadcaster } from './notifications';
 export { initDeviceBroadcaster } from './device';
+export { initHostDownloadHandler } from './host-download';

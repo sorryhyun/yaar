@@ -46,6 +46,7 @@ before changing a default or adding a knob.
 | `YAAR_CLIPBOARD_GRANT` | **on** | Pre-grant clipboard to the desktop origin over CDP (`=0` disables) |
 | `YAAR_TERMUX_API` | on for Android if it answers | Termux:API notifications, clipboard, share sheet (`=0` disables) |
 | `YAAR_LAUNCHER_PID` | unset | Shut down once this process is gone — how `make termux` avoids an orphaned server (`launcher-watchdog.ts`) |
+| `YAAR_WEBVIEW` / `YAAR_WEBVIEW_DEVTOOLS` / `YAAR_WEBVIEW_LIB` | on / off / — | Exe: desktop in YAAR's own WebView window (`0` → Chrome `--app`); Inspect menu; library path override |
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` (the inline cap stays 10MB) |
 | `YAAR_FREEDPI` | on | Route outbound TLS through a local fragmenting proxy, to get past SNI-matching DPI (`0` disables) |
 | `MONITOR_MAX_CONCURRENT` / `_ACTIONS_PER_MIN` / `_OUTPUT_PER_MIN` | `4` / `60` / `100000` | Background monitor budget |
@@ -64,6 +65,9 @@ src/
 ├── main.ts               # Thin orchestrator — binds the socket(s), then startTunnel(), banner, warm pool
 ├── config.ts             # Barrel over config/ (env, paths, assets, deadlines, limits, browser, providers/claude, providers/codex)
 ├── lifecycle.ts          # initializeSubsystems(), getBindHostname(), wantsAppOriginSocket(), startTunnel(), printBanner(), shutdown()
+├── exe-entry.ts / exe-bundle-entry.ts / exe-assets.ts  # the bundled exe: boot, embedded assets, `--window` routing
+├── macos-bundle.ts       # exe as YAAR.app: copies Resources/apps into ~/Library/Application Support/YAAR
+├── desktop-window/       # the exe's own window: launch.ts (server side, fallback + shutdown), host.ts (`yaar --window` process), host-bridge.ts (`window.yaarHost`: init script + op handlers), library.ts (find/extract the WebView library)
 ├── http/                 # HTTP server: createFetchHandler() (CORS, auth, MCP dispatch)
 │   ├── access.ts         # THE ACCESS CHOKEPOINT — resolvePrincipal(), requirePermission(), requireHost(), requireBundle()
 │   ├── auth.ts           # checkHttpAuth(), generateRemoteToken(), isStaticAsset(), hasValidIframeToken()

@@ -13,6 +13,7 @@
 import { APP_MSG } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
+import { hostSummary } from '@/lib/host';
 import { selectFullscreenCardId } from '../selectors';
 import type { DesktopStore } from '../types';
 import { getDesktopState, getDesktopStore } from './store-access';
@@ -21,7 +22,8 @@ import { postToIframe } from './target';
 function deviceUpdate(state: DesktopStore, windowId: string | undefined) {
   const { formFactor, orientation } = state;
   const fullscreen = windowId !== undefined && selectFullscreenCardId(state) === windowId;
-  return { type: APP_MSG.deviceUpdate, formFactor, orientation, fullscreen };
+  // `host` is what the frame is told of the native window — the host itself is main-frame only.
+  return { type: APP_MSG.deviceUpdate, formFactor, orientation, fullscreen, host: hostSummary() };
 }
 
 function windowIdOf(iframe: HTMLIFrameElement): string | undefined {

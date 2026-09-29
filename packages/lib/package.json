@@ -39,6 +39,10 @@
       "types": "./dist/tls/index.d.ts",
       "import": "./dist/tls/index.js"
     },
+    "./webview": {
+      "types": "./dist/webview/index.d.ts",
+      "import": "./dist/webview/index.js"
+    },
     "./termux": {
       "types": "./dist/termux/index.d.ts",
       "import": "./dist/termux/index.js"

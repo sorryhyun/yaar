@@ -305,6 +305,14 @@ export const APP_MSG = {
   // Frame → desktop: `{ on }`, the app asking to put its phone card in or out of full screen.
   deviceSetFullscreen: 'yaar:device-set-fullscreen',
 
+  /**
+   * A file the app wants saved, handed to the shell because the frame's own `<a download>`
+   * does nothing in YAAR's native window (`window.yaarHost`, main frame only). `{ name, mime,
+   * bytes: ArrayBuffer }`, transferred. Only sent when the frame's device state reports a host
+   * with `download`; the shell refuses anything past `HOST_DOWNLOAD_MAX_BYTES`.
+   */
+  download: 'yaar:download',
+
   // Parent → iframe pushes.
   notificationsUpdate: 'yaar:notifications-update',
   subscriptionUpdate: 'yaar:subscription-update',
@@ -322,6 +330,9 @@ export const APP_MSG = {
    */
   textSelectionCommand: 'yaar:text-selection-command',
 } as const;
+
+/** Largest file the shell will hand to the native host on an app's behalf (bytes cross as base64). */
+export const HOST_DOWNLOAD_MAX_BYTES = 128 * 1024 * 1024;
 
 /** Any `yaar:*` postMessage type. */
 export type AppMessageType = (typeof APP_MSG)[keyof typeof APP_MSG];
