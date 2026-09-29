@@ -11,6 +11,7 @@ import type {
   ExternalTurn,
   ExternalTurnHandlers,
   InterruptReceipt,
+  ProviderType,
   RemoteControlInfo,
   TransportOptions,
   TokenUsage,
@@ -317,6 +318,11 @@ export class AgentSession {
    */
   attachProvider(provider: AITransport): void {
     this.provider = provider;
+  }
+
+  /** Which provider this agent's turns run on, or `null` before one is attached. */
+  get providerType(): ProviderType | null {
+    return this.provider?.providerType ?? null;
   }
 
   /**

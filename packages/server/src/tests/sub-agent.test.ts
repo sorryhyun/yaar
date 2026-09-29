@@ -48,7 +48,13 @@ import { getAppMeta } from '../features/apps/discovery.js';
 import { APPS_DIR } from '../features/apps/roots.js';
 import { withoutPersonaCommands, personaCommandFor } from '../features/apps/persona-commands.js';
 import { getAgentLimiter } from '../agents/limiter.js';
-import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
+import { AGENT_TYPE_MODELS } from '../agents/profiles/model-tiers.js';
+import type {
+  AITransport,
+  ProviderType,
+  StreamMessage,
+  TransportOptions,
+} from '../providers/types.js';
 import type { SessionId } from '../session/types.js';
 
 interface Recorded {
@@ -56,10 +62,10 @@ interface Recorded {
   options: TransportOptions;
 }
 
-function fakeProvider(recorded: Recorded[]): AITransport {
+function fakeProvider(recorded: Recorded[], providerType: ProviderType = 'claude'): AITransport {
   return {
     name: 'fake',
-    providerType: 'claude',
+    providerType,
     async isAvailable() {
       return true;
     },
@@ -421,5 +427,51 @@ describe('tool-bearing sub-agents in AgentPool', () => {
     expect(app?.type).toBe('app');
     expect(app?.id).toBeNull(); // vacant owner slot — no app agent was ever needed
     expect(app?.children?.map((c) => c.type)).toEqual(['persona', 'persona']);
+  });
+});
+
+describe("a sub-agent turn's model", () => {
+  const pools: AgentPool[] = [];
+
+  afterEach(async () => {
+    delete process.env.FABLE;
+    await Promise.all(pools.splice(0).map((p) => p.cleanup()));
+  });
+
+  /** The model one turn of a sub-agent spawned with `model` reaches the provider with. */
+  const turnModel = async (providerType: ProviderType, model: string) => {
+    const recorded: Recorded[] = [];
+    const pool = new AgentPool(
+      'ses-subagent-model' as SessionId,
+      () => {},
+      createTestPoolHost(),
+      async () => fakeProvider(recorded, providerType),
+    );
+    pools.push(pool);
+    const result = await pool.subAgents.spawn('0', 'devtools', 'worker', {
+      systemPrompt: 'You are a worker.',
+      max: 4,
+      model,
+    });
+    if (!('record' in result)) throw new Error('spawn refused');
+    await pool.subAgents.runTurn(result.record, 'Survey the repo.', 'task-model');
+    return recorded[0].options.model;
+  };
+
+  it('passes the Claude alias through on Claude', async () => {
+    expect(await turnModel('claude', 'sonnet')).toBe('sonnet');
+  });
+
+  // devtools spawns its workers with `model: 'sonnet'`; handed to Codex verbatim, that
+  // is a model name `thread/start` does not know.
+  it('translates the alias on Codex', async () => {
+    expect(await turnModel('codex', 'sonnet')).toBe('gpt-5.6-terra');
+    expect(await turnModel('codex', 'haiku')).toBe('gpt-5.6-terra');
+  });
+
+  it("holds fable mode's Opus pin over the app's choice", async () => {
+    process.env.FABLE = '1';
+    expect(await turnModel('claude', 'sonnet')).toBe(AGENT_TYPE_MODELS.opus);
+    expect(await turnModel('codex', 'sonnet')).toBe('gpt-5.6-sol');
   });
 });

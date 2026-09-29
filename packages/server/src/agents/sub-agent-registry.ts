@@ -21,6 +21,7 @@
 
 import { buildSubAgentProfile, subAgentRole } from './profiles/sub-agent.js';
 import type { SubAgentToolSpec } from './profiles/sub-agent.js';
+import { turnOptionsFor } from './profiles/turn-options.js';
 import { monitorSource } from './context.js';
 import {
   isAgentBusy,
@@ -309,6 +310,7 @@ export class SubAgentRegistry {
    */
   async runTurn(record: SubAgent, content: string, messageId: string): Promise<void> {
     const profile = buildSubAgentProfile(record);
+    const { model } = turnOptionsFor(profile, record.agent.session.providerType ?? '');
     const turn: SubAgentTurn = { taskId: messageId, state: 'running', startedAt: Date.now() };
     record.turn = turn;
     // First verdict wins, and only for this turn — a later turn has replaced the object.
@@ -340,7 +342,10 @@ export class SubAgentRegistry {
         // no tools, the `subagent` namespace alone when it has some), on both providers:
         // Claude derives them in `claude/sdk-options.ts`, Codex in `codexServerFilter`.
         allowedTools: profile.allowedTools,
-        ...(record.model ? { model: record.model } : {}),
+        // The model, though, is the profile's and translated for the provider in use:
+        // `record.model` is the app's literal alias ("sonnet"), which Codex does not know
+        // and which skips fable mode's Opus pin.
+        ...(model ? { model } : {}),
         // Not a context tape write — nothing here reaches `ContextTape`. It is the one
         // callback that hands back the turn's final assistant text, which `read` serves
         // to an iframe that missed the `done` frame.

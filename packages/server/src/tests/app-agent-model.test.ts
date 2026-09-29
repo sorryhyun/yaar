@@ -34,4 +34,9 @@ describe('app agent model selection', () => {
     expect(profile.model).toBe('claude-opus-5-5');
     expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-sol');
   });
+
+  it('maps haiku to Terra rather than dropping it — Codex has no smaller tier', () => {
+    expect(claudeModelToCodex('claude-haiku-4-5-20251001')).toBe('gpt-5.6-terra');
+    expect(claudeModelToCodex('haiku')).toBe('gpt-5.6-terra');
+  });
 });

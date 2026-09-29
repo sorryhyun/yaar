@@ -47,6 +47,8 @@ export function claudeModelToCodex(model?: string): string | undefined {
   if (!model) return undefined;
   if (model.includes('fable')) return 'gpt-6-astra';
   if (model.includes('opus')) return 'gpt-5.6-sol';
-  if (model.includes('sonnet')) return 'gpt-5.6-terra';
+  // Codex has no tier below Terra. Naming it keeps a haiku request explicit rather than
+  // omitting `model` and inheriting whatever the shared app-server booted with.
+  if (model.includes('sonnet') || model.includes('haiku')) return 'gpt-5.6-terra';
   return undefined;
 }
