@@ -153,30 +153,49 @@ describe('staticResponse — filesystem branch', () => {
 });
 
 describe('embeddedValidators — bundled exe branch', () => {
-  it('takes a strong ETag from the content hash Bun mints into the bunfs path', () => {
-    const v = embeddedValidators('/$bunfs/root/main-6m6v52et.js');
-    expect(v.etag).toBe('"main-6m6v52et.js"');
-    // Strong: the name is a hash of the bytes, verified by rebuilding a fixture with
-    // different content at the same length and watching the suffix change.
-    expect(v.etag.startsWith('W/')).toBe(false);
+  it('gives two builds of the same file name different ETags', async () => {
+    // `--asset` keeps `index.html` as `index.html` in every build, so a name-derived
+    // ETag answered an upgraded exe's shell revalidation with a 304 — and the browser
+    // kept running the previous release's frontend.
+    const oldBuild = mkdtempSync(join(tmpdir(), 'yaar-static-old-'));
+    const newBuild = mkdtempSync(join(tmpdir(), 'yaar-static-new-'));
+    try {
+      writeFileSync(join(oldBuild, 'index.html'), '<script src="/main-aaaaaaaa.js"></script>');
+      writeFileSync(join(newBuild, 'index.html'), '<script src="/main-bbbbbbbb.js"></script>');
+      const before = await embeddedValidators(Bun.file(join(oldBuild, 'index.html')));
+      const after = await embeddedValidators(Bun.file(join(newBuild, 'index.html')));
+      expect(after.etag).not.toBe(before.etag);
+      expect(after.etag.startsWith('W/')).toBe(false);
+
+      const res = staticResponse(
+        GET({ 'If-None-Match': before.etag }),
+        Bun.file(join(newBuild, 'index.html')),
+        '/index.html',
+        after,
+      );
+      expect(res.status).toBe(200);
+    } finally {
+      rmSync(oldBuild, { recursive: true, force: true });
+      rmSync(newBuild, { recursive: true, force: true });
+    }
   });
 
-  it('sends no Last-Modified, because an embedded file reports a year-144680 sentinel', () => {
-    const v = embeddedValidators('/$bunfs/root/index.html');
+  it('sends no Last-Modified, because an embedded file reports a year-144680 sentinel', async () => {
+    const v = await embeddedValidators(Bun.file(assetPath));
     expect(v.lastModified).toBeUndefined();
 
     const res = staticResponse(GET(), Bun.file(assetPath), '/index.html', v);
     expect(res.headers.get('Last-Modified')).toBeNull();
-    expect(res.headers.get('ETag')).toBe('"index.html"');
+    expect(res.headers.get('ETag')).toBe(v.etag);
     expect(res.headers.get('Cache-Control')).toBe('no-cache');
   });
 
-  it('round-trips its own ETag to a 304', () => {
-    const v = embeddedValidators('/$bunfs/root/main-6m6v52et.js');
+  it('round-trips its own ETag to a 304', async () => {
+    const v = await embeddedValidators(Bun.file(assetPath));
     const res = staticResponse(
-      GET({ 'If-None-Match': '"main-6m6v52et.js"' }),
+      GET({ 'If-None-Match': v.etag }),
       Bun.file(assetPath),
-      '/main-6m6v52et.js',
+      '/main-a1b2c3d4.js',
       v,
     );
     expect(res.status).toBe(304);

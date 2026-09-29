@@ -93,17 +93,32 @@ export function fsValidators(file: Bun.BunFile): Validators | null {
 }
 
 /**
- * Embedded validators: the `/$bunfs/root/main-6m6v52et.js` path Bun mints for an
- * embedded asset already ends in a hash **of the file's contents** — verified by
- * rebuilding a fixture with different bytes at the same length and watching the
- * suffix change. That makes it a strong validator, and a free one.
+ * Embedded validators: a hash of the file's bytes, taken once per file per process —
+ * an embedded file cannot change while the binary runs.
+ *
+ * Not the `/$bunfs/` path. That used to end in a content hash Bun minted, back when
+ * assets were embedded by `import … with { type: 'file' }`; `--compile --asset` keeps
+ * each path as-is, so `index.html` is `index.html` in every build. Used as the ETag,
+ * that answered every upgraded exe's shell revalidation with a 304, and a returning
+ * browser ran the previous release's frontend — its hashed JS and CSS still sitting in
+ * the immutable cache — until something evicted it. `sw.js` never updated either.
  *
  * No `Last-Modified`: an embedded file reports `lastModified` as 4503599627370495,
  * a sentinel that formats as a date in the year 144680. Sending it would be worse
  * than sending nothing.
  */
-export function embeddedValidators(bunfsPath: string): Validators {
-  return { etag: `"${bunfsPath.slice(bunfsPath.lastIndexOf('/') + 1)}"` };
+const embeddedEtags = new Map<string, Promise<string>>();
+
+export function embeddedValidators(file: Bun.BunFile): Promise<Validators> {
+  const key = file.name ?? '';
+  let etag = embeddedEtags.get(key);
+  if (!etag) {
+    etag = file.arrayBuffer().then((bytes) => `"${Bun.hash(bytes).toString(36)}"`);
+    // A failed read is not remembered: the next request tries again.
+    etag.catch(() => embeddedEtags.delete(key));
+    embeddedEtags.set(key, etag);
+  }
+  return etag.then((tag) => ({ etag: tag }));
 }
 
 /**
@@ -189,9 +204,10 @@ function getEmbeddedAssets(): Map<string, string> {
   return embeddedAssets;
 }
 
-function serveEmbeddedAsset(req: Request, filePath: string, urlPath: string): Response {
+async function serveEmbeddedAsset(req: Request, filePath: string, urlPath: string) {
   // Bun.file() reads from the embedded /$bunfs/ path
-  return staticResponse(req, Bun.file(filePath), urlPath, embeddedValidators(filePath));
+  const file = Bun.file(filePath);
+  return staticResponse(req, file, urlPath, await embeddedValidators(file));
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
