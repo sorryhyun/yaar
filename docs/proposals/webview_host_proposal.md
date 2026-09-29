@@ -116,11 +116,16 @@ The APK as built is [android.md](../installations/android.md). Still to do:
 - Bytes over WebMessage as an ArrayBuffer (`WEB_MESSAGE_ARRAY_BUFFER`) instead of base64, for
   the 128 MiB saves.
 
-**Release:**
-- Build the APK in CI and attach it to GitHub releases, with `install.sh` offering it on
-  Termux.
-- Use one release keystore from the first public build. A signature change forces users to
-  uninstall, and the applicationId (`io.github.sorryhyun.yaar`) is permanent from then on.
+**Release:** `release.yml` builds and signs `yaar-android.apk`, and `install.sh` offers it on
+Termux ([android.md](../installations/android.md#installing-the-app)). Still to do:
+- Mint the release keystore and put it in the four `ANDROID_*` secrets. Until then releases
+  ship no APK. From the first APK on, the key and the applicationId
+  (`io.github.sorryhyun.yaar`) are permanent.
+- Run install.sh on a phone against the first release that carries the APK, with both Termux
+  builds. The Play build's refusal of `termux-open` was measured, and so was Chrome getting as
+  far as asking for the install permission. Nothing was installed. Also unmeasured:
+  `cmd package query-services` naming `RunCommandService` on the F-Droid build, and whether
+  `cmd package list packages` sees the app from either Termux.
 
 Done when (phase 4): a cold tap on the icon → desktop, with Termux never opened by hand (on an
 F-Droid or GitHub Termux; the Play one takes one `yaar` by hand).

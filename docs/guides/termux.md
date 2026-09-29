@@ -28,6 +28,18 @@ There is no Android release binary, so on Termux the installer builds from sourc
    `yaar://system/ytdlp` and the transcribe app's YouTube download run. Non-fatal.
 6. Puts a `yaar` launcher in `$PREFIX/bin` (it runs `make termux` in `~/yaar`), and a
    home-screen shortcut in `~/.shortcuts/YAAR`.
+7. Offers the **[YAAR app](../installations/android.md)**, the desktop's own window, if the
+   release has one and it is not installed or is older. Android installs it only when you tap
+   Install, and how you get there depends on your Termux:
+   - **F-Droid or GitHub Termux**: the APK is downloaded, checked against `SHA256SUMS`, and
+     handed to Android's installer. Pick **Package installer** if Android asks which app to
+     use. The first time, allow Termux to install apps.
+   - **Google Play Termux**: this Termux is not allowed to install apps, so the APK opens in
+     Chrome. Tap **Download anyway** at Chrome's warning, open the download, allow Chrome to
+     install apps the first time, and tap Install.
+
+   Termux can't always see whether the app is installed. When it can't, each version is
+   offered once. Skipping this changes nothing else: the desktop opens in Chrome.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -36,6 +48,7 @@ There is no Android release binary, so on Termux the installer builds from sourc
 | `INSTALL_DIR` | `$PREFIX/bin` | Where the `yaar` launcher goes |
 | `YAAR_SKIP_CLAUDE` | off | `1` leaves the Claude Code download to the first `yaar` run |
 | `YAAR_SKIP_YTDLP` | off | `1` skips installing yt-dlp |
+| `YAAR_SKIP_APK` | off | `1` skips offering the YAAR app |
 
 Pass them in front of `bash`, e.g. `curl -fsSL … | VERSION=v0.20.4 bash`.
 

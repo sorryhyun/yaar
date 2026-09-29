@@ -54,6 +54,13 @@ targeting `main` is published.
   runs `checks.yml` with `full: true` against that SHA (a draft may target any branch or SHA, so
   the released commit is not necessarily ruleset-gated) → `release` builds and smoke-tests the
   artifacts, then publishes a `SHA256SUMS` manifest alongside them.
+- Alongside them, `android` builds the Android host APK (`hosts/android/`) as `yaar-android.apk`,
+  signed with the release key. Its version is `package.json`'s (`versionCode` = major·10⁶ +
+  minor·10³ + patch, which `install.sh` recomputes from the tag). The key lives in four secrets:
+  `ANDROID_KEYSTORE_BASE64` (the `.jks`, base64), `ANDROID_KEYSTORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without the first, the release ships no APK and
+  says so in a warning. Once an APK has shipped, the key can never change: Android refuses an
+  update signed by another, so every install would have to be removed first.
 
 ## The `SHA256SUMS` manifest
 

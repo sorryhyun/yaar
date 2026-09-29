@@ -12,6 +12,7 @@
 #   YAAR_DIR     — Termux only: where the source checkout goes (default: ~/yaar)
 #   YAAR_SKIP_CLAUDE — Termux only: 1 leaves Claude Code for the first run to fetch
 #   YAAR_SKIP_YTDLP  — Termux only: 1 skips installing yt-dlp (YouTube audio download)
+#   YAAR_SKIP_APK    — Termux only: 1 skips offering the YAAR app (yaar-android.apk)
 
 set -euo pipefail
 
@@ -133,12 +134,143 @@ install_termux() {
   printf '#!/usr/bin/env bash\nexec "%s"\n' "$dest" > "$HOME/.shortcuts/YAAR"
   chmod +x "$HOME/.shortcuts/YAAR"
 
+  install_android_app "$version"
+
   echo ""
   echo "Installed to: $dest (runs ${yaar_dir})"
   echo "Home-screen button: add the Termux:Widget widget and pick 'YAAR' (~/.shortcuts/YAAR)."
   # The login stays at first run whatever we do here: piped into bash, this script has
   # no TTY on stdin, and `claude auth login` is interactive.
   echo "Run 'yaar' to start. The first run asks you to log in to Claude."
+}
+
+# — Termux: the YAAR app ————————————————————————————————————————————————
+#
+# The display half of YAAR on a phone (hosts/android/, docs/installations/android.md),
+# released as yaar-android.apk. Android installs nothing without the user tapping
+# Install, so all this can do is bring up that screen, and which app may bring it up
+# depends on the Termux:
+#
+#   F-Droid / GitHub Termux declares REQUEST_INSTALL_PACKAGES, so the verified APK goes
+#   straight to the package installer through termux-open.
+#   Google Play Termux does not. The installer closes on it without a word (measured on
+#   googleplay.2026.06.21: "Requesting uid … needs to declare permission
+#   android.permission.REQUEST_INSTALL_PACKAGES"), and termux-open still exits 0. So the
+#   release URL goes to Chrome instead, which may install once the user allows it.
+#
+# The two builds are told apart the way the app tells them apart: only the F-Droid and
+# GitHub builds have RunCommandService. Anything that cannot be asked takes Chrome,
+# which works on either.
+#
+# Non-fatal throughout: without the app, `yaar` opens the desktop in Chrome.
+
+YAAR_ANDROID_PACKAGE="io.github.sorryhyun.yaar"
+
+# versionCode for a tag, as hosts/android/app/build.gradle.kts computes it from the same
+# version: major * 1_000_000 + minor * 1_000 + patch. Empty for a tag that is not vX.Y.Z.
+android_version_code() {
+  local v="${1#v}" major minor patch
+  IFS=. read -r major minor patch <<< "$v"
+  local part
+  for part in "$major" "$minor" "$patch"; do
+    case "$part" in '' | *[!0-9]*) return 0 ;; esac
+  done
+  echo $((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
+}
+
+# Termux's Android user. `cmd package` needs it spelled out: left to itself it walks every
+# user, and on a Galaxy with Secure Folder (user 150) that is a SecurityException.
+termux_user() {
+  case "${TERMUX__USER_ID:-}" in '' | *[!0-9]* | 0[0-9]*) echo 0 ;; *) echo "$TERMUX__USER_ID" ;; esac
+}
+
+# The installed app's versionCode, or empty. Empty also when Android hides the package
+# from Termux, which a Termux without QUERY_ALL_PACKAGES may be subject to.
+installed_android_version_code() {
+  [ -x /system/bin/cmd ] || return 0
+  /system/bin/cmd package list packages --user "$(termux_user)" --show-versioncode \
+    "$YAAR_ANDROID_PACKAGE" \
+    < /dev/null 2> /dev/null |
+    sed -n "s/^package:${YAAR_ANDROID_PACKAGE//./\\.} versionCode:\([0-9]*\).*/\1/p" | head -1 ||
+    true
+}
+
+termux_can_install_apks() {
+  [ -x /system/bin/cmd ] &&
+    /system/bin/cmd package query-services --user "$(termux_user)" --brief \
+      -a com.termux.RUN_COMMAND \
+      < /dev/null 2> /dev/null | grep -q 'com\.termux/'
+}
+
+install_android_app() {
+  local version="$1" want have marker offered
+  [ "${YAAR_SKIP_APK:-0}" = "1" ] && return 0
+
+  want=$(android_version_code "$version")
+  [ -n "$want" ] || return 0
+  have=$(installed_android_version_code)
+  if [ -n "$have" ] && [ "$have" -ge "$want" ]; then
+    echo "YAAR app: up to date."
+    return 0
+  fi
+
+  # When the package is hidden from Termux, `have` is empty whether or not the app is
+  # there. Offer each version once rather than on every re-run.
+  marker="$HOME/.cache/yaar/android-apk-offered"
+  offered=$(cat "$marker" 2> /dev/null || true)
+  if [ -z "$have" ] && [ "$offered" = "$want" ]; then
+    echo "YAAR app: already offered for ${version}. To be offered it again: rm ${marker}"
+    return 0
+  fi
+
+  local url="https://github.com/${REPO}/releases/download/${version}/yaar-android.apk"
+  local user
+  user=$(termux_user)
+
+  echo ""
+  if termux_can_install_apks; then
+    local dir="$HOME/.cache/yaar" apk sums
+    apk="$dir/yaar-android.apk"
+    sums="$dir/SHA256SUMS"
+    mkdir -p "$dir"
+    echo "Downloading the YAAR app..."
+    if ! curl -fSL --progress-bar -o "$apk" "$url"; then
+      echo "⚠  This release has no YAAR app ($url) — the desktop opens in Chrome." >&2
+      rm -f "$apk"
+      return 0
+    fi
+    curl -fsSL -o "$sums" "https://github.com/${REPO}/releases/download/${version}/SHA256SUMS" || : > "$sums"
+    if ! verify_checksum "$apk" yaar-android.apk "$sums"; then
+      rm -f "$apk" "$sums"
+      return 0
+    fi
+    rm -f "$sums"
+    if ! termux-open --content-type application/vnd.android.package-archive "$apk"; then
+      echo "⚠  Could not open the YAAR app's installer. Later: termux-open ${apk}" >&2
+      return 0
+    fi
+    echo "Android is asking to install the YAAR app: pick Package installer if it asks which"
+    echo "app to use, then Install. The first time, allow Termux to install apps when asked."
+  else
+    # Only a HEAD check: the download itself is Chrome's.
+    if ! curl -fsIL -o /dev/null "$url"; then
+      echo "⚠  This release has no YAAR app ($url) — the desktop opens in Chrome." >&2
+      return 0
+    fi
+    # Chrome first, as termux-open-desktop.sh does: `am` can exit 0 on an intent that did
+    # not resolve, so its output is what says whether Chrome took it.
+    local out
+    if ! out=$(am start --user "$user" -a android.intent.action.VIEW -d "$url" \
+      -p com.android.chrome 2>&1) || printf '%s' "$out" | grep -qiE 'error|exception'; then
+      termux-open-url "$url" || true
+    fi
+    echo "This Termux cannot install apps, so the YAAR app downloads in Chrome instead:"
+    echo "  1. Chrome warns the file may be harmful: tap Download anyway."
+    echo "  2. Open the download, and pick Package installer if asked."
+    echo "  3. The first time, allow Chrome to install apps, then tap Install."
+  fi
+  mkdir -p "${marker%/*}"
+  echo "$want" > "$marker"
 }
 
 # — macOS: YAAR.app ——————————————————————————————————————————————————

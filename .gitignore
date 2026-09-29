@@ -61,3 +61,7 @@ apps/*/credentials.json
 /claude
 # Resource benchmark output (make claude-bench)
 /bench/
+
+# Signing keys (the Android release keystore lives in CI secrets, never here)
+*.jks
+*.keystore

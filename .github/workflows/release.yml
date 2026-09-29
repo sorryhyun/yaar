@@ -83,8 +83,69 @@ jobs:
           path: dist/native/macos/libwebview.dylib
           if-no-files-found: error
 
+  # The Android host APK (hosts/android/), which install.sh offers on Termux. It has
+  # to be signed with the one release key: Android refuses an update signed by any
+  # other, so a key minted per run would strand every install. No key in the secrets
+  # means no APK in this release, with a warning, rather than a failed release;
+  # install.sh finds no asset and skips it.
+  android:
+    needs: resolve
+    runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.build.outputs.built }}
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: No release key
+        if: env.HAS_KEYSTORE != 'true'
+        run: echo "::warning::No ANDROID_KEYSTORE_BASE64 secret, so this release ships no yaar-android.apk."
+
+      - uses: actions/checkout@v7
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - uses: actions/setup-java@v5
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # compileSdk 37 (androidx.core 1.19 requires it); the runner image may predate it.
+      - name: Install SDK platform
+        if: env.HAS_KEYSTORE == 'true'
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;36.0.0" > /dev/null
+
+      # versionCode/versionName come from package.json, which resolve checked
+      # against the tag.
+      - name: Build signed APK
+        id: build
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: hosts/android
+        env:
+          YAAR_ANDROID_KEYSTORE: ${{ runner.temp }}/release.jks
+          YAAR_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          YAAR_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          YAAR_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$YAAR_ANDROID_KEYSTORE"
+          ./gradlew --no-daemon assembleRelease
+          rm "$YAAR_ANDROID_KEYSTORE"
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$apk"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$apk" "$GITHUB_WORKSPACE/dist/yaar-android.apk"
+          echo "built=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          name: android-apk
+          path: dist/yaar-android.apk
+          if-no-files-found: error
+
   release:
-    needs: [resolve, verify, webview-macos]
+    needs: [resolve, verify, webview-macos, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -236,20 +297,35 @@ jobs:
       # install.sh/install.ps1 are deliberately absent: a user who pipes the
       # installer to a shell has already trusted that URL, and an installer that
       # verifies itself proves nothing.
+      - uses: actions/download-artifact@v4
+        if: needs.android.outputs.built == 'true'
+        with:
+          name: android-apk
+          path: dist
+
       - name: Generate SHA256SUMS
         working-directory: dist
         run: |
-          sha256sum \
-            yaar-windows-x64.exe \
-            yaar-linux-x64 \
-            yaar-linux-arm64 \
-            yaar-macos-x64 \
-            yaar-macos-arm64 \
-            yaar-apps.tar.gz > SHA256SUMS
+          files=(
+            yaar-windows-x64.exe
+            yaar-linux-x64
+            yaar-linux-arm64
+            yaar-macos-x64
+            yaar-macos-arm64
+            yaar-apps.tar.gz
+          )
+          if [ "${{ needs.android.outputs.built }}" = "true" ]; then
+            files+=(yaar-android.apk)
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Upload assets
         run: |
+          apk=()
+          if [ "${{ needs.android.outputs.built }}" = "true" ]; then
+            apk=(dist/yaar-android.apk)
+          fi
           gh release upload "${{ github.event.release.tag_name }}" \
             dist/yaar-windows-x64.exe \
             dist/yaar-linux-x64 \
@@ -257,6 +333,7 @@ jobs:
             dist/yaar-macos-x64 \
             dist/yaar-macos-arm64 \
             dist/yaar-apps.tar.gz \
+            "${apk[@]}" \
             dist/SHA256SUMS \
             install.sh \
             install.ps1 \

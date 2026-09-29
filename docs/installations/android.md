@@ -7,9 +7,10 @@ happens when you tap it, and what its window does that a browser tab doesn't. In
 server in Termux is the [Termux guide](../guides/termux.md). The work still to do on Android is in
 the [WebView host proposal](../proposals/webview_host_proposal.md#4-android-what-is-left).
 
-> **Status (2026-09-29).** The host APK is built from source and verified against a server on
-> a PC, on an API 35 emulator and on a Galaxy S25 (Android 16, WebView 153). It is not in the
-> releases yet, and the cold start below has not run with a server in the phone's own Termux.
+> **Status (2026-09-29).** The host APK is verified against a server on a PC, on an API 35
+> emulator and on a Galaxy S25 (Android 16, WebView 153). Releases carry it as
+> `yaar-android.apk` once the release key is in CI's secrets, and none has shipped yet. The
+> cold start below has not run with a server in the phone's own Termux.
 
 In short, YAAR on a phone is two apps. **Termux** runs the server, as it always has. The
 **YAAR app** (`io.github.sorryhyun.yaar`) is only the display: one Android WebView showing
@@ -64,7 +65,7 @@ What each piece does:
 | Where | What it is | Written by |
 |---|---|---|
 | Termux: `~/yaar`, `$PREFIX/bin/yaar`, `~/.cache/yaar/` | The server checkout, its launcher, and the unpacked Claude Code | install.sh in Termux ([Termux guide](../guides/termux.md#install)) |
-| The YAAR app, `io.github.sorryhyun.yaar` | The display: one activity, about 7 MB as a debug build | `adb install` for now (see [Building the app](#building-the-app)) |
+| The YAAR app, `io.github.sorryhyun.yaar` | The display: one activity, about 5.5 MB | install.sh in Termux offers it ([Installing the app](#installing-the-app)); `adb install` for a build of your own |
 | `/data/data/io.github.sorryhyun.yaar/` | The WebView's own storage (localStorage, IndexedDB, service worker, HTTP cache), private to the app | the WebView |
 | `Download/YAAR/` | What you save from the desktop | the YAAR app and DownloadManager |
 
@@ -219,9 +220,36 @@ The YAAR app and the server have separate lives:
 
 ---
 
+## Installing the app
+
+install.sh offers the release's `yaar-android.apk` on Termux, when the app is missing or older
+than the release ([Termux guide](../guides/termux.md#install), step 7). Android installs an app
+only when you tap Install, so all install.sh can do is bring up that screen. Which app is
+allowed to bring it up depends on the Termux:
+
+| Termux | How the APK reaches the installer |
+|---|---|
+| F-Droid, GitHub | Downloaded, checked against `SHA256SUMS`, and opened with `termux-open`. These builds declare `REQUEST_INSTALL_PACKAGES` |
+| Google Play | The release URL opens in Chrome, which downloads it and may install it once you allow Chrome to. Chrome warns about every APK download |
+
+The Google Play Termux does not declare `REQUEST_INSTALL_PACKAGES`. Its `termux-open` still
+gets as far as the installer, which then closes without showing anything (logcat:
+`Requesting uid … needs to declare permission android.permission.REQUEST_INSTALL_PACKAGES`),
+and `termux-open` still exits 0. install.sh therefore does not try it there. It tells the two
+builds apart the way the app does, by whether Termux has `RunCommandService`, and anything it
+cannot ask gets the Chrome route.
+
+Whether the app is installed comes from `cmd package list packages --show-versioncode`.
+Android may hide the package from a Termux without `QUERY_ALL_PACKAGES`, so when the answer is
+empty, each version is offered once (`~/.cache/yaar/android-apk-offered`).
+
+The app's `versionCode` is YAAR's version, major·10⁶ + minor·10³ + patch, so `0.22.0` is
+`22000`. Every release APK is signed with the one release key
+([release process](../reference/release_process.md#cutting-a-release)).
+
 ## Building the app
 
-There is no release build yet. Build it on a desktop, not in Termux, with JDK 17 or later.
+Build it on a desktop, not in Termux, with JDK 17 or later.
 JDK 21 is what it was built with; the JDK Homebrew's `gradle` pulls in is newer, so point
 `JAVA_HOME` at 21.
 
@@ -238,9 +266,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - `compileSdk` is 37 because `androidx.core` 1.19 requires it; the app runs on Android 10
   (API 29) and later.
-- A debug build is signed with your machine's debug key. The release build will use one
-  keystore from its first public release onward, and moving between the two takes an
-  uninstall, because Android refuses an update signed by another key.
+- A debug build is signed with your machine's debug key, and a release is signed with the
+  release key. Moving between the two takes an uninstall, because Android refuses an update
+  signed by another key.
+- `assembleRelease` signs only when `YAAR_ANDROID_KEYSTORE` and its three companions are set
+  (see `app/build.gradle.kts`). Without them the APK comes out unsigned.
 - After changing `desktop-window/host-bridge.ts`, regenerate the page half with
   `bun scripts/codegen/android-host-script.ts`.
 
@@ -293,3 +323,5 @@ adb uninstall io.github.sorryhyun.yaar     # or Settings → Apps → YAAR → U
 | An app's Save or Export does nothing, or "Couldn't save this download (blob:)" | The app was compiled before its SDK learned about hosts, so it tries a `blob:` link the WebView cannot save. Recompile the app |
 | "Open Termux and run `yaar`" | This Termux is the Google Play build, which cannot start the server for another app. Run `yaar` in it ([above](#termux-from-google-play-run-yaar-yourself)) |
 | `yaar` opens Chrome, not the YAAR app | The checkout predates the launcher preferring the app: `git pull` in `~/yaar` |
+| The installer says "App not installed" or that the package conflicts | A build signed with another key is installed, usually a debug build from `adb install`. Uninstall YAAR, then install the release |
+| install.sh's installer screen never appeared | Allow Termux (or, with the Play Termux, Chrome) to install apps under Settings → Apps → Special access → Install unknown apps, then run install.sh again. If it says the app was already offered, delete `~/.cache/yaar/android-apk-offered` first |
