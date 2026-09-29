@@ -16,7 +16,7 @@ import type { AppManifest } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
 import { DEPLOY_ROOT, appIdRefusal, resolveAppDir } from '../apps/roots.js';
 import { agentDocPaths, APP_ROOT_DOCS } from '../apps/discovery.js';
-import { readManifest, readManifestFile } from '../apps/manifest.js';
+import { normalizeManifest, readManifest, readManifestFile } from '../apps/manifest.js';
 import { agentDocsFilesFor } from '../apps/docs.js';
 import { notifyAppChanged } from '../apps/changed.js';
 import { snapshotApp } from './git.js';
@@ -80,6 +80,23 @@ async function writeIfChanged(filePath: string, content: string): Promise<void> 
     // File doesn't exist yet — fall through to write it.
   }
   await Bun.write(filePath, content);
+}
+
+/**
+ * Remove the manifest keys deploy no longer writes, translating the one that still means
+ * something.
+ *
+ * `hidden: true` is the legacy spelling of `createShortcut: false`, and the manifest
+ * reader still honours it (`normalizeManifest`). Deleting it without writing its
+ * replacement gave every redeployed app that relied on it its desktop shortcut back. The
+ * reader lets `hidden: true` win over any `createShortcut`, so the translation does too —
+ * the written manifest means what the one it replaces meant.
+ */
+export function dropLegacyManifestKeys(metadata: Record<string, unknown>): void {
+  if (metadata.hidden === true) metadata.createShortcut = false;
+  delete metadata.hidden;
+  delete metadata.appProtocol;
+  delete metadata.protocol;
 }
 
 export interface DeployArgs {
@@ -333,6 +350,20 @@ export async function doDeploy(
   const existing = await readManifest(appPath);
   const existingMeta = existing?.raw ?? {};
 
+  // Refuse a manifest the server would have to read differently from how it is written —
+  // today, a `permissions` entry whose `verbs` is malformed (dropped, fail-closed) or names
+  // a verb that does not exist. Read at runtime it only logs; here the author is at hand
+  // and the fix is one edit. Checked on the merge this deploy is about to write, since a
+  // sandbox that omits `permissions` inherits the installed list.
+  const problems = normalizeManifest({ ...existingMeta, ...sandboxMeta })?.problems ?? [];
+  if (problems.length > 0) {
+    const error =
+      `app.json for "${appId}" does not say what it means — refusing to deploy. ` +
+      `Fix these in the project's app.json:\n${problems.map((p) => `- ${p}`).join('\n')}`;
+    emit('error', { step: 'metadata', error });
+    return { success: false, error };
+  }
+
   const resolvedIcon = icon ?? existing?.icon ?? '🎮';
   const displayName = name ?? existing?.name ?? toDisplayName(appId);
 
@@ -420,10 +451,7 @@ export async function doDeploy(
     if (hasCompiledApp) metadata.run = 'dist/index.html';
     if (!metadata.version) metadata.version = '1.0.0';
     if (!metadata.author) metadata.author = 'YAAR';
-    // Remove legacy fields
-    delete metadata.hidden;
-    delete metadata.appProtocol;
-    delete metadata.protocol;
+    dropLegacyManifestKeys(metadata);
     await writeIfChanged(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
 
     // Write protocol.json to dist/ (compiler already writes it, but cover source-only extraction)

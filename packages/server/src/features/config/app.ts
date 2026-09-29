@@ -5,13 +5,16 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../lib/verb-result.js';
 import {
-  readAppConfig,
-  writeAppConfig,
-  removeAppConfig,
-  listAppConfigs,
-} from '../apps/config.js';
+  ok,
+  error,
+  notFoundError,
+  okJsonResource,
+  okMissing,
+  type VerbResult,
+} from '../../lib/verb-result.js';
+import type { ReadOptions } from '../../lib/read-options.js';
+import { readAppConfig, writeAppConfig, removeAppConfig, listAppConfigs } from '../apps/config.js';
 
 export const appContentSchema = z.object({
   appId: z.string(),
@@ -28,15 +31,32 @@ export async function handleSetApp(content: Record<string, unknown>) {
   return ok(`Config updated for app "${appId}".`);
 }
 
-export async function handleGetApp(appId?: string) {
-  if (appId) {
-    const result = await readAppConfig(appId);
-    if (!result.success) return { app: { [appId]: null, error: result.error } };
-    return { app: { [appId]: result.content } };
-  }
-  // List all app configs
+/** Every app's config, keyed by app id — the `yaar://config/app` listing. */
+export async function handleGetApp() {
   const configs = await listAppConfigs();
   return { app: configs };
+}
+
+/**
+ * Read one app's config — `yaar://config/app/{appId}`.
+ *
+ * An app with no config file yet is answered the way storage answers an absent file:
+ * `null` when the caller passed `missingOk`, otherwise a failure tagged not-found. It
+ * used to be a *success* whose body was `{ app: { [id]: null, error } }`, which is
+ * neither — `missingOk` could not produce its `null`, and a caller without it could not
+ * catch the absence either.
+ */
+export async function handleReadApp(
+  uri: string,
+  appId: string,
+  options?: ReadOptions,
+): Promise<VerbResult> {
+  const result = await readAppConfig(appId);
+  if (!result.success) {
+    if (result.notFound) return options?.missingOk ? okMissing() : notFoundError(result.error!);
+    return error(result.error!);
+  }
+  return okJsonResource(uri, { app: { [appId]: result.content } });
 }
 
 export async function handleRemoveApp(appId: string, key?: string) {

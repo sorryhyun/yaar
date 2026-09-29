@@ -6,7 +6,16 @@
  */
 
 import type { ResourceRegistry } from './uri-registry.js';
-import { ok, okJsonResource, okLinks, error, type VerbResult } from '../lib/verb-result.js';
+import {
+  ok,
+  okJsonResource,
+  okLinks,
+  okMissing,
+  error,
+  notFoundError,
+  type VerbResult,
+} from '../lib/verb-result.js';
+import type { ReadOptions } from '../lib/read-options.js';
 import { assertUri } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
@@ -22,7 +31,12 @@ import {
   handleRemoveShortcut,
 } from '../features/config/shortcuts.js';
 import { handleSetMount, handleGetMounts, handleRemoveMount } from '../features/config/mounts.js';
-import { handleSetApp, handleGetApp, handleRemoveApp } from '../features/config/app.js';
+import {
+  handleSetApp,
+  handleGetApp,
+  handleReadApp,
+  handleRemoveApp,
+} from '../features/config/app.js';
 import { hasConfig as hasAppConfig } from '../features/apps/config.js';
 import { resolveAppDir } from '../features/apps/roots.js';
 import {
@@ -33,6 +47,14 @@ import {
   setAllowAllDomains,
 } from '../features/config/domains.js';
 import { actionEmitter } from '../session/action-emitter.js';
+
+/**
+ * An absent config entry, answered the way storage answers an absent file: `null` for a
+ * caller that passed `missingOk`, a failure tagged not-found for one that did not.
+ */
+function absent(text: string, options?: ReadOptions): VerbResult {
+  return options?.missingOk ? okMissing() : notFoundError(text);
+}
 
 export function registerConfigHandlers(registry: ResourceRegistry): void {
   // ── yaar://config/ — list all config sections ──
@@ -201,12 +223,12 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       return resolved.id in (await readMcpConfig());
     },
 
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
       assertUri(resolved, 'config');
       if (!resolved.id) return error('Server name required.');
       const config = await readMcpConfig();
       const entry = config[resolved.id];
-      if (!entry) return error(`Server "${resolved.id}" not found in config.`);
+      if (!entry) return absent(`Server "${resolved.id}" not found in config.`, options);
       return okJsonResource(resolved.sourceUri, { name: resolved.id, config: entry });
     },
 
@@ -325,14 +347,14 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       return (hooks as Array<{ id: string }>).some((h) => h.id === resolved.id);
     },
 
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
       assertUri(resolved, 'config');
       // Return all hooks — the caller can filter by id
       const data = await handleGetHooks();
       const hookId = resolved.id;
       const hooks = data.hooks as Array<{ id: string }>;
       const hook = hookId ? hooks.find((h) => h.id === hookId) : null;
-      if (!hook) return error(`Hook "${hookId}" not found.`);
+      if (!hook) return absent(`Hook "${hookId}" not found.`, options);
       return okJsonResource(resolved.sourceUri, hook);
     },
 
@@ -472,11 +494,10 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       return (await hasAppConfig(resolved.id)) || resolveAppDir(resolved.id) !== null;
     },
 
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
       assertUri(resolved, 'config');
       if (!resolved.id) return error('App ID required.');
-      const data = await handleGetApp(resolved.id);
-      return okJsonResource(resolved.sourceUri, data);
+      return handleReadApp(resolved.sourceUri, resolved.id, options);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

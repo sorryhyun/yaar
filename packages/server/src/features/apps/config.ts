@@ -30,7 +30,7 @@ export async function hasConfig(appId: string): Promise<boolean> {
  */
 export async function readAppConfig(
   appId: string,
-): Promise<{ success: boolean; content?: unknown; error?: string }> {
+): Promise<{ success: boolean; content?: unknown; error?: string; notFound?: true }> {
   try {
     const content = await Bun.file(getAppConfigPath(appId)).text();
     try {
@@ -40,8 +40,10 @@ export async function readAppConfig(
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
+    // Flagged, not only worded, so the read door can honour `missingOk` — an app that has
+    // never saved a config (or a token the user has not supplied yet) is the normal case.
     if (error.includes('ENOENT')) {
-      return { success: false, error: `No config found for app "${appId}".` };
+      return { success: false, error: `No config found for app "${appId}".`, notFound: true };
     }
     return { success: false, error };
   }

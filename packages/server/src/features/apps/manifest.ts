@@ -19,6 +19,8 @@ import { join } from 'path';
 // Type-only, and must stay so — see the note on the same import in `discovery.ts`.
 import type { PermissionEntry } from '../../http/access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
+// A value import, but from the leaf — see `uri-match.ts`'s header for why that one is safe.
+import { ALL_VERBS } from '../../http/uri-match.js';
 
 export type WindowVariantType = 'standard' | 'widget' | 'panel';
 export type DockEdgeType = 'top' | 'bottom';
@@ -102,10 +104,32 @@ export function usesRetiredPersonasKey(meta: { subagents?: unknown; personas?: u
   return !parseSubAgents(meta) && !!meta.personas && typeof meta.personas === 'object';
 }
 
-/** Parse permission entries from app.json, supporting both string and object formats. */
-function parsePermissions(raw: unknown[]): PermissionEntry[] {
+/** Is this one of the five verbs a permission entry can name? */
+function isVerb(v: unknown): v is Verb {
+  return typeof v === 'string' && (ALL_VERBS as readonly string[]).includes(v);
+}
+
+function describeValue(v: unknown): string {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'an array';
+  return typeof v === 'string' ? `the string ${JSON.stringify(v)}` : `a ${typeof v}`;
+}
+
+/**
+ * Parse permission entries from app.json, supporting both string and object formats.
+ *
+ * An object entry without `verbs` confers every verb (`entryVerbs`), so a `verbs` that is
+ * *present but malformed* must not be read as absent — that turned an author's attempt to
+ * narrow a grant (`"verbs": "read"`, `["read", null]`) into the widest grant there is,
+ * silently, and bundled apps get their permissions with no dialog to catch it. Such an
+ * entry is dropped instead: a restriction that cannot be read fails closed. An unknown verb
+ * name inside an otherwise valid list is dropped on its own — it matched nothing anyway.
+ * Either way the reason goes into `problems`, which `getAppMeta`, deploy and `check:apps`
+ * report with the app's id.
+ */
+function parsePermissions(raw: unknown[], problems: string[]): PermissionEntry[] {
   const result: PermissionEntry[] = [];
-  for (const entry of raw) {
+  raw.forEach((entry, i) => {
     if (typeof entry === 'string') {
       result.push(entry);
     } else if (
@@ -116,12 +140,30 @@ function parsePermissions(raw: unknown[]): PermissionEntry[] {
     ) {
       const obj = entry as { uri: string; verbs?: unknown };
       const parsed: PermissionEntry = { uri: obj.uri };
-      if (Array.isArray(obj.verbs) && obj.verbs.every((v) => typeof v === 'string')) {
-        parsed.verbs = obj.verbs as Verb[];
+      const where = `permissions[${i}] (${obj.uri})`;
+      if ('verbs' in obj) {
+        const verbs = obj.verbs;
+        if (!Array.isArray(verbs) || verbs.some((v) => typeof v !== 'string')) {
+          problems.push(
+            `${where}: "verbs" must be an array of verb names (${ALL_VERBS.join(', ')}), got ` +
+              `${Array.isArray(verbs) ? 'an array holding a non-string' : describeValue(verbs)}` +
+              ` — the entry is dropped, so the app holds none of this grant.`,
+          );
+          return;
+        }
+        const unknown = verbs.filter((v) => !isVerb(v));
+        if (unknown.length > 0) {
+          problems.push(
+            `${where}: unknown verb${unknown.length > 1 ? 's' : ''} ` +
+              `${unknown.map((v) => JSON.stringify(v)).join(', ')} ignored — valid verbs are ` +
+              `${ALL_VERBS.join(', ')}.`,
+          );
+        }
+        parsed.verbs = verbs.filter(isVerb);
       }
       result.push(parsed);
     }
-  }
+  });
   return result;
 }
 
@@ -206,6 +248,12 @@ export interface AppJson {
   subagents?: SubAgentsEntry;
   /** See {@link usesRetiredPersonasKey}. */
   usesRetiredPersonasKey: boolean;
+  /**
+   * What the reading could not honour as written, one sentence each, for the app's author
+   * — today a `permissions` entry dropped or narrowed (see `parsePermissions`). Empty for
+   * a well-formed manifest. Readers that report it name the app id themselves.
+   */
+  problems: string[];
 }
 
 /**
@@ -220,6 +268,10 @@ export function normalizeManifest(raw: unknown): AppJson | null {
   const dockEdge =
     meta.dockEdge === 'top' || meta.dockEdge === 'bottom' ? meta.dockEdge : undefined;
   const subagents = parseSubAgents(meta);
+  const problems: string[] = [];
+  const permissions = Array.isArray(meta.permissions)
+    ? parsePermissions(meta.permissions, problems)
+    : undefined;
 
   return {
     raw: meta,
@@ -242,12 +294,13 @@ export function normalizeManifest(raw: unknown): AppJson | null {
     ...(typeof meta.defaultHeight === 'number' && { defaultHeight: meta.defaultHeight }),
     ...(meta.messaging === 'all' && { messaging: 'all' as const }),
     agentType: string(meta.agentType),
-    ...(Array.isArray(meta.permissions) && { permissions: parsePermissions(meta.permissions) }),
+    ...(permissions && { permissions }),
     ...(Array.isArray(meta.controls) && { controls: parseControls(meta.controls) }),
     bundles: strings(meta.bundles),
     streams: strings(meta.streams),
     ...(subagents && { subagents }),
     usesRetiredPersonasKey: usesRetiredPersonasKey(meta),
+    problems,
   };
 }
 

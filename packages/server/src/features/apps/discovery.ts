@@ -311,6 +311,9 @@ export interface AppMeta {
  * Runs on every app window create and token mint, and on most app-agent door checks,
  * so it resolves the app once and reads the manifest through the cache.
  */
+/** `${appId}\0${problem}` for every manifest problem already logged — see `getAppMeta`. */
+const reportedProblems = new Set<string>();
+
 export async function getAppMeta(appId: string): Promise<AppMeta | null> {
   const app = resolveApp(appId);
   if (!app) return null;
@@ -337,6 +340,18 @@ export async function getAppMeta(appId: string): Promise<AppMeta | null> {
   // here too — `readAppInfo` above only feeds listings.
   if (meta.permissions) {
     result.permissions = narrowForeignStorage(meta.permissions, appId, source);
+  }
+  // A permission entry the reading had to drop or narrow (a malformed `verbs`, say) is a
+  // grant the author believes the app holds and it does not. Said once per app per
+  // problem: this runs on every window create and door check.
+  for (const problem of meta.problems) {
+    const key = `${appId}\0${problem}`;
+    if (reportedProblems.has(key)) continue;
+    reportedProblems.add(key);
+    log.warn('app.json declares a permission it cannot mean — fix the manifest', {
+      appId,
+      problem,
+    });
   }
   // Gated SDKs — carried onto the iframe token so the HTTP doors those SDKs open
   // can check the declaration at runtime, not just at compile time (see access.ts).

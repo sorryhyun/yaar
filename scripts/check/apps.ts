@@ -36,6 +36,9 @@ import {
   DOC_AUDIENCES,
   parseDocFrontmatter,
 } from '../../packages/server/src/features/apps/doc-frontmatter.ts';
+// The one reading of app.json the server grants from, so this lint reports exactly what
+// the runtime would drop — not a second opinion about what a manifest means.
+import { normalizeManifest } from '../../packages/server/src/features/apps/manifest.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const APPS_DIR = join(REPO_ROOT, 'apps');
@@ -1051,6 +1054,35 @@ function scanProtocolDescriptions(appDir: string, appId: string): Violation[] {
 }
 
 // ---------------------------------------------------------------------------
+// Rule: app.json says what it means
+// ---------------------------------------------------------------------------
+
+/**
+ * A manifest the server has to read differently from how it is written. Today that is a
+ * `permissions` entry whose `verbs` is malformed — dropped, fail-closed, so the app holds
+ * none of a grant its author thinks it has — or names a verb that does not exist. The
+ * runtime only logs these and deploy refuses them; this is where an author of a bundled
+ * app (which never goes through deploy) hears about it.
+ */
+const MANIFEST_RULE_ID = 'manifest-permissions';
+
+function scanManifest(appDir: string, appId: string): Violation[] {
+  const path = join(appDir, 'app.json');
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return []; // No app.json, or not JSON — not this rule's question.
+  }
+  const file = relative(REPO_ROOT, path);
+  return (normalizeManifest(raw)?.problems ?? []).map((problem) => ({
+    file,
+    line: 1,
+    message: `${appId}: ${problem}`,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
 
@@ -1171,6 +1203,7 @@ function main(): void {
   const chromeViolations: Violation[] = [];
   const cloneViolations: Violation[] = [];
   const descriptionViolations: Violation[] = [];
+  const manifestViolations: Violation[] = [];
   for (const appDir of appDirsFor(targets)) {
     const app = basename(appDir);
     skillViolations.push(...scanSkillDoc(appDir, app));
@@ -1181,6 +1214,7 @@ function main(): void {
     chromeViolations.push(...scanChromeShadow(appDir));
     cloneViolations.push(...scanChromeClones(appDir));
     descriptionViolations.push(...scanProtocolDescriptions(appDir, app));
+    manifestViolations.push(...scanManifest(appDir, app));
   }
 
   const docRules: Array<{ id: string; severity: Severity; title: string; found: Violation[] }> = [
@@ -1219,6 +1253,12 @@ function main(): void {
       severity: 'ADVISORY',
       title: 'app CSS does not restate a y-* chrome block under its own name',
       found: cloneViolations,
+    },
+    {
+      id: MANIFEST_RULE_ID,
+      severity: 'ERROR',
+      title: 'app.json permissions say what they mean (no malformed or unknown verbs)',
+      found: manifestViolations,
     },
     {
       id: PROTOCOL_DESCRIPTION_RULE_ID,
