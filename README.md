@@ -38,6 +38,10 @@ curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh
 yaar                # Browser opens automatically
 ```
 
+On macOS the installer puts the app in `~/Applications/YAAR.app` (its own window, and the
+microphone permission apps need) and `yaar` on your PATH starts it. How it runs:
+[docs/installations/mac.md](./docs/installations/mac.md).
+
 For Windows users:
 
 ```

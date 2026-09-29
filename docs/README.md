@@ -9,6 +9,7 @@ New here? Start with the [FAQ](./faq.md) — it answers the questions people act
 | [`architecture/`](./architecture/) | **Intuition & rationale** | Mental models, invariants, and the *why* — including the failure that motivated a rule |
 | [`reference/`](./reference/) | **Precision** | Schemas, payload shapes, protocol details, API tables — anything a reader would copy-paste |
 | [`guides/`](./guides/) | **How-to** | Task-oriented walkthroughs (app development, hooks, remote mode, Android/Termux) |
+| [`installations/`](./installations/) | **How it runs** | Per-platform: what an install puts where, the processes it starts, how they end ([macOS](./installations/mac.md)) |
 | [`proposals/`](./proposals/) | **Design drafts** | Not-yet-landed designs; may not match the code |
 
 ## The rule

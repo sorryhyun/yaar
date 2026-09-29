@@ -37,6 +37,8 @@ curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh
 yaar                # 브라우저가 자동으로 열립니다
 ```
 
+macOS에서는 설치 스크립트가 `~/Applications/YAAR.app`을 설치합니다(전용 창, 앱이 쓰는 마이크 권한 포함). PATH의 `yaar`가 이 앱을 실행합니다. 동작 방식: [docs/installations/mac.md](./docs/installations/mac.md).
+
 Linux, macOS (Intel & Apple Silicon), Windows (WSL)를 지원합니다. 단일 바이너리 — Bun이나 Node.js가 필요 없습니다.
 
 Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
