@@ -1,6 +1,7 @@
 package io.github.sorryhyun.yaar;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Dialog;
 import android.app.DownloadManager;
@@ -10,7 +11,6 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,7 +23,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
@@ -44,7 +43,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -64,6 +69,15 @@ public final class MainActivity extends Activity {
     private static final int REQ_TERMUX = 3;
     private static final long PROBE_INTERVAL_MS = 1000;
     private static final int PROBE_TIMEOUT_MS = 800;
+    private static final long WATCH_INTERVAL_MS = 3000;
+    private static final int WATCH_TIMEOUT_MS = 2000;
+    /** Misses in a row before the desktop gives way to the waiting screen, by kind. */
+    private static final int WATCH_REFUSED_LIMIT = 2;
+    private static final int WATCH_TIMEOUT_LIMIT = 4;
+
+    private static final int ANSWERED = 0;
+    private static final int REFUSED = 1;
+    private static final int NO_ANSWER = 2;
 
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -81,6 +95,10 @@ public final class MainActivity extends Activity {
     private volatile boolean probing;
     private boolean termuxStarted;
     private boolean termuxPermissionAsked;
+    /** Bumped on every start and stop of the watch, so a probe from an old one is dropped. */
+    private int watchGeneration;
+    private int watchRefused;
+    private int watchTimedOut;
 
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingMic;
@@ -90,7 +108,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setDecorFitsSystemWindows(false);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
@@ -99,7 +117,7 @@ public final class MainActivity extends Activity {
         root.setBackgroundColor(Color.BLACK);
         waiting = buildWaitingView();
         root.addView(waiting, match());
-        root.setOnApplyWindowInsetsListener(this::applyInsets);
+        ViewCompat.setOnApplyWindowInsetsListener(root, this::applyInsets);
         setContentView(root);
         registerBack();
 
@@ -344,7 +362,7 @@ public final class MainActivity extends Activity {
         FrameLayout frame = new FrameLayout(this);
         frame.setBackgroundColor(Color.BLACK);
         frame.addView(view, match());
-        frame.setOnApplyWindowInsetsListener(this::applyInsets);
+        ViewCompat.setOnApplyWindowInsetsListener(frame, this::applyInsets);
         popup.setContentView(frame);
         popup.setOnCancelListener(d -> closePopup(view));
         popup.show();
@@ -422,18 +440,86 @@ public final class MainActivity extends Activity {
     }
 
     private static boolean reachable(String url) {
+        return probe(url, PROBE_TIMEOUT_MS) == ANSWERED;
+    }
+
+    /**
+     * Any HTTP answer is {@link #ANSWERED}. {@link #REFUSED} means nothing listens on the port,
+     * which on loopback is a definite answer; anything else is {@link #NO_ANSWER}, which a busy
+     * server can also give.
+     */
+    private static int probe(String url, int timeoutMs) {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(url).openConnection();
-            c.setConnectTimeout(PROBE_TIMEOUT_MS);
-            c.setReadTimeout(PROBE_TIMEOUT_MS);
+            c.setConnectTimeout(timeoutMs);
+            c.setReadTimeout(timeoutMs);
             c.getResponseCode();
-            return true;
+            return ANSWERED;
+        } catch (ConnectException e) {
+            return REFUSED;
         } catch (IOException e) {
-            return false;
+            return NO_ANSWER;
         } finally {
             if (c != null) c.disconnect();
         }
+    }
+
+    // ── Watching a loaded desktop ───────────────────────────────────────────────────────
+
+    /*
+     * A reload with no server does not come back to the waiting screen: once sw.js has cached
+     * the shell, it answers the reload itself and onReceivedError never fires. The desktop
+     * reconnects on its own when the server returns, but nothing would start it, so a server
+     * killed while YAAR was in the background left the app on a desktop waiting forever.
+     *
+     * So while the activity is in front and the desktop is loaded, it probes /health itself,
+     * and a server that is gone hands over to awaitServer(), which starts it again in Termux.
+     * A refused connection is a server that is gone; no answer in time can be a busy one (a
+     * compile, a big turn), so it takes more of those.
+     */
+
+    private void startWatch() {
+        int generation = ++watchGeneration;
+        watchRefused = 0;
+        watchTimedOut = 0;
+        main.post(() -> watchTick(generation));
+    }
+
+    private void stopWatch() {
+        watchGeneration++;
+    }
+
+    private void watchTick(int generation) {
+        if (generation != watchGeneration) return;
+        if (!loaded) {
+            // awaitServer() is probing; pick up again once it has loaded the desktop.
+            main.postDelayed(() -> watchTick(generation), WATCH_INTERVAL_MS);
+            return;
+        }
+        String health = desktop.toString() + "health";
+        Thread t = new Thread(() -> {
+            int result = probe(health, WATCH_TIMEOUT_MS);
+            main.post(() -> onWatchResult(generation, result));
+        }, "yaar-watch");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void onWatchResult(int generation, int result) {
+        if (generation != watchGeneration) return;
+        if (loaded) {
+            watchRefused = result == REFUSED ? watchRefused + 1 : 0;
+            watchTimedOut = result == NO_ANSWER ? watchTimedOut + 1 : 0;
+            if (watchRefused >= WATCH_REFUSED_LIMIT || watchTimedOut >= WATCH_TIMEOUT_LIMIT) {
+                Log.i(TAG, "server gone under the desktop ("
+                        + (result == REFUSED ? "refused" : "no answer") + "), waiting for it again");
+                watchRefused = 0;
+                watchTimedOut = 0;
+                awaitServer();
+            }
+        }
+        main.postDelayed(() -> watchTick(generation), WATCH_INTERVAL_MS);
     }
 
     /** One failed probe: say why, and start the server in Termux once per wait. */
@@ -522,13 +608,20 @@ public final class MainActivity extends Activity {
      *
      * The keyboard is the same story: under edge-to-edge, adjustResize no longer shrinks
      * the window, so the page would otherwise type behind it.
+     *
+     * The insets are consumed here, so the WebView under the padding never sees them. Newer
+     * WebViews do put the bars in env() (153 on a Galaxy S25: 35 px top, 48 px bottom), and
+     * handed the same insets unconsumed they padded a second time on top of this.
+     *
+     * Through androidx.core, because the platform's WindowInsets.Type is API 30 and the app
+     * runs from 29.
      */
-    private WindowInsets applyInsets(View v, WindowInsets insets) {
+    private WindowInsetsCompat applyInsets(View v, WindowInsetsCompat insets) {
         Insets bars = insets.getInsets(
-                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-        Insets ime = insets.getInsets(WindowInsets.Type.ime());
+                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+        Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
         v.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
-        return insets;
+        return WindowInsetsCompat.CONSUMED;
     }
 
     /**
@@ -544,8 +637,10 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** API 29–32 only: from 33 on, Back arrives through the dispatcher registered above. */
     @Override
     @SuppressWarnings("deprecation")
+    @SuppressLint("GestureBackNavigation")
     public void onBackPressed() {
         handleBack();
     }
@@ -562,6 +657,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        stopWatch();
         if (web != null) web.onPause();
     }
 
@@ -569,11 +665,13 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
+        startWatch();
     }
 
     @Override
     protected void onDestroy() {
         probing = false;
+        stopWatch();
         closePopup(popupView);
         if (web != null) {
             web.destroy();
