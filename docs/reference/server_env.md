@@ -125,7 +125,7 @@ breaks the signature macOS records permission grants (the microphone) against.
 
 **Source:** `packages/server/src/desktop-window/`, `packages/lib/src/webview/`,
 `packages/lib/native/webview_extras.mm`, `packages/server/src/macos-bundle.ts`,
-`docs/proposals/webview_host_proposal.md`
+`docs/installations/mac.md`
 
 ### `FABLE`
 

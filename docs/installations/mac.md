@@ -4,8 +4,9 @@
 
 This page is about what YAAR *is* once it is installed on a Mac: which files it puts where, the
 processes that run when you start it, and how they end. To install it, see the
-[README](../../README.md#install). For the design history behind the window, see the
-[WebView host proposal](../proposals/webview_host_proposal.md).
+[README](../../README.md#install). For the platforms still to come (Windows, Linux) and the
+checks a new host runs, see the [WebView host proposal](../proposals/webview_host_proposal.md).
+Android is [android.md](./android.md).
 
 In short, YAAR on a Mac is `~/Applications/YAAR.app`. It is one binary that runs twice: once
 as a server with no window, and once as a native window showing the desktop in WebKit. It
@@ -171,6 +172,22 @@ the server side. The window is only for you.
 Apps that run models run them on this window's WebGPU, which is WebKit's: no `subgroups`, and
 about 1.8× slower than Chrome on the same Mac for anima. Measurements and options:
 [mac_ml.md](./mac_ml.md).
+
+### WebKit, not Chrome
+
+Three engine differences were measured on 2026-09-29 (macOS 26.6), with a page on `localhost`
+and an iframe on `127.0.0.1`:
+
+- **No WebP encoding.** `canvas.toDataURL('image/webp')` returns PNG. The server reads the
+  type off the bytes and re-encodes captures (`captureForModel` in `@yaar/lib/image`), and
+  `uploadImage.ts` keeps the original file when the canvas did not produce WebP.
+- **Installed apps' browser storage does not survive a launch.** The `127.0.0.1` frame's
+  localStorage and IndexedDB are empty every time, though its Cache API and the desktop's own
+  storage persist, and its quota is a tenth of the desktop's. No app loses weights to this,
+  because every ML app keeps them on server disk. App state belongs in app storage anyway.
+  Why WebKit does it is unexplained.
+- **No Page Lifecycle `freeze` event.** Presence falls back to `visibilitychange`, which is
+  enough on a desktop.
 
 ---
 

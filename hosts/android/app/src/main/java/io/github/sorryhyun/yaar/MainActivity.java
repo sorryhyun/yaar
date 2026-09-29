@@ -53,8 +53,7 @@ import java.util.List;
  * The YAAR desktop in the system WebView. This is the display only: the server runs in Termux
  * ({@link Termux}), and this activity waits for it, starting it if it is not running.
  *
- * <p>What the page gets, and why each is here: {@code docs/proposals/webview_host_proposal.md}
- * §4, "What the APK must implement".
+ * <p>What the page gets, and why each is here: {@code docs/installations/android.md}.
  */
 public final class MainActivity extends Activity {
     private static final String TAG = "YaarHost";

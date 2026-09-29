@@ -245,7 +245,7 @@ static NSString *leaf_spki_sha256(SecTrustRef trust) {
 
 // Ask macOS for each capture device the request needs, in turn, then decide. WebKit on
 // its own asks macOS only for the main frame — the first request from an isolated app
-// frame was refused with no system prompt at all (proposal §3) — so the app asks first.
+// frame was refused with no system prompt at all (measured 2026-09-29) — so the app asks first.
 static void authorize_capture(NSArray<AVMediaType> *types, NSUInteger i,
                               void (^decide)(WKPermissionDecision)) API_AVAILABLE(macos(12.0)) {
   if (i == types.count) {

@@ -13,7 +13,8 @@
  * a host injects it into the top frame of the desktop origin and nowhere else. An app that
  * needs a host capability asks the shell over the iframe bridge, and the shell decides.
  *
- * Why it exists and what each platform must do: `docs/proposals/webview_host_proposal.md` §2.
+ * What each host does with it: `docs/installations/mac.md` and `docs/installations/android.md`;
+ * the platforms still to come: `docs/proposals/webview_host_proposal.md`.
  */
 
 export const YAAR_HOST_VERSION = 1;

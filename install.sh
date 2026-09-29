@@ -147,7 +147,7 @@ install_termux() {
 # PATH is a launcher into it. The bundle is not packaging for its own sake: WKWebView
 # exposes no navigator.mediaDevices at all to a process whose main bundle has no
 # NSMicrophoneUsageDescription, so a bare binary's window can never record (measured
-# on 0.22.0 — see docs/proposals/webview_host_proposal.md). The bundle's signature is
+# on 0.22.0 — see docs/installations/mac.md). The bundle's signature is
 # also what macOS files the microphone grant under.
 #
 # Assembled here rather than downloaded because codesign, sips and iconutil ship with
