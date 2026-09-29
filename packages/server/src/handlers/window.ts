@@ -1192,6 +1192,16 @@ export function registerWindowHandlers(
             `list("yaar://windows/${resolved.windowId}") shows them.`,
         );
       }
+      if (target.kind === 'history') {
+        return error(
+          `delete("yaar://windows/${resolved.windowId}") closes the window — history is not ` +
+            `deleted, so "${resolved.sourceUri}" is refused rather than closing ` +
+            `"${resolved.windowId}". To drop entries, restore to the last one you keep: ` +
+            `invoke("${historyUri(resolved.windowId)}", { action: "restore", upTo: <seq> }) ` +
+            '(upTo: 0 forgets everything). To close the window itself: ' +
+            `delete("yaar://windows/${resolved.windowId}").`,
+        );
+      }
       if (target.kind === 'invalid') {
         return error(
           `"${target.subPath}" is not a window sub-resource, and delete on a window URI closes ` +

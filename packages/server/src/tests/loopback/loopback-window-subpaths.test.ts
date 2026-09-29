@@ -575,6 +575,18 @@ describe('S10 — the wrong spelling is refused, not guessed at', () => {
       expect(h.session.windowState.getWindow('memo')).toBeDefined();
     }
 
+    // `history` parses as its own target kind, so it slipped past the `resource` and
+    // `invalid` refusals above and fell through to the close. Trimming history is a
+    // restore, so that is what the refusal points at.
+    for (const uri of ['yaar://windows/memo/history', 'yaar://windows/memo/history/1']) {
+      const result = await call('delete', uri);
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).not.toContain('Closed window');
+      expect(textOf(result)).toContain('invoke("yaar://windows/memo/history", { action: "restore"');
+      expect(textOf(result)).toContain('delete("yaar://windows/memo")');
+      expect(h.session.windowState.getWindow('memo')).toBeDefined();
+    }
+
     // The bare collection has no window to close either — and there is no "close them all".
     const collection = await call('delete', 'yaar://windows/');
     expect(collection.isError).toBe(true);
