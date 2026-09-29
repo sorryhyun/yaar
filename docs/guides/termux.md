@@ -9,7 +9,7 @@ browser at `http://localhost:8000`. Only the Claude provider is supported.
 
 ## Install
 
-Install Termux, then run this in it:
+Install Termux, from F-Droid, GitHub or Google Play, then run this in it:
 
 ```bash
 curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
@@ -60,8 +60,9 @@ the URL it prints, approve, and paste the code back. This has to be the full log
 inference-only, so the CLI refuses [Claude Remote](./claude_remote.md) with it, and the
 launcher tells you so.
 
-Once the server answers, the desktop opens in the installed YAAR app if there is one
-(see [Install it as an app](#install-it-as-an-app)), otherwise in **Chrome** if it is
+Once the server answers, the desktop opens in the [YAAR app](../installations/android.md)
+if it is installed, then in Chrome's installed app if there is one (see
+[Install it as an app](#install-it-as-an-app)), otherwise in **Chrome** if it is
 installed, and in the default browser if not. Starting with "install essential apps" is a
 good first message.
 
@@ -76,7 +77,7 @@ name (empty means the default browser):
 YAAR_TERMUX_BROWSER=org.mozilla.firefox yaar
 ```
 
-The installed app, when there is one, still comes first.
+The YAAR app and Chrome's installed app, when there is one, still come first.
 
 ### Install it as an app
 
@@ -218,7 +219,7 @@ not set to `0`.
   `YAAR_TERMUX_BROWSER`, `YAAR_COMPANION_TAB`, `YAAR_REACT_PROD`, and why each one defaults
   the way it does on Android
 - `scripts/dev/start-termux.sh`: the launcher; every step above is commented there
-- `scripts/dev/termux-open-desktop.sh`: installed app → Chrome → default browser
+- `scripts/dev/termux-open-desktop.sh`: YAAR app → Chrome's installed app → Chrome → default browser
 - `scripts/dev/ensure-claude-android.sh`, `scripts/dev/unbun-claude.ts`: Claude Code for Android
 - `packages/server/src/features/android/`, `packages/lib/src/termux/`: the Termux:API integration
 - `make mobile-bench`: phone-shell performance with a mock agent, set up the way Termux runs

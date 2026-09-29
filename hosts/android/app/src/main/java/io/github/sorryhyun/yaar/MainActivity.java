@@ -36,6 +36,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -70,6 +71,8 @@ public final class MainActivity extends Activity {
     private WebView web;
     private View waiting;
     private TextView waitingText;
+    /** Shown only for a Termux that cannot be asked to start the server. */
+    private View openTermux;
 
     /** {@code http://localhost:<port>/}: the only URL this activity loads as the desktop. */
     private Uri desktop;
@@ -391,6 +394,7 @@ public final class MainActivity extends Activity {
         if (web != null) web.setVisibility(View.INVISIBLE);
         waiting.setVisibility(View.VISIBLE);
         waitingText.setText("Connecting to YAAR on " + desktop.getAuthority() + "…");
+        openTermux.setVisibility(View.GONE);
         if (probing) return;
         probing = true;
         String health = desktop.toString() + "health";
@@ -435,11 +439,21 @@ public final class MainActivity extends Activity {
     /** One failed probe: say why, and start the server in Termux once per wait. */
     private void onServerMissing() {
         String where = desktop.getAuthority();
+        openTermux.setVisibility(View.GONE);
         if (!Termux.installed(this)) {
             waitingText.setText("YAAR's server runs in Termux, which is not installed.\n\n"
                     + "Install Termux (F-Droid or GitHub), then in Termux run:\n\n"
                     + "curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash"
                     + "\n\nWaiting for a server on " + where + "…");
+            return;
+        }
+        // Termux from Google Play has no RUN_COMMAND, so asking for it would be refused
+        // unseen and the screen would ask for a permission there is no way to give.
+        if (!Termux.takesRunCommand(this)) {
+            if (Termux.launchIntent(this) != null) openTermux.setVisibility(View.VISIBLE);
+            waitingText.setText("No YAAR server on " + where + ".\n\n"
+                    + "Open Termux and run\n\nyaar\n\n"
+                    + "The desktop opens here once the server answers.");
             return;
         }
         if (!Termux.hasPermission(this)) {
@@ -481,6 +495,18 @@ public final class MainActivity extends Activity {
         waitingText.setTextIsSelectable(true);
         waitingText.setPadding(0, dp(24), 0, 0);
         box.addView(waitingText);
+        Button open = new Button(this);
+        open.setText("Open Termux");
+        open.setVisibility(View.GONE);
+        open.setOnClickListener(v -> {
+            Intent termux = Termux.launchIntent(this);
+            if (termux != null) startActivity(termux);
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(24);
+        box.addView(open, lp);
+        openTermux = open;
         return box;
     }
 

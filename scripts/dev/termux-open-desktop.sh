@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Open the YAAR desktop on the phone: the installed app if there is one, else Chrome, else
-# the default browser.
+# Open the YAAR desktop on the phone: the YAAR app if it is installed, else the installed
+# web app, else Chrome, else the default browser.
 #
 # Two callers: start-termux.sh once the server answers (or when a second launch finds one
 # running), and a tap on a native notification (features/android/), which Termux runs as
@@ -22,7 +22,12 @@ view_in() {
     ! printf '%s' "$out" | grep -qiE 'error|exception'
 }
 
-# The installed app. "Install app" in Chrome mints a WebAPK (package org.chromium.webapk.*)
+# The YAAR app (hosts/android/), whose VIEW filter takes exactly http://localhost/. Its
+# waiting screen tells a Termux without RUN_COMMAND (the Play build) to run `yaar` here, so
+# this is how that user gets back to it.
+view_in io.github.sorryhyun.yaar && exit 0
+
+# The installed web app. "Install app" in Chrome mints a WebAPK (package org.chromium.webapk.*)
 # whose intent filter claims the desktop's URL, so asking the package manager who handles
 # that URL finds this desktop's app and not some other site's. Opened without the pin,
 # the same URL would land in a Chrome tab. A plain "Add to Home screen" shortcut is not a

@@ -7,9 +7,9 @@ happens when you tap it, and what its window does that a browser tab doesn't. In
 server in Termux is the [Termux guide](../guides/termux.md). The work still to do on Android is in
 the [WebView host proposal](../proposals/webview_host_proposal.md#4-android-what-is-left).
 
-> **Status (2026-09-29).** The host APK is built from source and verified on an API 35 emulator
-> against a server on a PC. It is not in the releases yet, it has not run on a phone, and
-> `yaar` in Termux does not open it yet (see [Fallbacks](#fallbacks)).
+> **Status (2026-09-29).** The host APK is built from source and verified against a server on
+> a PC, on an API 35 emulator and on a Galaxy S25 (Android 16, WebView 153). It is not in the
+> releases yet, and the cold start below has not run with a server in the phone's own Termux.
 
 In short, YAAR on a phone is two apps. **Termux** runs the server, as it always has. The
 **YAAR app** (`io.github.sorryhyun.yaar`) is only the display: one Android WebView showing
@@ -80,8 +80,9 @@ tap YAAR
   └ waiting screen, GET http://localhost:8000/health every second (800 ms timeout)
        ├ answer    → load http://localhost:8000/, shown at the first paint
        └ no answer → Termux installed?  no  → say so, with the install command, and keep polling
-                                         yes → RUN_COMMAND granted?  no  → ask for it, and keep polling
-                                                                     yes → run $PREFIX/bin/yaar once, keep polling
+                                         yes → takes RUN_COMMAND?  no  → "run yaar in Termux", Open Termux button, keep polling
+                                                                   yes → granted?  no  → ask for it, and keep polling
+                                                                                   yes → run $PREFIX/bin/yaar once, keep polling
 ```
 
 1. **The app shows a waiting screen and polls `/health`.** Any HTTP answer counts, so a server
@@ -95,11 +96,24 @@ tap YAAR
 The port is 8000, unless the app was opened by a `VIEW` of another `http://localhost:<port>/`,
 which is the URL `termux-open-desktop.sh` passes.
 
-This cold start has not run on a phone yet: the emulator it was verified on has no Termux.
+This cold start has not run on a phone yet: the emulator has no Termux, and the phone it was
+checked on has the Google Play Termux (below).
+
+### Termux from Google Play: run `yaar` yourself
+
+The Google Play build of Termux (checked: `googleplay.2026.06.21`) has no `RunCommandService`,
+so there is no `RUN_COMMAND` for the app to ask for. Android refuses a permission no app
+declares without showing anything. The app checks for the service first, and with this Termux
+its waiting screen says to run `yaar` in Termux, with an **Open Termux** button. `yaar` then
+opens the desktop back in the YAAR app ([Fallbacks](#fallbacks)), and the app, which kept
+polling, is already on it.
+
+Everything else is the same with either Termux. Only the start is by hand.
 
 ### The two one-time grants
 
-`RUN_COMMAND` needs two things, and the waiting screen names whichever is missing:
+With the F-Droid or GitHub Termux, `RUN_COMMAND` needs two things, and the waiting screen
+names whichever is missing:
 
 - **The permission.** Android asks "Allow YAAR to run commands in Termux?" the first time the
   app finds no server.
@@ -169,8 +183,12 @@ WebView by the status bar, the navigation bar and the display cutout itself, and
 keyboard when that is taller.
 The page's `env(safe-area-inset-*)` could not be trusted with them: WebView 124 on the
 emulator reported the cutout there (51 px at the top) and never the navigation bar, so the
-gesture bar sat on the shell's input. Padded, the page has nothing to overlap, and `env()`
-reads 0 on any WebView version.
+gesture bar sat on the shell's input.
+
+WebView 153 on the Galaxy S25 does report the bars (35 px at the top, 48 px at the bottom),
+on top of the native padding. The shell's `env()` rules then pad a second time: an empty band
+above a maximized window, and below the command sheet's handle. Fixing it is open in the
+[proposal](../proposals/webview_host_proposal.md#4-android-what-is-left).
 
 ---
 
@@ -185,19 +203,18 @@ The YAAR app and the server have separate lives:
 - **Stopping the server** is done in Termux: `Ctrl-C` in its session, or closing the session
   ([Termux guide](../guides/termux.md#day-to-day)).
 - **A server that goes away under an open desktop** is handled by the desktop's own reconnect,
-  as in Chrome. If a reload then cannot reach it, the app goes back to its waiting screen,
-  and may start Termux again.
+  as in Chrome. A reload does not bring the waiting screen back: once the service worker has
+  cached the shell, it answers the reload itself, so the WebView never sees the error. The
+  desktop reconnects when the server returns.
 
 ---
 
 ## Fallbacks
 
-- **No YAAR app.** `termux-open-desktop.sh` opens the installed Chrome app (a WebAPK) if there
-  is one, then Chrome, then the default browser. See the
+- **Opened from Termux.** `termux-open-desktop.sh`, which `yaar` and notification taps run,
+  opens the YAAR app first, pinned to its package. Without it, the installed Chrome app (a
+  WebAPK) if there is one, then Chrome, then the default browser. See the
   [Termux guide](../guides/termux.md#first-run).
-- **YAAR app installed, but opened from Termux.** The launcher does not look for the YAAR app
-  yet, so `yaar` still opens Chrome. Open YAAR from its icon instead: it finds the running
-  server.
 - **An old WebView.** There is no host, so everything works the way it does in Chrome.
 
 ---
@@ -272,4 +289,5 @@ adb uninstall io.github.sorryhyun.yaar     # or Settings → Apps → YAAR → U
 | "Starting YAAR in Termux…" and nothing happens | Termux refused the command: add `allow-external-apps = true` (above). Otherwise open Termux, whose new session shows what `yaar` is doing |
 | A toast says the WebView is too old for the host bridge | Update Android System WebView from the Play Store |
 | An app's Save or Export does nothing, or "Couldn't save this download (blob:)" | The app was compiled before its SDK learned about hosts, so it tries a `blob:` link the WebView cannot save. Recompile the app |
-| `yaar` opens Chrome, not the YAAR app | The launcher does not prefer the app yet. Open YAAR from its icon |
+| "Open Termux and run `yaar`" | This Termux is the Google Play build, which cannot start the server for another app. Run `yaar` in it ([above](#termux-from-google-play-run-yaar-yourself)) |
+| `yaar` opens Chrome, not the YAAR app | The checkout predates the launcher preferring the app: `git pull` in `~/yaar` |
