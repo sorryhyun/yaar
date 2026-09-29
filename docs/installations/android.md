@@ -282,7 +282,7 @@ The desktop is the same frontend Chrome would show. It learns that it is in YAAR
 | Microphone | Allowed for `localhost` and `127.0.0.1` only. The first time, Android asks; after that, Settings → Apps → YAAR → Permissions decides |
 | File upload | The system document picker, with multi-select |
 | Back | Puts one layer of the desktop away, as in Chrome. With nothing left, YAAR goes to the background instead of closing |
-| Screen edges and keyboard | The desktop is laid out between the status bar and the navigation bar, and the keyboard pushes it up |
+| Screen edges and keyboard | The status bar is hidden (swipe down from the edge to see it); the desktop is laid out above the navigation bar and clear of the camera cutout, and the keyboard pushes it up |
 | A renderer crash | The WebView is recreated and the desktop reloads. The app does not die with it |
 
 The Browser app, and anything else that drives a browser for an agent, still uses Termux
@@ -306,9 +306,11 @@ in a toast. The desktop then saves and copies the way Chrome does.
 
 ### Why the bars are padded natively
 
-The app draws edge to edge, which Android 15 enforces on an app that targets it. It pads the
-WebView by the status bar, the navigation bar and the display cutout itself, and by the
-keyboard when that is taller.
+The app draws edge to edge, which Android 15 enforces on an app that targets it, and hides
+the status bar (a swipe from the edge shows it over the page). It pads the WebView by the
+navigation bar and the display cutout itself, and by the keyboard when that is taller. A
+hidden status bar has no insets, so the top is padded by the cutout alone: in landscape the
+cutout is on a side and the desktop gets the whole height.
 The page's `env(safe-area-inset-*)` could not be trusted with them: WebView 124 on the
 emulator reported the cutout there (51 px at the top) and never the navigation bar, so the
 gesture bar sat on the shell's input.

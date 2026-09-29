@@ -23,6 +23,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.webkit.CookieManager;
 import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
@@ -47,6 +48,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -109,6 +111,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        hideStatusBar(getWindow());
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
@@ -364,6 +367,7 @@ public final class MainActivity extends Activity {
         frame.addView(view, match());
         ViewCompat.setOnApplyWindowInsetsListener(frame, this::applyInsets);
         popup.setContentView(frame);
+        hideStatusBar(popup.getWindow());
         popup.setOnCancelListener(d -> closePopup(view));
         popup.show();
     }
@@ -622,6 +626,28 @@ public final class MainActivity extends Activity {
         Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
         v.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
         return WindowInsetsCompat.CONSUMED;
+    }
+
+    /**
+     * The status bar is hidden, so the desktop gets the top of the screen; a swipe from the
+     * edge shows it over the page for a moment. A hidden bar has no insets, so
+     * {@link #applyInsets} pads the top by the display cutout alone, which in portrait on a
+     * punch-hole phone is still most of the bar. The navigation bar stays: Back and Home
+     * need it.
+     */
+    private static void hideStatusBar(Window window) {
+        WindowInsetsControllerCompat bars =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+        bars.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        bars.hide(WindowInsetsCompat.Type.statusBars());
+    }
+
+    /** The system can bring the bar back (another app, a dialog, the lock screen). */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideStatusBar(getWindow());
     }
 
     /**
