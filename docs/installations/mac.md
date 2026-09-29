@@ -168,6 +168,10 @@ macOS remembers the window's size and position between launches.
 The Browser app, and anything else that drives a browser for an agent, still uses Chrome on
 the server side. The window is only for you.
 
+Apps that run models run them on this window's WebGPU, which is WebKit's: no `subgroups`, and
+about 1.8× slower than Chrome on the same Mac for anima. Measurements and options:
+[mac_ml.md](./mac_ml.md).
+
 ---
 
 ## How it ends
