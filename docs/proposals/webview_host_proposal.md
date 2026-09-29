@@ -108,7 +108,7 @@ bound `__poll` eval channel for scripted steps. Window screenshots came from `sc
 |---|---|
 | Desktop renders | ✅ command palette present **320 ms** after navigation start; no page errors |
 | Bundled app (Storage) | ✅ opens, lists files, renders correctly |
-| User app (Crawl) | ✅ renders — but loaded **same-origin** (see "Not exercised" below) |
+| User app (Crawl) | ✅ renders — but loaded **same-origin**, a YAAR bug since fixed (see "Not exercised" below) |
 | Agent turn (markdown window: heading, table, code block) | ✅ created and rendered |
 | WebGPU | ✅ adapter (`apple`/`apple`), `shader-f16` present, a 1M-float compute pass round-trips correctly in 59 ms |
 | localStorage / sessionStorage / IndexedDB | ✅ |
@@ -121,13 +121,19 @@ bound `__poll` eval channel for scripted steps. Window screenshots came from `sc
 | **`window.open`** | ❌ returns `null`; no `createWebViewWith` delegate → `openExternal` + patch for OAuth popups |
 | Page Lifecycle `freeze` event | absent (`onfreeze` not in `document`) — presence falls back to `visibilitychange`, fine on desktop |
 | Webview on a Bun Worker thread | ❌ process crash (§1) |
+| Microphone (transcribe's record button), measured 2026-09-29 | ⚠️ The **first** request, from the isolated `127.0.0.1` frame, was refused with no macOS prompt, and the app showed its "access was refused" toast. A `getUserMedia` from the main frame raised the macOS microphone prompt; once allowed, the isolated frame records too. With permission granted: a cross-origin frame with `allow="microphone"` records and one without gets `NotAllowedError` (as in Chrome); webm/opus and mp4/AAC takes both record and decode again |
 
 **Not exercised:**
-- **The isolated-app path.** Crawl is a `user-apps/` app, yet this run's session log shows its
-  `window.create` with no `isolateOrigin`, so the frame stayed on `localhost` and the cross-origin
-  (`127.0.0.1`) iframe was never loaded in WebKit. Why the server did not mark it is a server-side
-  question, independent of the engine, and is worth its own look. The WebKit side then still needs
-  a run with a genuinely isolated app.
+- **The isolated-app path.** Crawl was opened from its desktop icon, and that path never
+  isolated anything. `launchAppWindow` (frontend `store/iframe-bridge/open-url.ts`) built its
+  own `window.create` without the app-origin marks, which only an agent's create
+  (`features/window/create.ts`) and a replay (`logging/window-restore.ts`) derived. So every
+  installed app opened from the desktop ran same-origin with it, on every engine, until the
+  next reload's snapshot marked it. Fixed in phase 0: the rule is one function
+  (`features/window/origin-marks.ts`), and `/api/iframe-token` hands its answer to the
+  desktop with the token. (The session log was no evidence either way: the logged create is
+  rebuilt by `windowCreateAction`, which omits the marks by design.) The WebKit side still
+  needs a run with an app that is actually isolated.
 - **File chooser.** The header implements `runOpenPanelWithParameters`, but a scripted click cannot
   open a panel. Needs one human click (Storage → Upload).
 - **Heavy ML apps** (transcribe, image23d) on WebKit's WebGPU, and window chrome (resize,
@@ -138,9 +144,42 @@ bound `__poll` eval channel for scripted steps. Window screenshots came from `sc
 
 **TLS on WebKit.** Chromium's `--ignore-certificate-errors-spki-list` has no WebKit equivalent,
 so the h2 local socket (`http/local-tls.ts`) is unavailable. The spike ran on plain HTTP/1.1. To
-get h2 back, patch in a `didReceiveAuthenticationChallenge` handler that pins the local SPKI
-**(verify impact first — measure whether HTTP/1.1's per-host connection cap is felt with many
-windows open)**.
+get h2 back, patch in a `didReceiveAuthenticationChallenge` handler that pins the local SPKI.
+The cap itself is now measured (below), so the patch is a phase 1b deliverable.
+
+### Follow-up measurements (2026-09-29): three regressions
+
+A second run used the same dylib against a throwaway static server: a page on `localhost` with
+an iframe on `127.0.0.1`, launched three times. YAAR itself was not running, so these describe
+the engine, not YAAR's behavior on it.
+
+| Check | Result |
+|---|---|
+| `canvas.toDataURL('image/webp')` | ❌ returns `data:image/png` — WebKit does not encode WebP |
+| Isolated frame: localStorage, IndexedDB across launches | ❌ empty on every launch (first-party localStorage and the frame's Cache API both persisted) |
+| Isolated frame: storage quota | 1.9 GB, against 19.2 GB first-party |
+| HTTP/1.1 connections per host | 6 concurrent (10 slow requests, peak counted server-side) |
+| `foreignObject` capture via `data:` URI | ✅ draws and reads back; a `blob:` URL taints, as in Chrome |
+| Isolated frame: fetch to `localhost` | ✅ carries `Origin: http://127.0.0.1:<port>`, so the origin boundary can attribute it |
+| Isolated frame: WebSocket, WebGPU adapter | ✅ |
+| Host binding inside the isolated frame | ✅ absent (`typeof window.__report === 'undefined'`) |
+
+What each failure means for YAAR:
+
+1. **Captures are mislabeled.** The capture paths ask for WebP and get PNG bytes, and the server
+   stamps `image/webp` on them regardless (`handlers/window.ts`, both `__screenshot` returns).
+   The same encode is assumed in `lib/uploadImage.ts`, `store/clipboard.ts`,
+   `DrawingOverlay.tsx` and `captureMonitorScreenshot.ts`.
+2. **Isolated apps lose their browser storage on every launch.** This costs no weight
+   downloads. Every ML app keeps its weights on server disk: transcribe, ocr and image23d
+   via `prefetchWeights` (`storage/apps/<id>/models/…`), and anima under
+   `storage/apps/anima/weights`. `fetchWeights` on a local URL does not mirror it into
+   IndexedDB. anima's own `anima-weights` IndexedDB cache is only a copy over its disk
+   files, so losing it means a local re-read, not a download. Confirmed live: transcribe
+   and anima both load in WKWebView. The cost that remains is that any app that keeps real
+   state in IndexedDB loses it. The app guardrails already ban localStorage.
+3. **Without h2 the six-connection cap is back.** That cap is the reason `http/local-tls.ts`
+   exists: a few long `/api/verb` calls queue everything else behind them.
 
 ---
 
@@ -231,12 +270,21 @@ from the first public build, because a signature change forces users to uninstal
 
 | Phase | Deliverable | Done when |
 |---|---|---|
-| **0. macOS spike** | §3 | ✅ done 2026-09-29 |
-| **1. Desktop host (macOS first)** | Vendored `webview.h` + patches (download delegate, new-window, clipboard), `yaar --window` process, exe fallback chain, `host-contract.ts` + `lib/host.ts`, downloads and clipboard routed through the host | `bun run build:exe:bundle:macos` opens in WKWebView, and a day of normal use needs no Chrome window |
+| **0. macOS spike, closed out** | §3; the host-independent fixes below; one WebKit run with an actually isolated app, the file chooser clicked by hand, a side-by-side against Chrome | The spike ✅ 2026-09-29; the WebKit re-run ✅ (isolation, capture mime, transcribe recording and disk weights). Open: the file chooser, the side-by-side |
+| **1a. Desktop window, no bridge** | Vendored `webview.h` (unpatched), `yaar --window` process, window-exit → server shutdown, exe fallback chain; an app bundle whose `Info.plist` carries `NSMicrophoneUsageDescription` (launched from a terminal, the spike borrowed the terminal's microphone permission; a shipped exe has none to borrow) | `bun run build:exe:bundle:macos` opens in WKWebView; closing it stops the server; a missing dylib falls back to `--app`; the macOS microphone prompt names YAAR |
+| **1b. Contract + patches** | `host-contract.ts` + `lib/host.ts`; header patches (download delegate, new-window, clipboard, and a `requestMediaCapturePermissionForOrigin:` UI-delegate method that asks macOS for access itself and grants only the two local origins); downloads and clipboard routed through the host; the TLS patch below; app permission messages that do not point at an address bar the window lacks (transcribe's refusal toast) | A day of normal use needs no Chrome window; on a fresh install, transcribe's record button raises the macOS prompt on its first press; the regression criteria below pass in WKWebView |
 | **2. Windows** | The same exe on WebView2, flags via env | §3's table re-run on a Windows box, plus CDP to the display |
 | **3. Linux go/no-go** | Epiphany smoke test → WebKitGTK host or stay on `--app` | A decision, recorded here |
 | **4. Android host** | APK: WebView + §4 inventory + RUN_COMMAND launch | A cold tap on the icon → desktop, with Termux never opened by hand |
 | **5. Android extras** | DevTools bridge, companion spike, home launcher | Each measured before it lands |
+
+**Regression fixes** (measured in §3, "Follow-up measurements"):
+
+| Regression | Phase | Fix | Exit criterion |
+|---|---|---|---|
+| Captures are PNG bytes labeled `image/webp` | 0 ✅ | The server reads the type off the bytes and re-encodes PNG/JPEG to WebP (`captureForModel` in `@yaar/lib/image`), in both `__screenshot` returns. `uploadImage.ts` keeps the original file when the canvas did not produce WebP. `clipboard.ts` already used the blob's own type; the drawing and monitor captures travel as data URLs whose prefix is honest. | A `__screenshot` read in WKWebView returns an image whose mime matches its bytes |
+| Isolated apps' localStorage and IndexedDB do not survive a launch | — | None needed for weights (§3). Why WebKit kept the Cache API but not IndexedDB is still unexplained. It only matters if an app starts keeping state there, which belongs in app storage anyway. | — |
+| HTTP/1.1's six connections per host | 1b | The `didReceiveAuthenticationChallenge` patch that pins the local SPKI, so the window loads the h2 socket | The window's document is served from `https://localhost:<tlsPort>` over h2 |
 
 **Non-goals:**
 - Replacing Chrome in development or headless driving.
@@ -248,9 +296,10 @@ from the first public build, because a signature change forces users to uninstal
 
 ## 6. Open questions
 
-- **Why was Crawl not isolated in the spike run?** See §3 "Not exercised". It needs an answer
-  before the WebKit cross-origin path can be called verified.
-- **Is h2 worth a WebKit TLS patch?** Measure first.
+- **Why was Crawl not isolated in the spike run?** Answered: the desktop's own launch path
+  never carried the isolation marks (§3 "Not exercised"). Fixed; the WebKit run is still owed.
+- **Is h2 worth a WebKit TLS patch?** Answered: WKWebView holds six connections per host (§3),
+  so the patch is in phase 1. Whether WebKitGTK needs the same patch is part of phase 3.
 - **Should the window process own tray and menu integration?** Out of scope until phase 1 lands.
 - **Remote mode.** A host could also be a remote client. The `#remote=` token lives in
   sessionStorage, which a host restart loses, so the host would need to persist it.
