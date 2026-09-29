@@ -88,25 +88,16 @@ Done when: a decision, recorded here.
 
 The APK as built is [android.md](../installations/android.md). Still to do:
 
-**Fixes** (found on a Galaxy S25, Android 16, WebView 153, 2026-09-29):
-- **Insets are applied twice.** WebView 153 reports the system bars in
-  `env(safe-area-inset-*)` (35 px top, 48 px bottom) although the APK already pads by them.
-  `applyInsets` returns the insets unconsumed, so the WebView child sees them too. Fix: consume
-  them before the WebView, then re-measure on the phone and on the emulator's WebView 124.
-- **The waiting screen never comes back under an open desktop.** Once `sw.js` has cached the
-  shell, a reload with no server is answered from the cache, so `onReceivedError` never fires.
-  The desktop's reconnect covers it, but the path that restarts Termux is dead. Decide whether
-  the app should probe `/health` on its own when the desktop loses its socket.
-- **Apps built before the host field existed cannot save.** The iframe SDK is compiled into
-  each app's `dist/index.html`. Memo and Anima report `device.get()` without `host`, so their
-  `downloadBlob()` takes the `<a download>` path with a `blob:` URL, which Android's
-  `DownloadListener` cannot fetch from another frame. Fix: rebuild the apps, and make the app
-  build's staleness check include the SDK scripts, so the next SDK change rebuilds them by
-  itself.
-
 **Still unrun:**
+- Insets on the Galaxy S25. The APK now consumes them, and the emulator's WebView 124 reads
+  `env(safe-area-inset-*)` as 0 on every side. Check that WebView 153 does too: no empty band
+  above a maximized window or below the command sheet's handle.
+- Android 10 (API 29). The insets code went through the platform's API 30 calls, which lint
+  flagged and which fail `onCreate` there. It uses androidx.core's compat classes now, but there
+  is no API 29 image to run it on.
 - The server in the phone's own Termux. The phone checked had the Google Play Termux and no
-  YAAR in it: does that Termux run `install.sh` and `make termux`, and Termux:API? Does `yaar`
+  YAAR in it: does that Termux run `install.sh` (its Chromium step included) and `make termux`,
+  and Termux:API? Does `yaar`
   there reach the app through `termux-open-desktop.sh`? Termux's own `am` was only seen to
   open the app, not its output, which `view_in` greps.
 - The cold start through `RUN_COMMAND`, on an F-Droid or GitHub Termux. Check that

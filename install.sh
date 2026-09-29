@@ -12,6 +12,7 @@
 #   YAAR_DIR     — Termux only: where the source checkout goes (default: ~/yaar)
 #   YAAR_SKIP_CLAUDE — Termux only: 1 leaves Claude Code for the first run to fetch
 #   YAAR_SKIP_YTDLP  — Termux only: 1 skips installing yt-dlp (YouTube audio download)
+#   YAAR_SKIP_CHROMIUM — Termux only: 1 skips installing Chromium (companion desktop, Browser app)
 #   YAAR_SKIP_APK    — Termux only: 1 skips offering the YAAR app (yaar-android.apk)
 
 set -euo pipefail
@@ -118,6 +119,18 @@ install_termux() {
   if [ "${YAAR_SKIP_YTDLP:-0}" != "1" ] && ! command -v yt-dlp > /dev/null 2>&1; then
     if ! pkg install -y yt-dlp; then
       echo "⚠  Could not install yt-dlp — YouTube download stays off. Later: pkg install yt-dlp" >&2
+    fi
+  fi
+
+  # Chromium, for the companion desktop (which keeps __screenshot answering while the phone
+  # shows another app) and the Browser app. The server finds `chromium-browser` on the PATH;
+  # Termux ships it in x11-repo, which has to be enabled first. A large download, and
+  # non-fatal: without it the server goes without a companion and says so once.
+  if [ "${YAAR_SKIP_CHROMIUM:-0}" != "1" ] && ! command -v chromium-browser > /dev/null 2>&1; then
+    echo "Installing Chromium (companion desktop, Browser app)..."
+    if ! { pkg install -y x11-repo && pkg install -y chromium; }; then
+      echo "⚠  Could not install Chromium — no companion desktop or Browser app." >&2
+      echo "   Later: pkg install x11-repo && pkg install chromium" >&2
     fi
   fi
 

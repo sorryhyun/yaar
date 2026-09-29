@@ -1,22 +1,25 @@
 # YAAR on Android
 
-**Source:** `hosts/android/` (`MainActivity.java`, `HostBridge.java`, `Termux.java`), `packages/server/src/desktop-window/host-bridge.ts`, `scripts/codegen/android-host-script.ts`, `scripts/dev/start-termux.sh`, `scripts/dev/termux-open-desktop.sh`
+**Source:** `hosts/android/` (`MainActivity.java`, `HostBridge.java`, `Termux.java`), `scripts/dev/start-termux.sh`, `scripts/dev/termux-open-desktop.sh`, `scripts/dev/ensure-claude-android.sh`, `scripts/dev/unbun-claude.ts`, `packages/server/src/features/android/`, `packages/server/src/features/companion/`, `packages/server/src/launcher-watchdog.ts`, `packages/server/src/desktop-window/host-bridge.ts`, `scripts/codegen/android-host-script.ts`
 
-This page is about what YAAR *is* on an Android phone: which two apps it is made of, what
-happens when you tap it, and what its window does that a browser tab doesn't. Installing the
-server in Termux is the [Termux guide](../guides/termux.md). The work still to do on Android is in
-the [WebView host proposal](../proposals/webview_host_proposal.md#4-android-what-is-left).
+This page describes how YAAR is put together on an Android phone: which processes run where,
+what the launcher does, what happens when you tap the app, and what the app's window does that
+a browser tab doesn't. To install it, follow the [Termux guide](../guides/termux.md). The work
+still to do on Android is in the
+[WebView host proposal](../proposals/webview_host_proposal.md#4-android-what-is-left).
 
 > **Status (2026-09-29).** The host APK is verified against a server on a PC, on an API 35
 > emulator and on a Galaxy S25 (Android 16, WebView 153). Releases carry it as
 > `yaar-android.apk` once the release key is in CI's secrets, and none has shipped yet. The
 > cold start below has not run with a server in the phone's own Termux.
 
-In short, YAAR on a phone is two apps. **Termux** runs the server, as it always has. The
-**YAAR app** (`io.github.sorryhyun.yaar`) is only the display: one Android WebView showing
-the desktop at `http://localhost:8000/`, with a `window.yaarHost` that saves files, reads the
-clipboard and opens links the way a phone app does. Without the YAAR app, the desktop opens
-in Chrome, as the Termux guide describes.
+## The shape of it
+
+On a phone, YAAR is two apps. **Termux** runs the server and everything the agents run. The
+**YAAR app** (`io.github.sorryhyun.yaar`) is only the display: one Android WebView showing the
+desktop at `http://localhost:8000/`, with a `window.yaarHost` that saves files, reads the
+clipboard and opens links the way a phone app does. Without the YAAR app, the desktop opens in
+Chrome instead, and everything on the Termux side is the same.
 
 ```mermaid
 flowchart LR
@@ -31,7 +34,9 @@ flowchart LR
   subgraph termux["Termux — the server and the agents' userland"]
     yaar["$PREFIX/bin/yaar<br/>make termux in ~/yaar"]
     server["YAAR server<br/>http :8000"]
+    claude["claude CLI per agent<br/><i>unpacked JS on Android Bun</i>"]
     chromium["Termux Chromium<br/><i>Browser app, companion</i>"]
+    api["Termux:API<br/><i>notifications, clipboard, share</i>"]
   end
 
   subgraph android["Android"]
@@ -47,7 +52,9 @@ flowchart LR
   web -- "WebMessage channel,<br/>top frame only" --> host
   host --> media
   host --> clip
+  server --> claude
   server -- "drives" --> chromium
+  server --> api
 ```
 
 What each piece does:
@@ -55,26 +62,173 @@ What each piece does:
   That is why the server is not in the APK. An APK that carried it would be rebuilding Termux.
 - **The YAAR app** owns the window and nothing else. If it is closed, the server keeps
   running. If the server is not running, the app waits for it and can start it.
-- **Android System WebView** is the renderer. It is Chromium, updated through the Play Store,
-  not something YAAR ships.
+- **Android System WebView** is the app's renderer. It is Chromium, updated through the Play
+  Store, not something YAAR ships.
 
----
-
-## What gets installed
+### What lives where
 
 | Where | What it is | Written by |
 |---|---|---|
-| Termux: `~/yaar`, `$PREFIX/bin/yaar`, `~/.cache/yaar/` | The server checkout, its launcher, and the unpacked Claude Code | install.sh in Termux ([Termux guide](../guides/termux.md#install)) |
-| The YAAR app, `io.github.sorryhyun.yaar` | The display: one activity, about 5.5 MB | install.sh in Termux offers it ([Installing the app](#installing-the-app)); `adb install` for a build of your own |
+| `~/.bun/bin/bun` | Bun's Android build (`bun-linux-aarch64-android`). The build the bun.sh installer picks does not run on Android | install.sh |
+| `~/yaar` | A git checkout of the release tag, with its `node_modules` | install.sh |
+| `$PREFIX/bin/yaar` | The launcher: `cd ~/yaar && make termux` | install.sh |
+| `~/.shortcuts/YAAR` | The same launcher, as a Termux:Widget button | install.sh |
+| `~/.cache/yaar/claude-js/<sdk-version>-<arch>/` | Claude Code, unpacked for Android, and a `claude` wrapper | `ensure-claude-android.sh`, from install.sh or the first launch |
+| `~/.claude/` | The Claude login | `claude auth login`, from the first launch |
+| `$PREFIX/bin/chromium-browser` | Termux's Chromium (`x11-repo`), for the companion desktop and the Browser app | install.sh (`pkg install chromium`) |
+| The YAAR app, `io.github.sorryhyun.yaar` | The display: one activity, about 5.5 MB | Android's installer, offered by install.sh ([Installing the app](#installing-the-app)) |
 | `/data/data/io.github.sorryhyun.yaar/` | The WebView's own storage (localStorage, IndexedDB, service worker, HTTP cache), private to the app | the WebView |
 | `Download/YAAR/` | What you save from the desktop | the YAAR app and DownloadManager |
 
-The app's only dependencies are `androidx.webkit` and `androidx.core`. It has no Play
-services, so it can go to F-Droid.
+The server's own state (`storage/`, `config/`, `session_logs/`) is inside `~/yaar`, as in any
+source checkout.
 
 ---
 
-## What happens when you open it
+## The Termux side
+
+### Why there is no release binary
+
+The release binaries are glibc builds, and Android's linker refuses them. So on Termux,
+install.sh builds from source: Bun's Android build, a checkout of the release tag, and
+`bun install`. An update is another run of install.sh, which moves the checkout to the new tag.
+
+### Why Claude Code has to be unpacked
+
+The Agent SDK ships `claude` as glibc and musl executables, and Android's linker refuses both
+(`unexpected e_type: 2`). Those executables are Bun single-file builds, though, and the
+JavaScript inside is stored as source next to its bytecode.
+
+`ensure-claude-android.sh` downloads the SDK's linux package from npm (about 220 MB), and
+`unbun-claude.ts` extracts its module graph into a plain directory. A small `claude` wrapper
+runs its `cli.js` on the Android Bun, and `CLAUDE_CODE_PATH` points at the wrapper. The result
+is cached per SDK version and architecture, so this runs again only when the SDK is bumped.
+
+install.sh runs it so the big download happens while you are already waiting on an installer.
+The launcher runs it too, so a checkout whose SDK has moved since still starts.
+
+### What `yaar` does
+
+`yaar` runs `make termux`, which is `scripts/dev/start-termux.sh`. In order:
+
+1. **Checks Bun.** A Bun that does not run means it is not the Android build.
+2. **Stays single-instance.** It writes `$TMPDIR/yaar-termux.pid`. If a live launcher already
+   owns it, this one opens that server's desktop and exits. A second server would take the
+   next port, and the first one's exit would release the wake lock under it.
+3. **Reinstalls when `bun.lock` has moved** since the last install. `git pull` alone would
+   leave the old SDK in `node_modules`, and with it the old unpacked Claude Code.
+4. **Finds Claude Code.** A `CLAUDE_CODE_PATH` from the shell profile is used only if it is at
+   least the version the SDK was built against. An older CLI fails every turn with a bare 400
+   once it is asked for a model it does not know. Otherwise, the unpacked build.
+5. **Logs in.** With no credentials and no `CLAUDE_CODE_OAUTH_TOKEN`, it runs
+   `claude auth login` in the terminal. Without a terminal (started from the YAAR app or a
+   widget), it exits and says to run `yaar` in Termux.
+6. **Opens the desktop** once the server answers, through `termux-open-desktop.sh`
+   ([below](#where-the-desktop-opens)).
+7. **Takes the wake lock** (`termux-wake-lock`, part of Termux itself). Without it, Android
+   dozes Termux within minutes of the screen going off. It is released when the launcher
+   exits.
+8. **Starts the server** with `start.sh claude` and these settings:
+
+| | Desktop | `make termux` |
+|---|---|---|
+| Providers | Claude, Codex | Claude only |
+| Remote mode | `REMOTE=1` / settings toggle | Always off: `REMOTE=0`, even over a `REMOTE=1` in your shell profile. Client and server are the same device |
+| MCP auth | On (except `*-dev` targets) | Skipped (`MCP_SKIP_AUTH=1`) |
+| File watcher | `bun --watch` | Off (`NO_WATCH=1`), so a `git pull` under a running YAAR does not restart it and drop every agent |
+| React build | Development (dev server) | Production. The dev build doubled render cost on the phone shell (`YAAR_REACT_PROD`) |
+| Companion desktop | Off | On, when Chromium is installed |
+| Layout | Desktop | The phone shell, chosen by the browser's own media query (coarse pointer, narrow window) |
+
+### How the server ends
+
+`start.sh` runs the server in a process group of its own, so the only thing that stops it is
+`start.sh`'s cleanup trap. On Android a launcher usually dies by SIGKILL: Termux kills a closed
+session's processes that way, and so does the phantom-process killer. A trap does not run on
+SIGKILL. So the launcher passes its own PID as `YAAR_LAUNCHER_PID`, and the server checks every
+two seconds and shuts down normally once the launcher is gone
+([`server_env.md`](../reference/server_env.md#yaar_launcher_pid)). Otherwise an orphan would
+keep port 8000, and the app would keep opening it.
+
+### Android's phantom-process killer
+
+Android 12 and later kill a background app's child processes ("phantom processes") outright,
+with no log line, when they use too much CPU or when there are more than 32 of them across all
+apps. YAAR under Termux is exactly that shape: a Bun server, a Claude CLI per agent, a
+companion Chromium, and `tsc` on every app compile.
+
+Only the user can turn this off (Developer options → **Disable child process restrictions**
+on Android 14+, `adb` on 12 and 13). The toggle is stored in a system property that an app
+can read, so the server knows which state it is in (`features/android/child-process-limit.ts`):
+
+- **On** (Android's default): each session is capped at 2 monitors, since each monitor is one
+  more agent process. The Configurations app says why.
+- **Off**: the normal monitor cap.
+- **Unknown** (`getprop` did not answer): no cap. A cap on a guess would be a restriction with
+  no stated reason.
+
+`read yaar://system/android` shows the current state.
+
+### The companion desktop
+
+When you switch apps, Android hides YAAR's page and then freezes it. After that, anything the
+server asks the page stops answering, `__screenshot` included. The socket does not show this:
+a frozen page's socket stays open.
+
+So the server parks a **companion desktop**: a second, always-visible desktop in a headless
+Termux Chromium. Chromium is a child of Termux, so it is on the server's side of the freeze.
+It uses the desktop layout, so every window stays mounted, and it answers app commands only
+while your own page cannot. It needs `chromium-browser` on `PATH`, which install.sh installs
+from Termux's `x11-repo`. Without it, the server does without, and says so once. Details:
+[`server_env.md` → Companion desktop](../reference/server_env.md#companion-desktop).
+
+### Termux:API
+
+With both the `termux-api` package and the Termux:API app, the server uses the phone itself
+(`features/android/`, over `@yaar/lib/termux`):
+
+- While nobody is looking at the desktop (the companion does not count), notifications,
+  permission dialogs, questions and finished monitor turns are mirrored into the Android
+  notification shade. A tap runs `termux-open-desktop.sh`, and coming back clears them.
+- The clipboard is the phone's real one, with no browser focus rule. Text only: an empty text
+  read still asks the browser, in case it holds an image.
+- Storage files gain `invoke { action: "share" }`, which opens Android's share sheet.
+
+With the package but not the app, every `termux-*` command hangs instead of failing. So the
+server makes one call at startup (`termux-battery-status`) and turns the integration on only if
+it answers in time. Every later call has its own deadline too.
+Details: [`server_env.md` → Termux:API](../reference/server_env.md#termuxapi-android).
+
+---
+
+## Where the desktop opens
+
+`termux-open-desktop.sh` is the one opener. `yaar` runs it when the server answers (or when a
+second launch finds one running), and notification taps run it. It tries, in order:
+
+1. **The YAAR app**, with `am start -a VIEW` pinned to its package.
+2. **An installed Chrome app.** Chrome's **Install app** mints a WebAPK
+   (`org.chromium.webapk.*`) that claims the desktop's URL. The opener asks the package
+   manager which activities handle `http://localhost:8000/` to find it. A plain home-screen
+   shortcut is not a WebAPK and is not found. Neither is a `PORT` other than the one the app
+   was installed on.
+3. **Chrome**, or the package in `YAAR_TERMUX_BROWSER`. Not the default browser: on a Galaxy
+   that is Samsung Internet, which warns "can't be downloaded securely" on every plain-http
+   download, `localhost` included. Chrome treats loopback as secure.
+4. **The default browser**, through `termux-open-url`.
+
+The trailing slash in the URL is load-bearing: the YAAR app's intent filter claims the path
+`/`, not an empty one.
+
+In Chrome, a service worker caches the shell, so reopening the desktop after Android has
+discarded the tab loads immediately while the server is still waking up. `?nosw` unregisters
+the worker and clears its caches.
+
+---
+
+## The YAAR app
+
+### What happens when you open it
 
 ```
 tap YAAR
@@ -93,6 +247,12 @@ tap YAAR
    would type. It is sent once per wait, and the app keeps polling whatever Termux does with it.
 3. **The server answers, and the desktop loads.** The WebView stays hidden until the page has
    painted, so you go from the waiting screen straight to the desktop.
+4. **While the desktop is loaded and the app is in front, it keeps probing `/health`**, every
+   3 s with a 2 s timeout. Two refused connections in a row (nothing listens on the port), or
+   four probes with no answer (which a busy server can also give), and it goes back to step 1:
+   the waiting screen, which starts the server again. The watch stops in `onPause` and
+   restarts in `onResume` with an immediate probe, so a server that died while YAAR was in
+   the background is caught within a few seconds of coming back.
 
 The port is 8000, unless the app was opened by a `VIEW` of another `http://localhost:<port>/`,
 which is the URL `termux-open-desktop.sh` passes.
@@ -106,8 +266,8 @@ The Google Play build of Termux (checked: `googleplay.2026.06.21`) has no `RunCo
 so there is no `RUN_COMMAND` for the app to ask for. Android refuses a permission no app
 declares without showing anything. The app checks for the service first, and with this Termux
 its waiting screen says to run `yaar` in Termux, with an **Open Termux** button. `yaar` then
-opens the desktop back in the YAAR app ([Fallbacks](#fallbacks)), and the app, which kept
-polling, is already on it.
+opens the desktop back in the YAAR app ([Where the desktop opens](#where-the-desktop-opens)),
+and the app, which kept polling, is already on it.
 
 Everything else is the same with either Termux. Only the start is by hand.
 
@@ -118,15 +278,12 @@ names whichever is missing:
 
 - **The permission.** Android asks "Allow YAAR to run commands in Termux?" the first time the
   app finds no server.
-- **Termux's consent.** Termux refuses outside apps unless you add this, with its own
-  notification rather than an error the app can see:
+- **Termux's consent.** Termux refuses outside apps unless `allow-external-apps = true` is in
+  `~/.termux/termux.properties`. It refuses with its own notification rather than an error the
+  app can see.
 
-  ```bash
-  echo 'allow-external-apps = true' >> ~/.termux/termux.properties
-  termux-reload-settings
-  ```
-
-Without either, run `yaar` in Termux yourself. The app picks the server up within a second.
+Without either, `yaar` run in Termux by hand still works. The app picks the server up within a
+second.
 
 ### The two origins
 
@@ -139,9 +296,7 @@ to the WebView the two origins are different sites.
 There is no h2 here, unlike the Mac's window. The traffic is plain HTTP/1.1, the same as in
 Chrome on the phone.
 
----
-
-## What the window does that a browser tab doesn't
+### What the window does that a browser tab doesn't
 
 The desktop is the same frontend Chrome would show. It learns that it is in YAAR's app from
 `window.yaarHost`, which exists only in the desktop's top frame and never in an app iframe:
@@ -186,14 +341,18 @@ The page's `env(safe-area-inset-*)` could not be trusted with them: WebView 124 
 emulator reported the cutout there (51 px at the top) and never the navigation bar, so the
 gesture bar sat on the shell's input.
 
-WebView 153 on the Galaxy S25 does report the bars (35 px at the top, 48 px at the bottom),
-on top of the native padding. The shell's `env()` rules then pad a second time: an empty band
-above a maximized window, and below the command sheet's handle. Fixing it is open in the
-[proposal](../proposals/webview_host_proposal.md#4-android-what-is-left).
+The padding view then **consumes** the insets, so the WebView under it never sees them. It
+used to pass them on, and WebView 153 on the Galaxy S25 does turn the bars into `env()`
+(35 px at the top, 48 px at the bottom). The shell's `env()` rules then padded a second time:
+an empty band above a maximized window, and below the command sheet's handle. With the insets
+consumed, WebView 124 on the emulator reads `env()` as 0 on all four sides. The S25 is still
+to re-measure ([proposal](../proposals/webview_host_proposal.md#4-android-what-is-left)).
 
----
+It goes through androidx.core's `WindowInsetsCompat`, because the platform's
+`WindowInsets.Type` and `Window.setDecorFitsSystemWindows` are API 30 and the app runs from
+29. Called directly, as they once were, they fail `onCreate` on Android 10.
 
-## How it ends
+### How it ends
 
 The YAAR app and the server have separate lives:
 
@@ -201,31 +360,22 @@ The YAAR app and the server have separate lives:
   paused (`onPause`), the desktop reports itself hidden, and the server keeps running.
 - **Swiping YAAR away from Recents** closes the display only. The server keeps running in
   Termux, held awake by its wake lock.
-- **Stopping the server** is done in Termux: `Ctrl-C` in its session, or closing the session
-  ([Termux guide](../guides/termux.md#day-to-day)).
-- **A server that goes away under an open desktop** is handled by the desktop's own reconnect,
-  as in Chrome. A reload does not bring the waiting screen back: once the service worker has
-  cached the shell, it answers the reload itself, so the WebView never sees the error. The
-  desktop reconnects when the server returns.
-
----
-
-## Fallbacks
-
-- **Opened from Termux.** `termux-open-desktop.sh`, which `yaar` and notification taps run,
-  opens the YAAR app first, pinned to its package. Without it, the installed Chrome app (a
-  WebAPK) if there is one, then Chrome, then the default browser. See the
-  [Termux guide](../guides/termux.md#first-run).
-- **An old WebView.** There is no host, so everything works the way it does in Chrome.
+- **Stopping the server** is done in Termux: `Ctrl-C` in its session, or closing the session,
+  which the [launcher watchdog](#how-the-server-ends) turns into a clean shutdown.
+- **A server that goes away under an open desktop** brings the waiting screen back, through the
+  app's own `/health` watch (step 4 [above](#what-happens-when-you-open-it)), and with it the
+  restart in Termux. The page cannot be what notices: once the service worker has cached the
+  shell, it answers a reload itself, so the WebView never sees an error. Verified on the
+  emulator by removing the `adb reverse` under a loaded desktop, in front and from the
+  background.
 
 ---
 
 ## Installing the app
 
 install.sh offers the release's `yaar-android.apk` on Termux, when the app is missing or older
-than the release ([Termux guide](../guides/termux.md#install), step 7). Android installs an app
-only when you tap Install, so all install.sh can do is bring up that screen. Which app is
-allowed to bring it up depends on the Termux:
+than the release. Android installs an app only when you tap Install, so all install.sh can do
+is bring up that screen. Which app is allowed to bring it up depends on the Termux:
 
 | Termux | How the APK reaches the installer |
 |---|---|
@@ -246,6 +396,9 @@ empty, each version is offered once (`~/.cache/yaar/android-apk-offered`).
 The app's `versionCode` is YAAR's version, major·10⁶ + minor·10³ + patch, so `0.22.0` is
 `22000`. Every release APK is signed with the one release key
 ([release process](../reference/release_process.md#cutting-a-release)).
+
+The app's only dependencies are `androidx.webkit` and `androidx.core`. It has no Play
+services, so it can go to F-Droid.
 
 ## Building the app
 
@@ -300,28 +453,15 @@ that depend on the WebView version, like WebGPU and the safe-area insets, need a
 On a Galaxy S25 (WebView 153), WebGPU works (Adreno 8xx, with `shader-f16` and `subgroups`)
 and `navigator.vibrate` does too.
 
----
+To test the phone shell without a phone, `make claude-dev-mobile` emulates one in desktop
+Chrome, and `make mobile-bench` measures it with a mock agent, set up the way Termux runs
+(companion on, production React).
 
-## Uninstalling
+## Related
 
-```bash
-adb uninstall io.github.sorryhyun.yaar     # or Settings → Apps → YAAR → Uninstall
-```
-
-`Download/YAAR/` is left alone. Removing the server is the
-[Termux guide's](../guides/termux.md) business.
-
----
-
-## Troubleshooting
-
-| Symptom | Cause |
-|---|---|
-| "YAAR's server runs in Termux, which is not installed" | Install Termux, then YAAR in it ([Termux guide](../guides/termux.md#install)) |
-| "Starting YAAR in Termux…" and nothing happens | Termux refused the command: add `allow-external-apps = true` (above). Otherwise open Termux, whose new session shows what `yaar` is doing |
-| A toast says the WebView is too old for the host bridge | Update Android System WebView from the Play Store |
-| An app's Save or Export does nothing, or "Couldn't save this download (blob:)" | The app was compiled before its SDK learned about hosts, so it tries a `blob:` link the WebView cannot save. Recompile the app |
-| "Open Termux and run `yaar`" | This Termux is the Google Play build, which cannot start the server for another app. Run `yaar` in it ([above](#termux-from-google-play-run-yaar-yourself)) |
-| `yaar` opens Chrome, not the YAAR app | The checkout predates the launcher preferring the app: `git pull` in `~/yaar` |
-| The installer says "App not installed" or that the package conflicts | A build signed with another key is installed, usually a debug build from `adb install`. Uninstall YAAR, then install the release |
-| install.sh's installer screen never appeared | Allow Termux (or, with the Play Termux, Chrome) to install apps under Settings → Apps → Special access → Install unknown apps, then run install.sh again. If it says the app was already offered, delete `~/.cache/yaar/android-apk-offered` first |
+- [Termux guide](../guides/termux.md): installing, day-to-day use, uninstalling, and
+  troubleshooting
+- [`docs/reference/server_env.md`](../reference/server_env.md): `YAAR_TERMUX_API`,
+  `YAAR_TERMUX_BROWSER`, `YAAR_COMPANION_TAB`, `YAAR_LAUNCHER_PID`, `YAAR_REACT_PROD`
+- [YAAR on macOS](./mac.md): the other native desktop window, which shares the
+  `window.yaarHost` contract

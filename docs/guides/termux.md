@@ -1,145 +1,189 @@
-# YAAR on Android (Termux)
+# Installing YAAR on Android (Termux)
 
-YAAR runs on an Android phone under [Termux](https://termux.dev/), with the phone acting as
-both server and client: the server runs in Termux, and the desktop opens in the phone's own
-browser at `http://localhost:8000`. Only the Claude provider is supported.
+This guide takes a phone from nothing to a running YAAR: install Termux, install YAAR in it,
+log in to Claude, and add the YAAR app. At the end, the phone is both server and client. The
+server runs in Termux, and the desktop opens on the same phone at `http://localhost:8000`.
+Only the Claude provider is supported.
+
+How those pieces fit together (the two apps, the launcher, why Claude Code is unpacked) is
+[YAAR on Android](../installations/android.md). This page covers only what you do.
 
 > **Want to use YAAR on your phone while it runs on a PC?** That is
 > [remote mode](./remote_mode.md), not this page.
 
-## Install
+## What you need
 
-Install Termux, from F-Droid, GitHub or Google Play, then run this in it:
+- An **arm64 Android phone**. Termux runs on Android 7 and later. The YAAR app needs
+  Android 10 (API 29) or later, and without it the desktop opens in Chrome.
+- **Several GB of free storage.** YAAR installs its full dependency tree, and the Claude
+  Code download alone is about 220 MB.
+- A **Claude account** that Claude Code can log in to.
+- **Chrome** is recommended but optional. Without the YAAR app, the desktop opens there
+  ([why Chrome](#why-chrome-and-not-the-default-browser)).
+
+---
+
+## Step 1: Install Termux
+
+Termux comes from three places. The builds are signed with different keys, so they do not
+update each other and their add-ons (Termux:API, Termux:Widget) do not mix. **Get Termux and
+every add-on from the same source.**
+
+| Source | Where | With YAAR |
+|---|---|---|
+| **F-Droid** (recommended) | [f-droid.org/packages/com.termux](https://f-droid.org/packages/com.termux/). Use the F-Droid app, or download the APK from that page | Everything works. The YAAR app can start the server itself, and install.sh can hand the app to Android's installer directly |
+| **GitHub** | [github.com/termux/termux-app/releases](https://github.com/termux/termux-app/releases). Take the `arm64-v8a` APK | Same as F-Droid |
+| **Google Play** | Search for "Termux" | Works, with two manual steps: you start the server yourself by running `yaar`, and the YAAR app downloads through Chrome |
+
+An F-Droid or GitHub APK is a file you install yourself. The first time, Android asks you to
+allow your browser (or the F-Droid app) to install apps. Allow it, then tap **Install**.
+
+Open Termux once and wait for its first-run setup to finish, until the `$` prompt appears.
+Then bring its packages up to date:
+
+```bash
+pkg update && pkg upgrade -y
+```
+
+If `pkg` is slow or cannot reach its mirror, `termux-change-repo` picks another one.
+
+---
+
+## Step 2: Install YAAR
+
+In Termux:
 
 ```bash
 curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
-yaar
 ```
 
-There is no Android release binary, so on Termux the installer builds from source instead:
+There is no Android release binary, so on Termux the installer builds from source. It takes a
+few minutes, mostly for the Claude Code download:
 
 1. Installs any missing `git`, `make`, `curl` or `unzip` with `pkg`.
-2. Installs **Bun's Android build** (`bun-linux-aarch64-android`) to `~/.bun/bin`. The build
-   the bun.sh installer picks does not run on Android.
+2. Installs Bun's Android build to `~/.bun/bin`.
 3. Clones the release tag to `~/yaar` and runs `bun install`.
-4. Fetches **Claude Code** and unpacks it for Android — about 220 MB, and the one big
-   download. It lands in `~/.cache/yaar/claude-js/<sdk-version>-<arch>/`.
-5. Installs **yt-dlp** (`pkg install yt-dlp`) unless it is already there — what
-   `yaar://system/ytdlp` and the transcribe app's YouTube download run. Non-fatal.
-6. Puts a `yaar` launcher in `$PREFIX/bin` (it runs `make termux` in `~/yaar`), and a
-   home-screen shortcut in `~/.shortcuts/YAAR`.
-7. Offers the **[YAAR app](../installations/android.md)**, the desktop's own window, if the
-   release has one and it is not installed or is older. Android installs it only when you tap
-   Install, and how you get there depends on your Termux:
-   - **F-Droid or GitHub Termux**: the APK is downloaded, checked against `SHA256SUMS`, and
-     handed to Android's installer. Pick **Package installer** if Android asks which app to
-     use. The first time, allow Termux to install apps.
-   - **Google Play Termux**: this Termux is not allowed to install apps, so the APK opens in
-     Chrome. Tap **Download anyway** at Chrome's warning, open the download, allow Chrome to
-     install apps the first time, and tap Install.
+4. Downloads **Claude Code** and unpacks it for Android, into `~/.cache/yaar/`. This is the
+   big download (about 220 MB).
+5. Installs **yt-dlp** with `pkg`, for YouTube audio download. If that fails, the install
+   continues without it.
+6. Installs **Chromium** (`x11-repo`, then `chromium`), for the
+   [companion desktop](#chromium-page-reads-while-youre-in-another-app) and the Browser app.
+   This is the other large download. If it fails, the install continues without it.
+7. Adds the `yaar` command, and a home-screen shortcut in `~/.shortcuts/YAAR`
+   ([Termux:Widget](#termuxwidget-a-home-screen-button)).
+8. Offers the **YAAR app**. See [Step 4](#step-4-install-the-yaar-app).
 
-   Termux can't always see whether the app is installed. When it can't, each version is
-   offered once. Skipping this changes nothing else: the desktop opens in Chrome.
+Options go in front of `bash`, e.g. `curl -fsSL … | VERSION=v0.20.4 bash`:
 
 | Option | Default | Meaning |
 |---|---|---|
 | `VERSION` | latest | Release tag to check out |
 | `YAAR_DIR` | `~/yaar` | Where the source checkout goes |
-| `INSTALL_DIR` | `$PREFIX/bin` | Where the `yaar` launcher goes |
+| `INSTALL_DIR` | `$PREFIX/bin` | Where the `yaar` command goes |
 | `YAAR_SKIP_CLAUDE` | off | `1` leaves the Claude Code download to the first `yaar` run |
 | `YAAR_SKIP_YTDLP` | off | `1` skips installing yt-dlp |
+| `YAAR_SKIP_CHROMIUM` | off | `1` skips installing Chromium |
 | `YAAR_SKIP_APK` | off | `1` skips offering the YAAR app |
 
-Pass them in front of `bash`, e.g. `curl -fsSL … | VERSION=v0.20.4 bash`.
+---
 
-### Why Claude Code has to be unpacked
-
-The Agent SDK ships `claude` as glibc and musl executables, and Android's linker refuses
-both (`unexpected e_type: 2`). Those executables are Bun single-file builds, though, and
-the JavaScript inside is stored as source next to its bytecode.
-`scripts/dev/unbun-claude.ts` extracts that module graph into a plain directory, and a small
-`claude` wrapper runs its `cli.js` on the Android Bun. `CLAUDE_CODE_PATH` points at the
-wrapper. The result is cached per SDK version, so it runs again only when the SDK is bumped.
-
-## First run
+## Step 3: First run and Claude login
 
 ```bash
 yaar
 ```
 
-If Claude is not logged in, the launcher starts `claude auth login` in the terminal: open
-the URL it prints, approve, and paste the code back. This has to be the full login.
-`CLAUDE_CODE_OAUTH_TOKEN` (a `setup-token` token) also works for chat, but it is
-inference-only, so the CLI refuses [Claude Remote](./claude_remote.md) with it, and the
-launcher tells you so.
+The first time, Claude is not logged in yet, so `yaar` starts `claude auth login` in the
+terminal. Open the URL it prints, approve, and paste the code back into Termux. This has to be
+the full login. `CLAUDE_CODE_OAUTH_TOKEN` (a `setup-token` token) also works for chat, but it
+is inference-only, so [Claude Remote](./claude_remote.md) refuses it. The launcher tells you
+when you are using one.
 
-Once the server answers, the desktop opens in the [YAAR app](../installations/android.md)
-if it is installed, then in Chrome's installed app if there is one (see
-[Install it as an app](#install-it-as-an-app)), otherwise in **Chrome** if it is
-installed, and in the default browser if not. Starting with "install essential apps" is a
-good first message.
+Once the server answers, the desktop opens: in the YAAR app if it is installed, otherwise in
+Chrome. Starting with "install essential apps" is a good first message.
 
-### Why Chrome and not the default browser
+Leave the Termux session open. Closing it stops YAAR.
 
-On a Galaxy phone the default browser is Samsung Internet, which warns "can't be downloaded
-securely" on every plain-http download, `localhost` included. Chrome counts loopback as
-secure and does not warn. To use another browser, set `YAAR_TERMUX_BROWSER` to its package
-name (empty means the default browser):
+---
 
-```bash
-YAAR_TERMUX_BROWSER=org.mozilla.firefox yaar
-```
+## Step 4: Install the YAAR app
 
-The YAAR app and Chrome's installed app, when there is one, still come first.
+The YAAR app is the desktop's own window. It is a full-screen app instead of a Chrome tab. It
+saves into `Download/YAAR/`, reads the clipboard directly, and can start the server when it is
+not running. [What it does](../installations/android.md#what-the-window-does-that-a-browser-tab-doesnt).
 
-### Install it as an app
+install.sh (Step 2) offers it when the release has one and the app is missing or older.
+Android installs an app only when you tap Install, and the way to that screen depends on your
+Termux:
 
-In Chrome, use **Install app** (or **Add to Home screen → Install**). An installed YAAR
-opens full-screen, and a service worker caches the shell, so reopening it after Android has
-discarded the tab loads immediately while the server is still waking up.
+- **F-Droid or GitHub Termux**: install.sh downloads the APK, checks it against
+  `SHA256SUMS`, and opens Android's installer. If Android asks which app to use, pick
+  **Package installer**. The first time, allow Termux to install apps. Then tap **Install**.
+- **Google Play Termux**: this Termux is not allowed to install apps, so the APK opens in
+  Chrome. Tap **Download anyway** at Chrome's warning, open the download, allow Chrome to
+  install apps the first time, and tap **Install**.
 
-Once it is installed, `yaar`, the home-screen button, and taps on native notifications all
-open **the app** rather than a Chrome tab. The launcher finds it by asking Android which
-apps handle `http://localhost:8000/`: Chrome's installed apps are WebAPKs
-(`org.chromium.webapk.*`) that claim their site's URL. Two cases are not found and open in
-Chrome as before: a plain home-screen *shortcut* (Chrome offers one when it cannot install
-a WebAPK), and a `PORT` other than the one the app was installed on.
+Missed it? Run the install one-liner again. Termux can't always see whether the app is
+installed, and when it can't, each version is offered only once. To be offered it again,
+delete `~/.cache/yaar/android-apk-offered` first.
 
-If the cached shell ever misbehaves, opening `http://localhost:8000/?nosw` unregisters the
-worker and clears its caches.
+Skipping the app changes nothing else. The desktop opens in Chrome, and you can
+[install it from Chrome](#no-yaar-app-install-it-from-chrome) instead.
 
-## Day to day
+### Let the app start the server (F-Droid or GitHub Termux)
 
-| To… | Do this |
-|---|---|
-| Start YAAR | `yaar`, or tap the home-screen button (below) |
-| Bring the desktop back | Run `yaar` again, or tap the button again: a second launch opens the running desktop and exits |
-| Stop YAAR | `Ctrl-C` in the Termux session running it, or close that session: the server notices its launcher is gone and stops within a few seconds |
-| Update | Re-run the install one-liner (it moves `~/yaar` to the new tag). The next launch notices the changed `bun.lock`, reinstalls, and unpacks a newer Claude Code if the SDK moved |
+With these two one-time grants, tapping YAAR starts the server when it is not running, so you
+never have to open Termux. The same goes for a server that stops while the app is open, or
+while it is in the background: the app notices within a few seconds of being in front, and
+starts it again.
 
-**One YAAR per phone.** The launcher writes `$TMPDIR/yaar-termux.pid`, so a second `yaar`
-does not start a second server. It opens the first server's desktop and exits.
+1. Let Termux accept commands from other apps:
 
-**The wake lock.** While the server runs, the launcher holds `termux-wake-lock`, so Android
-does not put Termux to sleep with the screen off. Termux shows this as a persistent
-notification. It is released when the server exits. On phones with aggressive battery
-management it can also help to exempt Termux from battery optimization in Android's
-settings.
+   ```bash
+   echo 'allow-external-apps = true' >> ~/.termux/termux.properties
+   termux-reload-settings
+   ```
 
-**No file watcher.** `make termux` runs the server without `bun --watch`, so a `git pull`
-under a running YAAR does not restart it and drop every agent. `NO_WATCH=0 yaar` turns
-watching back on if you are editing the server on the phone.
+2. Open the YAAR app while the server is stopped. When Android asks
+   "Allow YAAR to run commands in Termux?", tap **Allow**.
+
+With the **Google Play Termux**, this is not possible: that build cannot run commands for
+other apps. The app's waiting screen says "run `yaar` in Termux" and has an **Open Termux**
+button. Run `yaar`, and the app picks the server up within a second.
+
+---
+
+## Step 5: Stop Android from killing YAAR (Android 12 and later)
+
+Android 12 and later kill background child processes of apps ("phantom processes") without
+warning. Under Termux, that means the YAAR server, every agent's Claude process, and the
+companion Chromium. It happens most when you switch to another app while an agent is working.
+
+While these restrictions are on, YAAR limits each session to 2 monitors, and the
+**Configurations** app shows a warning in its Android section. To turn them off:
+
+- **Android 14 and later**: enable Developer options (Settings → About phone → tap
+  **Build number** seven times). Then go to Settings → Developer options and turn on
+  **Disable child process restrictions**.
+- **Android 12 and 13**: there is no toggle. It takes `adb` from a computer, see
+  [Termux's instructions](https://github.com/termux/termux-app/issues/2366).
+
+Also exempt Termux from battery optimization: Settings → Apps → Termux → Battery →
+**Unrestricted**. On Galaxy phones, also keep Termux out of "Sleeping apps".
+
+---
 
 ## Optional add-ons
 
-YAAR works without any of these. Termux:Widget and Termux:API are separate apps: install them
-from the same store you got Termux from.
+YAAR works without any of these. Termux:Widget and Termux:API are separate apps. Install them
+from the same source as Termux.
 
 ### Termux:Widget: a home-screen button
 
-The installer writes `~/.shortcuts/YAAR`. Install Termux:Widget, add its widget to the home
-screen, and pick **YAAR**. Tapping it starts YAAR, or brings back the desktop if YAAR is
-already running.
+Install Termux:Widget, add its widget to the home screen, and pick **YAAR**. Tapping it starts
+YAAR, or brings back the desktop if YAAR is already running. With the YAAR app, you can use
+the app's own icon instead.
 
 ### Termux:API: notifications, clipboard, share sheet
 
@@ -147,48 +191,90 @@ already running.
 pkg install termux-api   # plus the Termux:API app
 ```
 
-With both installed, the server uses the phone itself:
+With both installed, YAAR uses the phone itself:
 
 - **Native notifications.** While you are not looking at the desktop, agent notifications,
   permission dialogs, questions, and finished monitor turns show up in the Android
-  notification shade. Tapping one opens the desktop (in the installed app, if there is
-  one), and they are all cleared when you come back. This matters most for permission dialogs, which have a deadline: one you never
-  see counts as a denial.
+  notification shade. Tapping one opens the desktop, and they are all cleared when you come
+  back. This matters most for permission dialogs, which have a deadline: one you never see
+  counts as a denial.
 - **Clipboard.** Text reads and writes use the phone's real clipboard, without the browser's
   focus rule. Images still go through the browser.
 - **Share sheet.** Storage files gain a `share` action that opens Android's share sheet.
 
-You need both the package **and** the app. With only the package, every `termux-*` command
-hangs instead of failing. So the server makes one test call at startup and turns the
-integration on only if it answers in time. If you don't install it, the launcher prints a
-one-line tip and nothing else changes. `YAAR_TERMUX_API=0` turns it off.
+You need both the package **and** the app. If only one is installed, YAAR notices at startup
+and leaves the integration off. `YAAR_TERMUX_API=0` turns it off on purpose.
 
 ### Chromium: page reads while you're in another app
 
-When you switch apps, Android hides YAAR's tab and then freezes it. After that, anything the
-agent reads out of the page stops answering. The one that hurts is `__screenshot`: an agent
-building an app can no longer see what it built.
+install.sh installs this one for you (Step 2), unless you set `YAAR_SKIP_CHROMIUM=1` or the
+install failed.
 
-To keep those reads working, the server parks a **companion desktop**: a second,
-always-visible desktop in its own headless Chromium, running inside Termux and so on the
-server's side of the freeze. It is on by default on Android and needs a Termux Chromium
-(`chromium-browser` on `PATH`). YAAR already passes the `--browser-subprocess-path` flag that
-Chromium needs to start its child processes under Termux.
+When you switch apps, Android freezes the desktop, and agents can no longer read from it. The
+one that matters is taking screenshots: an agent building an app can no longer see what it
+built. A Termux Chromium lets the server keep a hidden
+[companion desktop](../installations/android.md#the-companion-desktop) that keeps answering.
+The Browser app uses the same Chromium. To install it by hand:
 
-The companion costs a Chromium process and a second live iframe per open app window.
-`YAAR_COMPANION_TAB=0` turns it off. Details:
-[`server_env.md` → Companion desktop](../reference/server_env.md#companion-desktop).
+```bash
+pkg install x11-repo
+pkg install chromium
+```
 
-## What differs from a desktop install
+YAAR finds it on the next start. It costs memory (a Chromium process, plus a second copy of
+each open app window). `YAAR_COMPANION_TAB=0` turns the companion off.
 
-| | Desktop | `make termux` |
-|---|---|---|
-| Providers | Claude, Codex | Claude only |
-| Remote mode | `REMOTE=1` / settings toggle | Always off: the launcher pins `REMOTE=0`, even over a `REMOTE=1` in your shell profile |
-| MCP auth | On (except `*-dev` targets) | Skipped (`MCP_SKIP_AUTH=1`) |
-| React build | Development (dev server) | Production. The dev build doubled render cost on the phone shell (`YAAR_REACT_PROD`) |
-| Companion desktop | Off | On |
-| Layout | Desktop | The phone shell, chosen by the browser's own media query (coarse pointer, narrow window) |
+### No YAAR app: install it from Chrome
+
+Without the YAAR app, open the desktop in Chrome and use **Install app** (or
+**Add to Home screen → Install**). The installed desktop opens full-screen, and `yaar`,
+Termux:Widget and notification taps then open it rather than a Chrome tab. It has to be
+**installed**. A plain home-screen *shortcut* still opens in a Chrome tab.
+
+If its cached page ever misbehaves, open `http://localhost:8000/?nosw` once to clear it.
+
+### Why Chrome and not the default browser
+
+On a Galaxy phone the default browser is Samsung Internet, which warns "can't be downloaded
+securely" on every plain-http download, `localhost` included. Chrome treats `localhost` as
+secure and does not warn. To use another browser, set `YAAR_TERMUX_BROWSER` to its package
+name (empty means the default browser):
+
+```bash
+YAAR_TERMUX_BROWSER=org.mozilla.firefox yaar
+```
+
+The YAAR app and an installed Chrome app still come first.
+
+---
+
+## Day to day
+
+| To… | Do this |
+|---|---|
+| Start YAAR | Tap the YAAR app, run `yaar` in Termux, or tap the Termux:Widget button |
+| Bring the desktop back | Same as starting: when YAAR is already running, it opens the running desktop |
+| Close the desktop only | Swipe the YAAR app (or Chrome) away. The server keeps running in Termux |
+| Stop YAAR | `Ctrl-C` in the Termux session running it, or close that session. The server stops within a few seconds |
+| Update | Run the install one-liner again. The next `yaar` reinstalls dependencies and, if needed, a newer Claude Code |
+
+While YAAR runs, Termux shows a persistent **wake-lock** notification. That is what keeps the
+server alive with the screen off, and it goes away when YAAR stops.
+
+Only one YAAR runs per phone. A second `yaar` opens the first one's desktop and exits.
+
+## Uninstalling
+
+```bash
+rm -rf ~/yaar ~/.cache/yaar ~/.shortcuts/YAAR $PREFIX/bin/yaar
+rm -rf ~/.bun   # Bun, unless something else uses it
+```
+
+Remove the YAAR app like any other app (Settings → Apps → YAAR → Uninstall). `Download/YAAR/`,
+where the desktop saved your files, is left alone. Your Claude login is in `~/.claude/`, which
+the Claude CLI shares, so remove it only if nothing else uses it.
+
+---
 
 ## Troubleshooting
 
@@ -196,44 +282,66 @@ The companion costs a Chromium process and a second live iframe per open app win
 `bun-linux-aarch64-android.zip` from the [Bun releases](https://github.com/oven-sh/bun/releases)
 and put its `bun` in `~/.bun/bin`.
 
+**`Claude is not logged in` and `yaar` exits.** It was started without a terminal (from the
+YAAR app, a widget, or a script). Run `yaar` once in a Termux session to log in.
+
+**Every turn fails right after an update.** Start YAAR through `yaar`, not the server
+directly. `yaar` is what reinstalls dependencies and unpacks a newer Claude Code.
+
 **`Ignoring CLAUDE_CODE_PATH=…`.** Your shell profile points `CLAUDE_CODE_PATH` at a Claude
-Code older than the one the SDK was built against. An older CLI fails every turn with a bare
-400 as soon as it is asked for a model it does not know, so the launcher uses the unpacked
-build instead. Unset the variable to drop the note.
+Code older than the one YAAR needs, so YAAR uses its own instead. Unset the variable to drop
+the note.
 
-**Every turn fails right after an update.** Launch through `yaar` / `make termux`, not the
-server directly. The launcher is what reinstalls dependencies when `bun.lock` has moved and
-re-unpacks Claude Code for a new SDK.
+**YAAR stops by itself, or stops with the screen off.** Android is killing it. Do
+[Step 5](#step-5-stop-android-from-killing-yaar-android-12-and-later), check that the Termux
+wake-lock notification is showing, and exempt Termux from battery optimization.
 
-**`Claude is not logged in` and the launcher exits.** It was started without a terminal
-(from a widget or a script). Run `yaar` once from a Termux session to log in.
+**The YAAR app says "Starting YAAR in Termux…" and nothing happens.** Termux refused the
+command. Add `allow-external-apps = true`
+([Step 4](#let-the-app-start-the-server-f-droid-or-github-termux)). Otherwise, open Termux:
+the new session there shows what `yaar` is doing.
 
-**YAAR stops with the screen off.** Check that the Termux wake-lock notification is showing,
-and exempt Termux from battery optimization.
+**The YAAR app says "Open Termux and run `yaar`".** This is the Google Play Termux, which
+cannot start the server for another app. Run `yaar` in it.
 
-**The desktop opens in a Chrome tab even though the app is installed.** Check what Android
-reports for the desktop URL:
+**The YAAR app says Termux is not installed.** Install Termux ([Step 1](#step-1-install-termux)),
+then YAAR in it.
+
+**The installer screen never appeared.** Allow Termux (or, with the Play Termux, Chrome) to
+install apps under Settings → Apps → Special access → Install unknown apps. Then delete
+`~/.cache/yaar/android-apk-offered` and run the install one-liner again.
+
+**"App not installed", or the package conflicts.** A YAAR app signed with another key is
+installed, usually a build of your own. Uninstall YAAR, then install the release.
+
+**`yaar` opens Chrome, not the YAAR app.** Your checkout is older than the app. Run the
+install one-liner again.
+
+**A toast says the WebView is too old.** Update **Android System WebView** from the Play Store.
+Until then, the app saves and copies the way Chrome does.
+
+**An app's Save or Export does nothing, or "Couldn't save this download (blob:)".** That app
+was compiled with an older SDK. YAAR recompiles such apps when the server starts, so restart
+YAAR. If it persists, ask the agent to recompile the app.
+
+**The desktop opens in a Chrome tab even though you installed it from Chrome.** Check what
+Android reports for the desktop URL:
 
 ```bash
 /system/bin/cmd package query-activities --brief -a android.intent.action.VIEW -d http://localhost:8000/
 ```
 
-An `org.chromium.webapk.…` line means the app is found. No such line means it was added as
-a shortcut rather than installed: remove it and use **Install app**. An error means this
-phone does not let Termux query the package manager, and the launcher falls back to Chrome.
+A line with `org.chromium.webapk.…` means the app is found. No such line means it was added
+as a shortcut rather than installed: remove it and use **Install app**.
 
 **Screenshots or other page reads time out while you're in another app.** The companion
-desktop is not running. Install Chromium in Termux, and check that `YAAR_COMPANION_TAB` is
-not set to `0`.
+desktop is not running. [Install Chromium](#chromium-page-reads-while-youre-in-another-app),
+and check that `YAAR_COMPANION_TAB` is not set to `0`.
 
 ## Related
 
+- [YAAR on Android](../installations/android.md): how the pieces fit together, and building
+  the YAAR app
 - [`docs/reference/server_env.md`](../reference/server_env.md): `YAAR_TERMUX_API`,
-  `YAAR_TERMUX_BROWSER`, `YAAR_COMPANION_TAB`, `YAAR_REACT_PROD`, and why each one defaults
-  the way it does on Android
-- `scripts/dev/start-termux.sh`: the launcher; every step above is commented there
-- `scripts/dev/termux-open-desktop.sh`: YAAR app → Chrome's installed app → Chrome → default browser
-- `scripts/dev/ensure-claude-android.sh`, `scripts/dev/unbun-claude.ts`: Claude Code for Android
-- `packages/server/src/features/android/`, `packages/lib/src/termux/`: the Termux:API integration
-- `make mobile-bench`: phone-shell performance with a mock agent, set up the way Termux runs
-  (companion on, production React)
+  `YAAR_TERMUX_BROWSER`, `YAAR_COMPANION_TAB`, and why each one defaults the way it does on
+  Android
