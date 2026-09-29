@@ -1,6 +1,6 @@
 # YAAR on macOS
 
-**Source:** `install.sh`, `scripts/build/exe-bundle.js`, `packages/server/src/config/env.ts`, `packages/server/src/macos-bundle.ts`, `packages/server/src/exe-entry.ts`, `packages/server/src/desktop-window/launch.ts`, `packages/server/src/desktop-window/host.ts`, `packages/server/src/desktop-window/host-bridge.ts`, `packages/server/src/desktop-window/library.ts`, `packages/lib/native/webview_extras.mm`, `packages/server/src/http/local-tls.ts`, `packages/server/src/features/update/installer.ts`
+**Source:** `install.sh`, `scripts/build/exe-bundle.js`, `packages/server/src/config/env.ts`, `packages/server/src/macos-bundle.ts`, `packages/server/src/exe-entry.ts`, `packages/server/src/desktop-window/launch.ts`, `packages/server/src/desktop-window/host.ts`, `packages/server/src/desktop-window/host-bridge.ts`, `packages/server/src/desktop-window/library.ts`, `packages/lib/src/webview/native/webview_extras.mm`, `packages/server/src/http/local-tls.ts`, `packages/server/src/features/update/installer.ts`
 
 This page is about what YAAR *is* once it is installed on a Mac: which files it puts where, the
 processes that run when you start it, and how they end. To install it, see the

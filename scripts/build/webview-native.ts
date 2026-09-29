@@ -9,9 +9,10 @@
  * Output: `dist/native/<platform>/<library>` — the path `exe-bundle.js` embeds from and a
  * source checkout loads from (`packages/server/src/desktop-window/library.ts`).
  *
- * Sources are `packages/lib/native/`: the vendored `webview/webview.h` (never edited) and
- * `webview_extras.mm`, YAAR's additions. macOS only for now — a universal (arm64 + x86_64)
- * dylib, so one build serves both macOS release binaries. Windows (WebView2) and Linux
+ * Sources are `packages/lib/src/webview/native/`, beside the FFI binding that loads them: the
+ * vendored `webview/webview.h` (never edited) and `webview_extras.mm`, YAAR's additions.
+ * macOS only for now — a universal (arm64 + x86_64) dylib, so one build serves both macOS
+ * release binaries. Windows (WebView2) and Linux
  * (WebKitGTK) are later phases of `docs/proposals/webview_host_proposal.md`, and on those
  * hosts this script says so and exits non-zero; the exe then opens Chrome/Edge as before.
  *
@@ -25,7 +26,7 @@ import { mkdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 
 const rootDir = join(import.meta.dir, '..', '..');
-const nativeDir = join(rootDir, 'packages', 'lib', 'native');
+const nativeDir = join(rootDir, 'packages', 'lib', 'src', 'webview', 'native');
 
 /** `dist/native/<dir>/<file>` per platform — shared with exe-bundle.js. */
 export const WEBVIEW_LIBRARIES = {

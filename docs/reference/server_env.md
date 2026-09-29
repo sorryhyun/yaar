@@ -89,7 +89,7 @@ environment once read, so the agents the server spawns do not inherit it.
 ### `YAAR_WEBVIEW`
 
 Where the bundled exe shows the desktop. On macOS the binary carries a native WebView library
-(`libwebview.dylib`, built from `packages/lib/native/` by `scripts/build/webview-native.ts`) and
+(`libwebview.dylib`, built from `packages/lib/src/webview/native/` by `scripts/build/webview-native.ts`) and
 re-spawns itself as `yaar --window <url> --parent <pid>` to own a WKWebView window; closing that
 window shuts the server down, and the window closes itself if the server dies first. Any
 failure before the window appears (no library for the platform, a library that will not load,
@@ -124,7 +124,7 @@ A `YAAR.app` (built on a Mac by `bun run build:exe:bundle:macos`) keeps its data
 breaks the signature macOS records permission grants (the microphone) against.
 
 **Source:** `packages/server/src/desktop-window/`, `packages/lib/src/webview/`,
-`packages/lib/native/webview_extras.mm`, `packages/server/src/macos-bundle.ts`,
+`packages/lib/src/webview/native/webview_extras.mm`, `packages/server/src/macos-bundle.ts`,
 `docs/installations/mac.md`
 
 ### `FABLE`

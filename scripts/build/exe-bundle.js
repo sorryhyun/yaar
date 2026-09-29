@@ -293,7 +293,7 @@ try {
 //
 // LSUIElement keeps the server process — the bundle's executable, which never opens a
 // window — out of the Dock; the window process it spawns promotes itself to a regular app
-// (packages/lib/native/webview_extras.mm), so there is exactly one Dock icon.
+// (packages/lib/src/webview/native/webview_extras.mm), so there is exactly one Dock icon.
 //
 // The bundle's data lives in ~/Library/Application Support/YAAR, not beside the binary
 // (config/env.ts), and its apps ride read-only in Resources/ (macos-bundle.ts copies them

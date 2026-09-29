@@ -1,6 +1,6 @@
 # In-browser ML on macOS
 
-**Source:** `packages/compiler/src/shims/yaar-ml.ts`, `packages/server/src/desktop-window/host.ts`, `packages/lib/native/webview_extras.mm`
+**Source:** `packages/compiler/src/shims/yaar-ml.ts`, `packages/server/src/desktop-window/host.ts`, `packages/lib/src/webview/native/webview_extras.mm`
 
 Apps that run models (anima, transcribe, image23d, … through `@bundled/yaar-ml`) run them
 *in the page*, on the page's WebGPU. On macOS that page is YAAR's own window, which is WebKit

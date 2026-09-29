@@ -1,7 +1,7 @@
 /**
  * One native window with a WebView in it, through `bun:ffi` over the webview/webview C API.
  *
- * The library is built from `packages/lib/native/` by `scripts/build/webview-native.ts`;
+ * The library is built from `native/` beside this file by `scripts/build/webview-native.ts`;
  * where the caller finds the built file is the caller's business (`libPath`).
  *
  * {@link runWebviewWindow} **blocks the calling thread** until the window closes:
