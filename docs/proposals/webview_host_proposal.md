@@ -110,7 +110,7 @@ bound `__poll` eval channel for scripted steps. Window screenshots came from `sc
 |---|---|
 | Desktop renders | ✅ command palette present **320 ms** after navigation start; no page errors |
 | Bundled app (Storage) | ✅ opens, lists files, renders correctly |
-| User app (Crawl) | ✅ renders — but loaded **same-origin**, a YAAR bug since fixed (see "Not exercised" below) |
+| User app (Crawl) | ✅ renders — but loaded **same-origin**: the desktop's own launch path never carried the app-origin marks. Fixed in phase 0 (`features/window/origin-marks.ts`); the WebKit re-run with an isolated app passed |
 | Agent turn (markdown window: heading, table, code block) | ✅ created and rendered |
 | WebGPU | ✅ adapter (`apple`/`apple`), `shader-f16` present, a 1M-float compute pass round-trips correctly in 59 ms |
 | localStorage / sessionStorage / IndexedDB | ✅ |
@@ -125,24 +125,9 @@ bound `__poll` eval channel for scripted steps. Window screenshots came from `sc
 | Webview on a Bun Worker thread | ❌ process crash (§1) |
 | Microphone (transcribe's record button), measured 2026-09-29 | ⚠️ The **first** request, from the isolated `127.0.0.1` frame, was refused with no macOS prompt, and the app showed its "access was refused" toast. A `getUserMedia` from the main frame raised the macOS microphone prompt; once allowed, the isolated frame records too. With permission granted: a cross-origin frame with `allow="microphone"` records and one without gets `NotAllowedError` (as in Chrome); webm/opus and mp4/AAC takes both record and decode again |
 
-**Not exercised:**
-- **The isolated-app path.** Crawl was opened from its desktop icon, and that path never
-  isolated anything. `launchAppWindow` (frontend `store/iframe-bridge/open-url.ts`) built its
-  own `window.create` without the app-origin marks, which only an agent's create
-  (`features/window/create.ts`) and a replay (`logging/window-restore.ts`) derived. So every
-  installed app opened from the desktop ran same-origin with it, on every engine, until the
-  next reload's snapshot marked it. Fixed in phase 0: the rule is one function
-  (`features/window/origin-marks.ts`), and `/api/iframe-token` hands its answer to the
-  desktop with the token. (The session log was no evidence either way: the logged create is
-  rebuilt by `windowCreateAction`, which omits the marks by design.) The WebKit side still
-  needs a run with an app that is actually isolated.
-- **File chooser.** The header implements `runOpenPanelWithParameters`, but a scripted click cannot
-  open a panel. Needs one human click (Storage → Upload).
-- **Heavy ML apps** (transcribe, image23d) on WebKit's WebGPU, and window chrome (resize,
-  minimize, full screen).
-- **Side-by-side layout against Chrome.** Two small visual differences were seen: the command
-  palette's placeholder wrapped onto two lines once a window was open, and the markdown window had
-  no content padding. Either may exist in Chrome too; unconfirmed.
+**Not exercised:** image23d on WebKit's WebGPU (transcribe and anima load; see below), and
+window chrome (resize, minimize, full screen). The file chooser (Storage → Upload) and a
+side-by-side against Chrome were checked by hand later: both fine.
 
 **TLS on WebKit.** Chromium's `--ignore-certificate-errors-spki-list` has no WebKit equivalent,
 so the h2 local socket (`http/local-tls.ts`) is unavailable. The spike ran on plain HTTP/1.1. To
@@ -208,6 +193,8 @@ What each failure means for YAAR:
 - Riskiest. WebKitGTK's WebGPU is experimental or off by default **(verify)**, and GPU compositing
   is historically weaker.
 - The go/no-go is a GNOME Web (Epiphany) smoke test, which is WebKitGTK itself, repeating §3.
+- Whether WebKitGTK needs the SPKI-pin TLS patch that WKWebView did (six connections per host
+  without h2) is part of the same test.
 - A no-go keeps Linux on Chrome `--app`. The contract makes that a per-platform choice, not a fork.
 
 ### Android (host APK + Termux)
@@ -272,8 +259,8 @@ from the first public build, because a signature change forces users to uninstal
 
 | Phase | Deliverable | Done when |
 |---|---|---|
-| **0. macOS spike, closed out** | §3; the host-independent fixes below; one WebKit run with an actually isolated app, the file chooser clicked by hand, a side-by-side against Chrome | The spike ✅ 2026-09-29; the WebKit re-run ✅ (isolation, capture mime, transcribe recording and disk weights). Open: the file chooser, the side-by-side |
-| **1a. Desktop window, no bridge** (§5a) | Vendored `webview.h` (unpatched), `yaar --window` process, window-exit → server shutdown, exe fallback chain; an app bundle whose `Info.plist` carries `NSMicrophoneUsageDescription` (launched from a terminal, the spike borrowed the terminal's microphone permission; a shipped exe has none to borrow) | `bun run build:exe:bundle:macos` opens in WKWebView; closing it stops the server; a missing dylib falls back to `--app`; the macOS microphone prompt names YAAR |
+| **0. macOS spike, closed out** | §3; the host-independent fixes below; one WebKit run with an actually isolated app, the file chooser clicked by hand, a side-by-side against Chrome | ✅ 2026-09-29: the spike; the WebKit re-run (isolation, capture mime, transcribe recording and disk weights); the file chooser and the side-by-side, by hand |
+| **1a. Desktop window, no bridge** (§5a) | Vendored `webview.h` (unpatched), `yaar --window` process, window-exit → server shutdown, exe fallback chain; an app bundle whose `Info.plist` carries `NSMicrophoneUsageDescription` (without it WKWebView exposes no `navigator.mediaDevices` at all, §5c) | `bun run build:exe:bundle:macos` opens in WKWebView; closing it stops the server; a missing dylib falls back to `--app`; the macOS microphone prompt names YAAR |
 | **1b. Contract + patches** | `host-contract.ts` + `lib/host.ts`; header patches (download delegate, new-window, clipboard, and a `requestMediaCapturePermissionForOrigin:` UI-delegate method that asks macOS for access itself and grants only the two local origins); downloads and clipboard routed through the host; the TLS patch below; app permission messages that do not point at an address bar the window lacks (transcribe's refusal toast) | A day of normal use needs no Chrome window; on a fresh install, transcribe's record button raises the macOS prompt on its first press; the regression criteria below pass in WKWebView |
 | **2. Windows** | The same exe on WebView2, flags via env | §3's table re-run on a Windows box, plus CDP to the display |
 | **3. Linux go/no-go** | Epiphany smoke test → WebKitGTK host or stay on `--app` | A decision, recorded here |
@@ -292,19 +279,19 @@ from the first public build, because a signature change forces users to uninstal
 | Server side: spawn, wait up to 20 s for the line, else fall back to Chrome `--app` → default browser; window exit → SIGTERM → `lifecycle.shutdown()` | `desktop-window/launch.ts`, `exe-entry.ts` |
 | Embedded in the exe (`native/` asset dir), extracted to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` | `exe-assets.ts`, `desktop-window/library.ts` |
 | `dist/YAAR.app` on a macOS host: `NSMicrophoneUsageDescription`, `LSUIElement` (the server process stays out of the Dock), icon, ad-hoc signature. Data in `~/Library/Application Support/YAAR`; apps shipped in `Resources/apps` and copied out per build | `scripts/build/exe-bundle.js`, `config/env.ts` (`MACOS_APP_BUNDLE`), `macos-bundle.ts` |
-| Release: a `macos-latest` job builds the dylib; the Linux job embeds it with `--require-webview` | `.github/workflows/release.yml` (**not yet run in CI**) |
+| Release: a `macos-latest` job builds the dylib; the Linux job embeds it with `--require-webview` (first run: v0.22.0, green) | `.github/workflows/release.yml` |
 | `YAAR_WEBVIEW=0` / `YAAR_WEBVIEW_DEVTOOLS=1` / `YAAR_WEBVIEW_LIB` | `docs/reference/server_env.md` |
 
 Verified with the built arm64 binary: the desktop renders and connects in the window; killing
 the window process shuts the server down and frees the port; killing `--parent` closes the
 window within 1.5 s; an unloadable library exits 3 with no "opened" line
-(the fallback trigger); spawn to open is ~240 ms. **Still owed:** a hand check of the menu
-(Cmd+V into the palette, Cmd+W, Cmd+Q — the terminal had no Accessibility grant to script
-keystrokes), and the `.app` microphone prompt.
+(the fallback trigger); spawn to open is ~240 ms. By hand: the menu (Cmd+V into the
+palette, Cmd+Q).
 
-Not in 1a: the release did not ship `YAAR.app` — closed by §5c. GUI-launched apps get a
-minimal `PATH`, so a provider CLI found only via `PATH` is likely missed when `YAAR.app` is
-opened from Finder **(verify)**; `yaar` from a terminal inherits the shell's.
+GUI-launched apps get a minimal `PATH`, and codex is looked up on `PATH` only
+(`config/providers/codex.ts`), so `YAAR.app` opened from Finder finds no codex; `yaar` from a
+terminal inherits the shell's. Claude is found anyway (`~/.local/bin/claude`). See
+[docs/installations/mac.md](../installations/mac.md).
 
 ### 5b. Phase 1b as built (2026-09-29)
 
@@ -319,13 +306,17 @@ opened from Finder **(verify)**; `yaar` from a terminal inherits the shell's.
 
 Verified: in a scripted harness, everything above; in the shipped window by hand, window export → host save → "Saved to …" toast.
 
-**Still owed:**
-- The microphone prompt on a fresh grant (`tccutil reset Microphone`, then transcribe's record button in `YAAR.app`).
-- openExternal and the GitHub OAuth popup end to end.
-- A hand check of ⌘W after the fix (the event path is verified: each dispatch closes one YAAR window).
-- **Service worker under the pin — likely explained:** the stale shell matches `01facf81`
-  (every exe build ETagged `index.html` as `"index.html"`, so an upgraded exe answered
-  revalidation with 304), fixed in 0.22.0. Re-check after the next upgrade. Original note: a harness window kept serving a shell cached in an earlier run while the server served a newer bundle. That would happen if WebKit does not route a service worker's own fetches through the navigation delegate's TLS challenge, so its network-first document fetch always fails and falls back to cache. The shipped window picked up the new bundle, so this is unconfirmed. If it holds, an upgraded exe would show a stale desktop until `?nosw`.
+By hand in the installed window: ⌘W closes one YAAR window per press; openExternal and the
+GitHub OAuth popup work end to end.
+
+**Service worker under the pin: not an issue.** A harness window once kept serving a shell
+cached in an earlier run. The suspicion was that WebKit does not send a service worker's own
+fetches through the navigation delegate's TLS challenge, so its network-first document fetch
+would always fail and fall back to cache. Measured on 2026-09-29, it does send them: a
+network-first worker's `fetch` reached the server over the pinned socket on two launches, and
+the second launch showed the server's new version. The stale shell was `01facf81`: every exe
+build ETagged `index.html` as `"index.html"`, so an upgraded exe answered revalidation with
+304. That is fixed in 0.22.0.
 
 ### 5c. The installed `YAAR.app` (2026-09-29)
 
@@ -362,8 +353,8 @@ Verified against the v0.22.0 assets in a scratch `HOME`: install, migration and
 set-aside, reinstall (no second migration), `codesign --verify --strict`, and the probe
 through the installed launcher: `mediaDevices` and `getUserMedia` present in both frames
 over the pinned https socket. The updater path was run against a copy of that bundle
-with a stubbed release. **Still owed:** the real microphone prompt from the installed
-bundle.
+with a stubbed release. By hand, from the installed bundle: transcribe's record button
+raises the macOS microphone prompt.
 
 **Regression fixes** (measured in §3, "Follow-up measurements"):
 
@@ -383,10 +374,7 @@ bundle.
 
 ## 6. Open questions
 
-- **Why was Crawl not isolated in the spike run?** Answered: the desktop's own launch path
-  never carried the isolation marks (§3 "Not exercised"). Fixed; the WebKit run is still owed.
-- **Is h2 worth a WebKit TLS patch?** Answered: WKWebView holds six connections per host (§3),
-  so the patch is in phase 1. Whether WebKitGTK needs the same patch is part of phase 3.
-- **Should the window process own tray and menu integration?** Out of scope until phase 1 lands.
+- **Should the window process own tray and menu integration?** Phase 1 has landed without
+  it; undecided.
 - **Remote mode.** A host could also be a remote client. The `#remote=` token lives in
   sessionStorage, which a host restart loses, so the host would need to persist it.
