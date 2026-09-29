@@ -41,6 +41,8 @@ yaar                # Browser opens automatically
 On macOS the installer puts the app in `~/Applications/YAAR.app` (its own window, and the
 microphone permission apps need) and `yaar` on your PATH starts it. How it runs:
 [docs/installations/mac.md](./docs/installations/mac.md).
+On Linux, `yaar` opens the desktop in Chrome or Chromium in app mode:
+[docs/installations/linux.md](./docs/installations/linux.md).
 
 For Windows users:
 

@@ -4,9 +4,10 @@
 
 This page is about what YAAR *is* once it is installed on a Mac: which files it puts where, the
 processes that run when you start it, and how they end. To install it, see the
-[README](../../README.md#install). For the platforms still to come (Windows, Linux) and the
-checks a new host runs, see the [WebView host proposal](../proposals/webview_host_proposal.md).
-Android is [android.md](./android.md).
+[README](../../README.md#install). For the checks a new host runs, see the
+[WebView host proposal](../proposals/webview_host_proposal.md). Windows is
+[windows.md](./windows.md), Android is [android.md](./android.md), and Linux, which stays on
+Chrome, is [linux.md](./linux.md).
 
 In short, YAAR on a Mac is `~/Applications/YAAR.app`. It is one binary that runs twice: once
 as a server with no window, and once as a native window showing the desktop in WebKit. It

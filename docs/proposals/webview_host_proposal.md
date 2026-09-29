@@ -9,10 +9,11 @@
 - The host contract is `packages/shared/src/host-contract.ts`. The desktop window is
   `packages/server/src/desktop-window/`.
 
-Not started: the Linux go/no-go (phase 3). Android still needs two
+Linux (phase 3) is decided: no WebView host, it stays on Chrome `--app` (§3). Android still needs two
 fixes found on a phone, a full run with the server in the phone's own Termux, and a release. Claims not yet run are marked **(verify)**.
 
-**Decision (unchanged):** the *shipped* display is the OS WebView everywhere. **Development
+**Decision (unchanged):** the *shipped* display is the OS WebView everywhere except Linux,
+which keeps Chrome `--app` (§3). **Development
 stays on Chrome.** `make dev`, `claude-dev`, `MOBILE=1` and headless driving all stand on CDP,
 and they keep it.
 
@@ -20,7 +21,7 @@ and they keep it.
 |---|---|---|---|
 | Windows | WebView2 via `webview` + `bun:ffi` | Chromium (Edge) | ✅ built, verified; first release pending |
 | macOS | WKWebView via `webview` + `bun:ffi` | WebKit | ✅ shipped |
-| Linux | WebKitGTK via `webview` + `bun:ffi`, or stay on Chrome `--app` | WebKit | undecided |
+| Linux | Chrome `--app` (no WebView host) | Chromium | ✅ decided: no-go |
 | Android | host APK (`android.webkit.WebView`) + server in Termux | Chromium | APK verified on a phone; fixes and release pending |
 
 ---
@@ -94,18 +95,27 @@ Measured on the shipped exe (2026-09-30), against §1:
   fall back to `--app`.
 - The `webview-windows` release job has not run yet; the first release is its test.
 
-## 3. Linux (WebKitGTK) go/no-go
+## 3. Linux: no-go, stays on Chrome `--app`
 
-- Riskiest. WebKitGTK's WebGPU is experimental or off by default **(verify)**, and GPU
-  compositing is historically weaker.
-- The go/no-go is a GNOME Web (Epiphany) smoke test, which is WebKitGTK itself, repeating §1.
-- Whether WebKitGTK needs the SPKI-pin TLS patch that WKWebView did is part of the same test.
-- A VM answers the functional rows but not the GPU ones, which are the ones that decide. The
-  decision needs a real Linux box with a GPU.
-- A no-go keeps Linux on Chrome `--app`. The contract makes that a per-platform choice, not a
-  fork.
+**Decided 2026-09-29.** The display on Linux stays Chrome `--app`, and no WebKitGTK host is built.
 
-Done when: a decision, recorded here.
+- **CDP.** Linux keeps one engine, and it is the one YAAR already drives. The Browser app and
+  headless driving run Chrome over CDP on every platform. From source (`make claude-dev`), the
+  window you look at is a Chrome with a DevTools port (9222), which headless driving and the
+  clipboard grant attach to. A WebKitGTK window would have been a second engine with no CDP.
+  The release binary's `--app` window has no DevTools port today, but adding one would take a
+  flag, not a host.
+- **Compute.** Models run faster on Chrome's WebGPU than on WebKit's. WKWebView has no
+  `subgroups` and ran anima about 1.8× slower than Chrome on the same Mac
+  ([mac_ml.md](../installations/mac_ml.md)). WebKitGTK's WebGPU was never shown to be usable
+  at all.
+- **Cost.** A host would have needed a GTK extras library, a web-process extension for the
+  main-frame binding gate (as far as anyone checked, WebKitGTK script messages do not say which frame sent them), and
+  native arm64 CI jobs. All of that would have bought a window Chrome already provides.
+
+Nothing on Linux changes. `library.ts` has no Linux entry, so `openDesktopWindow` returns
+false and `exe-entry.ts` opens Chrome/Edge as it always has. Reopen this only if Chrome
+`--app` itself stops being viable on Linux.
 
 ## 4. Android: what is left
 
