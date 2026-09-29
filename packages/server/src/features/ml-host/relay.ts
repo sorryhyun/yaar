@@ -259,10 +259,10 @@ async function openClient(ws: ServerWebSocket<WsData>): Promise<void> {
   );
 
   try {
-    const { session } = await provider.createSession(channel.browserId);
-    // The idle sweep reads "nobody touched this tab" as "nobody needs it"; this tab is
-    // touched by its socket, which the sweep cannot see.
-    session.pinned = true;
+    // Pinned: the idle sweep reads "nobody touched this tab" as "nobody needs it", and this
+    // tab is touched by its socket, which the sweep cannot see. Pinning also keeps it off
+    // the session cap users and apps are held to.
+    const { session } = await provider.createSession(channel.browserId, { pinned: true });
     if (channel.closed) {
       await provider.closeSession(channel.browserId).catch(() => {});
       return;

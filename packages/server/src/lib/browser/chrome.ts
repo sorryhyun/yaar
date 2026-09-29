@@ -8,7 +8,6 @@
 
 import { existsSync } from 'fs';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
 import { basename, dirname, join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
 import { fetchBrowserWsUrl } from './cdp.js';
@@ -21,6 +20,7 @@ import {
   writePidFile as writePidFileImpl,
   removePidFile as removePidFileImpl,
   cleanupStaleChrome as cleanupStaleChromeImpl,
+  instanceTempPrefix,
 } from './pid-file.js';
 
 // Keep these as wrappers instead of live re-exports. Bun's process-wide module
@@ -178,7 +178,8 @@ export async function launchChrome(
   options: LaunchChromeOptions = {},
 ): Promise<ChromeInstance> {
   const ephemeral = !options.userDataDir;
-  const userDataDir = options.userDataDir ?? (await mkdtemp(join(tmpdir(), 'yaar-browser-')));
+  // Named for this server's PID, so another instance's stale sweep leaves it alone.
+  const userDataDir = options.userDataDir ?? (await mkdtemp(instanceTempPrefix('profile')));
   if (!ephemeral) await mkdir(userDataDir, { recursive: true });
 
   // Use a fixed debugging port on Windows: Chrome on Windows may fork a child process

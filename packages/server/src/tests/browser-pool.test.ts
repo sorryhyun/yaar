@@ -15,22 +15,29 @@ import { installFakeCdpClient } from './helpers/mock-cdp-client.js';
 
 // `waitForEvent` and `onClose` (crash-watch arm) aren't asserted on by this file —
 // the helper still wires them into the mock's shape, just not into a binding here.
-const { send: mockCdpSend, close: mockCdpClose, on: mockCdpOn } = installFakeCdpClient();
+const {
+  send: mockCdpSend,
+  close: mockCdpClose,
+  on: mockCdpOn,
+  onClose: mockCdpOnClose,
+} = installFakeCdpClient();
 
 // ── Mock chrome process management ───────────────────────────────────────────
 
 const mockFindChrome = mock(() => Promise.resolve('/usr/bin/chrome'));
 const mockKill = mock(() => {});
-const mockLaunchChrome = mock(() =>
+const defaultLaunch = () =>
   Promise.resolve({
     port: 9222,
-    process: { pid: 99999, kill: mockKill },
+    // Never exits on its own; the tests that kill Chrome launch their own fake.
+    process: { pid: 99999, kill: mockKill, exited: new Promise<number>(() => {}) },
     wsUrl: 'ws://127.0.0.1:9222/devtools/browser/abc',
     userDataDir: '/tmp/yaar-browser-mock',
     ephemeral: false,
-  }),
-);
-const mockCleanupChrome = mock(() => Promise.resolve(undefined));
+  });
+const mockLaunchChrome = mock(defaultLaunch);
+const defaultCleanup = () => Promise.resolve(undefined);
+const mockCleanupChrome = mock(defaultCleanup);
 const mockCleanupStaleChrome = mock(() => Promise.resolve(undefined));
 const mockWritePidFile = mock(() => Promise.resolve(undefined));
 const mockRemovePidFile = mock(() => Promise.resolve(undefined));
@@ -47,7 +54,7 @@ mock.module('../lib/browser/chrome.js', () => ({
 // ── Mock global fetch for Chrome debug HTTP API ──────────────────────────────
 
 const _originalFetch = globalThis.fetch;
-const mockFetch = mock(() =>
+const defaultFetch = () =>
   Promise.resolve({
     ok: true,
     json: () =>
@@ -55,8 +62,8 @@ const mockFetch = mock(() =>
         id: 'tab-mock',
         webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/mock',
       }),
-  }),
-) as any;
+  });
+const mockFetch = mock(defaultFetch) as any;
 globalThis.fetch = mockFetch;
 
 // Named sessions persist to disk (see `session-store.ts`). Point that at a private
@@ -518,6 +525,233 @@ describe('HeadlessServerBrowser', () => {
     expect(byId.one.state).toBe('suspended');
     expect(byId.one.url).toBe('https://example.com/one');
     expect(byId.two.state).toBe('live');
+  });
+});
+
+// ── Chrome itself dying (bugs.md #1) ─────────────────────────────────────────
+
+/** A launched Chrome whose process exit the test decides. */
+function fakeChrome(port: number) {
+  let die!: (code: number) => void;
+  const exited = new Promise<number>((resolve) => (die = resolve));
+  return {
+    die,
+    instance: {
+      port,
+      process: { pid: 90_000 + port, kill: mockKill, exited },
+      wsUrl: `ws://127.0.0.1:${port}/devtools/browser/abc`,
+      userDataDir: '/tmp/yaar-browser-mock',
+      ephemeral: false,
+    },
+  };
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timed out: ${what}`)), ms)),
+  ]);
+}
+
+/** The socket-close handler the most recently attached tab registered. */
+function lastSocketClose(): (expected: boolean) => void {
+  return (mockCdpOnClose.mock.calls as unknown as [(expected: boolean) => void][]).at(-1)![0];
+}
+
+/** Chrome at `deadPort` has stopped answering; everything else behaves as by default. */
+function portIsDead(deadPort: number) {
+  mockFetch.mockImplementation((input: unknown) =>
+    String(input).includes(`:${deadPort}/`)
+      ? Promise.reject(new Error('ECONNREFUSED'))
+      : defaultFetch(),
+  );
+}
+
+const fetchedUrls = () => (mockFetch.mock.calls as unknown as [unknown][]).map(([u]) => String(u));
+
+describe('HeadlessServerBrowser when its Chrome dies', () => {
+  let pool: InstanceType<typeof HeadlessServerBrowser>;
+
+  beforeEach(async () => {
+    // Reset, not clear: a launch queued with `mockImplementationOnce` that a test never
+    // consumed must not become the next test's Chrome.
+    mockLaunchChrome.mockReset();
+    mockLaunchChrome.mockImplementation(defaultLaunch);
+    mockCleanupChrome.mockReset();
+    mockCleanupChrome.mockImplementation(defaultCleanup);
+    mockFetch.mockClear();
+    mockFetch.mockImplementation(defaultFetch);
+    mockCdpSend.mockImplementation(() => Promise.resolve({}));
+    await rm(join(STATE_DIR, 'sessions.json'), { force: true });
+    pool = new HeadlessServerBrowser();
+  });
+
+  afterEach(async () => {
+    await pool.shutdown();
+    mockFetch.mockImplementation(defaultFetch);
+  });
+
+  it('relaunches Chrome and brings its sessions back when the process exits', async () => {
+    const first = fakeChrome(9222);
+    const second = fakeChrome(9333);
+    mockLaunchChrome
+      .mockImplementationOnce(() => Promise.resolve(first.instance))
+      .mockImplementationOnce(() => Promise.resolve(second.instance));
+
+    const { session } = await pool.createSession('news');
+    const revived = new Promise<void>((resolve) => session.once('revived', () => resolve()));
+
+    first.die(137); // OOM kill, GPU crash, a user's `kill`
+    await withTimeout(revived, 2000, 'the session was never revived');
+
+    expect(mockLaunchChrome).toHaveBeenCalledTimes(2);
+    expect(pool.getSession('news')).toBe(session);
+    expect(session.isCrashed).toBe(false);
+    // The fresh tab was opened on the new Chrome, not the dead one.
+    expect(fetchedUrls()).toContain('http://127.0.0.1:9333/json/new?about:blank');
+    expect(pool.getStats().chromeRunning).toBe(true);
+  });
+
+  it('relaunches when a tab reports the crash before the process exit is seen', async () => {
+    const first = fakeChrome(9222);
+    const second = fakeChrome(9333);
+    mockLaunchChrome
+      .mockImplementationOnce(() => Promise.resolve(first.instance))
+      .mockImplementationOnce(() => Promise.resolve(second.instance));
+
+    const { session } = await pool.createSession('news');
+    const revived = new Promise<void>((resolve) => session.once('revived', () => resolve()));
+
+    // Chrome is gone, but only the tab's socket has said so yet.
+    portIsDead(9222);
+    lastSocketClose()(false);
+    await withTimeout(revived, 2000, 'the session was never revived');
+
+    expect(mockLaunchChrome).toHaveBeenCalledTimes(2);
+    expect(session.isCrashed).toBe(false);
+    expect(fetchedUrls()).toContain('http://127.0.0.1:9333/json/new?about:blank');
+  });
+
+  it('revive actually revives a crashed session', async () => {
+    const first = fakeChrome(9222);
+    const second = fakeChrome(9333);
+    mockLaunchChrome
+      .mockImplementationOnce(() => Promise.resolve(first.instance))
+      // The automatic relaunch fails, leaving the session crashed…
+      .mockImplementationOnce(() => Promise.reject(new Error('Chrome launch timeout (10s)')))
+      // …and the explicit revive gets a working Chrome.
+      .mockImplementationOnce(() => Promise.resolve(second.instance));
+
+    const { session } = await pool.createSession('news');
+    portIsDead(9222);
+    lastSocketClose()(false);
+    await settleStore();
+    expect(session.isCrashed).toBe(true);
+
+    const revived = await pool.reviveSession('news');
+    expect(revived).toBe(session);
+    expect(session.isCrashed).toBe(false);
+    expect(fetchedUrls()).toContain('http://127.0.0.1:9333/json/new?about:blank');
+  });
+
+  it('does not read its own release of Chrome as a crash', async () => {
+    const first = fakeChrome(9222);
+    mockLaunchChrome.mockImplementationOnce(() => Promise.resolve(first.instance));
+    // The kill inside cleanup is what makes the process exit.
+    mockCleanupChrome.mockImplementationOnce(async () => {
+      first.die(0);
+      await settleStore();
+    });
+
+    await pool.createSession('pinned-elsewhere');
+    await pool.closeSession('pinned-elsewhere'); // last session: Chrome is released
+    await settleStore();
+
+    expect(mockLaunchChrome).toHaveBeenCalledTimes(1);
+    expect(pool.getStats().chromeRunning).toBe(false);
+  });
+});
+
+// ── Pinned internal tabs and the session cap (bugs.md #5) ────────────────────
+
+describe('HeadlessServerBrowser pinned internal tabs', () => {
+  let pool: InstanceType<typeof HeadlessServerBrowser>;
+
+  beforeEach(async () => {
+    mockLaunchChrome.mockReset();
+    mockLaunchChrome.mockImplementation(defaultLaunch);
+    mockFetch.mockImplementation(defaultFetch);
+    await rm(join(STATE_DIR, 'sessions.json'), { force: true });
+    pool = new HeadlessServerBrowser();
+  });
+
+  afterEach(async () => {
+    await pool.shutdown();
+  });
+
+  it('do not take the slots users and apps are told about', async () => {
+    // The companion desktop and a remote-ML host channel.
+    await pool.createSession('companion-desktop', { pinned: true });
+    await pool.createSession('ml-host-abc', { pinned: true });
+    for (let i = 0; i < 5; i++) await pool.createSession();
+
+    expect(pool.getStats()).toMatchObject({
+      activeSessions: 5,
+      internalSessions: 2,
+      maxSessions: 5,
+    });
+    const err = await pool.createSession().catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/limit reached/i);
+
+    const info = await pool.listSessionInfo();
+    const byId = Object.fromEntries(info.map((i) => [i.id, i]));
+    expect(byId['companion-desktop'].pinned).toBe(true);
+    expect(byId['0'].pinned).toBe(false);
+  });
+
+  it('are still bounded among themselves', async () => {
+    for (let i = 0; i < 5; i++) await pool.createSession(`ml-host-${i}`, { pinned: true });
+    const err = await pool.createSession('ml-host-5', { pinned: true }).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    // A user tab is still free to open.
+    await pool.createSession();
+    expect(pool.getStats().activeSessions).toBe(1);
+  });
+
+  it('come back pinned when revived from their record', async () => {
+    const { session } = await pool.createSession('companion-desktop', { pinned: true });
+    session.emit('updated', { url: session.currentUrl, title: '', version: 1 });
+    await settleStore();
+    // Server restart: the record is all that is left.
+    await pool.shutdown();
+    pool = new HeadlessServerBrowser();
+
+    for (let i = 0; i < 5; i++) await pool.createSession();
+    const revived = await pool.reviveSession('companion-desktop');
+    expect(revived?.pinned).toBe(true);
+  });
+});
+
+// ── Viewer count (bugs.md #6) ────────────────────────────────────────────────
+
+describe('HeadlessServerBrowser session info', () => {
+  it('reports how many viewers are watching, not just whether one is', async () => {
+    mockFetch.mockImplementation(defaultFetch);
+    await rm(join(STATE_DIR, 'sessions.json'), { force: true });
+    const pool = new HeadlessServerBrowser();
+    try {
+      const { session } = await pool.createSession('watched');
+      await session.startScreencast();
+      await session.startScreencast();
+      const info = (await pool.listSessionInfo()).find((i) => i.id === 'watched');
+      expect(info?.viewers).toBe(2);
+
+      await session.stopScreencast();
+      const after = (await pool.listSessionInfo()).find((i) => i.id === 'watched');
+      expect(after?.viewers).toBe(1);
+    } finally {
+      await pool.shutdown();
+    }
   });
 });
 

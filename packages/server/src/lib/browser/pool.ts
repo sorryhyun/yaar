@@ -20,8 +20,10 @@
  * only the launch-and-own-a-private-Chrome behavior.
  */
 
+import { rm } from 'fs/promises';
 import { join } from 'path';
 import { CdpBrowserProvider } from './cdp-provider.js';
+import { fetchBrowserWsUrl } from './cdp.js';
 import { LocalUserBrowser } from './local-user-browser.js';
 import { getBrowserStateDir, isEphemeralBrowserProfile } from '../../config.js';
 import {
@@ -36,10 +38,25 @@ import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('browser');
 
+/** Whether a DevTools endpoint still answers. A dead Chrome refuses the connection at once. */
+async function endpointAnswers(port: number): Promise<boolean> {
+  try {
+    return (await fetchBrowserWsUrl(port, 1500)) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export class HeadlessServerBrowser extends CdpBrowserProvider {
   private chrome: ChromeInstance | null = null;
   private initPromise: Promise<ChromeInstance> | null = null;
   private chromePath: string | null | undefined; // undefined = not checked yet
+  /**
+   * Set by {@link shutdown}, and final. From here on a Chrome going away is the server
+   * going away — not a crash to relaunch from — and a launch already in flight is
+   * released as soon as it lands rather than left running with nothing tracking it.
+   */
+  private stopped = false;
 
   readonly controlsUserBrowser = false;
 
@@ -68,6 +85,7 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
   private async getChrome(): Promise<ChromeInstance> {
     if (this.chrome) return this.chrome;
     if (this.initPromise) return this.initPromise;
+    if (this.stopped) throw new Error('The sandbox browser is shutting down.');
 
     // initPromise is claimed before the first await: every caller that arrives while the
     // binary lookup is still pending joins this launch instead of starting its own, which
@@ -89,7 +107,13 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
           : { userDataDir: join(getBrowserStateDir(), 'profile') }),
       });
       await writePidFile(instance);
+      if (this.stopped) {
+        // The server began exiting while this launch was in flight.
+        await cleanupChrome(instance);
+        throw new Error('The sandbox browser is shutting down.');
+      }
       this.chrome = instance;
+      this.watchProcess(instance);
       log.info('Chrome launched', { port: instance.port });
       return instance;
     })();
@@ -102,12 +126,81 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
   }
 
   protected async releaseProcess(): Promise<void> {
-    if (this.chrome) {
-      await cleanupChrome(this.chrome);
+    const instance = this.chrome;
+    if (instance) {
+      // Cleared before the kill: the exit it causes is ours, not a crash (see watchProcess).
       this.chrome = null;
       this.initPromise = null;
+      await cleanupChrome(instance);
       log.info('Chrome process closed');
     }
+  }
+
+  async shutdown(): Promise<void> {
+    this.stopped = true;
+    await super.shutdown();
+  }
+
+  /**
+   * Notice Chrome dying on its own — an OOM kill, a GPU crash, a user's `kill`.
+   *
+   * Without this nothing ever cleared `chrome`: every tab's socket dropped, each crash
+   * restart was handed the dead instance's port, and every later session was opened
+   * against it too, until the server restarted.
+   *
+   * On Windows the process we spawned can be a launcher that forks the real browser and
+   * exits (see `launchChrome`), so an exit there only counts once the endpoint has
+   * stopped answering too; the browser-level socket ({@link browserSocketLost}) covers
+   * the real browser dying later.
+   */
+  private watchProcess(instance: ChromeInstance): void {
+    void instance.process.exited?.then(async (code) => {
+      if (this.chrome !== instance) return; // released on purpose, or already replaced
+      if (process.platform === 'win32' && (await endpointAnswers(instance.port))) return;
+      this.chromeLost(instance, `process exited (code ${code})`);
+    });
+  }
+
+  /** Confirm the current Chrome is still there; if it is not, say so. */
+  private async verifyChrome(): Promise<void> {
+    const instance = this.chrome;
+    if (!instance) return;
+    if (await endpointAnswers(instance.port)) return;
+    this.chromeLost(instance, 'DevTools endpoint stopped answering');
+  }
+
+  private chromeLost(instance: ChromeInstance, reason: string): void {
+    if (this.chrome !== instance) return;
+    this.chrome = null;
+    this.initPromise = null;
+    if (this.stopped) return;
+    log.warn('Chrome went away — relaunching for its sessions', { port: instance.port, reason });
+    // A Chrome that stopped answering may still be alive and holding the profile lock
+    // the relaunch needs; one that exited makes this a no-op.
+    try {
+      instance.process.kill();
+    } catch {
+      /* already gone */
+    }
+    if (instance.ephemeral) {
+      void rm(instance.userDataDir, { recursive: true, force: true }).catch(() => {});
+    }
+    this.endpointLost();
+  }
+
+  /**
+   * A crash-restart's port: the current Chrome if it still answers, else a fresh one.
+   * The check is what makes "Chrome itself is gone" reachable when a tab's socket
+   * reports the crash before the process exit is seen.
+   */
+  protected async restartPort(): Promise<number | null> {
+    if (this.stopped) return null;
+    await this.verifyChrome();
+    return this.ensureChromePort();
+  }
+
+  protected browserSocketLost(): void {
+    void this.verifyChrome();
   }
 
   /** Only report a port when our private Chrome is already up — never launch it. */

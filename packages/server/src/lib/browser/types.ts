@@ -8,8 +8,14 @@ import type { ShieldProfile, BrowserSession, BrowserSessionOptions } from './ses
  * Stats reported by a browser provider for `yaar://` system introspection.
  */
 export interface BrowserProviderStats {
+  /** Live sessions counted against `maxSessions` — every tab but the pinned ones. */
   activeSessions: number;
   maxSessions: number;
+  /**
+   * Live pinned tabs YAAR keeps for itself (the companion desktop, remote-ML host
+   * channels). Budgeted separately, so they never take a slot from `maxSessions`.
+   */
+  internalSessions: number;
   chromeRunning: boolean;
 }
 
@@ -34,6 +40,11 @@ export interface BrowserSessionInfo {
   driving: boolean;
   /** Live screencast viewers attached — 0 means nobody is looking. */
   viewers: number;
+  /**
+   * One of YAAR's own tabs (the companion desktop, a remote-ML host channel): exempt from
+   * the idle sweep and not counted against the session cap.
+   */
+  pinned: boolean;
   createdAt: number;
   /** Milliseconds since anything touched this session. */
   idleMs: number;

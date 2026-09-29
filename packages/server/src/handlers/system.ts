@@ -191,7 +191,9 @@ function registerBrowserHandlers(registry: ResourceRegistry): void {
       'watching it, how idle it is, and roughly what it weighs. `state` is "live" when a ' +
       'CDP socket is behind it, "suspended" when only its record is (a reloaded desktop, ' +
       'an idle-swept tab, a restarted server — reviving it restores the page and its ' +
-      'logins), or "crashed" when the tab died and could not be brought back.',
+      'logins), or "crashed" when the tab died and could not be brought back. Tabs YAAR ' +
+      'keeps for itself (the companion desktop, remote ML compute) are `pinned: true`; ' +
+      'they are counted in `internalSessions` and do not take any of the `maxSessions` slots.',
     verbs: ['describe', 'list', 'read'],
 
     async list(): Promise<VerbResult> {
@@ -201,7 +203,8 @@ function registerBrowserHandlers(registry: ResourceRegistry): void {
       return okJson({
         chromeRunning: stats.chromeRunning,
         maxSessions: stats.maxSessions,
-        liveSessions: sessions.filter((s) => s.state === 'live').length,
+        liveSessions: sessions.filter((s) => s.state === 'live' && !s.pinned).length,
+        internalSessions: stats.internalSessions,
         sessions,
       });
     },

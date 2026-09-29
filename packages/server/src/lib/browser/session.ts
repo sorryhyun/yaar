@@ -172,6 +172,13 @@ export interface BrowserSessionOptions {
    * pre-existing targets (see `CdpBrowserProvider.syncExistingTabs`).
    */
   adopt?: boolean;
+  /**
+   * Open the tab {@link BrowserSession.pinned} — one YAAR keeps for itself (the companion
+   * desktop, a remote-ML host channel). Said at creation rather than set afterwards
+   * because the provider's session cap reads it: internal tabs are budgeted apart from
+   * the ones users and apps open, and the admission check runs before the tab exists.
+   */
+  pinned?: boolean;
 }
 
 /**
@@ -219,6 +226,9 @@ export class BrowserSession extends EventEmitter {
    * (`features/companion/companion-tab.ts`), which exists precisely so that a capture has
    * somewhere to land while the user's own client is backgrounded. Nothing touches it
    * between captures, so the sweep would collect it exactly when it is about to matter.
+   *
+   * Pinned tabs are YAAR's own, so they also sit outside the session cap users and apps
+   * are held to (`CdpBrowserProvider`, `MAX_SESSIONS`) — see `BrowserSessionOptions.pinned`.
    */
   pinned = false;
 
@@ -261,6 +271,7 @@ export class BrowserSession extends EventEmitter {
     const mobile = options?.mobile ?? false;
     const cdp = await CDPClient.connect(debuggerUrl);
     const session = new BrowserSession(id, cdp, mobile, options?.adopt === true);
+    session.pinned = options?.pinned === true;
     await session.initTarget(cdp);
     return session;
   }
@@ -398,6 +409,14 @@ export class BrowserSession extends EventEmitter {
     this.crashed = true;
     log.info('session lost its tab', { browserId: this.id, reason });
     this.emit('crashed', { reason });
+  }
+
+  /**
+   * The provider knows the tab is gone before its socket says so — Chrome itself exited.
+   * Same announcement as a socket drop, and like it, made at most once per socket.
+   */
+  markCrashed(reason: string): void {
+    this.noteCrash(this.cdp, reason);
   }
 
   /** True once the tab died on its own and nothing has revived it yet. */
@@ -1578,6 +1597,11 @@ export class BrowserSession extends EventEmitter {
 
   get screencasting(): boolean {
     return this.screencastViewers > 0;
+  }
+
+  /** How many viewers are attached to the screencast right now. */
+  get viewerCount(): number {
+    return this.screencastViewers;
   }
 
   /**

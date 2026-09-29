@@ -33,6 +33,8 @@ export interface BrowserSessionRecord {
   mobile: boolean;
   /** The YAAR window this session was bound to, if any. */
   windowId?: string;
+  /** One of YAAR's own tabs — so a revive brings it back outside the user-facing cap. */
+  pinned?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -100,6 +102,7 @@ export class BrowserSessionStore {
   remember(id: string, patch: Partial<Omit<BrowserSessionRecord, 'id'>>): void {
     const now = Date.now();
     const prev = this.records.get(id);
+    const pinned = patch.pinned ?? prev?.pinned;
     this.records.set(id, {
       id,
       url: patch.url ?? prev?.url ?? 'about:blank',
@@ -108,6 +111,7 @@ export class BrowserSessionStore {
       // An explicit `undefined` means "no longer bound to a window", which is
       // different from "not mentioned" — so read the key, not the value.
       windowId: 'windowId' in patch ? patch.windowId : prev?.windowId,
+      ...(pinned ? { pinned: true } : {}),
       createdAt: prev?.createdAt ?? now,
       updatedAt: now,
     });
@@ -136,6 +140,7 @@ function asRecord(entry: unknown): BrowserSessionRecord | null {
     title: typeof e.title === 'string' ? e.title : '',
     mobile: e.mobile === true,
     ...(typeof e.windowId === 'string' ? { windowId: e.windowId } : {}),
+    ...(e.pinned === true ? { pinned: true } : {}),
     createdAt: num(e.createdAt),
     updatedAt: num(e.updatedAt),
   };

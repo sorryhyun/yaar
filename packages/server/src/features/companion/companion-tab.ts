@@ -141,7 +141,9 @@ async function openTab(port: number): Promise<void> {
     }
     let fresh = false;
     if (!live) {
-      const created = await provider.createSession(BROWSER_ID);
+      // Pinned from the start: the cap check runs before the tab exists, and a pinned tab
+      // is budgeted apart from the ones users and apps open.
+      const created = await provider.createSession(BROWSER_ID, { pinned: true });
       live = created.session;
       fresh = true;
     }

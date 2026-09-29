@@ -43,7 +43,7 @@
  */
 import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { instanceTempPrefix } from './pid-file.js';
 import { join } from 'node:path';
 import type { CDPClient } from './cdp.js';
 import { createLogger } from '../../observability/log.js';
@@ -176,7 +176,7 @@ export class DownloadCapture {
   }
 
   private async ensureDir(): Promise<string> {
-    if (!this.dir) this.dir = await mkdtemp(join(tmpdir(), 'yaar-browser-dl-'));
+    if (!this.dir) this.dir = await mkdtemp(instanceTempPrefix('downloads'));
     return this.dir;
   }
 

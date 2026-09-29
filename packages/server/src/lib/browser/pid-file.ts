@@ -9,7 +9,7 @@
 import { rm, readFile, readdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { isProcessAlive } from '@yaar/lib/process';
+import { isProcessAlive, readProcessStartTime } from '@yaar/lib/process';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('browser');
@@ -17,13 +17,46 @@ const log = createLogger('browser');
 interface PidRecord {
   pid: number;
   userDataDir: string;
+  /**
+   * The YAAR server that launched this Chrome. Absent in records written before
+   * instances were told apart, which are treated as orphans — the old behaviour.
+   */
+  ownerPid?: number;
+  /** The owner's start time where procfs has one (Linux, Android) — a PID-reuse guard. */
+  ownerStart?: string;
 }
 
-/** PID file to track Chrome process across server restarts / crashes. */
-const PID_FILE = join(tmpdir(), 'yaar-browser.pid');
+/**
+ * Everything this module leaves in the temp dir is keyed by the server PID that owns it.
+ *
+ * It used to be one fixed `yaar-browser.pid` and a blanket sweep of every
+ * `yaar-browser-*` dir, which made two YAARs on one machine each other's stale state:
+ * the second instance's first launch killed the first one's Chrome and deleted its
+ * scratch profile and download captures. The PID in the name is what lets a sweep
+ * tell "left behind by a server that is gone" from "in use by one that is running".
+ * The server PID and not the port or the state dir, because it is the one key that is
+ * unique among running instances *and* answers "is the owner still alive?" by itself.
+ */
+const PID_FILE_NAME = /^yaar-browser(?:-(\d+))?\.pid$/;
+const OWNED_DIR_NAME = /^yaar-browser-(?:dl-)?(\d+)-/;
+
+/** This server's PID file. */
+function instancePidFile(dir = tmpdir()): string {
+  return join(dir, `yaar-browser-${process.pid}.pid`);
+}
+
+/**
+ * The `mkdtemp` prefix for this server's scratch dirs — the ephemeral profile, and
+ * each session's download capture. Only a sweep run after this server is gone removes
+ * them (see {@link cleanupStaleChrome}).
+ */
+export function instanceTempPrefix(kind: 'profile' | 'downloads'): string {
+  const tag = kind === 'downloads' ? 'dl-' : '';
+  return join(tmpdir(), `yaar-browser-${tag}${process.pid}-`);
+}
 
 interface CleanupOptions {
-  pidFile?: string;
+  /** Where to look for PID files and scratch dirs. Defaults to the OS temp dir. */
   tempDir?: string;
 }
 
@@ -33,10 +66,16 @@ export async function writePidFile(
     process: { pid: number };
     userDataDir: string;
   },
-  pidFile = PID_FILE,
+  pidFile = instancePidFile(),
 ): Promise<void> {
   try {
-    const record: PidRecord = { pid: instance.process.pid, userDataDir: instance.userDataDir };
+    const ownerStart = readProcessStartTime(process.pid);
+    const record: PidRecord = {
+      pid: instance.process.pid,
+      userDataDir: instance.userDataDir,
+      ownerPid: process.pid,
+      ...(ownerStart ? { ownerStart } : {}),
+    };
     await writeFile(pidFile, JSON.stringify(record));
   } catch {
     /* non-critical — stale cleanup on next restart just won't find this run */
@@ -44,12 +83,29 @@ export async function writePidFile(
 }
 
 /** Remove the PID file (called on clean shutdown). */
-export async function removePidFile(pidFile = PID_FILE): Promise<void> {
+export async function removePidFile(pidFile = instancePidFile()): Promise<void> {
   try {
     await rm(pidFile, { force: true });
   } catch {
     /* non-critical */
   }
+}
+
+/**
+ * Whether the server behind a PID file is a *running other* YAAR — whose Chrome and
+ * PID file are none of our business. Our own PID counts as not running: the only
+ * way to find our own record here is a relaunch after our Chrome died, and whatever
+ * it names is exactly what that relaunch must clear out of the way.
+ */
+function ownerIsRunningElsewhere(ownerPid: number, ownerStart?: string): boolean {
+  if (ownerPid === process.pid) return false;
+  if (!isProcessAlive(ownerPid)) return false;
+  // A live PID that started at a different time is a stranger holding a recycled number.
+  if (ownerStart) {
+    const now = readProcessStartTime(ownerPid);
+    if (now !== null && now !== ownerStart) return false;
+  }
+  return true;
 }
 
 /**
@@ -93,39 +149,53 @@ function isRecordedChrome(record: PidRecord): boolean {
 }
 
 /**
- * Clean up stale Chrome processes and temp dirs from previous crashed runs.
- * Called once before launching a new Chrome instance.
+ * Clean up what YAAR servers that are no longer running left behind.
+ * Called before every launch of the sandbox Chrome.
  *
- * Handles two scenarios:
- * 1. PID file exists → kill the orphaned Chrome process
- * 2. /tmp/yaar-browser-* dirs exist → remove them (all are stale since we haven't launched yet)
+ * 1. Every `yaar-browser[-<ownerPid>].pid` whose owner is gone (or is this server —
+ *    a relaunch) → kill the Chrome it names, if that PID is still that Chrome.
+ * 2. Every `yaar-browser-[dl-]<ownerPid>-*` dir whose owner is gone → remove it.
+ *
+ * A running instance's files are left alone, so two YAARs can share a machine. So are
+ * this server's own dirs: a relaunch after Chrome died runs while this server's
+ * sessions — and their download captures — are still alive. Dirs with no owner in
+ * their name predate this scheme and are left for the OS's temp reaper; there is no
+ * telling whether an older YAAR still running is using one.
  */
 export async function cleanupStaleChrome(options: CleanupOptions = {}): Promise<void> {
-  const pidFile = options.pidFile ?? PID_FILE;
   const tempDir = options.tempDir ?? tmpdir();
-  let killedPid = false;
-
-  // 1. Check PID file for an orphaned Chrome process
+  let entries: string[];
   try {
-    const data = await readFile(pidFile, 'utf-8');
-    const record: PidRecord = JSON.parse(data);
-    // Integer check first: the PID is interpolated into the Windows lookup command.
-    const livePid = Number.isInteger(record.pid) && record.pid > 0 && isProcessAlive(record.pid);
-    if (livePid && !isRecordedChrome(record)) {
-      log.info('PID from a stale PID file is no longer our Chrome — leaving it alone', {
-        pid: record.pid,
-      });
-    } else if (livePid) {
-      log.info('killing stale Chrome process', { pid: record.pid });
-      try {
-        process.kill(record.pid, 'SIGKILL');
-        killedPid = true;
-      } catch {
-        /* process died between check and kill — fine */
-      }
-    }
+    entries = await readdir(tempDir);
   } catch {
-    /* no PID file or invalid JSON — continue */
+    return; // a temp dir we cannot list has nothing we can clean either
+  }
+
+  // 1. PID files → orphaned Chrome processes
+  let killedPid = false;
+  for (const name of entries) {
+    const match = PID_FILE_NAME.exec(name);
+    if (!match) continue;
+    const pidFile = join(tempDir, name);
+    const namedOwner = match[1] ? Number(match[1]) : undefined;
+
+    let record: PidRecord;
+    try {
+      record = JSON.parse(await readFile(pidFile, 'utf-8'));
+    } catch {
+      // Unreadable. A running owner may be halfway through writing it; anyone else's
+      // is garbage.
+      if (namedOwner === undefined || !ownerIsRunningElsewhere(namedOwner)) {
+        await removePidFile(pidFile);
+      }
+      continue;
+    }
+
+    const ownerPid = namedOwner ?? record.ownerPid;
+    if (ownerPid !== undefined && ownerIsRunningElsewhere(ownerPid, record.ownerStart)) continue;
+
+    if (killRecordedChrome(record)) killedPid = true;
+    await removePidFile(pidFile);
   }
 
   // Give killed process time to release resources (ports, file locks)
@@ -133,19 +203,32 @@ export async function cleanupStaleChrome(options: CleanupOptions = {}): Promise<
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  // 2. Remove all stale yaar-browser-* temp directories
-  try {
-    const entries = await readdir(tempDir);
-    for (const entry of entries) {
-      if (entry.startsWith('yaar-browser-')) {
-        const fullPath = join(tempDir, entry);
-        await rm(fullPath, { recursive: true, force: true }).catch(() => {});
-      }
-    }
-  } catch {
-    /* /tmp scan failure is non-critical */
+  // 2. Scratch dirs whose owner is gone
+  for (const name of entries) {
+    const match = OWNED_DIR_NAME.exec(name);
+    if (!match) continue;
+    const ownerPid = Number(match[1]);
+    if (ownerPid === process.pid || isProcessAlive(ownerPid)) continue;
+    await rm(join(tempDir, name), { recursive: true, force: true }).catch(() => {});
   }
+}
 
-  // 3. Remove stale PID file
-  await removePidFile(pidFile);
+/** Kill the Chrome a record names, if that PID is still that Chrome. True if signalled. */
+function killRecordedChrome(record: PidRecord): boolean {
+  // Integer check first: the PID is interpolated into the Windows lookup command.
+  const livePid = Number.isInteger(record.pid) && record.pid > 0 && isProcessAlive(record.pid);
+  if (!livePid) return false;
+  if (!isRecordedChrome(record)) {
+    log.info('PID from a stale PID file is no longer our Chrome — leaving it alone', {
+      pid: record.pid,
+    });
+    return false;
+  }
+  log.info('killing stale Chrome process', { pid: record.pid });
+  try {
+    process.kill(record.pid, 'SIGKILL');
+    return true;
+  } catch {
+    return false; /* process died between check and kill — fine */
+  }
 }

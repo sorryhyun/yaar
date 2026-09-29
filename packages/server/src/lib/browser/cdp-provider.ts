@@ -32,7 +32,14 @@ import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('browser');
 
+/** Tabs users and apps may hold at once — the number `yaar://system/browsers` reports. */
 export const MAX_SESSIONS = 5;
+/**
+ * Tabs YAAR may hold for itself at once — pinned sessions (the companion desktop, one per
+ * remote-ML host channel). A separate budget, so turning the companion on or opening an
+ * ML app never costs a user a tab, but still a bound: every ML channel is a whole tab.
+ */
+export const MAX_PINNED_SESSIONS = 5;
 const CLEANUP_INTERVAL_MS = 60 * 1000; // check every minute
 
 /**
@@ -85,6 +92,8 @@ interface BrowserRecord {
   restarts: number;
   /** A {@link CdpBrowserProvider.reviveSession} in flight, so concurrent callers join it. */
   reviving?: Promise<BrowserSession | null>;
+  /** A crash-restart in flight, so an endpoint loss does not start a second one. */
+  restarting?: Promise<void>;
   /** An adopted popup not yet handed out by `consumeAdoptedTabs`. */
   unannounced?: boolean;
 }
@@ -104,7 +113,10 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    */
   protected targets = new Map<string, string | null>();
   protected nextId = 0;
+  /** User-facing sessions being created right now — counted against {@link MAX_SESSIONS}. */
   protected pendingSessions = 0;
+  /** Pinned sessions being created right now — counted against {@link MAX_PINNED_SESSIONS}. */
+  protected pendingPinned = 0;
   protected cleanupTimer: ReturnType<typeof setInterval> | null = null;
   protected browserCdp: CDPClient | null = null;
   /** The shield every tracked session carries; see {@link setShield}. */
@@ -143,6 +155,23 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    */
   protected abstract reachableChromePort(): Promise<number | null>;
 
+  /**
+   * The port a crash-restart should open its fresh tab on, or `null` when there is
+   * nothing to open it on. The default only takes an endpoint that is already up —
+   * right for a browser YAAR does not own. A provider that owns its Chrome overrides
+   * this to relaunch one that has died, which is the only way a restart can succeed
+   * after Chrome itself went down.
+   */
+  protected restartPort(): Promise<number | null> {
+    return this.reachableChromePort();
+  }
+
+  /**
+   * The browser-level CDP socket closed without us closing it. Usually Chrome went away;
+   * a provider that owns the process confirms and reacts. Default: nothing more.
+   */
+  protected browserSocketLost(): void {}
+
   private *liveSessions(): Generator<[string, BrowserSession]> {
     for (const [id, rec] of this.records) {
       if (rec.session) yield [id, rec.session];
@@ -153,6 +182,26 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     let n = 0;
     for (const rec of this.records.values()) if (rec.session) n++;
     return n;
+  }
+
+  /** Live sessions on one side of the pinned/user split. */
+  private countLive(pinned: boolean): number {
+    let n = 0;
+    for (const rec of this.records.values()) {
+      if (rec.session && rec.session.pinned === pinned) n++;
+    }
+    return n;
+  }
+
+  /**
+   * Whether another session of this kind would go over its cap. The two budgets are
+   * separate: a pinned internal tab never takes a user's slot, nor a user tab one of
+   * YAAR's.
+   */
+  private atCapacity(pinned: boolean): boolean {
+    return pinned
+      ? this.countLive(true) + this.pendingPinned >= MAX_PINNED_SESSIONS
+      : this.countLive(false) + this.pendingSessions >= MAX_SESSIONS;
   }
 
   /** Remove a record that no longer holds anything — no socket, no tab, no revive. */
@@ -303,6 +352,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         title: session.currentTitle,
         mobile: session.mobile,
         windowId: session.windowId,
+        pinned: session.pinned,
       });
     });
 
@@ -312,6 +362,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         title: session.currentTitle,
         mobile: session.mobile,
         windowId: session.windowId,
+        pinned: session.pinned,
       });
     });
 
@@ -328,10 +379,22 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    * into crashing forever. After {@link MAX_CRASH_RESTARTS} the session is dropped
    * and the window is left showing the failure, which is the honest outcome.
    */
-  private async restartCrashed(browserId: string, session: BrowserSession): Promise<void> {
+  private restartCrashed(browserId: string, session: BrowserSession): Promise<void> {
     const rec = this.records.get(browserId);
-    if (!rec || rec.session !== session) return;
+    if (!rec || rec.session !== session) return Promise.resolve();
 
+    const attempt = this.runRestart(browserId, rec, session).finally(() => {
+      if (rec.restarting === attempt) rec.restarting = undefined;
+    });
+    rec.restarting = attempt;
+    return attempt;
+  }
+
+  private async runRestart(
+    browserId: string,
+    rec: BrowserRecord,
+    session: BrowserSession,
+  ): Promise<void> {
     rec.restarts++;
     if (rec.restarts > MAX_CRASH_RESTARTS) {
       log.error('session keeps crashing — giving up', { browserId, crashes: rec.restarts - 1 });
@@ -340,8 +403,11 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     }
 
     try {
-      const port = await this.reachableChromePort();
-      if (port == null) return; // Chrome itself is gone; a revive would relaunch it.
+      // Relaunches Chrome where this provider owns it and it has died; `null` only when
+      // the browser is not ours to bring back and is not there.
+      const port = await this.restartPort();
+      if (port == null) return;
+      await this.ensureDiscovery(port);
       const target = await this.openTarget(port);
       await session.reattach(target.webSocketDebuggerUrl, session.currentUrl);
       if (rec.session !== session || this.records.get(browserId) !== rec) {
@@ -360,6 +426,44 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   }
 
   /**
+   * The Chrome behind this provider is gone — its process exited, or its endpoint
+   * stopped answering. Everything that pointed into it is void.
+   *
+   * Nothing here relaunches Chrome by itself: each surviving session is marked crashed,
+   * and its crash-restart ({@link restartCrashed}) goes through {@link restartPort},
+   * which is what brings a new Chrome up — once, however many sessions ask at once. A
+   * session whose restart already ran and failed (its socket dropped before the exit
+   * was seen, so it tried the dead port) is restarted again now that the endpoint is
+   * known to be gone. An adopted popup has no record to come back from and is closed.
+   *
+   * Only ever called for a Chrome that went away on its own: a deliberate release
+   * clears the instance before killing it, so its exit is never read as a crash.
+   */
+  protected endpointLost(): void {
+    this.forgetEndpoint();
+    for (const [id, rec] of [...this.records]) {
+      rec.targetId = undefined;
+      rec.unannounced = false;
+      const session = rec.session;
+      if (!session) {
+        this.pruneIfEmpty(id);
+        continue;
+      }
+      if (rec.ephemeral) {
+        this.emitTabEvent({
+          type: 'closed',
+          browserId: id,
+          openerBrowserId: session.openerBrowserId,
+        });
+        void this.drop(id, { forgetRecord: true }).catch(() => {});
+        continue;
+      }
+      if (!session.isCrashed) session.markCrashed('chrome exited');
+      else if (!rec.restarting) void this.restartCrashed(id, session);
+    }
+  }
+
+  /**
    * Get a live session back for a `browserId` that has a record but no socket —
    * the desktop reloaded, the idle sweep collected it, or the server restarted.
    *
@@ -371,16 +475,25 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   async reviveSession(browserId: string): Promise<BrowserSession | null> {
     const existing = this.records.get(browserId);
     const live = existing?.session;
-    if (live && !live.isClosed) return live;
+    if (existing && live && !live.isClosed) {
+      if (!live.isCrashed) return live;
+      // A crashed session holds its id but no working socket — as good as missing, and
+      // reattached in place rather than replaced so whatever is subscribed to it stays.
+      // An explicit revive is someone asking, so it gets a fresh restart budget.
+      if (!existing.restarting) existing.restarts = 0;
+      await (existing.restarting ?? this.restartCrashed(browserId, live));
+      return !live.isClosed && !live.isCrashed && existing.session === live ? live : null;
+    }
     if (existing?.reviving) return existing.reviving;
 
     const attempt: Promise<BrowserSession | null> = (async () => {
       await this.store.load();
       const record = this.store.get(browserId);
       if (!record) return null;
-      if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) return null;
+      const pinned = record.pinned === true;
+      if (this.atCapacity(pinned)) return null;
 
-      const { session } = await this.createSession(browserId, { mobile: record.mobile });
+      const { session } = await this.createSession(browserId, { mobile: record.mobile, pinned });
       session.windowId = record.windowId;
       if (/^https?:/i.test(record.url)) {
         const state = await session.navigate(record.url, 'domcontentloaded').catch(() => null);
@@ -437,7 +550,17 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const wsUrl = await fetchBrowserWsUrl(port, 5000);
       if (!wsUrl) return;
 
-      this.browserCdp = await CDPClient.connect(wsUrl);
+      const client = await CDPClient.connect(wsUrl);
+      this.browserCdp = client;
+      // The browser-level socket outlives every tab, so its dropping unasked is the
+      // provider's own hint that Chrome went away — the only one on Windows, where the
+      // process we spawned may be a launcher that exited long ago.
+      client.onClose((expected) => {
+        if (expected || this.browserCdp !== client) return;
+        this.browserCdp = null;
+        this.discoveryPromise = null;
+        this.browserSocketLost();
+      });
       await this.browserCdp.send('Target.setDiscoverTargets', { discover: true });
 
       this.browserCdp.on('Target.targetCreated', (params: unknown) => {
@@ -461,7 +584,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   }
 
   private async handleNewTarget(targetInfo: NewTargetInfo, chromePort: number): Promise<void> {
-    if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) {
+    if (this.atCapacity(false)) {
       log.info('cannot adopt new tab — limit reached');
       return;
     }
@@ -617,7 +740,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const url = t.url || '';
       // Skip internal / scratch pages — nothing useful to address there.
       if (/^(chrome|chrome-extension|devtools|about|edge):/.test(url)) continue;
-      if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) break;
+      if (this.atCapacity(false)) break;
 
       const browserId = String(this.nextId++);
       const rec = this.claim(browserId, t.id);
@@ -709,17 +832,12 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
    * in flight keeps its record: it will bring the endpoint back up itself.
    */
   protected async closeEndpoint() {
-    if (this.browserCdp) {
-      this.browserCdp.close();
-      this.browserCdp = null;
-    }
-    this.targets.clear();
+    this.forgetEndpoint();
     for (const [id, rec] of this.records) {
       rec.targetId = undefined;
       rec.unannounced = false;
       if (!rec.session && !rec.reviving) this.records.delete(id);
     }
-    this.discoveryPromise = null;
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
@@ -727,14 +845,27 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     await this.releaseProcess();
   }
 
+  /** Drop the browser-level socket and every target claim — the endpoint behind them is gone. */
+  private forgetEndpoint(): void {
+    if (this.browserCdp) {
+      this.browserCdp.close();
+      this.browserCdp = null;
+    }
+    this.discoveryPromise = null;
+    this.targets.clear();
+  }
+
   /** Create a new browser tab. Auto-assigns the next browserId if omitted. */
   async createSession(
     browserId?: string,
     options?: BrowserSessionOptions,
   ): Promise<{ session: BrowserSession; browserId: string }> {
-    if (this.liveCount + this.pendingSessions >= MAX_SESSIONS) {
+    const pinned = options?.pinned === true;
+    if (this.atCapacity(pinned)) {
       throw new Error(
-        `Browser limit reached (max ${MAX_SESSIONS}). Close an existing browser first.`,
+        pinned
+          ? `Internal browser tab limit reached (max ${MAX_PINNED_SESSIONS}).`
+          : `Browser limit reached (max ${MAX_SESSIONS}). Close an existing browser first.`,
       );
     }
 
@@ -751,7 +882,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       if (Number.isInteger(asNumber) && asNumber >= this.nextId) this.nextId = asNumber + 1;
     }
 
-    this.pendingSessions++;
+    if (pinned) this.pendingPinned++;
+    else this.pendingSessions++;
     try {
       const port = await this.ensureChromePort();
       await this.ensureDiscovery(port);
@@ -766,7 +898,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       this.track(browserId, session, { persist: options?.adopt !== true });
       return { session, browserId };
     } finally {
-      this.pendingSessions--;
+      if (pinned) this.pendingPinned--;
+      else this.pendingSessions--;
     }
   }
 
@@ -826,8 +959,9 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
   getStats(): BrowserProviderStats {
     return {
-      activeSessions: this.liveCount,
+      activeSessions: this.countLive(false),
       maxSessions: MAX_SESSIONS,
+      internalSessions: this.countLive(true),
       chromeRunning: this.chromeRunning,
     };
   }
@@ -850,7 +984,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         windowId: session.windowId,
         state: session.isCrashed ? 'crashed' : 'live',
         driving: session.driving,
-        viewers: session.screencasting ? 1 : 0,
+        viewers: session.viewerCount,
+        pinned: session.pinned,
         createdAt: session.createdAt,
         idleMs: now - session.lastActivity,
         jsHeapBytes: await session.jsHeapBytes().catch(() => null),
@@ -870,6 +1005,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
           state: 'suspended',
           driving: false,
           viewers: 0,
+          pinned: record.pinned === true,
           createdAt: record.createdAt,
           idleMs: now - record.updatedAt,
           jsHeapBytes: null,
