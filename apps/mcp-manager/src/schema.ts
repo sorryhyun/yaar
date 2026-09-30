@@ -94,6 +94,14 @@ export const McpServerStatus = z.looseObject({
   state: z.optional(z.string()),
   error: z.optional(z.string()),
   toolCount: z.optional(z.number()),
+  // 'required' (401, must sign in) or 'signed_in'; absent = no OAuth involved.
+  auth: z.optional(z.string()),
+});
+
+// Reply to `login`: JSON with the URL the user must open. An "already signed in"
+// reply is plain text, which fails this schema and reads as no URL.
+export const McpLoginResponse = z.looseObject({
+  authUrl: z.optional(z.string()),
 });
 
 export const McpStatusListResponse = z.looseObject({

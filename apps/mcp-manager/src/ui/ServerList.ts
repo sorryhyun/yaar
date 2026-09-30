@@ -1,7 +1,7 @@
 import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { confirmRemove, refreshServer, toggleExpand } from '../actions';
-import { CONNECTION_STATE } from '../constants';
+import { confirmRemove, refreshServer, signIn, signOut, toggleExpand } from '../actions';
+import { AUTH_STATE, CONNECTION_STATE, HTTP_TRANSPORT } from '../constants';
 import { expandedServer, serverTools, servers } from '../store';
 import type { McpServer } from '../types';
 import { ToolList } from './ToolList';
@@ -49,6 +49,13 @@ export function ServerList() {
               </div>
               <!-- Buttons sit inside the row, so their clicks must not also toggle it. -->
               <div class="server-actions" onClick=${(e: Event) => e.stopPropagation()}>
+                <${Show} when=${server.type === HTTP_TRANSPORT && server.auth === AUTH_STATE.required}>
+                  <button class="y-btn y-btn-primary y-btn-sm" onClick=${() => signIn(server.name)}>Sign in</button>
+                </>
+                <${Show} when=${server.type === HTTP_TRANSPORT && server.auth === AUTH_STATE.signedIn}>
+                  <span class="y-badge y-badge-success">Signed in</span>
+                  <button class="y-btn y-btn-ghost y-btn-sm" onClick=${() => signOut(server.name)}>Sign out</button>
+                </>
                 <button
                   class="y-btn y-btn-ghost y-btn-sm"
                   onClick=${() => refreshServer(server.name)}

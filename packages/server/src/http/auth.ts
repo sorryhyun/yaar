@@ -8,6 +8,7 @@ import { IS_REMOTE } from '../config.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { extractIframeToken } from './access.js';
 import { createLogger } from '../observability/log.js';
+import { MCP_OAUTH_CALLBACK_PATH } from '../mcp/external/oauth.js';
 
 const log = createLogger('Auth');
 
@@ -92,6 +93,9 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
   // here is served from a caller-named path, and a bare GET with no valid state does
   // nothing but render an error page.
   if (url.pathname === '/api/auth/google/callback') return null;
+  // The same, for an external MCP server's authorization server (mcp/external/oauth.ts):
+  // same single-use `state`, spent in `completeAuth`.
+  if (url.pathname === MCP_OAUTH_CALLBACK_PATH) return null;
 
   // Static frontend assets must load without auth so the client-side JS
   // can read the #remote=<token> hash fragment and attach it to API/WS calls.

@@ -9,8 +9,8 @@
 // `reportError` or `tryToast` and resolves; an action a protocol command calls
 // directly (`startScan`, `addServerByUrl`, ...) throws, so the agent gets the
 // message instead of a silent success.
-import { showConfirm, showToast, tryToast, withLoading } from '@bundled/yaar';
-import { SCAN_BATCH_SIZE, SCAN_DEFAULTS } from './constants';
+import { showConfirm, showToast, tryToast, wait, withLoading } from '@bundled/yaar';
+import { AUTH_STATE, SCAN_BATCH_SIZE, SCAN_DEFAULTS } from './constants';
 import * as gateway from './gateway';
 import { logInfo, reportError } from './log';
 import { probePort, probeUrl } from './mcp';
@@ -23,6 +23,7 @@ import {
   scanPath,
   scanTo,
   serverTools,
+  servers,
   setDiscovered,
   setExpandedServer,
   setLoading,
@@ -222,6 +223,57 @@ export async function confirmRemove(name: string): Promise<void> {
 /** UI refresh path. */
 export async function refreshServer(name: string): Promise<void> {
   await tryToast(() => refreshServerByName(name), { success: `Refreshed "${name}"` });
+}
+
+/** How long to wait for the browser round trip: ~2 min at 2s. */
+const SIGN_IN_POLL_ATTEMPTS = 60;
+const SIGN_IN_POLL_INTERVAL_MS = 2000;
+
+/**
+ * OAuth sign-in for one server. The tab is opened blank before the first await
+ * (user activation), then pointed at the consent page; a URL passed to
+ * window.open would be routed into a YAAR window, which consent pages refuse
+ * to be framed in. Completion is detected by polling the server list.
+ */
+export async function signIn(name: string): Promise<void> {
+  const tab = window.open('', '_blank');
+  try {
+    const authUrl = await gateway.beginLogin(name);
+    if (!authUrl) {
+      tab?.close();
+      await loadServers();
+      showToast(`"${name}" is already signed in`, 'success');
+      return;
+    }
+    if (!tab) throw new Error('the browser blocked the sign-in tab — allow pop-ups and retry');
+    tab.opener = null;
+    tab.location.href = authUrl;
+    showToast('Complete sign-in in the browser tab that just opened…');
+
+    for (let i = 0; i < SIGN_IN_POLL_ATTEMPTS; i++) {
+      await wait(SIGN_IN_POLL_INTERVAL_MS);
+      await loadServers();
+      if (servers().find((s) => s.name === name)?.auth === AUTH_STATE.signedIn) {
+        showToast(`Signed in to "${name}"`, 'success');
+        await loadToolsFor(name);
+        return;
+      }
+    }
+    showToast(`Sign-in to "${name}" did not complete. Try again.`, 'error');
+  } catch (err) {
+    tab?.close();
+    reportError(`Sign-in to "${name}" failed`, err);
+  }
+}
+
+export async function signOut(name: string): Promise<void> {
+  await tryToast(
+    async () => {
+      await gateway.logout(name);
+      await loadServers();
+    },
+    { success: `Signed out of "${name}"` },
+  );
 }
 
 /** Expand a row, loading its tools the first time. Clicking the open row closes it. */

@@ -17,6 +17,7 @@ import {
 } from '../lib/verb-result.js';
 import type { ReadOptions } from '../lib/read-options.js';
 import { assertUri } from './utils.js';
+import { MCP_OAUTH_CONFIG_SCHEMA } from './mcp-gateway.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
 import { handleSetSettings, handleGetSettings } from '../features/config/settings.js';
@@ -191,6 +192,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
             cwd: { type: 'string' },
             url: { type: 'string' },
             headers: { type: 'object' },
+            oauth: MCP_OAUTH_CONFIG_SCHEMA,
           },
           required: ['type'],
         },

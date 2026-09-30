@@ -365,8 +365,8 @@ function createFetchHandlerInner() {
     const apiResponse = await handleApiRoutes(req, url);
     if (apiResponse) return withCors(apiResponse, corsHeaders);
 
-    const googleAuthResponse = await handleAuthRoutes(req, url);
-    if (googleAuthResponse) return withCors(googleAuthResponse, corsHeaders);
+    const authRouteResponse = await handleAuthRoutes(req, url);
+    if (authRouteResponse) return withCors(authRouteResponse, corsHeaders);
 
     const remoteControlResponse = await handleRemoteControlRoutes(req, url);
     if (remoteControlResponse) return withCors(remoteControlResponse, corsHeaders);

@@ -41,4 +41,6 @@ export interface McpServer {
   state: string;
   error?: string;
   toolCount?: number;
+  /** OAuth state: 'required' | 'signed_in'; absent when the server never asked. */
+  auth?: string;
 }

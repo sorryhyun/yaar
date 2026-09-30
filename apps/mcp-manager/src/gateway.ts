@@ -21,6 +21,7 @@ import {
   McpConfigResponse,
   McpServerConfig,
   McpServerStatus,
+  McpLoginResponse,
   McpStatusListResponse,
 } from './schema';
 import { parseToolList } from './tools';
@@ -79,6 +80,7 @@ export async function fetchServers(): Promise<McpServer[]> {
       state: status?.state ?? CONNECTION_STATE.disconnected,
       error: status?.error,
       toolCount: status?.toolCount,
+      auth: status?.auth,
     };
   });
 }
@@ -114,4 +116,27 @@ export async function removeServer(name: string): Promise<void> {
 /** Force the gateway to reconnect and re-cache one server's tools. */
 export async function refreshServer(name: string): Promise<void> {
   await invoke(MCP_URI, { action: MCP_ACTION.refresh, name });
+}
+
+/**
+ * Start OAuth sign-in for one server. Returns the URL the user must open in a
+ * real browser tab, or undefined when the server is already signed in (the
+ * gateway answers that case with plain text, not JSON).
+ */
+export async function beginLogin(name: string): Promise<string | undefined> {
+  const raw = await invoke<unknown>(MCP_URI, { action: MCP_ACTION.login, name });
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  return safeParseOr(McpLoginResponse, value, undefined, { label: 'mcp-manager:login' })?.authUrl;
+}
+
+/** Forget the stored OAuth tokens for one server. */
+export async function logout(name: string): Promise<void> {
+  await invoke(MCP_URI, { action: MCP_ACTION.logout, name });
 }

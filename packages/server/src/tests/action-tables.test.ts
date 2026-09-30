@@ -106,7 +106,7 @@ describe('handlers whose enum used to be hand-written beside a switch', () => {
   const cases: Array<[uri: string, names: string[]]> = [
     ['yaar://session/agents/session', ['interrupt', 'relay', 'audit', 'coordinate', 'query']],
     ['yaar://session/monitors/0', ['suspend', 'resume', 'interrupt']],
-    ['yaar://mcp', ['add', 'remove', 'reload', 'refresh']],
+    ['yaar://mcp', ['add', 'remove', 'reload', 'refresh', 'login', 'logout']],
   ];
 
   for (const [uri, names] of cases) {

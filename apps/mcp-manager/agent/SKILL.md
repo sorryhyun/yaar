@@ -18,6 +18,15 @@ re-caches its tools.
 Probe first when the server is unfamiliar — probing tells you whether it answers and what
 tools it advertises without writing anything to the config.
 
+## Signing in (OAuth)
+
+An http server that answers 401 shows `auth: 'required'` in its status row, and its row gets
+a **Sign in** button. That button is the user's path: it opens the consent page in a real
+browser tab and the row flips to `signed_in` once the redirect comes back. You cannot approve
+consent yourself — `invoke('yaar://mcp', { action: 'login', name })` only answers the
+`authUrl` for the user to open. `action: 'logout'` forgets the tokens. Sign-in completes only
+when the browser runs on the same machine as the YAAR server (the redirect is loopback).
+
 ## Protocol version negotiation
 
 - It speaks MCP revision **`2025-06-18`**.

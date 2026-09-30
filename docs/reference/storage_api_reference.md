@@ -22,7 +22,8 @@ PROJECT_ROOT/
     ├── settings.json            # User settings
     ├── shortcuts.json           # Desktop shortcuts
     ├── hooks.json               # Event-driven hooks
-    └── mcp-servers.json         # MCP server configuration
+    ├── mcp-servers.json         # MCP server configuration
+    └── credentials/mcp/{server}.json  # OAuth client + tokens per external MCP server (0600)
 ```
 
 Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environment variable.

@@ -5,7 +5,10 @@
  *   list   yaar://mcp/{server}           → list tools on a server
  *   describe yaar://mcp/{server}/{tool}  → tool input schema
  *   invoke yaar://mcp/{server}/{tool}    → call the tool
- *   invoke yaar://mcp                    → manage servers (add/remove/reload/refresh)
+ *   invoke yaar://mcp                    → manage servers (add/remove/reload/refresh/login/logout)
+ *
+ * `login` answers a URL rather than opening it: the user's browser is wherever they are, not
+ * necessarily where the server runs (see mcp/external/oauth.ts).
  */
 
 import type { ResourceRegistry } from './uri-registry.js';
@@ -125,7 +128,52 @@ const serverActions = defineActions<ServerActionCtx>({
       return ok(`Refreshed "${name}": ${tools.length} tool(s).`);
     },
   },
+  login: {
+    description: 'OAuth sign-in for an http server; answers authUrl for the user to open',
+    run: async ({ manager, name }) => {
+      if (!name) return error('Missing "name" for login action');
+      try {
+        const { authUrl } = await manager.beginAuth(name);
+        if (!authUrl) return ok(`Server "${name}" is already signed in and connected.`);
+        return okJson({
+          server: name,
+          authUrl,
+          next:
+            'The user opens authUrl in their browser and approves. The server is usable once ' +
+            `describe('yaar://mcp/${name}') shows auth "signed_in". The link expires in 10 minutes.`,
+        });
+      } catch (err) {
+        return error(err instanceof Error ? err.message : 'Sign-in could not start');
+      }
+    },
+  },
+  logout: {
+    description: "forget a server's OAuth credentials",
+    run: async ({ manager, name }) => {
+      if (!name) return error('Missing "name" for logout action');
+      await manager.signOut(name);
+      return ok(`Signed out of "${name}".`);
+    },
+  },
 });
+
+/** Documentation of an http server's `oauth` field, shared by both config doors. */
+export const MCP_OAUTH_CONFIG_SCHEMA = {
+  description:
+    'http only. OAuth client settings; omit to sign in with dynamic registration when the ' +
+    'server asks, false to never offer OAuth.',
+  anyOf: [
+    {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string', description: 'Pre-registered client id (skips registration)' },
+        clientSecret: { type: 'string', description: 'Its secret; "$NAME" reads process.env' },
+        scope: { type: 'string' },
+      },
+    },
+    { type: 'boolean', const: false },
+  ],
+};
 
 export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
   // ── yaar://mcp — list all servers, manage config ──
@@ -138,7 +186,10 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
       type: 'object',
       properties: {
         action: { ...serverActions.schema, description: summarizeActions(serverActions, ', ') },
-        name: { type: 'string', description: 'Server name (required for add/remove/refresh)' },
+        name: {
+          type: 'string',
+          description: 'Server name (required for every action but reload)',
+        },
         config: {
           type: 'object',
           description: 'Server config (required for add)',
@@ -150,6 +201,7 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
             cwd: { type: 'string' },
             url: { type: 'string' },
             headers: { type: 'object' },
+            oauth: MCP_OAUTH_CONFIG_SCHEMA,
           },
         },
       },

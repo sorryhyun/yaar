@@ -21,6 +21,14 @@ export const MCP_ACTION = {
   add: 'add',
   remove: 'remove',
   refresh: 'refresh',
+  login: 'login',
+  logout: 'logout',
+} as const;
+
+/** `auth` values a status row can carry. */
+export const AUTH_STATE = {
+  required: 'required',
+  signedIn: 'signed_in',
 } as const;
 
 /**

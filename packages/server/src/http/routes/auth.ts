@@ -1,5 +1,9 @@
 /**
- * Google auth routes — marketplace publisher identity.
+ * OAuth routes — Google (marketplace publisher identity) and the redirect back from an
+ * external MCP server's sign-in.
+ *
+ * GET  /api/auth/mcp/callback     — an external MCP server's OAuth redirect target
+ *                                    (mcp/external/oauth.ts); started by `login` on yaar://mcp
  *
  * GET  /api/auth/google/status    — { configured, signedIn, email, pending }
  * POST /api/auth/google/login     — mint Google's consent URL for the caller to open
@@ -24,8 +28,8 @@
  * iframe allowlist (below) so a system app's `fetch()` reaches them; the per-request
  * `systemApp` check is what keeps every other app out.
  *
- * `callback` is deliberately *not* here: it is a top-level browser navigation from
- * Google (no iframe token, no consent to gate), already exempted from remote-token
+ * Neither `callback` is here: each is a top-level browser navigation from an
+ * authorization server (no iframe token, no consent to gate), exempted from remote-token
  * auth in `auth.ts`, and its credential is the single-use `state`.
  */
 import {
@@ -35,6 +39,8 @@ import {
   signOut,
 } from '../../features/market/google-auth.js';
 import { fetchMe } from '../../features/market/marketplace.js';
+import { getMcpClientManager } from '../../mcp/external/index.js';
+import { MCP_OAUTH_CALLBACK_PATH } from '../../mcp/external/oauth.js';
 import { resolvePrincipal } from '../access.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
 import { errMessage } from '@yaar/lib/errors';
@@ -85,8 +91,23 @@ function requireHostOrSystemApp(req: Request, url: URL): Response | null {
   );
 }
 
-/** Minimal browser-facing page — this is the one route a human actually looks at. */
-function callbackPage(title: string, message: string, ok: boolean): Response {
+/** Text for an HTML body. The message can carry a query parameter or a remote server's words. */
+function escapeHtml(text: string): string {
+  return text.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
+}
+
+/**
+ * Minimal browser-facing page — this is the one route a human actually looks at.
+ *
+ * Everything interpolated is escaped: the page is served on the desktop's own origin with
+ * no auth in front of it, so an `?error=<script>…` echoed raw would run as the host.
+ */
+function callbackPage(rawTitle: string, rawMessage: string, ok: boolean): Response {
+  const title = escapeHtml(rawTitle);
+  const message = escapeHtml(rawMessage);
   return new Response(
     `<!doctype html>
 <html>
@@ -118,6 +139,9 @@ function callbackPage(title: string, message: string, ok: boolean): Response {
 }
 
 export async function handleAuthRoutes(req: Request, url: URL): Promise<Response | null> {
+  if (url.pathname === MCP_OAUTH_CALLBACK_PATH && req.method === 'GET') {
+    return mcpCallback(url);
+  }
   if (!url.pathname.startsWith('/api/auth/google/')) return null;
 
   if (url.pathname === '/api/auth/google/status' && req.method === 'GET') {
@@ -183,4 +207,24 @@ export async function handleAuthRoutes(req: Request, url: URL): Promise<Response
   }
 
   return null;
+}
+
+/** An external MCP server's authorization server sending the user back (mcp/external/oauth.ts). */
+async function mcpCallback(url: URL): Promise<Response> {
+  try {
+    const manager = await getMcpClientManager();
+    const server = await manager.completeAuth(url.searchParams);
+    return callbackPage(
+      'Signed in',
+      `YAAR is signed in to the MCP server "${server}". You can close this tab.`,
+      true,
+    );
+  } catch (err) {
+    const oauthError = url.searchParams.get('error');
+    return callbackPage(
+      oauthError === 'access_denied' ? 'Sign-in cancelled' : 'Sign-in failed',
+      errMessage(err),
+      false,
+    );
+  }
 }
