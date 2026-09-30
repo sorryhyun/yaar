@@ -50,7 +50,7 @@ bun run test                         # Everything (what CI runs)
 bun run build:exe                # Build Windows executable
 bun run build:exe:bundle:linux   # Build Linux executable
 bun run build:exe:bundle:macos   # Build macOS executable (on a Mac: also dist/YAAR.app)
-bun scripts/build/webview-native.ts  # Build the exe's native WebView library (macOS; build:exe:bundle:macos runs it)
+bun scripts/build/webview-native.ts  # Build the exe's native WebView library (macOS dylib / Windows DLL; the exe builds run it)
 ```
 
 Every `bun test` is environment-pinned (preloads `scripts/test/env.ts`), and a run mixing test

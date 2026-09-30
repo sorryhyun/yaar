@@ -7,7 +7,8 @@
  * {@link runWebviewWindow} **blocks the calling thread** until the window closes:
  * `webview_run()` is the platform's UI loop, so Bun's event loop does not turn while it
  * runs. It cannot move to a Worker either — on macOS AppKit insists on the main thread, and
- * a Worker call crashes the process outright. So a process that opens a window does nothing
+ * a Worker call crashes the process outright; on Windows the native code is not one a
+ * Worker can contain either (a fault there takes the process). So a process that opens a window does nothing
  * else: timers, promises and I/O callbacks queued before the call run only after the window
  * is gone. Talk to that process through its exit, or through the page.
  *
@@ -19,7 +20,7 @@
 import { CString, dlopen, FFIType, JSCallback, type Pointer } from 'bun:ffi';
 
 export interface WebviewWindowOptions {
-  /** Absolute path to the built library (`libwebview.dylib` on macOS). */
+  /** Absolute path to the built library (`libwebview.dylib` on macOS, `webview.dll` on Windows). */
   libPath: string;
   url: string;
   title: string;
@@ -28,8 +29,22 @@ export interface WebviewWindowOptions {
   height: number;
   /** Right-click → Inspect (and Safari's Develop menu on macOS). */
   devtools?: boolean;
-  /** Remember the window's frame across launches under this name. */
+  /**
+   * Remember the window's frame across launches under this name (macOS: the user
+   * defaults; Windows: `HKCU\Software\YAAR\WindowPlacement`).
+   */
   autosaveName?: string;
+  /**
+   * Windows: the WebView2 profile folder (cookies, storage, cache). Unset, webview.h puts
+   * it in `%APPDATA%\<exe name>` — `bun.exe` from a source checkout. macOS ignores it:
+   * WKWebView keeps one store per app.
+   */
+  dataDir?: string;
+  /**
+   * Windows: serve CDP for the window on this loopback port (Chromium's
+   * `--remote-debugging-port`). macOS ignores it — WebKit has no CDP.
+   */
+  remoteDebuggingPort?: number;
   /** Close the window — and exit this process — as soon as process `pid` exits. */
   exitWithPid?: number;
   /**
@@ -54,7 +69,7 @@ export interface WebviewWindowOptions {
   /**
    * Save downloads here: `<a download>` (blob: included), attachment responses, and
    * anything the web view cannot display. Unset, downloads are dropped as the bare
-   * WebView drops them.
+   * WKWebView drops them (macOS), or go to WebView2's default folder (Windows).
    */
   downloadsDir?: string;
   /**
@@ -67,6 +82,8 @@ export interface WebviewWindowOptions {
    * Make ⌘W the page's close key: instead of closing the native window, it dispatches
    * this event (a plain name, `[A-Za-z0-9:_-]+`) on the top frame's `window`. For a page
    * that is a desktop of its own windows. The close button still closes the native one.
+   * On Windows WebView2 binds no close key, so Ctrl+W reaches the page as it is and this
+   * only validates the name.
    */
   closeKeyEvent?: string;
 }
@@ -197,6 +214,30 @@ function bindingCallback(
 }
 
 /**
+ * Windows: the profile folder and extra Chromium switches for the WebView2 environment that
+ * `webview_create` is about to make (see `webview_extras_environment` in
+ * `webview_extras_win.cc` — webview.h fixes both, and the loader ignores the WEBVIEW2_*
+ * variables that would override them). Its own `dlopen` of the already-loaded library, so
+ * the macOS library, which has no such symbol, is never asked for it.
+ */
+function configureWebView2(opts: WebviewWindowOptions): void {
+  if (process.platform !== 'win32') return;
+  const args: string[] = [];
+  if (opts.remoteDebuggingPort !== undefined) {
+    args.push(`--remote-debugging-port=${opts.remoteDebuggingPort}`);
+  }
+  if (!opts.dataDir && !args.length) return;
+  const { symbols, close } = dlopen(opts.libPath, {
+    webview_extras_environment: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
+  });
+  symbols.webview_extras_environment(
+    opts.dataDir ? cstr(opts.dataDir) : null,
+    args.length ? cstr(args.join(' ')) : null,
+  );
+  close(); // the caller's handle keeps the library, and what was just set, loaded
+}
+
+/**
  * Open the window and run its UI loop until it closes.
  *
  * Throws — before any window appears — when the library does not load or the platform
@@ -205,6 +246,7 @@ function bindingCallback(
  */
 export function runWebviewWindow(opts: WebviewWindowOptions): void {
   const { symbols: wv, close } = open(opts.libPath);
+  configureWebView2(opts);
   const w = wv.webview_create(opts.devtools ? 1 : 0, null) as Pointer | null;
   if (!w) {
     close();
@@ -218,11 +260,12 @@ export function runWebviewWindow(opts: WebviewWindowOptions): void {
 
   wv.webview_set_title(w, title);
   wv.webview_set_size(w, opts.width, opts.height, WEBVIEW_HINT_NONE);
-  const nsWindow = wv.webview_get_window(w);
-  if (nsWindow) wv.webview_extras_configure(nsWindow, title, autosave);
+  const window = wv.webview_get_window(w); // NSWindow on macOS, HWND on Windows
+  if (window) wv.webview_extras_configure(window, title, autosave);
 
   // Delegates and the binding gate go on before any binding or page exists: a binding
-  // with no gate would be callable from app frames.
+  // with no gate would be callable from app frames. The handle is the WKWebView on macOS,
+  // the ICoreWebView2Controller on Windows.
   const webView = wv.webview_get_native_handle(w, WEBVIEW_NATIVE_HANDLE_KIND_BROWSER_CONTROLLER);
   const bindingOrigin = opts.bindingOrigin ? cstr(opts.bindingOrigin) : null;
   const downloadsDir = opts.downloadsDir ? cstr(opts.downloadsDir) : null;

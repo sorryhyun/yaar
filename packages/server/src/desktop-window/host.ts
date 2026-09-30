@@ -21,13 +21,19 @@
  *
  * `--trust-spki` is the local TLS socket's key pin (`http/local-tls.ts`), which lets the
  * window load the desktop over h2 from `https://localhost:<tlsPort>` — WebKit has no
- * command-line switch for that, so the window's own delegate checks it.
+ * command-line switch for that, so the window's own delegate checks it (on Windows, the
+ * web view's certificate-error event does).
  *
  * The page gets `window.yaarHost` (`host-bridge.ts`) in the top frame of the URL's
  * origin, and nowhere else.
+ *
+ * On Windows the window is WebView2, which is Chromium: `YAAR_WEBVIEW_CDP_PORT` serves CDP
+ * for it on that loopback port, so a CDP client can drive the shipped window too.
  */
 
 import { writeSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 import { errMessage } from '@yaar/lib/errors';
 import { runWebviewWindow } from '@yaar/lib/webview';
 import { envFlag } from '../config/env.js';
@@ -40,6 +46,21 @@ export const WINDOW_OPENED_LINE = 'yaar-window-opened';
 
 /** Exit status for "no window was shown"; the server reads the missing line, not this. */
 const EXIT_UNAVAILABLE = 3;
+
+/** Windows: the WebView2 profile — storage, cookies, cache — kept across launches. */
+function webView2DataDir(): string | undefined {
+  if (process.platform !== 'win32') return undefined;
+  return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'YAAR', 'WebView2');
+}
+
+/** `YAAR_WEBVIEW_CDP_PORT`, when it is a usable port. */
+function cdpPort(): number | undefined {
+  const raw = process.env.YAAR_WEBVIEW_CDP_PORT;
+  const port = raw ? Number(raw) : NaN;
+  if (Number.isInteger(port) && port > 0 && port < 65536) return port;
+  if (raw) console.error(`[yaar] ignoring YAAR_WEBVIEW_CDP_PORT=${raw}: not a port`);
+  return undefined;
+}
 
 function valueAfter(args: string[], flag: string): string | undefined {
   const i = args.indexOf(flag);
@@ -75,6 +96,8 @@ export function runWindowProcess(args: string[]): never {
       height: 900,
       devtools: envFlag('YAAR_WEBVIEW_DEVTOOLS', false),
       autosaveName: 'YAAR Desktop',
+      dataDir: webView2DataDir(),
+      remoteDebuggingPort: cdpPort(),
       exitWithPid: parent !== undefined && Number.isInteger(parent) ? parent : undefined,
       initScript: hostInitScript(origin),
       closeKeyEvent: CLOSE_KEY_EVENT,

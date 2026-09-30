@@ -9,7 +9,8 @@
  * (`pick-directory.ts`).
  *
  * COM has no `bun:ffi` support, so methods are called by vtable slot, `this` first. The slot
- * numbers were checked on Windows 11 against a live dialog; see docs/proposals/windows_proposal.md §4.
+ * numbers were checked on Windows 11 against a live dialog; see the closed Windows FFI proposal §4
+ * (`git show 06a6aac3:docs/proposals/windows_proposal.md`).
  */
 import { writeSync } from 'node:fs';
 import { CFunction, dlopen, FFIType, read, type Pointer } from 'bun:ffi';

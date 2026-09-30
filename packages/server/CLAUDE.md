@@ -42,7 +42,7 @@ Names and defaults. Rationale for each — read it before changing a default or 
 | `YAAR_CLIPBOARD_GRANT` | **on** | Pre-grant clipboard to the desktop origin over CDP (`=0` disables) |
 | `YAAR_TERMUX_API` | on for Android if it answers | Termux:API notifications, clipboard, share sheet (`=0` disables) |
 | `YAAR_LAUNCHER_PID` | unset | Shut down once this process is gone — how `make termux` avoids an orphaned server (`launcher-watchdog.ts`) |
-| `YAAR_WEBVIEW` / `YAAR_WEBVIEW_DEVTOOLS` / `YAAR_WEBVIEW_LIB` | on / off / — | Exe: desktop in YAAR's own WebView window (`0` → Chrome `--app`); Inspect menu; library path override |
+| `YAAR_WEBVIEW` / `YAAR_WEBVIEW_DEVTOOLS` / `YAAR_WEBVIEW_LIB` / `YAAR_WEBVIEW_CDP_PORT` | on / off / — / — | Exe: desktop in YAAR's own WebView window (`0` → Chrome `--app`); Inspect menu; library path override; CDP port for the Windows (WebView2) window |
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` (the inline cap stays 10MB) |
 | `YAAR_FREEDPI` | on | Route outbound TLS through a local fragmenting proxy, to get past SNI-matching DPI (`0` disables) |
 | `MONITOR_MAX_CONCURRENT` / `_ACTIONS_PER_MIN` / `_OUTPUT_PER_MIN` | `4` / `60` / `100000` | Background monitor budget |

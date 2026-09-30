@@ -15,10 +15,12 @@
  * (`scripts/codegen/android-host-script.ts`) and the APK answers the ops in Java.
  *
  * **Top frame of the desktop origin only.** Three layers, any one of which suffices:
- * webview.h injects its bindings and init scripts with `forMainFrameOnly:YES`; the
- * library drops binding calls from any other frame or origin (`bindingOrigin`, enforced
- * natively in `webview_extras.mm`); and the script below defines nothing unless it is in
- * the top frame of that origin. App iframes live on `127.0.0.1` and never see any of it —
+ * webview.h injects its bindings and init scripts with `forMainFrameOnly:YES` on macOS
+ * (WebView2 delivers binding messages from the top-level document only); the library
+ * keeps any other frame or origin from calling (`bindingOrigin`, enforced natively — per
+ * message in `webview_extras.mm`, by holding the top level to that origin in
+ * `webview_extras_win.cc`); and the script below defines nothing unless it is in the top
+ * frame of that origin. App iframes live on `127.0.0.1` and never see any of it —
  * they ask the shell over the iframe bridge, and the shell decides.
  */
 
@@ -49,9 +51,9 @@ export interface HostScriptOptions {
   transport: 'binding' | 'webMessage';
 }
 
-/** The macOS window. `share`, `insets` and `back` are phone things. */
+/** The desktop window (macOS or Windows). `share`, `insets` and `back` are phone things. */
 const DESKTOP_HOST: HostScriptOptions = {
-  platform: 'macos',
+  platform: process.platform === 'win32' ? 'windows' : 'macos',
   caps: ['download', 'clipboard', 'openExternal'],
   transport: 'binding',
 };

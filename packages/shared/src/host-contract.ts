@@ -3,8 +3,8 @@
  * `window.yaarHost`.
  *
  * A *host* is the thing that owns the window the desktop runs in when that thing is YAAR's
- * own — the macOS WKWebView window today (`packages/server/src/desktop-window/`), later a
- * WebView2 window and an Android APK. Every host implements this one interface, and the
+ * own — the macOS WKWebView and Windows WebView2 windows (`packages/server/src/desktop-window/`)
+ * and the Android APK (`hosts/android/`). Every host implements this one interface, and the
  * frontend never learns which host it is in. In Chrome, Cromite or dev there is no host:
  * `window.yaarHost` is undefined and every call site keeps its browser path
  * (`<a download>`, `navigator.clipboard`) — see the frontend's `lib/host.ts`.
@@ -13,7 +13,8 @@
  * a host injects it into the top frame of the desktop origin and nowhere else. An app that
  * needs a host capability asks the shell over the iframe bridge, and the shell decides.
  *
- * What each host does with it: `docs/installations/mac.md` and `docs/installations/android.md`;
+ * What each host does with it: `docs/installations/mac.md`, `docs/installations/windows.md` and
+ * `docs/installations/android.md`;
  * the platforms still to come: `docs/proposals/webview_host_proposal.md`.
  */
 

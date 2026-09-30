@@ -3,19 +3,19 @@
  * Build standalone executable with frontend assets embedded via Bun.
  *
  * Usage:
- *   bun scripts/build/exe-bundle.js --target windows
+ *   bun scripts/build/exe-bundle.js --target windows [--require-webview]
  *   bun scripts/build/exe-bundle.js --target linux
  *   bun scripts/build/exe-bundle.js --target macos [--require-webview]
  *
  * `--arch` defaults to this machine's for linux and macos (so a macOS build on Apple
  * silicon is not an x64 binary under Rosetta), and to x64 for windows, the only one shipped.
  *
- * A macos build embeds the native WebView library the desktop window loads
- * (`scripts/build/webview-native.ts`): built on the spot on a macOS host, taken prebuilt
- * from `dist/native/macos/` anywhere else. Missing, it is a warning — the binary then opens
- * Chrome/Edge like the other targets — unless `--require-webview` makes it an error, which
- * is how the release job stops a macOS binary shipping without its window. On a macOS host
- * the build also wraps the binary in `dist/YAAR.app`, signed ad hoc.
+ * A macos or windows build embeds the native WebView library the desktop window loads
+ * (`scripts/build/webview-native.ts`): built on the spot on a host of that OS, taken
+ * prebuilt from `dist/native/<macos|windows>/` anywhere else. Missing, it is a warning — the
+ * binary then opens Chrome/Edge like the linux target — unless `--require-webview` makes it
+ * an error, which is how the release job stops a binary shipping without its window. On a
+ * macOS host the build also wraps the binary in `dist/YAAR.app`, signed ad hoc.
  *
  * The three asset trees — the built frontend, the prebundled `@bundled/*` libraries, and
  * the onnxruntime-web artifacts — ride inside the binary via `bun build --compile --asset`,
@@ -187,16 +187,20 @@ function stageDir(name, target) {
 const assetPaths = [stageDir(EMBEDDED_ASSET_DIRS.frontend, frontendDist)];
 if (hasBundledLibs) assetPaths.push(stageDir(EMBEDDED_ASSET_DIRS.bundledLibs, bundledLibsDir));
 
-// ── Native WebView library (macOS) ─────────────────────────────────
+// ── Native WebView library (macOS, Windows) ────────────────────────
+
+/** The exe target → the Node platform whose library it embeds. */
+const WEBVIEW_PLATFORMS = { macos: 'darwin', windows: 'win32' };
+const webviewPlatform = WEBVIEW_PLATFORMS[target];
 
 let webviewLib = null;
-if (target === 'macos') {
-  webviewLib = webviewLibraryPath('darwin');
-  if (process.platform === 'darwin') {
+if (webviewPlatform) {
+  webviewLib = webviewLibraryPath(webviewPlatform);
+  if (process.platform === webviewPlatform) {
     execFileSync('bun', [join(__dirname, 'webview-native.ts')], { cwd: rootDir, stdio: 'inherit' });
   }
   if (!existsSync(webviewLib)) {
-    const msg = `WebView library not found at ${webviewLib} (build it on macOS: bun scripts/build/webview-native.ts).`;
+    const msg = `WebView library not found at ${webviewLib} (build it on ${target}: bun scripts/build/webview-native.ts).`;
     if (args.includes('--require-webview')) {
       console.error(msg);
       process.exit(1);

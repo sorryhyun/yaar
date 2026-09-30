@@ -83,6 +83,29 @@ jobs:
           path: dist/native/macos/libwebview.dylib
           if-no-files-found: error
 
+  # The Windows desktop window's WebView2 library: MSVC (found through vswhere) and
+  # the pinned WebView2 SDK, which webview-native.ts fetches and hash-checks. Built
+  # here and handed to the release job, which embeds it in the Windows binary.
+  webview-windows:
+    needs: resolve
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun scripts/build/webview-native.ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webview-windows
+          path: dist/native/windows/webview.dll
+          if-no-files-found: error
+
   # The Android host APK (hosts/android/), which install.sh offers on Termux. It has
   # to be signed with the one release key: Android refuses an update signed by any
   # other, so a key minted per run would strand every install. No key in the secrets
@@ -145,7 +168,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [resolve, verify, webview-macos, android]
+    needs: [resolve, verify, webview-macos, webview-windows, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -179,9 +202,15 @@ jobs:
       - name: Package bundled apps
         run: tar -czf dist/yaar-apps.tar.gz apps
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: webview-windows
+          path: dist/native/windows
+
+      # --require-webview, as for macOS below.
       - name: Build Windows x64
         run: |
-          bun scripts/build/exe-bundle.js --target windows --arch x64
+          bun scripts/build/exe-bundle.js --target windows --arch x64 --require-webview
           mv dist/yaar.exe dist/yaar-windows-x64.exe
 
       - name: Sign Windows executable

@@ -28,6 +28,7 @@ dirs.
 | `YAAR_WEBVIEW` | on | Bundled exe only: open the desktop in YAAR's own WebView window where the build carries one (`0` goes straight to Chrome/Edge `--app`) |
 | `YAAR_WEBVIEW_DEVTOOLS` | off | `=1`: the WebView window gets right-click → Inspect (and Safari's Develop menu on macOS) |
 | `YAAR_WEBVIEW_LIB` | unset | Load the WebView library from this path instead of the exe's embedded copy |
+| `YAAR_WEBVIEW_CDP_PORT` | unset | Windows exe: serve CDP for the WebView2 window on this loopback port |
 
 ### `YAAR_MOCK_AGENT`
 
@@ -78,7 +79,8 @@ re-spawns itself as `yaar --window <url> --parent <pid>` to own a WKWebView wind
 window shuts the server down, and the window closes itself if the server dies first. Any
 failure before the window appears (no library for the platform, a library that will not load,
 no WebView to be had) falls back to Chrome/Edge `--app`, then the default browser — so
-`YAAR_WEBVIEW=0` is only needed to *choose* Chrome. Windows and Linux builds carry no library yet.
+`YAAR_WEBVIEW=0` is only needed to *choose* Chrome. Windows builds carry `webview.dll` (WebView2,
+[windows.md](../installations/windows.md)); Linux builds carry no library yet.
 Development never goes through here — `make dev` and friends open Chrome, over CDP.
 
 The window loads the local h2 socket, `https://localhost:<tlsPort>`. WebKit has no equivalent of
@@ -96,8 +98,12 @@ window of their own, and grants the microphone and camera to `localhost`/`127.0.
 macOS has granted them to YAAR.
 
 `YAAR_WEBVIEW_LIB` points the window at a different library build. The embedded copy is otherwise
-written to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` (dlopen cannot read the exe's virtual
-filesystem), once per build.
+written to `~/Library/Caches/YAAR/libwebview-<hash>.dylib` (`%LOCALAPPDATA%\YAAR\Cache\webview-<hash>.dll`
+on Windows; dlopen cannot read the exe's virtual filesystem), once per build.
+
+On Windows the window is WebView2: the pin is checked in its certificate-error event instead of
+a delegate, the profile lives in `%LOCALAPPDATA%\YAAR\WebView2`, and
+`YAAR_WEBVIEW_CDP_PORT=<port>` serves CDP for the window on that loopback port.
 
 A `YAAR.app` (built on a Mac by `bun run build:exe:bundle:macos`) keeps its data in
 `~/Library/Application Support/YAAR` (`.env`, `config/`, `storage/`, `session_logs/`, `apps/`,
@@ -105,8 +111,8 @@ A `YAAR.app` (built on a Mac by `bun run build:exe:bundle:macos`) keeps its data
 signature macOS records permission grants against.
 
 **Source:** `packages/server/src/desktop-window/`, `packages/lib/src/webview/`,
-`packages/lib/src/webview/native/webview_extras.mm`, `packages/server/src/macos-bundle.ts`,
-`docs/installations/mac.md`
+`packages/lib/src/webview/native/webview_extras.mm`, `packages/lib/src/webview/native/webview_extras_win.cc`,
+`packages/server/src/macos-bundle.ts`, `docs/installations/mac.md`, `docs/installations/windows.md`
 
 ### `FABLE`
 

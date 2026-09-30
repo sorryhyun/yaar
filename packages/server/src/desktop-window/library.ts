@@ -23,6 +23,7 @@ import { IS_BUNDLED_EXE, PROJECT_ROOT } from '../config/env.js';
 /** The library's file name per platform. Absent: no WebView host there yet. */
 const LIBRARY_FILE: Partial<Record<NodeJS.Platform, { dir: string; file: string }>> = {
   darwin: { dir: 'macos', file: 'libwebview.dylib' },
+  win32: { dir: 'windows', file: 'webview.dll' },
 };
 
 function libraryFile(): { dir: string; file: string } | null {

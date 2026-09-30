@@ -4,10 +4,12 @@
 - macOS (phases 0, 1a, 1b) shipped in 0.22.0 and is closed out: [docs/installations/mac.md](../installations/mac.md).
 - The Android host APK (phase 4, display half) is in `hosts/android/`, verified on an emulator
   and a Galaxy S25: [docs/installations/android.md](../installations/android.md).
+- Windows (phase 2) is built and verified on Windows 11 (build 26200, WebView2 154):
+  [docs/installations/windows.md](../installations/windows.md). What is left of it is §2.
 - The host contract is `packages/shared/src/host-contract.ts`. The desktop window is
   `packages/server/src/desktop-window/`.
 
-Not started: Windows (phase 2) and the Linux go/no-go (phase 3). Android still needs two
+Not started: the Linux go/no-go (phase 3). Android still needs two
 fixes found on a phone, a full run with the server in the phone's own Termux, and a release. Claims not yet run are marked **(verify)**.
 
 **Decision (unchanged):** the *shipped* display is the OS WebView everywhere. **Development
@@ -16,7 +18,7 @@ and they keep it.
 
 | Platform | Display | Engine | State |
 |---|---|---|---|
-| Windows | WebView2 via `webview` + `bun:ffi` | Chromium (Edge) | not started |
+| Windows | WebView2 via `webview` + `bun:ffi` | Chromium (Edge) | ✅ built, verified; first release pending |
 | macOS | WKWebView via `webview` + `bun:ffi` | WebKit | ✅ shipped |
 | Linux | WebKitGTK via `webview` + `bun:ffi`, or stay on Chrome `--app` | WebKit | undecided |
 | Android | host APK (`android.webkit.WebView`) + server in Termux | Chromium | APK verified on a phone; fixes and release pending |
@@ -45,31 +47,52 @@ same checks, with an isolated (`source:'user'`) app open, before it ships:
 
 ---
 
-## 2. Windows (WebView2)
+## 2. Windows (WebView2): what is left
 
-- **Chromium flags.** `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` passes them to the embedded engine
-  **(verify)**:
-  - `--ignore-certificate-errors-spki-list`: keeps the h2 local TLS socket, with no native
-    pin like macOS needed.
-  - `--remote-debugging-port`: keeps **CDP on the real display**, so headless driving works
-    against the shipped window.
-- **Profile.** `WEBVIEW2_USER_DATA_FOLDER` gives a persistent profile.
-- **Defaults cover most gaps (verify each).** WebView2's defaults already provide:
-  - the download flyout, `blob:` included;
-  - the native file dialog;
-  - popups in a new window (OAuth works);
-  - a clipboard-read permission prompt.
-- **Main frame only (verify).** Whether `webview_bind` injects into the main frame only on
-  WebView2. The binding gate in `webview_extras.mm` is Cocoa code, so Windows needs its own.
-- **Library.** `scripts/build/webview-native.ts` only builds the macOS dylib. A Windows DLL
-  needs MSVC or a mingw cross-compile, plus a Windows job in `release.yml`.
-- **Runtime.** WebView2 ships with Windows 11 and reaches Windows 10 via Evergreen updates. A
-  missing runtime falls back to `--app`.
-- **Where to verify.** Nothing here runs on the macOS dev machine. A Windows 11 ARM VM (UTM)
-  covers every row of §1 except the GPU ones. A `windows-latest` CI runner can run the
-  scripted rows on x64.
+Built as planned, with two corrections the first run forced:
 
-Done when: §1 re-run on a Windows box, plus CDP to the display.
+- **No command-line flags or environment variables.** webview.h creates the WebView2
+  environment with a fixed profile folder (`%APPDATA%\<exe name>`) and no options, and with a
+  folder passed explicitly the loader ignores `WEBVIEW2_USER_DATA_FOLDER` and
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` (measured, with the variables in the real process
+  environment). So `webview.cc` renames the header's one loader call to a wrapper in
+  `webview_extras_win.cc`, which passes the profile folder and a real options object; the
+  header stays unedited. That needs Microsoft's loader, linked statically
+  (`WebView2LoaderStatic.lib`), instead of webview.h's built-in one.
+- **The TLS pin is native, not `--ignore-certificate-errors-spki-list`**: WebView2's
+  `ServerCertificateErrorDetected` checks the pin, loopback hosts only, as the macOS delegate
+  does.
+
+The binding gate differs from macOS by design: WebView2 raises `WebMessageReceived` for the
+top-level document only (a subframe's `chrome.webview.postMessage` goes to that frame's own
+event, which nothing subscribes to), so the library instead holds the top level to the desktop
+origin. webview.h's binding functions *are* injected into iframes, but their calls go nowhere.
+
+Measured on the shipped exe (2026-09-30), against §1:
+
+| Check | Result |
+|---|---|
+| Desktop, a bundled app, an agent turn rendering a window | ✅ |
+| `yaarHost` in the top frame only (`platform: 'windows'`); a same-origin bundled frame's binding call, and a cross-origin frame's hand-built `chrome.webview.postMessage`, both dropped | ✅ |
+| Clipboard read/write through the host (UTF-8, emoji) | ✅ |
+| Host download (`name (1).ext`), `<a download>` of a `blob:` | ✅ (the latter through WebView2's flyout) |
+| `window.open('')` and loopback popups open; other schemes → `null`; top-level navigation off the desktop origin refused | ✅ |
+| `getUserMedia` from the top frame | ✅ granted, no prompt |
+| `canvas.toDataURL('image/webp')`, WebGPU adapter | ✅ WebP, adapter present |
+| Isolated frame's localStorage across launches | ✅ persists (profile in `%LOCALAPPDATA%\YAAR\WebView2`) |
+| Concurrent requests | ✅ h2 over the pinned local TLS socket, `wss:` included |
+| CDP to the real display (`YAAR_WEBVIEW_CDP_PORT`) | ✅ |
+| Window closes → server shuts down; server killed → window exits; placement remembered | ✅ |
+| Ctrl+W closes the top YAAR window | ✅ over CDP input only — **a real keypress is unrun** |
+
+**Still unrun:**
+- Ctrl+W from the keyboard (above), the file chooser (Storage → Upload), and an OAuth popup
+  end to end (market-apps' GitHub sign-in). Each needs a person at the window.
+- `getUserMedia` from an isolated `127.0.0.1` frame (the handler grants by the requesting
+  origin, so it should behave as the top frame did).
+- A machine without the WebView2 runtime (a clean Windows 10): the window should refuse and
+  fall back to `--app`.
+- The `webview-windows` release job has not run yet; the first release is its test.
 
 ## 3. Linux (WebKitGTK) go/no-go
 
