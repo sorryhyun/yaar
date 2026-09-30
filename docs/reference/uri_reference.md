@@ -19,7 +19,7 @@ The `YaarAuthority` type covers ten namespaces:
 | `session` | `yaar://session/...` | Session info, agents, monitors, logs, context, browser |
 | `user` | `yaar://user/...` | Notifications, prompts |
 | `history` | `yaar://history/` | Past session logs (list/read) |
-| `skills` | `yaar://skills/{topic}` | Skill topic docs (read before using related tools) |
+| `skills` | `yaar://skills/{topic}` | YAAR-specific how-to notes; `list` says when each topic applies |
 | `mcp` | `yaar://mcp/...` | External MCP server gateway (add/remove/refresh servers, call their tools) |
 | `system` | `yaar://system/update` | The running installation — version check and self-update |
 

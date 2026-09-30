@@ -32,6 +32,8 @@ function getPlatformName(): string {
       return 'Windows';
     case 'darwin':
       return 'macOS';
+    case 'android':
+      return "Android (Termux, on the user's phone — its files: yaar://skills/termux)";
     default:
       return 'Linux';
   }

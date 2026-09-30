@@ -205,6 +205,13 @@ With both installed, YAAR uses the phone itself:
 You need both the package **and** the app. If only one is installed, YAAR notices at startup
 and leaves the integration off. `YAAR_TERMUX_API=0` turns it off on purpose.
 
+### Phone storage: your downloads, photos and documents
+
+YAAR starts out seeing only Termux's own folder. To work with files from the rest of the phone,
+ask YAAR for one (for example, "open the PDF in my downloads"). It walks you through running
+`termux-setup-storage` in Termux once, then mounts only the folders you need, each behind an
+approval dialog. Photos are mounted read-only unless you say otherwise.
+
 ### Chromium: page reads while you're in another app
 
 install.sh installs this one for you (Step 2), unless you set `YAAR_SKIP_CHROMIUM=1` or the

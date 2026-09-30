@@ -55,8 +55,13 @@ async function validateHostPath(hostPath: string): Promise<string | null> {
     if (!stats.isDirectory()) {
       return 'Host path is not a directory';
     }
-  } catch {
-    return 'Host path does not exist';
+  } catch (err) {
+    // Told apart because the fixes differ: on Android an ungranted shared-storage folder
+    // refuses the stat, and "does not exist" sent the agent hunting for another path.
+    const code = (err as NodeJS.ErrnoException).code;
+    return code === 'EACCES' || code === 'EPERM'
+      ? 'Host path is not readable (permission denied)'
+      : 'Host path does not exist';
   }
 
   // Reject paths inside STORAGE_DIR (circular mount)

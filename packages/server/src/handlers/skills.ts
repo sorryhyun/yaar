@@ -17,7 +17,18 @@ import { extractIdFromUri } from './utils.js';
 import type { ResolvedUri } from './uri-resolve.js';
 // Names only — importing topics.js here would pull its `.md` text imports into the
 // static module graph. topics.ts asserts this list matches what it actually serves.
-import { TOPIC_NAMES } from '../features/skills/topic-names.js';
+import { TOPIC_NAMES, TOPIC_WHEN } from '../features/skills/topic-names.js';
+
+/**
+ * What skills are for, shared by both doors. It names the trigger — something specific to
+ * YAAR that general knowledge gets wrong — and leaves picking a topic to `list`, whose
+ * entries each say when they apply. A per-topic roster here, with "MUST"/"REQUIRED" on
+ * each line, read as a checklist to clear before every tool rather than a place to look.
+ */
+const SKILLS_PURPOSE =
+  "YAAR's own how-to notes for what is specific to this system — setup, conventions and " +
+  'quirks general knowledge will not cover. Look here when the user asks how something in ' +
+  'YAAR works or the task depends on YAAR-specific behavior.';
 
 /** Lazily load and resolve a topic's content (with template substitution). */
 async function loadTopic(topic: string): Promise<string | null> {
@@ -29,7 +40,7 @@ async function loadTopic(topic: string): Promise<string | null> {
 export function registerSkillsHandlers(registry: ResourceRegistry): void {
   // ── yaar://skills — list available topics ──
   registry.register('yaar://skills', {
-    description: `List available skill topics. Topics: ${TOPIC_NAMES.join(', ')}`,
+    description: `${SKILLS_PURPOSE} Lists each topic with when it applies.`,
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
@@ -37,6 +48,7 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
         TOPIC_NAMES.map((t) => ({
           uri: `yaar://skills/${t}`,
           name: t,
+          description: TOPIC_WHEN[t],
           mimeType: 'text/markdown',
         })),
       );
@@ -45,7 +57,7 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
 
   // ── yaar://skills/* — read a specific topic ──
   registry.register('yaar://skills/*', {
-    description: `Read a skill topic — reference docs you MUST read before using related tools. Topics: ${TOPIC_NAMES.join(', ')}. Use read, not list; a topic is a document, not a collection.`,
+    description: `${SKILLS_PURPOSE} Read one topic; list('yaar://skills') says which topic fits. Use read, not list; a topic is a document, not a collection.`,
     verbs: ['describe', 'read'],
 
     async exists(resolved: ResolvedUri): Promise<boolean> {

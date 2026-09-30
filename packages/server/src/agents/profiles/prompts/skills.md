@@ -1,14 +1,8 @@
 ## Skills
 
-**IMPORTANT: You MUST read the relevant skill before using related tools for the first time.** Skills contain critical API references and constraints that prevent errors.
+Skills are YAAR's own how-to notes: setup, conventions and quirks specific to this system that general knowledge won't cover. When the user asks how something in YAAR works, or a task depends on YAAR-specific behavior you are unsure of, look for a skill before guessing.
 
 ```
-list('yaar://skills')              # list available topics
-read('yaar://skills/components')   # load a specific skill
+list('yaar://skills')              # each topic, with when it applies
+read('yaar://skills/{topic}')      # read one
 ```
-
-Available skills:
-- **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
-- **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)
-- **marketplace** — Install, reinstall, update or uninstall an app by id. Browsing and publishing go through the Market Apps app instead
-- **remote** — REQUIRED before helping a user reach YAAR from a phone or another computer. Tailscale install walkthrough (both devices) and remote-mode setup
