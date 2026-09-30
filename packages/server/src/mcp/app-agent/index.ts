@@ -52,7 +52,12 @@
 
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
+import { strictInput } from '../strict-input.js';
+import {
+  handleAppQuery,
+  handleAppCommand,
+  handleAppManifestIndex,
+} from '../../features/window/app-protocol.js';
 import {
   findStorageOverride,
   overrideNote,
@@ -248,9 +253,11 @@ export const APP_TOOL_DESCRIPTIONS = {
   command: 'Send a command to the app. Specify the command name and optional parameters.',
   commandParam: 'Command name to execute.',
   query:
-    'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest.',
+    'Query the app state. Pass a stateKey to read specific state, or omit for an index of ' +
+    'its state keys and commands.',
   queryParam:
-    "State key to query (omit for manifest). Besides the app's own keys, every window " +
+    'State key to query (omit for the index; "manifest" for the full manifest). ' +
+    "Besides the app's own keys, every window " +
     'answers "__screenshot" (a picture of what it is showing), "__content" (its raw ' +
     'content) and "__console" (its captured console output).',
 } as const;
@@ -519,7 +526,7 @@ export function registerAppAgentTools(server: McpServer): void {
     'query',
     {
       description: docs.query,
-      inputSchema: {
+      inputSchema: strictInput({
         stateKey: z.string().optional().describe(docs.queryParam),
         appId: z
           .string()
@@ -527,7 +534,7 @@ export function registerAppAgentTools(server: McpServer): void {
           .describe(
             'Target another app you are permitted to control (via "controls"). Omit to read your own app.',
           ),
-      },
+      }),
       _meta: LARGE_RESULT_META,
     },
     async (args) => {
@@ -662,9 +669,13 @@ export function registerAppAgentTools(server: McpServer): void {
       // The window's own keys (`__screenshot`, `__content`) are the OS's to answer, not the
       // app's — the app has never heard of them. Same builder as the verbs door, reached
       // after `resolveTarget` so another app's window costs the same `controls` entry.
+      // No key is a request for orientation, answered with the index rather than the
+      // manifest itself — see `handleAppManifestIndex`.
       const result =
         (await queryWindowBuiltin(windowState, target.windowId, stateKey)) ??
-        (await handleAppQuery(windowState, target.windowId, { stateKey }));
+        (stateKey
+          ? await handleAppQuery(windowState, target.windowId, { stateKey })
+          : await handleAppManifestIndex(windowState, target.windowId));
       return {
         ...(target.launched ? withLaunchNote(result, args.appId!, target.windowId) : result),
       };
@@ -676,23 +687,26 @@ export function registerAppAgentTools(server: McpServer): void {
     'command',
     {
       description: docs.command,
-      inputSchema: {
-        command: z.string().describe(docs.commandParam),
-        params: z.record(z.string(), z.unknown()).optional().describe('Command parameters'),
-        appId: z
-          .string()
-          .optional()
-          .describe(
-            'Target another app you are permitted to control (via "controls"). Omit to drive your own app.',
-          ),
-        timeoutMs: z
-          .number()
-          .optional()
-          .describe(
-            'How long to wait for the app to respond. Defaults to 30s; raise it (max 180s) for ' +
-              'commands that do real work, like a compile or a deploy.',
-          ),
-      },
+      inputSchema: strictInput(
+        {
+          command: z.string().describe(docs.commandParam),
+          params: z.record(z.string(), z.unknown()).optional().describe('Command parameters'),
+          appId: z
+            .string()
+            .optional()
+            .describe(
+              'Target another app you are permitted to control (via "controls"). Omit to drive your own app.',
+            ),
+          timeoutMs: z
+            .number()
+            .optional()
+            .describe(
+              'How long to wait for the app to respond. Defaults to 30s; raise it (max 180s) for ' +
+                'commands that do real work, like a compile or a deploy.',
+            ),
+        },
+        { nestUnder: 'params' },
+      ),
       _meta: LARGE_RESULT_META,
     },
     async (args) => {
@@ -843,7 +857,7 @@ export function registerAppAgentTools(server: McpServer): void {
         'that is the door to use when a signature leaves you unsure, not a second full describe. ' +
         'Pass `topic` to get one topic doc in full, by the name the index shows. ' +
         'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
-      inputSchema: {
+      inputSchema: strictInput({
         appId: z
           .string()
           .optional()
@@ -862,7 +876,7 @@ export function registerAppAgentTools(server: McpServer): void {
           .describe(
             'One topic doc to read in full (name as it appears in the docs index), instead of the whole manual.',
           ),
-      },
+      }),
       _meta: LARGE_RESULT_META,
     },
     async (args) => {
@@ -955,9 +969,9 @@ export function registerAppAgentTools(server: McpServer): void {
     {
       description:
         'Hand off a message to the monitor agent when the request is outside your app domain.',
-      inputSchema: {
+      inputSchema: strictInput({
         message: z.string().describe('Message to send to the monitor agent'),
-      },
+      }),
     },
     async (args) => {
       const pool = getActivePool();

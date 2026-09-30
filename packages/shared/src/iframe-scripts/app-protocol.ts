@@ -205,6 +205,44 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
 
   var MAX_LISTED_NAMES = 40;
 
+  function editDistance(a, b) {
+    var prev = [], cur, i, j;
+    for (j = 0; j <= b.length; j++) prev.push(j);
+    for (i = 1; i <= a.length; i++) {
+      cur = [i];
+      for (j = 1; j <= b.length; j++) {
+        cur.push(Math.min(prev[j] + 1, cur[j - 1] + 1,
+          prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1)));
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  // The likeliest intended name for a miss, or null. A long list is the wrong answer to
+  // a typo: \`undoEdit\` against 63 commands wants "Did you mean undo?", not a scan. Close
+  // by edit distance (case-insensitive), or one name containing the other — the usual
+  // shape of a guessed verb suffix.
+  function nearestName(name, candidates) {
+    var lower = String(name).toLowerCase();
+    var best = null, bestScore = Infinity;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i], lc = c.toLowerCase();
+      var d = editDistance(lower, lc);
+      var near = d <= Math.max(2, Math.floor(Math.min(lower.length, lc.length) / 3));
+      var contains = Math.min(lower.length, lc.length) >= 3 &&
+        (lower.indexOf(lc) !== -1 || lc.indexOf(lower) !== -1);
+      if (!near && !contains) continue;
+      if (d < bestScore) { best = c; bestScore = d; }
+    }
+    return best;
+  }
+
+  function didYouMean(name, candidates) {
+    var hit = nearestName(name, candidates);
+    return hit ? ' Did you mean "' + hit + '"?' : '';
+  }
+
   function memberError(kind, name) {
     var isCmd = kind === 'command';
     var label = isCmd ? 'Unknown command: ' + name : 'Unknown state key: ' + name;
@@ -221,8 +259,11 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     var noun = isCmd ? 'commands' : 'state keys';
     if (!own.length) return label + '. This app registers no ' + noun + '.';
     var shown = own.slice(0, MAX_LISTED_NAMES).join(', ');
-    if (own.length > MAX_LISTED_NAMES) shown += ', ... (' + own.length + ' total)';
-    return label + '. Available ' + noun + ': ' + shown;
+    if (own.length > MAX_LISTED_NAMES) {
+      shown += ', ... (' + (own.length - MAX_LISTED_NAMES) + ' more of ' + own.length +
+        ' - describe() lists them all)';
+    }
+    return label + '.' + didYouMean(name, own) + ' Available ' + noun + ': ' + shown;
   }
 
   // A command's \`params\` JSON Schema is what the agent is shown in the manifest, but
@@ -264,8 +305,16 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
 
     var parts = [];
     if (missing.length) parts.push('missing required param: ' + missing.join(', '));
-    if (unknown.length) parts.push('unknown param: ' + unknown.join(', '));
     var accepted = memberNames(props);
+    if (unknown.length) {
+      var hints = [];
+      for (var u = 0; u < unknown.length; u++) {
+        var hit = nearestName(unknown[u], accepted);
+        if (hit && !owns(params, hit)) hints.push(unknown[u] + ' -> ' + hit);
+      }
+      parts.push('unknown param: ' + unknown.join(', ') +
+        (hints.length ? ' (did you mean ' + hints.join(', ') + '?)' : ''));
+    }
     return cmdName + ': ' + parts.join('; ') + '. Accepted params: ' +
       (accepted.length ? accepted.join(', ') : '(none)') +
       (required.length ? ' (required: ' + required.join(', ') + ')' : '') + '.';

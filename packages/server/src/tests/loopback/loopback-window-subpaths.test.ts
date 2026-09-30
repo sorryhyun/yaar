@@ -1054,3 +1054,34 @@ describe('S10 — an empty state key reads as null, not as a finished command', 
     expect(toEnvelope(result)).toEqual({ ok: true, data: null });
   });
 });
+
+describe("S10 — the app agent's keyless query is an index, not the manifest", () => {
+  it('answers one row per state key and command from the live registration', async () => {
+    const { h } = await bootTwoAppWindows();
+    const { handleAppManifestIndex } = await import('../../features/window/app-protocol.js');
+    const result = await expectSettlesWithin(
+      runWithAgentContext(
+        { agentId: 'harness-app-agent', sessionId: h.sessionId, monitorId: '0' },
+        () => handleAppManifestIndex(h.session.windowState, 'memo'),
+      ),
+      2000,
+      'the keyless query',
+    );
+
+    expect(result.isError).toBeUndefined();
+    const index = jsonOf(result);
+    // `drafts` and `pinMemo` exist only in the running registration, so this is the live
+    // manifest — the one `query` has always read.
+    expect(index.state).toEqual([
+      'drafts — Memos typed but never saved',
+      'memos — Every saved memo, newest first',
+    ]);
+    expect(index.commands).toContain(
+      'pinMemo(id: string, note?: string) — Pin one memo to the top of the list',
+    );
+    expect(index.builtinState).toEqual(['__content', '__screenshot', '__console']);
+    // No schema bodies — those are what made the manifest the wrong first answer.
+    expect(textOf(result)).not.toContain('"properties"');
+    expect(String(index.next)).toContain('query("manifest")');
+  });
+});

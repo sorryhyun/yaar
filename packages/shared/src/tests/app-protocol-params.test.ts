@@ -146,4 +146,60 @@ describe('app command params validation', () => {
     });
     expect(call('pick', { id: 'a', toString: 'nope' }).error).toContain('unknown param: toString');
   });
+
+  it('suggests the declared key a typo was reaching for', () => {
+    const call = installWith({
+      extrude: {
+        description: 'extrude',
+        params: { type: 'object', properties: { thickness: { type: 'number' } } },
+        handler: () => ({}),
+      },
+    });
+    expect(call('extrude', { thicknes: 1 }).error).toContain(
+      'unknown param: thicknes (did you mean thicknes -> thickness?)',
+    );
+  });
+});
+
+/** Every name a registration of `count` no-op commands would register, `cmd00`..`cmdNN`. */
+function manyCommands(count: number, extra: Record<string, unknown> = {}) {
+  const commands: Record<string, unknown> = { ...extra };
+  for (let i = 0; i < count; i++) {
+    commands[`cmd${String(i).padStart(2, '0')}`] = { description: 'n', handler: () => ({}) };
+  }
+  return commands;
+}
+
+describe('unknown command names', () => {
+  const noop = { description: 'n', handler: () => ({}) };
+
+  it('suggests the nearest registered command', () => {
+    const call = installWith({ undo: noop, redo: noop, extrude: noop });
+    const reply = call('undoEdit');
+    expect(reply.error).toContain('Unknown command: undoEdit.');
+    expect(reply.error).toContain('Did you mean "undo"?');
+  });
+
+  it('suggests across a case slip or a one-letter typo', () => {
+    const call = installWith({ newMesh: noop, extrude: noop });
+    expect(call('newmesh').error).toContain('Did you mean "newMesh"?');
+    expect(call('extrud').error).toContain('Did you mean "extrude"?');
+  });
+
+  it('offers no suggestion when nothing is close', () => {
+    const call = installWith({ undo: noop, extrude: noop });
+    expect(call('frobnicate').error).not.toContain('Did you mean');
+  });
+
+  it('says how many were cut and where the rest live, past the list cap', () => {
+    const call = installWith(manyCommands(63));
+    const error = call('nope').error ?? '';
+    expect(error).toContain('(23 more of 63 - describe() lists them all)');
+    expect(error).not.toContain('cmd40');
+  });
+
+  it('suggests a name even when it falls past the list cap', () => {
+    const call = installWith(manyCommands(50, { zoomToFit: noop }));
+    expect(call('zoomToFt').error).toContain('Did you mean "zoomToFit"?');
+  });
 });

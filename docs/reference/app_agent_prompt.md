@@ -174,15 +174,17 @@ of `appStateKeys` prepended after a window remount.
 
 Fixed for every app agent — `APP_AGENT_TOOL_NAMES`. Full names as the model sees them are
 `mcp__app__{name}` and `mcp__messaging__direct_message`. Descriptions below are the exact
-registered strings (parameter descriptions are the Zod `.describe()` strings).
+registered strings (parameter descriptions are the Zod `.describe()` strings). Every schema is
+strict (`strictInput` in `mcp/strict-input.ts`): an argument a tool does not declare is refused
+by name rather than dropped.
 
 ### `query`
 
-> Query the app state. Pass a stateKey to read specific state, or omit for the app manifest.
+> Query the app state. Pass a stateKey to read specific state, or omit for an index of its state keys and commands.
 
 | param | description |
 |-------|-------------|
-| `stateKey?` | State key to query (omit for manifest). |
+| `stateKey?` | State key to query (omit for the index; "manifest" for the full manifest). Besides the app's own keys, every window answers "__screenshot" (a picture of what it is showing), "__content" (its raw content) and "__console" (its captured console output). |
 | `appId?` | Target another app you are permitted to control (via "controls"). Omit to read your own app. |
 
 ### `command`

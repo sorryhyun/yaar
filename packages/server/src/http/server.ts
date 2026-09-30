@@ -16,6 +16,9 @@ import {
 import { EXTERNAL_MCP_PREFIX } from '../features/window/external-share.js';
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('HttpServer');
 
 let _devReloadHandler: (() => Response) | null = null;
 
@@ -238,22 +241,7 @@ function createFetchHandlerInner() {
       }
     } else {
       // Local mode: whitelist localhost origins (same-origin requests won't have Origin header)
-      const allowedOrigins = [`http://localhost:${getPort()}`];
-      // App-origin isolation (Stage 1): installed apps are served from the sibling
-      // loopback alias, so their SDK's cross-origin calls to the desktop API carry
-      // that Origin and must be allowed. Both aliases resolve to this same loopback
-      // socket, so widening the allowlist to the sibling adds no new reachability.
-      if (APP_ORIGIN_ISOLATION) {
-        allowedOrigins.push(`http://127.0.0.1:${getPort()}`);
-      }
-      // The same pair again on the local TLS socket (http/local-tls.ts) — same server,
-      // same handlers, reached over h2.
-      const tls = getLocalTlsEndpoint();
-      if (tls) {
-        allowedOrigins.push(`https://localhost:${tls.port}`);
-        if (APP_ORIGIN_ISOLATION) allowedOrigins.push(`https://127.0.0.1:${tls.port}`);
-      }
-      if (origin && allowedOrigins.includes(origin)) {
+      if (origin && localOrigins().includes(origin)) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
         corsHeaders['Access-Control-Allow-Headers'] = 'Content-Type, X-Iframe-Token, X-Yaar-Client';
@@ -322,6 +310,17 @@ function createFetchHandlerInner() {
           );
         }
       }
+    }
+
+    // Every /mcp/ door refuses a browser from anywhere but this desktop's own loopback
+    // origins — in remote mode too, since no page of YAAR's ever calls MCP; its clients are
+    // CLIs, which send no Origin at all. The MCP spec asks for this against DNS rebinding:
+    // a page on a rebound hostname is same-origin with itself, so CORS never stops it,
+    // and under MCP_SKIP_AUTH (`make claude-dev`) the core doors have no bearer behind
+    // them either. A shared window's token was never the only thing standing there.
+    if (url.pathname.startsWith('/mcp/') && origin && !localOrigins().includes(origin)) {
+      log.warn('refused MCP request from a foreign origin', { origin });
+      return Response.json({ error: 'Origin not allowed' }, { status: 403 });
     }
 
     // MCP endpoints for tool calls (/mcp/system, /mcp/verbs, /mcp/app, ... — CORE_SERVERS)
@@ -398,6 +397,27 @@ function createFetchHandlerInner() {
 
     return withCors(Response.json({ error: 'Not found' }, { status: 404 }), corsHeaders);
   };
+}
+
+/**
+ * The browser origins this desktop is served from on loopback — the local-mode CORS
+ * allowlist, and the only origins an /mcp/ door answers a browser from.
+ */
+function localOrigins(): string[] {
+  const origins = [`http://localhost:${getPort()}`];
+  // App-origin isolation (Stage 1): installed apps are served from the sibling
+  // loopback alias, so their SDK's cross-origin calls to the desktop API carry
+  // that Origin and must be allowed. Both aliases resolve to this same loopback
+  // socket, so widening the allowlist to the sibling adds no new reachability.
+  if (APP_ORIGIN_ISOLATION) origins.push(`http://127.0.0.1:${getPort()}`);
+  // The same pair again on the local TLS socket (http/local-tls.ts) — same server,
+  // same handlers, reached over h2.
+  const tls = getLocalTlsEndpoint();
+  if (tls) {
+    origins.push(`https://localhost:${tls.port}`);
+    if (APP_ORIGIN_ISOLATION) origins.push(`https://127.0.0.1:${tls.port}`);
+  }
+  return origins;
 }
 
 function withCors(response: Response, corsHeaders: Record<string, string>): Response {

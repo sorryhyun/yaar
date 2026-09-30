@@ -34,6 +34,8 @@ import {
   reservedKeyNote,
 } from '../../lib/command-signature.js';
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
+import { buildProtocolIndex } from '../../lib/protocol-index.js';
+import { BUILTIN_STATE } from './builtin-state.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
 import { noteExternalCommand } from './external-share.js';
@@ -295,6 +297,77 @@ function resolveTimeout(payload: Record<string, unknown>, fallbackMs: number): n
     : fallbackMs;
 }
 
+/**
+ * The iframe's own manifest, as every reader of it should see it — or the error the
+ * caller should read. `fetchLiveManifest` below is the quiet twin for callers with a
+ * disk-side fallback.
+ *
+ * The live manifest comes from the iframe, so the disk-side filter in `discovery.ts`
+ * never saw it: persona-audience commands are stripped here too, for the same reason —
+ * they are described to the sub-agent in character voice at spawn, and an app agent
+ * reading that description reads the wrong script.
+ */
+async function requestManifest(
+  windowState: WindowStateRegistry,
+  key: string,
+): Promise<{ ok: true; manifest: AppManifest | null } | { ok: false; result: VerbResult }> {
+  const askedAt = Date.now();
+  const outcome = await request(key, { kind: 'manifest' }, deadlines.appQueryMs);
+  if (!outcome.ok)
+    return { ok: false, result: error(noAnswer(outcome, 'manifest request', askedAt)) };
+  const response = outcome.value;
+  if (response.kind !== 'manifest')
+    return { ok: false, result: error('Unexpected response kind.') };
+  if (response.error) return { ok: false, result: error(response.error) };
+  if (response.manifest) enrichManifestWithUris(response.manifest, key, windowState.handleMap);
+  return {
+    ok: true,
+    manifest: response.manifest ? withoutPersonaCommands(response.manifest) : null,
+  };
+}
+
+/**
+ * What the app agent's `query` answers when it names no state key: the running window's
+ * protocol as an index — one row per state key and per command (signature + first
+ * sentence) — and never the manifest itself.
+ *
+ * "Omit for the manifest" used to be the whole answer, and it is the first call a model
+ * reaches for: mesh-edit's came back at ~71KB, most of it schemas `describe` already
+ * serves one command at a time. The index is what the caller can act on; the full
+ * document stays one explicit `query("manifest")` away, for the rare caller that wants it.
+ * Built from the *live* manifest, not disk, because that is what `query` has always read
+ * — a window's registration can differ from what shipped.
+ */
+export async function handleAppManifestIndex(
+  windowState: WindowStateRegistry,
+  windowId: string,
+): Promise<VerbResult> {
+  const win = windowState.getWindow(windowId);
+  if (!win) return error(`Window "${windowId}" not found.`);
+  if (win.content.renderer !== 'iframe') return error(`Window "${windowId}" is not an iframe app.`);
+  const key = win.id;
+  const readyErr = await requireAppReady(windowState, key);
+  if (readyErr) return readyErr;
+  const fetched = await requestManifest(windowState, key);
+  if (!fetched.ok) return fetched.result;
+  const manifest = fetched.manifest;
+  if (!manifest) return withResponderNote(error('The app answered with no manifest.'), key);
+  const index = buildProtocolIndex(manifest, defsOf(manifest));
+  return withResponderNote(
+    okJson({
+      appId: manifest.appId,
+      name: manifest.name,
+      state: index.state,
+      commands: index.commands,
+      builtinState: Object.keys(BUILTIN_STATE),
+      next:
+        'query(stateKey) reads one key; describe({ command }) gives one command with its ' +
+        'full parameter schema; query("manifest") returns the complete manifest (large).',
+    }),
+    key,
+  );
+}
+
 export async function handleAppQuery(
   windowState: WindowStateRegistry,
   windowId: string,
@@ -336,18 +409,9 @@ export async function handleAppQuery(
   };
 
   if (stateKey === 'manifest') {
-    const askedAt = Date.now();
-    const outcome = await request(key, { kind: 'manifest' }, deadlines.appQueryMs);
-    if (!outcome.ok) return error(noAnswer(outcome, 'manifest request', askedAt));
-    const response = outcome.value;
-    if (response.kind !== 'manifest') return error('Unexpected response kind.');
-    if (response.error) return error(response.error);
-    if (response.manifest) enrichManifestWithUris(response.manifest, win.id, windowState.handleMap);
-    // The live manifest comes from the iframe, so the disk-side filter in
-    // `discovery.ts` never saw it: strip persona-audience commands here too, for the
-    // same reason — they are described to the sub-agent in character voice at spawn,
-    // and an app agent reading that description reads the wrong script.
-    return answer(response.manifest ? withoutPersonaCommands(response.manifest) : null);
+    const fetched = await requestManifest(windowState, key);
+    if (!fetched.ok) return fetched.result;
+    return answer(fetched.manifest);
   }
 
   const askedAt = Date.now();

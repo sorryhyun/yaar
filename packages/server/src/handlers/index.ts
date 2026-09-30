@@ -30,6 +30,7 @@ import { resolveShorthandUri } from '../http/uri-match.js';
 import { LARGE_RESULT_META } from '../mcp/result-size.js';
 import { LIST_PAGE_SIZE } from '../lib/list-options.js';
 import { spillOversizedResult } from '../mcp/result-spill.js';
+import { strictInput } from '../mcp/strict-input.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 import type { LayoutNote } from '../session/layout-context.js';
 
@@ -161,9 +162,9 @@ export function registerVerbTools(server: McpServer): void {
       description:
         'Describe a yaar:// resource -- returns supported verbs, description, and invoke schema. ' +
         'URIs support brace expansion: yaar://storage/{a,b,c} describes all 3 at once.',
-      inputSchema: {
+      inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to describe'),
-      },
+      }),
       _meta: LARGE_RESULT_META,
     },
     async ({ uri }) => exec(reg, 'describe', uri),
@@ -183,7 +184,7 @@ export function registerVerbTools(server: McpServer): void {
         'bounds per mesh, materials, animation channels — steered by the gltf* options; gltfPose ' +
         'plays a clip into a world-space pose. ' +
         'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',
-      inputSchema: {
+      inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to read'),
         lines: z
           .string()
@@ -290,7 +291,7 @@ export function registerVerbTools(server: McpServer): void {
             'glTF/GLB only: sections to leave out, comma-separated — nodes, meshes, ' +
               'materials, images, animations, skins, cameras, lights.',
           ),
-      },
+      }),
       _meta: LARGE_RESULT_META,
     },
     async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage, ...gltf }) =>
@@ -316,7 +317,7 @@ export function registerVerbTools(server: McpServer): void {
         `A storage folder returns ${LIST_PAGE_SIZE} entries at a time, with a note giving the ` +
         'total and the next range; sort/order pick which entries come first. ' +
         'URIs support brace expansion: yaar://storage/{dir1,dir2} lists both.',
-      inputSchema: {
+      inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to list children of'),
         sort: z
           .enum(['name', 'modified', 'size'])
@@ -336,7 +337,7 @@ export function registerVerbTools(server: McpServer): void {
             `Storage folders: which entries to return (1-based, inclusive), e.g. "1-100", ` +
               `"201-400", "500-". Default: the first ${LIST_PAGE_SIZE}.`,
           ),
-      },
+      }),
       _meta: LARGE_RESULT_META,
     },
     async ({ uri, sort, order, range }) =>
@@ -353,19 +354,22 @@ export function registerVerbTools(server: McpServer): void {
         'once per element, in order, as one call — e.g. invoke(".../commands/setTransform", ' +
         '[{id:"a",...},{id:"b",...}]). Use the array form instead of N identical calls that ' +
         'differ only in their payload. It stops at the first failure and reports the index.',
-      inputSchema: {
-        uri: z.string().describe('yaar:// URI to invoke'),
-        payload: z
-          .union([
-            z.record(z.string(), z.unknown()),
-            z.array(z.record(z.string(), z.unknown())).max(100),
-          ])
-          .optional()
-          .describe(
-            'Action-specific payload (see describe for schema), or an array of payloads ' +
-              'to run against this URI in order.',
-          ),
-      },
+      inputSchema: strictInput(
+        {
+          uri: z.string().describe('yaar:// URI to invoke'),
+          payload: z
+            .union([
+              z.record(z.string(), z.unknown()),
+              z.array(z.record(z.string(), z.unknown())).max(100),
+            ])
+            .optional()
+            .describe(
+              'Action-specific payload (see describe for schema), or an array of payloads ' +
+                'to run against this URI in order.',
+            ),
+        },
+        { nestUnder: 'payload' },
+      ),
       _meta: LARGE_RESULT_META,
     },
     async ({ uri, payload }) => exec(reg, 'invoke', uri, payload),
@@ -377,9 +381,9 @@ export function registerVerbTools(server: McpServer): void {
       description:
         'Delete a yaar:// resource. ' +
         'URIs support brace expansion: yaar://storage/{a,b} deletes both.',
-      inputSchema: {
+      inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to delete'),
-      },
+      }),
     },
     async ({ uri }) => exec(reg, 'delete', uri),
   );

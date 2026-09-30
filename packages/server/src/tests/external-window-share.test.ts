@@ -216,6 +216,56 @@ describe('/mcp/window/{token}', () => {
     }
   });
 
+  it('refuses an argument the tool does not declare, naming where it belongs', async () => {
+    // A plain z.object strips an unknown key: `expectVersion` beside `params` used to be
+    // dropped and the command ran with its stale-id guard silently off.
+    const s = openSession();
+    s.windowState.handleAction(create('notes', 'notes'), '0');
+    const shared = setWindowShared(s, '0/notes', true);
+    if (!shared.ok || !shared.token) throw new Error('share failed');
+
+    const server = serve();
+    const client = new Client(
+      { name: 'external-test', version: '1.0.0' },
+      { versionNegotiation: { mode: 'auto' } },
+    );
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(
+          new URL(`http://127.0.0.1:${server.port}${EXTERNAL_MCP_PREFIX}${shared.token}`),
+        ),
+      );
+      const text = (r: unknown) =>
+        ((r as { content: { text?: string }[] }).content ?? []).map((c) => c.text ?? '').join('');
+
+      const listed = await client.listTools();
+      const command = listed.tools.find((t) => t.name === 'command');
+      expect(command?.inputSchema.additionalProperties).toBe(false);
+
+      const refused = await client.callTool({
+        name: 'command',
+        arguments: {
+          command: 'storage:write',
+          params: { path: 'strict.txt', content: 'x' },
+          expectVersion: 'v1',
+        },
+      });
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain('unknown argument "expectVersion"');
+      expect(text(refused)).toContain('params.expectVersion');
+
+      // And the command did not run.
+      const read = await client.callTool({
+        name: 'query',
+        arguments: { stateKey: 'storage/strict.txt' },
+      });
+      expect(read.isError).toBe(true);
+      await client.close();
+    } finally {
+      server.stop(true);
+    }
+  });
+
   it('answers 404 for an unknown token, an unshared window and a closed one', async () => {
     const s = openSession();
     s.windowState.handleAction(create('notes', 'notes'), '0');
