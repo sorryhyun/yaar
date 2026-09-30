@@ -1,6 +1,6 @@
 # App MCP: a window, shared by URL
 
-**Source:** `packages/server/src/features/window/external-share.ts`, `packages/server/src/mcp/server.ts` (`handleExternalMcpRequest`), `packages/server/src/mcp/external-help.ts` (the GET page), `packages/server/src/http/routes/window-share.ts`, `packages/frontend/src/lib/windowShare.ts`
+**Source:** `packages/server/src/features/window/external-share.ts`, `packages/server/src/mcp/server.ts` (`handleExternalMcpRequest`), `packages/server/src/mcp/external-help.ts` (the GET page and the POST checklist), `packages/server/src/mcp/external-result.ts` (one copy per answer), `packages/server/src/http/routes/window-share.ts`, `packages/frontend/src/lib/windowShare.ts`
 
 An agent outside YAAR — a Claude Code session in some repo, a Codex thread — can drive one
 YAAR window the user shared with it. The user presses the wifi button in the window's
@@ -19,9 +19,6 @@ its app.
 Fetched with GET (a browser, or an agent probing it with curl), the URL describes itself: which
 window and app it is bound to, the revision, the `claude mcp add` line, the headers and `_meta`
 envelope a raw request needs with a working curl, the tool list, and how the URL is revoked.
-
-This is a rough first cut of [the proposal](../proposals/external_window_access_proposal.md),
-and it deliberately takes a smaller path than the proposal describes (see the last section).
 
 ## The two ideas
 
@@ -74,8 +71,10 @@ clipboard ← localUrl (or the remote server URL + path in remote mode)
 
 outside agent ──POST /mcp/window/{token}──▶ handleExternalMcpRequest()
                                          ├─ resolveExternalShare(token) → { sessionId, monitorId, windowId, role: 'app' }
+                                         ├─ missingFromRawRequest(body) → one 400 listing every gap (+ GET pointer)
                                          └─ runWithAgentContext(...) → app + messaging tools → app protocol → the iframe
-                                                                                  └─ __screenshot → window.capture → the desktop
+                                                  │                               └─ __screenshot → window.capture → the desktop
+                                                  └─ answerOnce: each result leaves as one compact JSON text block
 anyone ──GET /mcp/window/{token}──▶ the self-describing page (markdown; `Accept: text/event-stream` still 405)
 ```
 
@@ -111,20 +110,38 @@ tab that pressed the button ever sees it.
   `Content-Type: application/json`, an `Mcp-Method` header (plus `Mcp-Name` on `tools/call`),
   and a `_meta` with the protocol version and client capabilities; `Accept` is not checked.
   The page's tool list is asked of the endpoint itself, so it cannot drift from what is served.
+- **A malformed POST is refused once, completely.** `serveStateless` takes a `preflight`; this
+  door's is `missingFromRawRequest`, the GET page's requirements run against the request, so a
+  hand-written call learns every gap in one 400 (`refuseIncomplete`) instead of one per
+  round trip. A 400 the SDK still returns gets the same "GET this URL for the guide" pointer
+  appended (`withGuide`).
+- **One copy per answer.** `okJson` / `wrapAppValue` answer an object twice — in
+  `structuredContent` and again as JSON text. YAAR's own clients hand their model only one of
+  the two, but an outside client may pass both (a 15 KB `describe` cost 30 KB). The external
+  server wraps `registerTool` (`answerOnce`), so every result leaves with its non-text blocks,
+  one compact JSON text block (notes folded in as `_notes`), and no `structuredContent`. The
+  app agent's own door is unchanged, since `POST /api/verb` and `resolveAppWindow` read
+  `structuredContent`.
+- **`external:*` is not a pool agent, and its OS actions are still delivered.**
+  `LiveSession.deliverEmittedAction` hands an unknown agent id to the pool, which drops it;
+  `external:*` is exempted like `iframe:*`. Without that, the capture behind `__screenshot`
+  never reached a desktop and every screenshot timed out as `no-response`.
 - **Unmatched `/mcp/*` and `/.well-known/*` paths answer 404**, not the desktop's SPA
   fallback: a client probing `/.well-known/mcp.json`, or holding a mistyped share URL, used to
   get a 200 of HTML (`servesSpaFallback` in `http/routes/static.ts`).
 
-## Where this departs from the proposal
+## What v1 deliberately does not do
 
-The proposal pairs a named client with a durable key, then shares windows to it at `read` or
-`operate` level through the `verbs` namespace, behind a default-deny gate in
-`ResourceRegistry.execute`. v1 does none of that:
+The first design paired a named client with a durable key, shared windows to it at `read` or
+`operate` level through the `verbs` namespace, and gated it with a default-deny table in
+`ResourceRegistry.execute`. The shipped cut is smaller:
 
 - no pairing and no levels — one capability URL per window, full app-agent authority;
 - no new `external` role — `role: 'app'`, with the window's context, is the whole grant;
 - no `verbs` surface — the outside agent speaks the app agent's four tools plus
-  `direct_message`.
+  `direct_message`;
+- no opening, moving or closing windows from outside, and no push — the stateless revision
+  has no channel back, so a client polls with `query`.
 
 Open, roughly in order of how much they matter:
 
