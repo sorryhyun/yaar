@@ -27,6 +27,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isLoopback } from '@yaar/lib/ssrf';
 import { isAppOriginIsolationEnabled, APP_ORIGIN_HOST, DESKTOP_ORIGIN_HOST } from '../config.js';
 
 export type OriginBoundary =
@@ -161,6 +162,28 @@ export function requestCarriesAppOrigin(req: Request, url: URL): boolean {
       if (isAppOriginSocketRequest()) return true;
       return originOf(req.headers.get('origin')) === boundary.appOrigin.toLowerCase();
   }
+}
+
+/**
+ * Is this browser `Origin` one the desktop itself is served from?
+ *
+ * The desktop only ever lives on loopback — every host (launched Chrome, the companion
+ * tab, the macOS and Android WebViews) loads `localhost` — or, in remote mode, on the
+ * published desktop origin. Any loopback port counts, since the port a document was
+ * served on is the browser's to know (see {@link isolatedAppOrigin}). A hostname
+ * compare, not an allowlist of origins, is what keeps a DNS-rebound page out: it is
+ * same-origin with itself, but its hostname is the attacker's.
+ *
+ * The isolated-app origin is loopback too, so callers ask
+ * {@link requestCarriesAppOrigin} first.
+ */
+export function isDesktopOrigin(origin: string): boolean {
+  const boundary = getOriginBoundary();
+  if (boundary.mode === 'proxy-port' && originOf(origin) === boundary.desktopOrigin.toLowerCase()) {
+    return true;
+  }
+  const hostname = hostnameOf(origin);
+  return hostname !== null && isLoopback(hostname);
 }
 
 /**

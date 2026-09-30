@@ -9,7 +9,7 @@
  *
  * Keeping the import here means that fragile property belongs to one file instead of seven.
  * Child modules take the store through these accessors and never import `desktop.ts`
- * themselves, so no future edit to `capture.ts` or `windows-sdk.ts` can widen the cycle.
+ * themselves, so no future edit to `capture.ts` or `notifications.ts` can widen the cycle.
  */
 import { useDesktopStore } from '../desktop';
 

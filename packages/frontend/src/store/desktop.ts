@@ -63,7 +63,6 @@ import { handleClipboardAction } from './clipboard';
 import {
   captureWindow,
   initIframeMessageHandlers,
-  initWindowsSdkHandler,
   initNotificationBroadcaster,
   initDeviceBroadcaster,
   initHostDownloadHandler,
@@ -554,7 +553,6 @@ export const useDesktopStore = create<DesktopStore>()(
 
 // Initialize iframe bridges (must run after store creation)
 initIframeMessageHandlers();
-initWindowsSdkHandler();
 initNotificationBroadcaster();
 initDeviceBroadcaster();
 initHostDownloadHandler();

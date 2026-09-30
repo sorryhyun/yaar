@@ -28,7 +28,13 @@ const APP_ID_RE = /^[a-z][a-z0-9-]*$/;
  */
 export function parseContentPath(pathname: string): ParsedContentPath | null {
   if (pathname.startsWith('/api/storage/')) {
-    return { authority: 'storage', path: pathname.slice('/api/storage/'.length) };
+    // Backslashes (a decoded `%5C`) become separators here, once, so the path the
+    // permission is checked on and the path the bytes are read from are one string —
+    // `resolvePath` would otherwise normalize only the second.
+    return {
+      authority: 'storage',
+      path: pathname.slice('/api/storage/'.length).replaceAll('\\', '/'),
+    };
   }
   if (pathname.startsWith('/api/apps/')) {
     const rest = pathname.slice('/api/apps/'.length);

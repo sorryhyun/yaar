@@ -75,11 +75,105 @@ function bypassFor(url: string): { proxy: string } | undefined {
   }
 }
 
+/** Credentials a browser never carries across origins on a redirect (Fetch spec §4.4). */
+const CROSS_ORIGIN_STRIPPED = ['authorization', 'proxy-authorization'];
+
+/** Headers that describe a request body, dropped with the body (Fetch "request-body-header name"). */
+const BODY_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-encoding',
+  'content-language',
+  'content-location',
+];
+
+/** A cookie held across one redirect chain, scoped the way a browser would scope it. */
+interface ChainCookie {
+  name: string;
+  value: string;
+  /** Lowercase, no leading dot. */
+  domain: string;
+  /** Sent to `domain` only, not its subdomains — the cookie named no `Domain`. */
+  hostOnly: boolean;
+  path: string;
+}
+
+function cookieDomainMatches(host: string, cookie: ChainCookie): boolean {
+  if (host === cookie.domain) return true;
+  return !cookie.hostOnly && host.endsWith(`.${cookie.domain}`);
+}
+
+function cookiePathMatches(path: string, cookiePath: string): boolean {
+  if (path === cookiePath) return true;
+  if (!path.startsWith(cookiePath)) return false;
+  return cookiePath.endsWith('/') || path[cookiePath.length] === '/';
+}
+
+/** RFC 6265 §5.1.4 default-path: the request path up to its last `/`. */
+function defaultCookiePath(pathname: string): string {
+  const slash = pathname.lastIndexOf('/');
+  return slash <= 0 ? '/' : pathname.slice(0, slash);
+}
+
+/**
+ * Parse one `Set-Cookie` received from `url`, or null when it may not be stored.
+ * A `Domain` the responding host does not belong to is refused, as a browser refuses it.
+ */
+function parseChainCookie(header: string, url: URL): ChainCookie | null {
+  const [pair = '', ...attrs] = header.split(';');
+  const eq = pair.indexOf('=');
+  if (eq <= 0) return null;
+  const host = url.hostname.toLowerCase();
+  const cookie: ChainCookie = {
+    name: pair.slice(0, eq).trim(),
+    value: pair.slice(eq + 1).trim(),
+    domain: host,
+    hostOnly: true,
+    path: defaultCookiePath(url.pathname),
+  };
+  for (const attr of attrs) {
+    const at = attr.indexOf('=');
+    const key = (at === -1 ? attr : attr.slice(0, at)).trim().toLowerCase();
+    const value = at === -1 ? '' : attr.slice(at + 1).trim();
+    if (key === 'domain' && value) {
+      const domain = value.replace(/^\./, '').toLowerCase();
+      if (host !== domain && !host.endsWith(`.${domain}`)) return null;
+      cookie.domain = domain;
+      cookie.hostOnly = false;
+    } else if (key === 'path' && value.startsWith('/')) {
+      cookie.path = value;
+    }
+  }
+  return cookie;
+}
+
+function readCookieHeader(headers: RequestInit['headers']): string {
+  if (!headers) return '';
+  return new Headers(headers as ConstructorParameters<typeof Headers>[0]).get('cookie') ?? '';
+}
+
+export interface SafeFetchOptions {
+  /**
+   * Called with each redirect target before it is followed, after the SSRF check. Throw
+   * to refuse the hop — a caller that vets the first URL (a domain allowlist) vets every
+   * URL the chain reaches the same way, or the first host decides where the rest go.
+   */
+  beforeRedirect?: (url: string) => void | Promise<void>;
+}
+
 /**
  * Fetch with SSRF-safe redirect following.
- * Validates each redirect target before following it.
+ *
+ * Validates each redirect target before following it, and follows the way a browser
+ * does rather than replaying the first request at every hop: `Authorization` does not
+ * cross origins, cookies go only where their domain and path reach, and a 303 (or a
+ * POST answered by 301/302) is retried as a bodiless GET.
  */
-export async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+export async function safeFetch(
+  url: string,
+  init?: RequestInit,
+  options?: SafeFetchOptions,
+): Promise<Response> {
   validateUrl(url);
 
   // If caller explicitly wants manual redirect handling, do a single request
@@ -87,53 +181,64 @@ export async function safeFetch(url: string, init?: RequestInit): Promise<Respon
     return fetch(url, { ...init, ...bypassFor(url), redirect: 'manual' });
   }
 
-  let currentUrl = url;
-  // Accumulate cookies across redirects (needed for SSO flows)
-  const cookieJar = new Map<string, string>();
+  let currentUrl = new URL(url);
+  let method = (init?.method ?? 'GET').toUpperCase();
+  let body = init?.body;
+  // The caller's headers, minus what the chain manages itself; credentials leave on the
+  // first cross-origin hop and never come back, as in a browser.
+  const headers = new Headers(init?.headers as ConstructorParameters<typeof Headers>[0]);
+  headers.delete('cookie');
 
-  // Seed jar with any cookies from the original request
-  const initCookie =
-    (init?.headers instanceof Headers
-      ? init.headers.get('cookie')
-      : Array.isArray(init?.headers)
-        ? init.headers.find(([k]) => k.toLowerCase() === 'cookie')?.[1]
-        : ((init?.headers as Record<string, string> | undefined)?.['Cookie'] ??
-          (init?.headers as Record<string, string> | undefined)?.['cookie'])) ?? '';
-  if (initCookie) {
-    for (const pair of initCookie.split(';')) {
-      const eq = pair.indexOf('=');
-      if (eq > 0) cookieJar.set(pair.substring(0, eq).trim(), pair.substring(eq + 1).trim());
-    }
+  // Accumulate cookies across redirects (needed for SSO flows), scoped to where each
+  // may be sent. The caller's own Cookie header is for the URL it named.
+  const cookieJar: ChainCookie[] = [];
+  const setCookie = (cookie: ChainCookie) => {
+    const i = cookieJar.findIndex(
+      (c) => c.name === cookie.name && c.domain === cookie.domain && c.path === cookie.path,
+    );
+    if (i === -1) cookieJar.push(cookie);
+    else cookieJar[i] = cookie;
+  };
+  for (const pair of readCookieHeader(init?.headers).split(';')) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    setCookie({
+      name: pair.substring(0, eq).trim(),
+      value: pair.substring(eq + 1).trim(),
+      domain: currentUrl.hostname.toLowerCase(),
+      hostOnly: true,
+      path: '/',
+    });
   }
 
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
-    // Build headers with accumulated cookies
-    const headers = new Headers(init?.headers as ConstructorParameters<typeof Headers>[0]);
-    if (cookieJar.size > 0) {
-      headers.set(
-        'Cookie',
-        Array.from(cookieJar.entries())
-          .map(([k, v]) => `${k}=${v}`)
-          .join('; '),
-      );
+    const host = currentUrl.hostname.toLowerCase();
+    const cookies = cookieJar.filter(
+      (c) => cookieDomainMatches(host, c) && cookiePathMatches(currentUrl.pathname, c.path),
+    );
+    const hopHeaders = new Headers(headers);
+    if (cookies.length > 0) {
+      hopHeaders.set('Cookie', cookies.map((c) => `${c.name}=${c.value}`).join('; '));
     }
 
     // Recomputed per hop: a redirect can cross from a censored host to a clean one,
     // or into private space, and the routing decision belongs to the URL being fetched.
-    const response = await fetch(currentUrl, {
+    const response = await fetch(currentUrl.toString(), {
       ...init,
-      ...bypassFor(currentUrl),
-      headers,
+      ...bypassFor(currentUrl.toString()),
+      method,
+      body,
+      headers: hopHeaders,
       redirect: 'manual',
     });
 
     if (!REDIRECT_STATUSES.has(response.status)) {
       // Merge accumulated Set-Cookie headers from redirect hops into final response
-      if (cookieJar.size > 0) {
+      if (cookieJar.length > 0) {
         const mergedHeaders = new Headers(response.headers);
         // Append redirect-hop cookies as Set-Cookie headers so callers see them
-        for (const [name, value] of cookieJar) {
-          mergedHeaders.append('Set-Cookie', `${name}=${value}; path=/`);
+        for (const c of cookieJar) {
+          mergedHeaders.append('Set-Cookie', `${c.name}=${c.value}; path=/`);
         }
         return new Response(response.body, {
           status: response.status,
@@ -145,12 +250,9 @@ export async function safeFetch(url: string, init?: RequestInit): Promise<Respon
     }
 
     // Capture Set-Cookie from this hop
-    const setCookies = response.headers.getSetCookie?.() ?? [];
-    for (const sc of setCookies) {
-      const nameValue = sc.split(';')[0] ?? '';
-      const eq = nameValue.indexOf('=');
-      if (eq > 0)
-        cookieJar.set(nameValue.substring(0, eq).trim(), nameValue.substring(eq + 1).trim());
+    for (const sc of response.headers.getSetCookie?.() ?? []) {
+      const cookie = parseChainCookie(sc, currentUrl);
+      if (cookie) setCookie(cookie);
     }
 
     const location = response.headers.get('location');
@@ -159,8 +261,22 @@ export async function safeFetch(url: string, init?: RequestInit): Promise<Respon
     }
 
     // Resolve relative URLs against the current URL
-    const nextUrl = new URL(location, currentUrl).toString();
-    validateUrl(nextUrl); // Throws if redirect targets private network
+    const nextUrl = new URL(location, currentUrl);
+    validateUrl(nextUrl.toString()); // Throws if redirect targets private network
+    await options?.beforeRedirect?.(nextUrl.toString());
+
+    if (nextUrl.origin !== currentUrl.origin) {
+      for (const name of CROSS_ORIGIN_STRIPPED) headers.delete(name);
+    }
+    const status = response.status;
+    if (
+      (status === 303 && method !== 'GET' && method !== 'HEAD') ||
+      ((status === 301 || status === 302) && method === 'POST')
+    ) {
+      method = 'GET';
+      body = undefined;
+      for (const name of BODY_HEADERS) headers.delete(name);
+    }
     currentUrl = nextUrl;
   }
 

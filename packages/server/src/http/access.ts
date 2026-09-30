@@ -568,7 +568,9 @@ export function storageUriFor(principal: Principal, path: string): string | Resp
  * would hand out permissions for one URI while the gate checked another.
  * Returns null for a traversing path, which names no resource.
  */
-export function storageUriForPath(path: string): string | null {
+export function storageUriForPath(rawPath: string): string | null {
+  // Separators as the disk will read them — see canonicalStorageUri.
+  const path = rawPath.replaceAll('\\', '/');
   // Traversal would let `apps/{me}/../{other}/secrets.json` name another app's
   // storage while presenting as this app's own URI.
   if (path.split('/').includes('..')) return null;

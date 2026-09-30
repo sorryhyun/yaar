@@ -15,7 +15,12 @@ import {
 } from '../mcp/server.js';
 import { EXTERNAL_MCP_PREFIX } from '../features/window/external-share.js';
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
-import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
+import {
+  desktopRedirectTarget,
+  isDesktopOrigin,
+  requestCarriesAppOrigin,
+  runOnAppOriginSocket,
+} from './origin-boundary.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('HttpServer');
@@ -26,7 +31,7 @@ let _devReloadHandler: (() => Response) | null = null;
 export function registerDevReloadHandler(handler: () => Response): void {
   _devReloadHandler = handler;
 }
-import { checkHttpAuth, checkWsAuth } from './auth.js';
+import { checkHttpAuth, checkWsAuth, getRemoteToken } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
 import { handleMlHostRoutes } from '../features/ml-host/relay.js';
 import { generateConnectionId } from '../session/broadcast-center.js';
@@ -165,6 +170,8 @@ function createFetchHandlerInner() {
       if (!authorized) {
         return new Response('Unauthorized', { status: 401 });
       }
+      const refused = refuseForeignDesktopSocket(req, url);
+      if (refused) return refused;
       const success = server.upgrade(req, { data });
       if (success) return undefined; // Bun handles the rest
       return new Response('WebSocket upgrade failed', { status: 500 });
@@ -204,6 +211,14 @@ function createFetchHandlerInner() {
     if (url.pathname === '/bridge') {
       if (!checkWsAuth(url)) {
         return new Response('Unauthorized', { status: 401 });
+      }
+      // The extension's service worker dials from its own `chrome-extension://` origin;
+      // a web page cannot wear one. A page that could open this socket would stand in
+      // for the user's browser and be handed whatever the agents ask that browser for.
+      const bridgeOrigin = req.headers.get('origin');
+      if (bridgeOrigin && !EXTENSION_ORIGIN.test(bridgeOrigin)) {
+        log.warn('refused bridge socket from a foreign origin', { origin: bridgeOrigin });
+        return new Response('Origin not allowed', { status: 403 });
       }
       const data: WsData = {
         kind: 'bridge',
@@ -397,6 +412,34 @@ function createFetchHandlerInner() {
 
     return withCors(Response.json({ error: 'Not found' }, { status: 404 }), corsHeaders);
   };
+}
+
+const EXTENSION_ORIGIN = /^(chrome|moz)-extension:\/\//;
+
+/**
+ * A 403 for a `/ws` upgrade that is not the desktop, or null to let it through.
+ *
+ * A WebSocket is not subject to CORS, and in local mode the socket asks for no
+ * credential — a connection with no `sessionId` joins the user's live session, where it
+ * reads every event and can send the agent messages. So the browser's `Origin` is the
+ * credential here, the way it is for the `/mcp/` doors: the isolated-app origin is
+ * refused outright, and any other browser must come from where the desktop is served
+ * (`isDesktopOrigin`). A client that sends no `Origin` is not a browser page — browsers
+ * always send one on a WebSocket handshake — and is let through as before.
+ *
+ * In remote mode a presented token already authenticated the caller, and a user's own
+ * reverse proxy may put the desktop on an origin this server never published; there
+ * only the app origin is refused.
+ */
+function refuseForeignDesktopSocket(req: Request, url: URL): Response | null {
+  const origin = req.headers.get('origin');
+  const tokenAuthenticated = IS_REMOTE && getRemoteToken() !== null;
+  const allowed =
+    !requestCarriesAppOrigin(req, url) &&
+    (!origin || tokenAuthenticated || isDesktopOrigin(origin));
+  if (allowed) return null;
+  log.warn('refused desktop socket from a foreign origin', { origin });
+  return new Response('Origin not allowed', { status: 403 });
 }
 
 /**

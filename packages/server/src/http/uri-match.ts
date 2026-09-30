@@ -277,11 +277,17 @@ function traverses(path: string): boolean {
  * checked now; the namespaced one used to pass through untouched.
  */
 export function canonicalStorageUri(uri: string): string | null {
-  if (uri === 'yaar://storage' || uri.startsWith('yaar://storage/')) {
-    return traverses(uri.slice('yaar://storage'.length)) ? null : uri;
+  // A backslash is a separator by the time the path reaches the disk (`resolvePath`
+  // normalizes it), so it is one here too. Matched as a literal character instead,
+  // `shared/..\apps\vault\x` read as a file inside the commons and opened another
+  // app's private one, and `apps\vault\x` escaped the `sharedOnly` ceiling by not
+  // parsing as app storage at all.
+  const flat = uri.replaceAll('\\', '/');
+  if (flat === 'yaar://storage' || flat.startsWith('yaar://storage/')) {
+    return traverses(flat.slice('yaar://storage'.length)) ? null : flat;
   }
 
-  const match = APP_STORAGE_URI.exec(uri);
+  const match = APP_STORAGE_URI.exec(flat);
   if (!match) return uri;
 
   const [, appId, rest] = match;

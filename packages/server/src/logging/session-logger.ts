@@ -103,11 +103,24 @@ export async function createSession(
 ): Promise<SessionInfo> {
   if (dir === SESSIONS_DIR) await ensureSessionsDir();
 
-  const sessionId = generateSessionId();
+  // Claim the directory atomically. The name is second-resolution, and two sessions can
+  // start in one second (tabs reconnecting after a restart); a recursive mkdir accepted
+  // the existing directory and the writes below then truncated the other session's log.
+  // A non-recursive mkdir fails on a taken name instead, and the next suffix is tried.
+  await mkdir(dir, { recursive: true });
+  const baseId = generateSessionId();
+  let sessionId = baseId;
+  for (let n = 2; ; n++) {
+    try {
+      await mkdir(join(dir, sessionId));
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      sessionId = `${baseId}_${n}`;
+    }
+  }
   const directory = join(dir, sessionId);
-
-  await mkdir(directory, { recursive: true });
-  await mkdir(join(directory, 'agents'), { recursive: true });
+  await mkdir(join(directory, 'agents'));
 
   const now = new Date().toISOString();
   const metadata: SessionMetadata = {

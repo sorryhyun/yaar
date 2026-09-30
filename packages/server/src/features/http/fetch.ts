@@ -176,13 +176,28 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
     }
 
     const method = options?.method || 'GET';
-    const response = await safeFetch(url, {
-      method,
-      headers: fetchHeaders,
-      body: method !== 'GET' && method !== 'HEAD' ? options?.body : undefined,
-      signal: controller.signal,
-      redirect: options?.redirect === 'manual' ? 'manual' : 'follow',
-    });
+    const response = await safeFetch(
+      url,
+      {
+        method,
+        headers: fetchHeaders,
+        body: method !== 'GET' && method !== 'HEAD' ? options?.body : undefined,
+        signal: controller.signal,
+        redirect: options?.redirect === 'manual' ? 'manual' : 'follow',
+      },
+      {
+        // The allowlist governs every host the request reaches, not just the first —
+        // otherwise any allowed host with an open redirect is a door to all the others.
+        // The clock stops while it asks: an unknown host prompts the user, and the time
+        // they take to answer is not the upstream being slow.
+        beforeRedirect: async (next) => {
+          clearTimeout(timeoutHandle);
+          const hopDenial = await ensureDomainAllowed(next, { sessionId: options?.sessionId });
+          if (hopDenial) throw new FetchDomainError(hopDenial.message);
+          timeoutHandle = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        },
+      },
+    );
 
     const sink = options?.sink;
     const maxSize = options?.maxResponseSize ?? MAX_RESPONSE_SIZE;
