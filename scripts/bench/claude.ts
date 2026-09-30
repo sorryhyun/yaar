@@ -22,6 +22,7 @@
  */
 
 import { Cdp } from '../lib/cdp.ts';
+import { findChrome } from '../lib/chrome.ts';
 
 const HERE = new URL('.', import.meta.url).pathname;
 const REPO = new URL('../../', import.meta.url).pathname;
@@ -66,20 +67,6 @@ async function sh(cmd: string[], opts: { cwd?: string } = {}): Promise<void> {
   const p = Bun.spawn(cmd, { cwd: opts.cwd, stdout: 'inherit', stderr: 'inherit' });
   const code = await p.exited;
   if (code !== 0) throw new Error(`${cmd.join(' ')} exited ${code}`);
-}
-
-function findChrome(): string | null {
-  const candidates = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    `${process.env.HOME}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
-  ];
-  for (const c of candidates) if (require('node:fs').existsSync(c)) return c;
-  return null;
 }
 
 async function pickPort(base = 8000): Promise<number> {

@@ -44,7 +44,8 @@
  */
 
 import { Cdp } from '../lib/cdp.ts';
-import { existsSync, mkdirSync, openSync, rmSync } from 'node:fs';
+import { findChrome } from '../lib/chrome.ts';
+import { mkdirSync, openSync, rmSync } from 'node:fs';
 
 const REPO = new URL('../../', import.meta.url).pathname;
 const OUT = `${REPO}bench/mobile`;
@@ -97,20 +98,6 @@ const sleep = (ms: number) => Bun.sleep(ms);
 async function sh(cmd: string[]): Promise<void> {
   const p = Bun.spawn(cmd, { cwd: REPO, stdout: 'inherit', stderr: 'inherit' });
   if ((await p.exited) !== 0) throw new Error(`${cmd.join(' ')} failed`);
-}
-
-function findChrome(): string | null {
-  const candidates = [
-    process.env.CHROME_PATH,
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    `${process.env.HOME}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
-  ];
-  return candidates.find((c): c is string => !!c && existsSync(c)) ?? null;
 }
 
 async function pickPort(base: number): Promise<number> {

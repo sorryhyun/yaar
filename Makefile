@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev claude-dev-mobile codex-dev termux claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench mobile-bench codex-types design design-preview
+.PHONY: dev claude codex claude-dev claude-dev-mobile codex-dev termux claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-lib test-integration bench claude-bench mobile-bench screencast-bench codex-types design design-preview
 
 # GNU make on Windows runs recipes with cmd.exe by default, which can't parse
 # the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
@@ -111,6 +111,12 @@ bench:
 # write bench/report.md. Override apps: make claude-bench APPS=market-apps,memo
 claude-bench:
 	@bun scripts/bench/claude.ts $(if $(APPS),--apps $(APPS),) $(if $(SETTLE),--settle $(SETTLE),) $(BENCH_ARGS)
+
+# Live-browser stream cost (docs/proposals/browser_proposal.md): record a scroll screencast in
+# a headless Chrome and compare today's JPEG stream with WebCodecs H.264/VP9 on the same frames.
+# Knobs via SCREENCAST_BENCH_ARGS, e.g. "--force-dsf 2 --mbps 8,16,24" or "--dsf-probe".
+screencast-bench:
+	@bun scripts/bench/screencast-codec.ts $(SCREENCAST_BENCH_ARGS)
 
 # Phone-shell performance on Termux, with a mock agent (no model, no tokens): a
 # phone-emulated, CPU-throttled headless Chrome creates monitors, has the mock agent open

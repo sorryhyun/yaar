@@ -1,8 +1,9 @@
 /**
  * Minimal Chrome DevTools Protocol client over WebSocket — just enough to drive
- * a headless Chrome for the benchmarks (scripts/bench/claude.ts, mobile.ts): attach to
- * the page target, evaluate JS in it, wait for readiness, and send raw commands
- * (Input.dispatchTouchEvent, Emulation.*, Performance.getMetrics).
+ * a headless Chrome for the benchmarks (scripts/bench/claude.ts, mobile.ts,
+ * screencast-codec.ts): attach to or open a page target, evaluate JS in it, wait for
+ * readiness, send raw commands (Input.dispatchTouchEvent, Emulation.*,
+ * Performance.getMetrics), and listen for events (Page.screencastFrame).
  *
  * No dependency on puppeteer or the server's internal browser lib — a benchmark
  * harness should stay self-contained.
@@ -14,6 +15,7 @@ export class Cdp {
   private ws!: WebSocket;
   private id = 0;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
+  private listeners = new Map<string, ((params: any) => void)[]>();
 
   private constructor() {}
 
@@ -40,14 +42,28 @@ export class Cdp {
     if (!target?.webSocketDebuggerUrl) {
       throw new Error(`No CDP page target for "${urlIncludes}" on port ${debugPort}`);
     }
+    return Cdp.open(target.webSocketDebuggerUrl);
+  }
+
+  /** Open a new tab on `url` and attach to it. */
+  static async openPage(debugPort: number, url: string): Promise<Cdp> {
+    const target = (await fetch(`http://127.0.0.1:${debugPort}/json/new?${url}`, {
+      method: 'PUT',
+    }).then((r) => r.json())) as CdpTarget;
+    return Cdp.open(target.webSocketDebuggerUrl);
+  }
+
+  private static async open(wsUrl: string): Promise<Cdp> {
     const c = new Cdp();
-    c.ws = new WebSocket(target.webSocketDebuggerUrl);
+    c.ws = new WebSocket(wsUrl);
     c.ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(ev.data as string);
       if (msg.id && c.pending.has(msg.id)) {
         const { resolve, reject } = c.pending.get(msg.id)!;
         c.pending.delete(msg.id);
         msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result);
+      } else if (msg.method) {
+        for (const fn of c.listeners.get(msg.method) ?? []) fn(msg.params);
       }
     });
     await new Promise<void>((res, rej) => {
@@ -57,6 +73,11 @@ export class Cdp {
     await c.send('Runtime.enable');
     await c.send('Page.enable');
     return c;
+  }
+
+  /** Subscribe to a CDP event on the page session. */
+  on(method: string, fn: (params: any) => void): void {
+    this.listeners.set(method, [...(this.listeners.get(method) ?? []), fn]);
   }
 
   /** A raw CDP command on the page session. */
