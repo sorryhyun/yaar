@@ -132,6 +132,19 @@ Apps are plain TypeScript with batteries included:
 
 See [Building Apps with the YAAR SDK](./docs/guides/yaar_sdk.md) and, for how an app is built and run, [Apps: from source to a running window](./docs/architecture/app_pipeline.md).
 
+## Share apps
+
+- **As a file** — every app compiles to one self-contained `dist/index.html`. Send it and it
+  opens in any browser, no YAAR needed; whatever runs in the page works, saving and loading
+  data does not.
+- **As source** — copy the app folder into another YAAR, or publish it to YAAR Market; the
+  receiving machine compiles it and can keep changing it.
+- **As a live window** — the wifi button in an app window's titlebar copies an MCP URL. Hand it
+  to Claude Code or any MCP client and that agent drives the window you're looking at, with
+  the window's own app-agent authority. Closing the window revokes it.
+
+[Guide](./docs/guides/sharing_apps.md)
+
 ## Trust model
 
 YAAR lets an agent write and run code on your machine, so it is built assuming you don't trust it:
