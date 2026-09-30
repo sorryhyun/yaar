@@ -68,6 +68,7 @@ import { subscriptionRegistry } from '../http/subscriptions.js';
 import { windowSharedStore } from '../http/window-shared.js';
 import { revokeTokensForWindow } from '../http/iframe-tokens.js';
 import { storageDocumentUri } from '../features/window/helpers.js';
+import { isExternalAgentId } from '../features/window/external-share.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import {
   normalizeAgentKey,
@@ -434,11 +435,21 @@ export class LiveSession {
    * An agent's action is recorded on that agent (its turn's reload fingerprint and context
    * tape) and addressed by its role. An agent id this pool does not know — a bare harness
    * call, an agent disposed mid-emit — is not delivered, as the bridge never delivered it.
+   *
+   * Two callers are not pool agents and are delivered as they are: an iframe app
+   * (`iframe:*`), and an outside client acting through a shared window (`external:*`,
+   * `features/window/external-share.ts`). The second used to fall into the pool lookup, so
+   * every action it emitted was dropped — its `__screenshot` capture never reached a desktop
+   * and waited out the feedback deadline as `no-response`.
    */
   private deliverEmittedAction(event: ActionEvent, windowHandle: string | undefined): void {
     let role: string | undefined;
     let monitorId = event.monitorId;
-    if (event.agentId && !event.agentId.startsWith('iframe:')) {
+    if (
+      event.agentId &&
+      !event.agentId.startsWith('iframe:') &&
+      !isExternalAgentId(event.agentId)
+    ) {
       const accepted = this.pool?.agentPool
         .findAgent(event.agentId)
         ?.acceptEmittedAction(event.action, event.monitorId);

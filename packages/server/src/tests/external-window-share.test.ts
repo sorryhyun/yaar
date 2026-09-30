@@ -13,6 +13,9 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import type { OSAction } from '@yaar/shared';
 import { handleExternalMcpRequest, initMcpServer } from '../mcp/server.js';
 import { EXTERNAL_MCP_PREFIX, setWindowShared } from '../features/window/external-share.js';
+import { singleCopy } from '../mcp/external-result.js';
+import { refuseIncomplete, withGuide } from '../mcp/external-help.js';
+import { prependNote } from '../lib/verb-result.js';
 import { WindowStateRegistry } from '../session/window-state.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { actionEmitter } from '../session/action-emitter.js';
@@ -280,17 +283,31 @@ describe('/mcp/window/{token}', () => {
     // `__screenshot` — so the one agent driving a window could not look at it. No iframe
     // answers in this test: a query that reached the app would wait out its readiness
     // deadline instead of returning the picture.
-    const capture = spyOn(actionEmitter, 'emitActionWithFeedback').mockResolvedValue({
-      ok: true,
-      value: {
-        requestId: 'r',
-        windowId: 'notes',
-        renderer: 'capture',
-        success: true,
-        imageData: 'Y2FwdHVyZWQtcGl4ZWxz',
-      },
-    } as never);
+    //
+    // Driven through the session's real delivery, with this spy standing in for the desktop:
+    // an `external:*` caller is no pool agent, and the capture it emitted used to be dropped
+    // before it was broadcast — five seconds of silence, then `no-response`.
     const { client, done } = await connect();
+    const delivered: { action: Record<string, unknown>; monitorId?: string }[] = [];
+    const desktop = spyOn(session, 'broadcast').mockImplementation((event) => {
+      const { actions, monitorId } = event as {
+        actions?: Record<string, unknown>[];
+        monitorId?: string;
+      };
+      for (const action of actions ?? []) {
+        if (action.type !== 'window.capture') continue;
+        delivered.push({ action, monitorId });
+        queueMicrotask(() =>
+          actionEmitter.resolveFeedback({
+            requestId: action.requestId as string,
+            windowId: action.windowId as string,
+            renderer: 'capture',
+            success: true,
+            imageData: 'Y2FwdHVyZWQtcGl4ZWxz',
+          }),
+        );
+      }
+    });
     try {
       const result = await client.callTool({
         name: 'query',
@@ -301,10 +318,11 @@ describe('/mcp/window/{token}', () => {
         (c) => c.type === 'image',
       );
       expect(image?.data).toBe('Y2FwdHVyZWQtcGl4ZWxz');
-      const [action] = capture.mock.calls[0]!;
-      expect(action).toMatchObject({ type: 'window.capture', windowId: '0/notes' });
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0].action).toMatchObject({ type: 'window.capture', windowId: '0/notes' });
+      expect(delivered[0].monitorId).toBe('0');
     } finally {
-      capture.mockRestore();
+      desktop.mockRestore();
       await done();
     }
   });
@@ -322,6 +340,25 @@ describe('/mcp/window/{token}', () => {
       const param = JSON.stringify(query?.inputSchema);
       expect(param).toContain('__screenshot');
       expect(param).toContain('__content');
+    } finally {
+      await done();
+    }
+  });
+
+  it('answers an object once, as compact JSON in content, with no structuredContent', async () => {
+    // Inside YAAR the same answer carries the object twice; an outside client may read both.
+    const { client, done } = await connect();
+    try {
+      const result = await client.callTool({
+        name: 'command',
+        arguments: { command: 'storage:write', params: { path: 'once.txt', content: 'hi' } },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toBeUndefined();
+      const blocks = result.content as { type: string; text?: string }[];
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].text).not.toContain('\n');
+      expect(JSON.parse(blocks[0].text!)).toMatchObject({ path: 'app/once.txt', written: true });
     } finally {
       await done();
     }
@@ -411,6 +448,68 @@ describe('/mcp/window/{token}', () => {
         server.stop(true);
       }
     });
+
+    it('refuses an incomplete raw request once, naming every gap and the guide', async () => {
+      // A bare JSON-RPC call used to take four 400s to get right — one condition each, the
+      // first of them advice about CLI opt-in gates.
+      const token = share();
+      const server = serve();
+      const url = `http://127.0.0.1:${server.port}${EXTERNAL_MCP_PREFIX}${token}`;
+      const post = (headers: Record<string, string>, body: unknown) =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify(body),
+        });
+      try {
+        const bare = { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'describe' } };
+        const res = await post({}, bare);
+        expect(res.status).toBe(400);
+        const { error, id } = (await res.json()) as {
+          id: unknown;
+          error: { message: string; data: { missing: string[]; guide: string } };
+        };
+        expect(id).toBe(7);
+        expect(error.data.guide).toBe(url);
+        expect(error.data.missing).toHaveLength(4);
+        for (const needed of [
+          'Mcp-Method: tools/call',
+          'Mcp-Name: describe',
+          'io.modelcontextprotocol/protocolVersion',
+          'io.modelcontextprotocol/clientCapabilities',
+        ]) {
+          expect(error.message).toContain(needed);
+        }
+        expect(error.message).toEndWith(
+          `GET ${url} for the raw-request guide, with working curl examples.`,
+        );
+        expect(error.message).not.toContain('MCP_SDK_GENERATION');
+
+        // Doing exactly what that one answer said is enough.
+        const fixed = await post(
+          { 'mcp-method': 'tools/call', 'mcp-name': 'describe' },
+          {
+            ...bare,
+            params: {
+              ...bare.params,
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientCapabilities': {},
+              },
+            },
+          },
+        );
+        expect(fixed.status).toBe(200);
+
+        const init = await post({}, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+        expect(init.status).toBe(400);
+        expect(((await init.json()) as { error: { message: string } }).error.message).toContain(
+          'stateless',
+        );
+      } finally {
+        server.stop(true);
+      }
+    });
   });
 
   it('shares app windows only', () => {
@@ -420,5 +519,44 @@ describe('/mcp/window/{token}', () => {
       ok: false,
       error: 'Only app windows can be shared.',
     });
+  });
+});
+
+describe('singleCopy', () => {
+  it('keeps non-text blocks, carries notes inside the object, and leaves text answers alone', () => {
+    const image = { type: 'image' as const, data: 'AAAA', mimeType: 'image/webp' };
+    const answer = singleCopy(
+      prependNote(
+        { content: [image, { type: 'text', text: '{\n  "a": 1\n}' }], structuredContent: { a: 1 } },
+        'paged',
+      ),
+    );
+    expect(answer).not.toHaveProperty('structuredContent');
+    expect(answer).not.toHaveProperty('notes');
+    expect(answer.content).toEqual([image, { type: 'text', text: '{"_notes":["paged"],"a":1}' }]);
+
+    const plain = { content: [{ type: 'text' as const, text: 'Done.' }] };
+    expect(singleCopy(plain)).toBe(plain);
+  });
+});
+
+describe('withGuide', () => {
+  it("appends the pointer to a handler's 400, once, and leaves anything else alone", async () => {
+    const sdk = Response.json(
+      { jsonrpc: '2.0', error: { code: -32020, message: 'Bad Request: x' }, id: 1 },
+      { status: 400 },
+    );
+    const guided = (await (await withGuide(sdk, 'http://h/mcp/window/t')).json()) as {
+      error: { message: string; data: { guide: string } };
+    };
+    expect(guided.error.message).toBe(
+      'Bad Request: x GET http://h/mcp/window/t for the raw-request guide, with working curl examples.',
+    );
+    expect(guided.error.data.guide).toBe('http://h/mcp/window/t');
+
+    const already = refuseIncomplete('http://h/mcp/window/t', 1, ['a']);
+    expect(await withGuide(already, 'http://h/mcp/window/t')).toBe(already);
+    const fine = Response.json({ result: {} });
+    expect(await withGuide(fine, 'http://h/mcp/window/t')).toBe(fine);
   });
 });

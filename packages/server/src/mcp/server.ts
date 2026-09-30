@@ -53,7 +53,15 @@ import { registerSubAgentTools } from './sub-agent/index.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 import { createLogger } from '../observability/log.js';
 import { resolveExternalShare } from '../features/window/external-share.js';
-import { envelope, renderSharedWindowHelp, type SharedWindowHelp } from './external-help.js';
+import {
+  envelope,
+  missingFromRawRequest,
+  refuseIncomplete,
+  renderSharedWindowHelp,
+  withGuide,
+  type SharedWindowHelp,
+} from './external-help.js';
+import { answerOnce } from './external-result.js';
 
 const log = createLogger('MCP');
 
@@ -223,6 +231,8 @@ function getExternalHandler(): McpHttpHandler {
         { name: 'yaar-window', version: '1.0.0' },
         { capabilities: { tools: {} } },
       );
+      // One copy per answer: an outside client may hand its model both fields.
+      answerOnce(server);
       registerAppAgentTools(server);
       registerMessagingTools(server);
       return server;
@@ -327,9 +337,28 @@ export async function handleExternalMcpRequest(req: Request, token: string): Pro
   if (req.method === 'GET' && !(req.headers.get('accept') ?? '').includes('text/event-stream')) {
     return runWithAgentContext(share, () => describeSharedWindow(req, share.windowId));
   }
-  return runWithAgentContext(share, () =>
-    serveStateless(req, EXTERNAL_LABEL, getExternalHandler()),
+  // Whatever refuses a POST here — the checklist, the era refusal, the SDK — the answer
+  // names every gap it can and ends by pointing at the GET page (`external-help.ts`).
+  const guide = pageUrl(req);
+  return runWithAgentContext(share, async () =>
+    withGuide(
+      await serveStateless(req, EXTERNAL_LABEL, getExternalHandler(), (body) => {
+        const missing = missingFromRawRequest(req.headers, body);
+        return missing.length
+          ? refuseIncomplete(guide, (body as { id?: unknown } | null)?.id, missing)
+          : null;
+      }),
+      guide,
+    ),
   );
+}
+
+/** A shared window's URL as the caller reached it, minus query and fragment. */
+function pageUrl(req: Request): string {
+  const url = new URL(req.url);
+  url.search = '';
+  url.hash = '';
+  return url.href;
 }
 
 /**
@@ -339,9 +368,7 @@ export async function handleExternalMcpRequest(req: Request, token: string): Pro
  * exactly what a client connecting to this URL would be served — not a second copy of it.
  */
 async function describeSharedWindow(req: Request, windowKey: string): Promise<Response> {
-  const url = new URL(req.url);
-  url.search = '';
-  url.hash = '';
+  const url = new URL(pageUrl(req));
   const win = getActiveSession().windowState.getWindow(windowKey);
 
   const body = {
@@ -383,12 +410,14 @@ async function describeSharedWindow(req: Request, windowKey: string): Promise<Re
 /**
  * The stateless serve both doors share, run inside the caller's context: refuse the 2025
  * era with a diagnostic, then hand the parsed body to a 2026-07-28 handler. `label` only
- * names the endpoint in the refusal's log line.
+ * names the endpoint in the refusal's log line. `preflight`, when given, sees the parsed
+ * body first and may answer in the handler's place (the shared-window door's checklist).
  */
 async function serveStateless(
   req: Request,
   label: string,
   handler: McpHttpHandler,
+  preflight?: (body: unknown) => Response | null,
 ): Promise<Response> {
   // A session id can only come from a client that handshook on the retired stateful
   // leg — a 2026-07-28 connection has none by construction. Checked before the body is
@@ -421,6 +450,9 @@ async function serveStateless(
       { status: 400 },
     );
   }
+
+  const early = preflight?.(body);
+  if (early) return early;
 
   // Handing the classifier the body we already parsed matters: given `parsedBody` it
   // inspects that instead of re-reading the request, so the stream is consumed once and
