@@ -13,6 +13,7 @@ import type { OSAction, WindowState, AppProtocolRequest, UserInteraction } from 
 import { applyContentOperation, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getMonitorId } from '../agents/agent-context.js';
 import type { PermissionEntry } from '../http/access.js';
+import { windowSharedStore } from '../http/window-shared.js';
 import { WindowHandleMap } from './window-handle-map.js';
 import { createLogger } from '../observability/log.js';
 
@@ -28,7 +29,7 @@ export type { WindowState } from '@yaar/shared';
  * holds (a replay after remount, a restore to an earlier point). Together they are what
  * `list('yaar://windows/{id}/history')` shows and what `restore` truncates to.
  */
-export type WindowHistoryEntry =
+export type WindowHistoryEntry = (
   | {
       kind: 'command';
       seq: number;
@@ -39,7 +40,16 @@ export type WindowHistoryEntry =
       ok: boolean;
       error?: string;
     }
-  | { kind: 'event'; seq: number; at: number; agentId?: string; event: string; detail?: string };
+  | { kind: 'event'; seq: number; at: number; agentId?: string; event: string; detail?: string }
+) & {
+  /**
+   * The shared-value rev (`windowSharedStore.currentRev()`) when the entry was filed:
+   * every value this window's copies set after it has a higher one. What lets `restore`
+   * rewind the window's shared values along with its command log. Internal — the history
+   * verbs leave it out of what they show.
+   */
+  sharedRev: number;
+};
 
 /**
  * Per-window history cap. Oldest entries fall off first, so a window past the cap
@@ -769,13 +779,18 @@ export class WindowStateRegistry {
     windowId: string,
     entry: WindowHistoryEntry extends infer E
       ? E extends unknown
-        ? Omit<E, 'seq' | 'at'>
+        ? Omit<E, 'seq' | 'at' | 'sharedRev'>
         : never
       : never,
   ): number {
     const history = this.historyOf(windowId);
     const seq = history.nextSeq++;
-    history.entries.push({ ...entry, seq, at: Date.now() } as WindowHistoryEntry);
+    history.entries.push({
+      ...entry,
+      seq,
+      at: Date.now(),
+      sharedRev: windowSharedStore.currentRev(),
+    } as WindowHistoryEntry);
     if (history.entries.length > WINDOW_HISTORY_CAP) {
       history.dropped += history.entries.length - WINDOW_HISTORY_CAP;
       history.entries.splice(0, history.entries.length - WINDOW_HISTORY_CAP);

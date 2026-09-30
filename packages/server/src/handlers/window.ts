@@ -953,7 +953,13 @@ export function registerWindowHandlers(
               `invoke("${resolved.sourceUri}") takes { action: "restore", upTo: <seq> } and nothing else.`,
             );
           }
-          return restoreHistory(getWindowState(), resolved.windowId, p);
+          // The window state is the active session's, so its shared values are too.
+          return restoreHistory(
+            getWindowState(),
+            resolved.windowId,
+            p,
+            getActiveSession().sessionId,
+          );
         }
       }
 

@@ -20,6 +20,12 @@
  * agent's view of the app, not the user's — the same truth replay has always had, now
  * named in the response. Commands the app declares `replay: 'never'` for are in the log
  * but not re-sent on restore, and the restore response says how many.
+ *
+ * The one state outside the log that restore does touch is the window's shared values
+ * (`createSharedSignal`, `http/window-shared.ts`): they are held by the server, so a
+ * remount reads them back, and a restore that left them alone would replay the kept
+ * commands on top of the state it was asked to go back before. Values set after the kept
+ * entry are reset; values last set before it stay.
  */
 
 import type { OSAction } from '@yaar/shared';
@@ -34,6 +40,7 @@ import {
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import type { WindowHistoryEntry, WindowStateRegistry } from '../../session/window-state.js';
+import { windowSharedStore } from '../../http/window-shared.js';
 import { formatWindowRef, requireWindowExists } from './helpers.js';
 
 export function historyUri(windowId: string, seq?: number): string {
@@ -70,7 +77,7 @@ function entryLine(entry: WindowHistoryEntry): string {
   return `${entry.command}(${params})${who}${status}`;
 }
 
-function toJson(entry: WindowHistoryEntry) {
+function toJson({ sharedRev: _sharedRev, ...entry }: WindowHistoryEntry) {
   return { ...entry, at: new Date(entry.at).toISOString() };
 }
 
@@ -130,14 +137,16 @@ export function readHistory(
 }
 
 /**
- * `restore`: truncate the log after `upTo` and remount. The remount's re-registration
- * replays what is left — the exact path a `reload` takes, so restore introduces no second
- * way of rebuilding a window.
+ * `restore`: truncate the log after `upTo`, rewind the window's shared values to the same
+ * point, and remount. The remount's re-registration replays what is left — the exact path
+ * a `reload` takes, so restore introduces no second way of rebuilding a window.
  */
 export function restoreHistory(
   windowState: WindowStateRegistry,
   windowId: string,
   payload: Record<string, unknown>,
+  /** Whose shared values to rewind; without one, only the command log is restored. */
+  sessionId?: string,
 ): VerbResult {
   const existsErr = requireWindowExists(windowState, windowId);
   if (existsErr) return existsErr;
@@ -167,24 +176,51 @@ export function restoreHistory(
     );
   }
 
+  // Read before the truncation drops it. `upTo: 0` forgets everything, so every shared
+  // value goes too.
+  const markRev = upTo === 0 ? 0 : entries.find((e) => e.seq === upTo)!.sharedRev;
   const removed = windowState.truncateWindowHistory(windowId, upTo);
+  const reset = sessionId ? rewindSharedValues(windowState, sessionId, windowId, markRev) : [];
   const kept = windowState.getAppCommands(windowId);
   const noReplay = windowState.getNoReplayCommands(windowId);
   const skipped = kept.filter((r) => r.kind === 'command' && noReplay.has(r.command)).length;
   windowState.recordWindowEvent(
     windowId,
     'restored',
-    `to seq ${upTo}; ${removed.length} later entr${removed.length === 1 ? 'y' : 'ies'} forgotten`,
+    `to seq ${upTo}; ${removed.length} later entr${removed.length === 1 ? 'y' : 'ies'} forgotten` +
+      (reset.length ? `, shared value(s) reset: ${reset.join(', ')}` : ''),
     agentId,
   );
   actionEmitter.emitAction({ type: 'window.reload', windowId } satisfies OSAction);
 
   return ok(
     `Restoring window "${formatWindowRef(windowId)}" to history seq ${upTo}: ${removed.length} ` +
-      `later entr${removed.length === 1 ? 'y' : 'ies'} forgotten, ${kept.length - skipped} command(s) ` +
-      'will be replayed once the app re-registers' +
+      `later entr${removed.length === 1 ? 'y' : 'ies'} forgotten` +
+      (reset.length
+        ? `, ${reset.length} shared value(s) written after it were reset (${reset.join(', ')})`
+        : '') +
+      `, ${kept.length - skipped} command(s) will be replayed once the app re-registers` +
       (skipped ? ` (${skipped} skipped — the app declares them replay: 'never')` : '') +
-      '. Only what agents sent comes back: state the user produced inside the window is not ' +
-      'in the history.',
+      '. What comes back is what agents sent, plus the shared values the app last set before ' +
+      'that point; other state the user produced inside the window is not in the history.',
   );
+}
+
+/**
+ * Reset the window's shared values set after `markRev`, under both spellings of its key —
+ * a copy whose token carries the raw id files its values there (see `sharedWindowKey` in
+ * `http/routes/verb.ts`), which is why the window's close clears both as well.
+ */
+function rewindSharedValues(
+  windowState: WindowStateRegistry,
+  sessionId: string,
+  windowId: string,
+  markRev: number,
+): string[] {
+  const reset = new Set(windowSharedStore.rewindWindow(sessionId, windowId, markRev));
+  const raw = windowState.handleMap.getRawWindowId(windowId);
+  if (raw !== windowId) {
+    for (const key of windowSharedStore.rewindWindow(sessionId, raw, markRev)) reset.add(key);
+  }
+  return [...reset].sort();
 }

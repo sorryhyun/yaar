@@ -98,6 +98,32 @@ class WindowSharedStore {
     return this.rev;
   }
 
+  /** The newest rev handed out, server-wide. A value set later is guaranteed a higher one. */
+  currentRev(): number {
+    return this.rev;
+  }
+
+  /**
+   * Drop this window's values set after `afterRev` and name their keys, sorted.
+   *
+   * A rewind, not a restore: a value's earlier versions are not kept, so a key written both
+   * before and after the mark goes back to unset rather than to what it held at the mark.
+   * The window history's `restore` calls this, and remounts the window straight after, so
+   * the app rebuilds such a key from `initial` plus the commands it replays.
+   */
+  rewindWindow(sessionId: string, windowKey: string, afterRev: number): string[] {
+    const keys = this.sessions.get(sessionId)?.get(windowKey);
+    if (!keys) return [];
+    const reset: string[] = [];
+    for (const [key, entry] of keys) {
+      if (entry.rev > afterRev) {
+        keys.delete(key);
+        reset.push(key);
+      }
+    }
+    return reset.sort();
+  }
+
   clearWindow(sessionId: string, windowKey: string): void {
     const windows = this.sessions.get(sessionId);
     if (!windows) return;

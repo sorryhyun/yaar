@@ -152,6 +152,8 @@ export function createPersistedSignal<T>(
  * restart — persist to `appStorage` for that). A copy that mounts later starts from it,
  * so `initial` is only the value before any copy has set one, and it is never written
  * by itself. The whole value travels on every set, JSON-serialized, up to 8 MB.
+ * A window-history `restore` resets the keys set after the entry it goes back to
+ * (`features/window/history.ts`), so they start from `initial` again.
  *
  * Last write wins, per key. Nothing is merged: two copies setting the same key at once
  * end on whichever write the server took second, which is why it suits state one actor

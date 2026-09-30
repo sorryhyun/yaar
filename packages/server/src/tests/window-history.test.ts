@@ -15,6 +15,7 @@ import {
   restoreHistory,
   parseHistorySubPath,
 } from '../features/window/history.js';
+import { windowSharedStore } from '../http/window-shared.js';
 
 function createIframe(id: string): OSAction {
   return {
@@ -145,6 +146,36 @@ describe('window history', () => {
     expect(entries.map((e) => e.kind)).toEqual(['command', 'event']);
     expect(entries[1]).toMatchObject({ event: 'restored' });
     expect(registry.getAppCommands('memo')).toHaveLength(1);
+  });
+
+  it('restore rewinds the shared values written after the kept entry', () => {
+    const session = 'sess-history-shared';
+    const registry = new WindowStateRegistry();
+    registry.handleAction(createIframe('memo'), '0');
+    try {
+      // Written before the kept entry: survives, since nothing later overwrote it.
+      windowSharedStore.set(session, 'memo', 'draft', 'typed by the user', 1);
+      windowSharedStore.set(session, 'memo', 'tab', 'a', 1);
+      registry.recordAppCommand('memo', { kind: 'command', command: 'openTab', params: 'a' });
+      // Written after it: the state restore is asked to go back before.
+      windowSharedStore.set(session, 'memo', 'tab', 'b', 1);
+      registry.recordAppCommand('memo', { kind: 'command', command: 'openTab', params: 'b' });
+      windowSharedStore.set(session, 'memo', 'extra', true, 1);
+
+      const restored = text(
+        restoreHistory(registry, 'memo', { action: 'restore', upTo: 1 }, session),
+      );
+      expect(restored).toContain('2 shared value(s) written after it were reset (extra, tab)');
+      expect(windowSharedStore.get(session, 'memo', 'draft')?.value).toBe('typed by the user');
+      expect(windowSharedStore.get(session, 'memo', 'tab')).toBeNull();
+      expect(windowSharedStore.get(session, 'memo', 'extra')).toBeNull();
+
+      // upTo 0 is "forget everything": every shared value goes with it.
+      restoreHistory(registry, 'memo', { action: 'restore', upTo: 0 }, session);
+      expect(windowSharedStore.get(session, 'memo', 'draft')).toBeNull();
+    } finally {
+      windowSharedStore.clearSession(session);
+    }
   });
 
   it('refuses restore on a non-app window', () => {
