@@ -21,5 +21,8 @@ export default defineApp({
   name: 'MCP Manager',
   state: { ...appState },
   commands: { ...appCommands },
+  // Every command acts on the server's MCP config, which a remount reads back; replaying
+  // one re-scans, re-adds or re-removes a server. New commands inherit this.
+  replay: 'never',
   view: App,
 });

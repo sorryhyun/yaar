@@ -209,6 +209,27 @@ describe('defineApp: reach', () => {
 
     expect(protocol!.commands.nav).toEqual({ description: 'Nav' });
   });
+
+  test("the app's replay is folded into every command that declares none", () => {
+    // Folded, not carried: the server reads one effective policy per command.
+    const { protocol, errors } = extract({
+      'src/main.ts': `${IMPORT}
+        const REPLAY = 'never';
+        export default defineApp({
+          id: 'd', name: 'D',
+          replay: REPLAY,
+          commands: {
+            add: { description: 'Add', run: () => 1 },
+            nav: { description: 'Nav', replay: 'always', run: () => 1 },
+          },
+        });`,
+    });
+
+    expect(errors).toEqual([]);
+    expect(protocol!.commands.add.replay).toBe('never');
+    expect(protocol!.commands.nav.replay).toBe('always');
+    expect(protocol).not.toHaveProperty('replay');
+  });
 });
 
 describe('defineApp: id', () => {
@@ -379,6 +400,19 @@ describe('defineApp: refusal', () => {
           });`,
       },
       "expected 'always' or 'never'",
+    );
+  });
+
+  test('an unknown app-level replay policy is refused', () => {
+    expectRejected(
+      {
+        'src/main.ts': `${IMPORT}
+          export default defineApp({
+            id: 'd', name: 'D', replay: 'once',
+            commands: { go: { description: 'Go', run: () => 1 } },
+          });`,
+      },
+      "`replay`: expected 'always' or 'never'",
     );
   });
 

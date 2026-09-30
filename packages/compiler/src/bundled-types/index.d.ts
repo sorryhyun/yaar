@@ -728,6 +728,7 @@ interface YaarAppCommandDefinition<P = Record<string, unknown>, R = unknown> {
    * iframe remounts, which is right for state restoration (`navigate`, `setDeck`).
    * `'never'` skips it, for a command that appends, notifies, or is otherwise
    * one-shot. The list of `'never'` commands rides the ready handshake.
+   * Omitted means the app's own `replay` (`YaarAppDefinition.replay`).
    */
   replay?: 'always' | 'never';
   /** See `YaarAppStateDefinition.describe` — on-demand doc, never in the manifest. */
@@ -852,6 +853,15 @@ interface YaarAppDefinition<
    * Ctrl+1-9, Ctrl+W, Ctrl+R, F5) are reserved — the build rejects them.
    */
   keybindings?: Record<string, string>;
+  /**
+   * The replay policy of every command that does not declare its own. `'never'`
+   * is for an app that keeps its state where a remount reads it back —
+   * `createSharedSignal`, `createPersistedSignal`, `appDb` — so replaying its
+   * commands only re-runs them on top of state already restored; a command that
+   * does rebuild something can still say `replay: 'always'`. Omitted means
+   * `'always'`.
+   */
+  replay?: 'always' | 'never';
   view?: YaarAppViewLike;
   /** Fire-and-forget callback invoked when the app window is closed. */
   onClose?: () => void;
@@ -2558,6 +2568,8 @@ declare module '@bundled/yaar' {
    * persist to `appStorage` for that); a copy that mounts later starts from it, and
    * `initial` is never written by itself. Keys are 1-64 chars of `A-Za-z0-9._-`; the
    * whole value is sent, as JSON, on every set (max 8 MB). Last write wins, no merge.
+   * A window-history `restore` resets the keys set after the entry it goes back to,
+   * so they start from `initial` again and the replayed commands rebuild them.
    *
    * `onRemote(value, prev)` runs when another copy's write lands — catch up the side
    * effects that copy performed (reload a buffer, refresh a listing). Not called for

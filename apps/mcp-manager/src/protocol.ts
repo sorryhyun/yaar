@@ -35,7 +35,6 @@ export const appCommands = {
       to: z.optional(z.number()),
       path: z.optional(z.string()),
     }),
-    replay: 'never',
     run: async (p) => {
       // Params double as form input: an agent's scan leaves the fields showing
       // what it scanned, so the user can re-run or adjust it by hand.
@@ -58,7 +57,6 @@ export const appCommands = {
     description:
       'Probe an MCP server URL and register it. Fails without adding if nothing MCP-shaped answers.',
     params: z.object({ url: z.string(), name: z.optional(z.string()) }),
-    replay: 'never',
     run: async (p) => {
       // Probe first so a bad URL fails loudly instead of landing a dead entry
       // in the config.
@@ -77,7 +75,6 @@ export const appCommands = {
   removeServer: defineAppCommand({
     description: 'Unregister a configured MCP server by name.',
     params: z.object({ name: z.string() }),
-    replay: 'never',
     run: async (p) => {
       await removeServerByName(p.name);
       return { removed: p.name };
@@ -87,7 +84,6 @@ export const appCommands = {
   refreshServer: defineAppCommand({
     description: 'Force-refresh the tool cache and connection state for one configured server.',
     params: z.object({ name: z.string() }),
-    replay: 'never',
     run: async (p) => {
       await refreshServerByName(p.name);
       // Read back after the refresh so the caller gets the state it produced,

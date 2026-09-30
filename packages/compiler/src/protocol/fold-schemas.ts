@@ -289,7 +289,9 @@ function buildProtocol(definition) {
     if (description === undefined) continue;
     const descriptor = { description: description };
     if (entry.aliases !== undefined) descriptor.aliases = entry.aliases;
-    if (entry.replay !== undefined) descriptor.replay = entry.replay;
+    // The command's own policy, else the app's default, as defineApp resolves it.
+    const replay = entry.replay !== undefined ? entry.replay : definition.replay;
+    if (replay !== undefined) descriptor.replay = replay;
     const params = foldSchema(entry.params, path + '.params', 'input');
     if (params !== undefined) descriptor.params = params;
     const returns = foldSchema(entry.returns, path + '.returns', 'output');

@@ -15,5 +15,8 @@ export default defineApp({
   name: 'Remote Control',
   state: { ...appState },
   commands: { ...appCommands },
+  // Both commands flip the gateway, whose status a remount reads back; replaying one
+  // would reopen the confirm dialog or stop a session the user started since.
+  replay: 'never',
   view: App,
 });

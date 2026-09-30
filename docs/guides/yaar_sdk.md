@@ -342,6 +342,10 @@ the agent. An app never calls `render()` itself, never registers from `onMount`,
   because it changes (`` () => `${rows().length} rows` ``). It never rides in the manifest.
 - **`replay: 'never'`** on any command whose effect must not be applied twice when the iframe
   remounts (appends, sends, deletes, anything that starts a job). Omit it for idempotent ones.
+  Set on `defineApp` itself, it is the default for every command that declares none — for an app
+  whose state a remount reads back anyway (`createSharedSignal`, `createPersistedSignal`,
+  `appDb`), where a replay only re-runs commands on top of state already restored. A command
+  that does rebuild something then says `replay: 'always'`.
 - **`view`** is a Solid component, or `{ mount(el) { … } }` for an app that owns its DOM; a
   returned function runs on window close, after `onClose`.
 - **`keybindings`**: `{ ArrowRight: 'nextPage', 'Ctrl+s': 'save' }` maps a combo to a declared

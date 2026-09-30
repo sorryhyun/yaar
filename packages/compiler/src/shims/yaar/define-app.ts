@@ -216,9 +216,11 @@ function toRegistration(definition) {
     if (params !== undefined) descriptor.params = params;
     const returns = manifestSchema(manifest, 'commands', name, 'returns', entry.returns);
     if (returns !== undefined) descriptor.returns = returns;
-    // Passed through untouched: the injected SDK reads `replay` to build the
-    // `noReplay` list it sends with the ready handshake.
-    if (entry.replay !== undefined) descriptor.replay = entry.replay;
+    // Resolved against the app's default here, so the injected SDK — which reads
+    // `replay` to build the `noReplay` list it sends with the ready handshake —
+    // only ever sees a command's effective policy. The build folds it the same way.
+    const replay = entry.replay !== undefined ? entry.replay : definition.replay;
+    if (replay !== undefined) descriptor.replay = replay;
     // See the state branch: an on-demand doc, never folded into the manifest.
     if (typeof entry.describe === 'function') descriptor.describe = () => entry.describe();
     commands[name] = descriptor;

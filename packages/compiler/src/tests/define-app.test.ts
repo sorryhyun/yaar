@@ -118,6 +118,23 @@ afterEach(() => {
 });
 
 describe('defineApp registration', () => {
+  test("resolves each command's replay against the app's default", () => {
+    // The injected SDK builds the handshake's noReplay list from `replay` alone, so the
+    // default has to be resolved before the registration reaches it.
+    const { registered } = installStubs();
+    defineApp({
+      id: 'dev',
+      name: 'Dev',
+      replay: 'never',
+      commands: {
+        clone: { description: 'Clone', run: () => 1 },
+        open: { description: 'Open', replay: 'always', run: () => 1 },
+      },
+    });
+    expect(registered[0].commands.clone.replay).toBe('never');
+    expect(registered[0].commands.open.replay).toBe('always');
+  });
+
   test('translates the authoring shape into the registration the SDK serves', () => {
     const { registered } = installStubs();
 

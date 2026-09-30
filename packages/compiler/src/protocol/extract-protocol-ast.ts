@@ -458,6 +458,25 @@ function buildProtocol(
     }
   }
 
+  // -- replay default ------------------------------------------------------
+  // `defineApp({ replay })` is the policy of every command that declares none. It is
+  // folded into each command here rather than carried as a manifest field, so every
+  // reader of `protocol.json` sees one effective policy per command and none of them
+  // has to know the default exists.
+  let appReplay: 'always' | 'never' | undefined;
+  const replaySection = sections.get('replay');
+  if (replaySection) {
+    const value = extractor.evaluate(replaySection.value, replaySection.scope, 'replay');
+    if (value === 'always' || value === 'never') appReplay = value;
+    else if (value !== undefined) {
+      extractor.error(
+        replaySection.scope,
+        replaySection.value,
+        "`replay`: expected 'always' or 'never'",
+      );
+    }
+  }
+
   // -- commands ------------------------------------------------------------
   const commandEntries = sectionEntries('commands');
   if (commandEntries) {
@@ -502,6 +521,8 @@ function buildProtocol(
           continue;
         }
         descriptor.replay = replay;
+      } else if (appReplay !== undefined) {
+        descriptor.replay = appReplay;
       }
 
       if (!assignObject(extractor, descriptor, 'params', props, label)) continue;

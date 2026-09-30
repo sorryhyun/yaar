@@ -19,14 +19,12 @@ export const appCommands = {
     params: z.object({
       name: z.optional(z.string()),
     }),
-    replay: 'never',
     run: async (p) => start(p),
   }),
 
   stop: defineAppCommand({
     description: 'Turn Remote Control off.',
     params: z.object({}),
-    replay: 'never',
     run: async () => {
       await stop();
       return { running: false };
