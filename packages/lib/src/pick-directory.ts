@@ -2,8 +2,10 @@
  * Native directory picker — opens a folder selection dialog on the host OS.
  *
  * Platform strategy:
- * - Windows (native exe): PowerShell FolderBrowserDialog via temp .ps1 file
- *   (stdout piping is broken in Bun compiled exe, so results go through temp files)
+ * - Windows: the Explorer folder dialog in a helper process, when the caller passes
+ *   `helperArgv` (see {@link tryFileDialog}); otherwise, or if the helper gives no answer,
+ *   PowerShell FolderBrowserDialog via temp .ps1 file (its stdout never reached us from
+ *   the compiled exe, so results go through temp files)
  * - WSL: PowerShell FolderBrowserDialog + wslpath conversion
  * - macOS: osascript `choose folder` (always present; zenity/kdialog are not)
  * - Linux: zenity or kdialog (direct spawn with stdout)
@@ -14,6 +16,8 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { allowForeground, killWithParent } from './win32/child-process.js';
+import type { FolderDialogResult } from './win32/folder-dialog.js';
 
 const isWSL = process.platform === 'linux' && process.env.WSL_DISTRO_NAME != null;
 const isWin32 = process.platform === 'win32';
@@ -196,9 +200,74 @@ $f.Dispose()
 }
 
 /**
+ * Windows: the Explorer folder picker, shown by a helper process (`win32/folder-dialog.ts`
+ * explains why not in-process). The helper is tied to our lifetime and killed at the deadline,
+ * which takes its dialog with it — no dialog outlives the request that asked for it.
+ *
+ * Returns the picked path, or null for a cancel or the deadline (both are answers), or
+ * `undefined` when the helper gave no answer — it failed to start, crashed, or reported an
+ * error — so the caller can fall back.
+ *
+ * Exported for tests: nothing in it is Windows-specific, so a fake helper exercises it anywhere.
+ */
+export async function tryFileDialog(
+  helperArgv: string[],
+  deadlineMs: number,
+): Promise<string | null | undefined> {
+  let proc: ReturnType<typeof Bun.spawn<'ignore', 'pipe', 'ignore'>>;
+  try {
+    proc = Bun.spawn(helperArgv, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+  } catch (err) {
+    console.error('[pickDirectory] folder dialog helper failed to start:', err);
+    return undefined;
+  }
+  killWithParent(proc.pid);
+  allowForeground(proc.pid);
+
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, deadlineMs);
+  const [stdout] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  clearTimeout(timer);
+  if (timedOut) return null;
+
+  const line = stdout.trim().split('\n').pop() ?? '';
+  let result: FolderDialogResult;
+  try {
+    result = JSON.parse(line) as FolderDialogResult;
+  } catch {
+    console.error('[pickDirectory] folder dialog helper exited without an answer', {
+      exitCode: proc.exitCode,
+    });
+    return undefined;
+  }
+  if ('path' in result) return result.path;
+  if ('cancelled' in result) return null;
+  console.error('[pickDirectory] folder dialog failed:', result.error);
+  return undefined;
+}
+
+export interface PickDirectoryOptions {
+  /**
+   * Windows: the argv that starts a process running `runFolderDialogProcess()` from
+   * `@yaar/lib/win32`. Only the caller knows what that is — its own exe with a flag, or the
+   * runtime plus a script. Without it, Windows uses the PowerShell picker.
+   */
+  helperArgv?: string[];
+  /** How long the Windows dialog may stay open before it is closed as a cancel. */
+  deadlineMs?: number;
+}
+
+/**
  * Open a native directory picker dialog. Returns the absolute path or null if cancelled.
  */
-export async function pickDirectory(): Promise<string | null> {
+export async function pickDirectory(options: PickDirectoryOptions = {}): Promise<string | null> {
+  if (isWin32 && options.helperArgv) {
+    const answer = await tryFileDialog(options.helperArgv, options.deadlineMs ?? 60_000);
+    if (answer !== undefined) return answer;
+  }
   const pickers =
     isWin32 || isWSL
       ? [tryPowerShell, tryZenity, tryKdialog]

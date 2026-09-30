@@ -33,7 +33,7 @@ Two live examples: `pdf/poppler-pdf.ts` takes `binDir` (`IS_BUNDLED_EXE` is the 
 | `tls/` | Self-signed loopback certificate (via `openssl`) + its Chromium SPKI hash, for a local h2 socket |
 | `tunnel/` | Tailscale Serve tunnel driver and `config/tunnel.json` parsing |
 | `webview/` | One native window with a WebView in it, via `bun:ffi` over the vendored webview/webview C API (`webview/native/` — C/ObjC that `tsc` never sees, built by `scripts/build/webview-native.ts`). `runWebviewWindow()` blocks its thread until the window closes — the caller is a process that does nothing else. Page bindings (synchronous handlers, gated to the top frame of one origin), downloads, popups, loopback-only capture grants and a loopback SPKI pin live in `webview/native/webview_extras.mm` |
-| `win32/` | Win32 calls through `bun:ffi` where one syscall replaces a PowerShell spawn: `readProcessCommandLine(pid)` (`NtQueryInformationProcess`). DLLs open on first call; throws off Windows |
+| `win32/` | Win32 calls through `bun:ffi` where one syscall replaces a PowerShell spawn: `readProcessCommandLine(pid)` (`NtQueryInformationProcess`); `showFolderDialog`/`runFolderDialogProcess` (`IFileOpenDialog` by vtable slot — **helper process only**, a native fault kills its process); `killWithParent` (kill-on-close job object) and `allowForeground` for such a helper. DLLs open on first call; throws off Windows |
 | `ytdlp/` | Optional yt-dlp binary wrapper — discovered on PATH, never bundled |
 | `errors.ts` | `errMessage(unknown)` |
 | `ids.ts` | `genId` / `genStamp` |
@@ -41,7 +41,7 @@ Two live examples: `pdf/poppler-pdf.ts` takes `binDir` (`IS_BUNDLED_EXE` is the 
 | `json-file.ts` | `createDebouncedJsonFile()` — debounced, atomic (tmp + rename), serialized JSON writer, with `flush()` |
 | `open-url.ts` | Open a URL in the user's browser |
 | `paths.ts` | `containedPath`/`isContained`/`isPathWithin`/`containedRealPath` — path containment, the `isAbsolute(rel)` form (a substring `includes('..')` check wrongly rejects a name like `a..b`) |
-| `pick-directory.ts` | Native directory picker |
+| `pick-directory.ts` | Native directory picker. Windows uses the Explorer dialog in a helper process when the caller passes `helperArgv` (the server's `features/pick-directory.ts`), PowerShell otherwise |
 | `process.ts` | `isProcessAlive` (EPERM means alive), `readProcessStartTime` (Linux procfs, for a PID-reuse guard) |
 | `ssrf.ts` | URL validation and `safeFetch` with redirect following |
 

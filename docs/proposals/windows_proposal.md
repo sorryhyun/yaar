@@ -1,9 +1,11 @@
 # Proposal: Windows Native Calls via `bun:ffi` — Command-Line Lookup and Folder Picker
 
-**Status:** Design A **implemented** (`@yaar/lib/win32`, wired into `pid-file.ts`). Design B
-**redesigned** after the first Windows run — §5 check #2 showed a Worker cannot contain a native
-crash, so the dialog moves to a helper process (§4). Written on macOS against Wine's headers;
-§5 checks #1–4 and #8 have since been run on Windows 11 (build 26200), Bun 1.4.2.
+**Status:** both designs **implemented** on Windows. Design A: `@yaar/lib/win32`'s
+`readProcessCommandLine`, wired into `pid-file.ts`. Design B, redesigned after the first Windows
+run showed a Worker cannot contain a native crash (§5 #2): the dialog runs in a helper process
+(§4) — `win32/folder-dialog.ts`, spawned by the server's `features/pick-directory.ts`, tied to it
+by a job object. Written on macOS against Wine's headers; the §5 results below are from Windows 11
+(build 26200), Bun 1.4.2. The rest of §5 needs a person clicking.
 
 Two places on Windows start PowerShell to do something one Win32 call can do. Both are slow,
 one blocks the whole server while it waits, and the other leaves the user on a tree-style
@@ -279,8 +281,8 @@ form as the dialog's owner. The same trick through FFI, with no window class to 
    → `SetForegroundWindow(owner)` → `AttachThreadInput(…, FALSE)`.
 3. `Show(owner)`; `DestroyWindow(owner)` afterwards.
 
-A cheaper first try: the parent calls `user32!AllowSetForegroundWindow(child.pid)` right after the
-spawn, handing the helper whatever foreground right the server holds. Measure both (§5 #5). This
+As built, both are applied: the parent also calls `user32!AllowSetForegroundWindow(child.pid)`
+right after the spawn, handing the helper whatever foreground right the server holds. This
 is the part most likely to need adjusting on a real desktop — and the dev machine runs the server
 **elevated**, which changes foreground and UIPI rules against a lower-integrity browser window.
 
@@ -320,16 +322,20 @@ Windows 11 Home 10.0.26200, Bun 1.4.2, dev only.
    `CloseHandle`. Shipped as `u64`.
 4. ◐ **Timing.** Command-line lookup: PowerShell `Get-CimInstance` **1.7 s cold, 1.0 s warm**;
    FFI **0.5–2.7 ms**. Still to do: click to dialog-visible for both pickers.
-5. ☐ **Focus.** Click the folder button in Chrome, and in the exe's own window: does the dialog
-   open in front, with keyboard focus? Repeat with another app focused in between, and with the
-   server elevated and not.
-6. ☐ **Deadline.** Temporarily set the deadline to 5 s; confirm the helper is killed, the dialog
-   disappears, and the route returns `cancelled`.
+5. ◐ **Focus.** Scripted run, another app in front: the dialog (`#32770`, our title, the
+   helper's PID) **was the foreground window** 2 s after the spawn. Still to do: click the folder
+   button in Chrome and in the exe's own window, and check keyboard focus; elevated and not.
+6. ✅ **Deadline.** With a 4 s deadline the helper was killed at 4.0 s, the dialog went with it,
+   and `pickDirectory` answered `null`. Also: **parent force-killed** with the dialog open → the
+   helper died with it (kill-on-close job object). `pick-directory-helper.test.ts` covers the
+   result protocol with fake helpers on every platform.
 7. ☐ **Paths.** A folder with non-ASCII characters (한글), a path over 260 chars, a mapped network
    drive, a OneDrive folder. `FOS_FORCEFILESYSTEM` should grey out Libraries and "This PC".
 8. ✅ **Command-line lookup.** `browser-stale-cleanup.test.ts` 13/13; the new
    `win32-process-command-line.test.ts` covers spaces, Hangul and a >4 KiB command line.
-9. ☐ **Helper argv in both builds** — dev (`[bun, script]`) and exe (`[yaar.exe, --pick-directory]`).
+9. ✅ **Helper argv in both builds** — dev (`[bun, folder-dialog-helper.ts]`) and the compiled
+   exe (`[yaar.exe, --pick-directory]`): both opened the dialog in the foreground and were killed
+   cleanly at the deadline, no stray process left.
 10. ☐ **WSL** still reaches `tryPowerShell()` and `wslpath` unchanged.
 
 ---

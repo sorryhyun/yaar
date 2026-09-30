@@ -10,7 +10,7 @@ import { listApps } from '../../features/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { readSettings } from '../../storage/settings.js';
-import { pickDirectory } from '@yaar/lib/pick-directory';
+import { pickHostDirectory } from '../../features/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
 import { appOriginMarks } from '../../features/window/origin-marks.js';
@@ -118,7 +118,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
 
   if (url.pathname === '/api/pick-directory' && req.method === 'POST') {
     try {
-      const path = await pickDirectory();
+      const path = await pickHostDirectory();
       if (path) {
         return jsonResponse({ path });
       } else {

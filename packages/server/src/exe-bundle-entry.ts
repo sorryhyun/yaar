@@ -41,6 +41,12 @@ void (async () => {
       const { runWindowProcess } = await import('./desktop-window/host.js');
       runWindowProcess(process.argv);
     }
+    // `yaar --pick-directory` is the Windows folder-picker helper: show the dialog, print one
+    // JSON line, exit (features/pick-directory.ts spawns it).
+    if (process.argv.includes('--pick-directory')) {
+      const { runFolderDialogProcess } = await import('@yaar/lib/win32');
+      runFolderDialogProcess();
+    }
     const { seedBundledApps } = await import('./macos-bundle.js');
     seedBundledApps();
     await import('./exe-entry.js');
