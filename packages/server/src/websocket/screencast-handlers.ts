@@ -65,6 +65,17 @@ interface ViewerState {
   /** The screencast levers, kept so a tab switch restarts at the same quality. */
   quality: number;
   maxWidth: number;
+  /**
+   * The app's window is hidden (minimized, another monitor, a backgrounded page), so
+   * this viewer holds no screencast: its share of the refcount is released and no tab
+   * switch takes one. The socket stays up — the tab strip and the input path survive
+   * the hide, and resuming is one message instead of a reconnect.
+   */
+  paused: boolean;
+  /** `Date.now()` the current pause began, 0 when streaming. */
+  pausedAt: number;
+  /** Time spent paused, so the detach log's fps is over streaming time only. */
+  pausedMs: number;
   unsubscribeTabs: () => void;
   /** Serializes switches so two fast clicks can't leave two screencasts running. */
   switching: Promise<void>;
@@ -102,6 +113,9 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     tabs: new Set([browserId]),
     quality: ws.data.screencastQuality ?? 60,
     maxWidth: ws.data.screencastMaxWidth ?? 0,
+    paused: false,
+    pausedAt: 0,
+    pausedMs: 0,
     unsubscribeTabs: () => {},
     switching: Promise.resolve(),
     onFrame: () => {},
@@ -114,7 +128,8 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
   };
 
   state.onFrame = (frame: ScreencastFrame) => {
-    if (ws.readyState !== 1) return;
+    // Paused, the session may still be screencasting for another viewer.
+    if (ws.readyState !== 1 || state.paused) return;
     if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) {
       state.dropped++;
       return;
@@ -173,16 +188,9 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     // last one leaves. That is wrong in general and irrelevant here: the app
     // reconnects the socket to change quality, and there is one viewer.
     //
-    // Activated first because Chrome composites only the frontmost tab of a
-    // window — a screencast on a background target streams nothing (the stall
-    // `apps/browser/src/live/fallback.ts` mitigates). Tolerated on failure: the
-    // fallback still produces stills. This socket only ever reaches the headless
-    // provider, so activation cannot steal focus in a user's own Chrome.
-    await session.bringToFront().catch(() => {});
-    await session.startScreencast({
-      quality: state.quality,
-      ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
-    });
+    // This socket only ever reaches the headless provider, so the activation in
+    // beginScreencast cannot steal focus in a user's own Chrome.
+    await beginScreencast(state);
   } catch (err) {
     log.warn('failed to start screencast', { browserId, err });
     state.unsubscribeTabs();
@@ -194,6 +202,52 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
   // an empty canvas can be sized correctly rather than jumping on frame one.
   sendReady(ws, state);
   log.info('viewer attached', { browserId });
+}
+
+/**
+ * Take this viewer's share of the tab's screencast.
+ *
+ * Activated first because only the frontmost tab composites — a screencast on a
+ * background target streams nothing (`apps/browser/src/live/fallback.ts` mitigates
+ * that stall). Tolerated on failure: the fallback still produces stills.
+ */
+async function beginScreencast(state: ViewerState): Promise<void> {
+  await state.session.bringToFront().catch(() => {});
+  await state.session.startScreencast({
+    quality: state.quality,
+    ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
+  });
+}
+
+/**
+ * Stop or restart this viewer's stream while its window is hidden.
+ *
+ * Chained behind tab switches for the same reason they are chained with each other:
+ * the refcount must see exactly one stop per start. A resume answers with `ready`,
+ * which is what makes the app reseed the canvas and resend its viewport — the page
+ * kept changing while nobody was looking.
+ */
+function setPaused(ws: ServerWebSocket<WsData>, state: ViewerState, paused: boolean): void {
+  state.switching = state.switching
+    .then(async () => {
+      if (ws.readyState !== 1 || state.paused === paused) return;
+      state.paused = paused;
+      if (paused) {
+        state.pausedAt = Date.now();
+        await state.session.stopScreencast().catch(() => {});
+        log.info('viewer paused', { browserId: state.browserId });
+        return;
+      }
+      state.pausedMs += Date.now() - state.pausedAt;
+      state.pausedAt = 0;
+      await beginScreencast(state);
+      await state.session.refreshLocation().catch(() => {});
+      sendReady(ws, state);
+      log.info('viewer resumed', { browserId: state.browserId });
+    })
+    .catch((err) => {
+      log.warn('failed to change pause state', { browserId: state.browserId, paused, err });
+    });
 }
 
 /** The `ready` frame, sent on attach and again after every tab switch. */
@@ -284,20 +338,16 @@ function switchTab(ws: ServerWebSocket<WsData>, state: ViewerState, browserId: s
       const previous = state.session;
       previous.off('screencastFrame', state.onFrame);
       previous.off('closed', state.onClosed);
-      await previous.stopScreencast().catch(() => {});
+      if (!state.paused) await previous.stopScreencast().catch(() => {});
 
       state.session = next;
       state.browserId = browserId;
       state.tabs.add(browserId);
       next.on('screencastFrame', state.onFrame);
       next.on('closed', state.onClosed);
-      // Same reason as on open: only the frontmost tab composites, so switching
-      // the canvas to a background tab without activating it streams zero frames.
-      await next.bringToFront().catch(() => {});
-      await next.startScreencast({
-        quality: state.quality,
-        ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
-      });
+      // A popup opening while the window is hidden still moves the canvas to it, so
+      // the resume lands there — it just starts nothing until then.
+      if (!state.paused) await beginScreencast(state);
       // The tab may have navigated itself since it was adopted, and the URL bar the
       // human reads comes from this frame.
       await next.refreshLocation().catch(() => {});
@@ -381,6 +431,11 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
       }
       return;
     }
+    case 'pause':
+    case 'resume': {
+      setPaused(ws, state, msg.t === 'pause');
+      return;
+    }
     case 'viewport': {
       const w = num(msg.width);
       const h = num(msg.height);
@@ -403,11 +458,14 @@ export function handleScreencastClose(ws: ServerWebSocket<WsData>): void {
   void state.switching.then(() => {
     state.session.off('screencastFrame', state.onFrame);
     state.session.off('closed', state.onClosed);
+    if (state.paused) return;
     return state.session.stopScreencast().catch(() => {});
   });
 
   // The spike's whole deliverable. `YAAR_LOG_LEVEL=info` already shows it.
-  const seconds = Math.max(0.001, (Date.now() - state.startedAt) / 1000);
+  const now = Date.now();
+  const pausedMs = state.pausedMs + (state.pausedAt ? now - state.pausedAt : 0);
+  const seconds = Math.max(0.001, (now - state.startedAt - pausedMs) / 1000);
   log.info('viewer detached', {
     browserId: state.browserId,
     frames: state.sent,
@@ -415,6 +473,7 @@ export function handleScreencastClose(ws: ServerWebSocket<WsData>): void {
     fps: Number((state.sent / seconds).toFixed(1)),
     kbps: Number(((state.bytes * 8) / seconds / 1000).toFixed(0)),
     seconds: Number(seconds.toFixed(1)),
+    pausedSeconds: Number((pausedMs / 1000).toFixed(1)),
   });
 }
 

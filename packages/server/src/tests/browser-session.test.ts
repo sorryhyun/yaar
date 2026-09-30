@@ -324,6 +324,30 @@ describe('BrowserSession', () => {
     // Session stores the screenshot for later retrieval
     expect(session.lastScreenshot).toBe(buffer);
   });
+
+  it('setViewport keeps the scale factor a mobile session was created with', async () => {
+    const session = await BrowserSession.create('vp-1', 'ws://localhost:9222/devtools/page/vp', {
+      mobile: true,
+    });
+    mockSend.mockClear();
+
+    await session.setViewport(500, 700);
+    expect(mockSend).toHaveBeenCalledWith('Emulation.setDeviceMetricsOverride', {
+      width: 500,
+      height: 700,
+      deviceScaleFactor: 3,
+      mobile: true,
+    });
+
+    await session.setViewport(600, 800, 2);
+    await session.setViewport(640, 820);
+    expect(mockSend).toHaveBeenLastCalledWith('Emulation.setDeviceMetricsOverride', {
+      width: 640,
+      height: 820,
+      deviceScaleFactor: 2,
+      mobile: true,
+    });
+  });
 });
 
 // ── Shield (issue #94) ──────────────────────────────────────────────────────

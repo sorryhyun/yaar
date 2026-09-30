@@ -6,11 +6,17 @@
  * because it cannot touch the frame's document. After that every change is pushed to
  * every mounted frame.
  *
- * `fullscreen` is per window, so every answer is addressed: a frame is told whether *its*
- * card is the full-screen one. A frame outside any window gets no answer — every frame the
- * desktop renders sits in one — and keeps the SDK's local guess.
+ * `fullscreen` and `visible` are per window, so every answer is addressed: a frame is told
+ * whether *its* card is the full-screen one, and whether *its* window is on screen at all. A
+ * frame outside any window gets no answer — every frame the desktop renders sits in one — and
+ * keeps the SDK's local guess.
+ *
+ * `visible` exists because a hidden window's frame never hears it: a minimized window, or
+ * one on another monitor, stays mounted under `visibility: hidden` (WindowManager keeps its
+ * state alive that way), and `document.visibilityState` inside a frame follows only the
+ * top-level page. An app streaming pixels had no way to know nobody was looking.
  */
-import { APP_MSG } from '@yaar/shared';
+import { APP_MSG, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { hostSummary } from '@/lib/host';
@@ -19,11 +25,32 @@ import type { DesktopStore } from '../types';
 import { getDesktopState, getDesktopStore } from './store-access';
 import { postToIframe } from './target';
 
+/** The same rule WindowManager hides a window by: minimized, or on another monitor. */
+function isShown(state: DesktopStore, windowId: string): boolean {
+  const w = state.windows[windowId];
+  return !!w && !w.minimized && (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId;
+}
+
+/** Which windows are on screen, as one comparable value. */
+function shownKey(state: DesktopStore): string {
+  return Object.keys(state.windows)
+    .filter((id) => isShown(state, id))
+    .join('\n');
+}
+
 function deviceUpdate(state: DesktopStore, windowId: string | undefined) {
   const { formFactor, orientation } = state;
   const fullscreen = windowId !== undefined && selectFullscreenCardId(state) === windowId;
+  const visible = windowId === undefined || isShown(state, windowId);
   // `host` is what the frame is told of the native window — the host itself is main-frame only.
-  return { type: APP_MSG.deviceUpdate, formFactor, orientation, fullscreen, host: hostSummary() };
+  return {
+    type: APP_MSG.deviceUpdate,
+    formFactor,
+    orientation,
+    fullscreen,
+    visible,
+    host: hostSummary(),
+  };
 }
 
 function windowIdOf(iframe: HTMLIFrameElement): string | undefined {
@@ -53,16 +80,27 @@ export function initDeviceBroadcaster() {
   const store = getDesktopStore();
   let prev = store.getState();
   let prevFullscreen = selectFullscreenCardId(prev);
+  let prevShown = shownKey(prev);
   store.subscribe((state) => {
     const fullscreen = selectFullscreenCardId(state);
+    // Only recomputed when windows or the monitor changed — a drag replaces `windows`
+    // every frame, but leaves this key alone, so nothing is posted for it.
+    const shown =
+      state.windows === prev.windows && state.activeMonitorId === prev.activeMonitorId
+        ? prevShown
+        : shownKey(state);
     if (
       state.formFactor === prev.formFactor &&
       state.orientation === prev.orientation &&
-      fullscreen === prevFullscreen
-    )
+      fullscreen === prevFullscreen &&
+      shown === prevShown
+    ) {
+      prev = state;
       return;
+    }
     prev = state;
     prevFullscreen = fullscreen;
+    prevShown = shown;
     for (const iframe of windowFrames()) {
       postToIframe(iframe, deviceUpdate(state, windowIdOf(iframe)));
     }

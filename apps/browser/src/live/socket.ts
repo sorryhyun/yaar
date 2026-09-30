@@ -1,11 +1,21 @@
 /**
- * The screencast socket: open it, route what comes back, close it.
+ * The screencast socket: open it, route what comes back, close it — and pause it
+ * while nobody can see the window.
  *
  * Binary frames are pixels (paint.ts); text frames are the small control
  * protocol below, which is the only thing that knows both channels exist.
  */
+import { device } from '@bundled/yaar';
 import { QUALITY_PRESETS, quality, setLiveTabs, setLiveStatus } from './state';
-import { getSocket, setSocket, getCanvas, setDesiredTab, resetFrameClock } from './context';
+import {
+  getSocket,
+  setSocket,
+  getCanvas,
+  setDesiredTab,
+  resetFrameClock,
+  isLiveConnected,
+  send,
+} from './context';
 import { seedCanvas } from './seed';
 import { screencastUrl } from '../endpoints';
 import { updateUrlBar } from '../store';
@@ -35,8 +45,66 @@ interface ControlFrame {
   editable?: boolean;
 }
 
+/**
+ * Whether the window is out of sight — minimized, on another monitor, or the whole
+ * page backgrounded (`device.visible` folds all three).
+ *
+ * A hidden live window used to go on streaming at full rate: Chrome encoding a JPEG
+ * per repaint, the socket carrying it, and a canvas nobody could see painting it.
+ * Paused, the server releases the screencast while the socket stays up, so the tab
+ * strip, the counters and the input path all survive the hide.
+ */
+let hidden = !device.get().visible;
+/** The tab a connect asked for while hidden; opened when the window comes back. */
+let pendingTab: string | null = null;
+/** The server has been told `pause` on this socket and not yet `resume`. */
+let serverPaused = false;
+
+device.onChange(({ visible }) => {
+  if (visible === !hidden) return;
+  hidden = !visible;
+  if (hidden) {
+    if (isLiveConnected()) pauseStream();
+    return;
+  }
+  if (pendingTab) {
+    const tab = pendingTab;
+    pendingTab = null;
+    connectLive(tab);
+  } else if (serverPaused) {
+    resumeStream();
+  }
+});
+
+function pauseStream(): void {
+  if (serverPaused) return;
+  serverPaused = true;
+  send({ t: 'pause' });
+  stopStatsClock();
+  stopFallback();
+  setLiveStatus('Paused (window hidden)');
+}
+
+function resumeStream(): void {
+  serverPaused = false;
+  send({ t: 'resume' });
+  // The pause is not the stream's to be judged on: counters start over, as on a tab switch.
+  resetStats();
+  resetFrameClock();
+  startStatsClock();
+  startFallback();
+  setLiveStatus('Resuming…');
+}
+
 export function connectLive(browserId: string): void {
   disconnectLive();
+  if (hidden) {
+    // Nothing to stream to. The server's pause would only land after `ready` anyway,
+    // by which point one screencast has already been started for nobody.
+    pendingTab = browserId;
+    setLiveStatus('Paused (window hidden)');
+    return;
+  }
   const preset = QUALITY_PRESETS[quality()];
   const ws = new WebSocket(screencastUrl(browserId, preset.quality, preset.maxWidth));
   ws.binaryType = 'arraybuffer';
@@ -70,6 +138,8 @@ export function connectLive(browserId: string): void {
 export function disconnectLive(): void {
   const ws = getSocket();
   setSocket(null);
+  pendingTab = null;
+  serverPaused = false;
   setDesiredTab(null);
   resetFrameClock();
   stopStatsClock();
@@ -105,7 +175,10 @@ function handleControlFrame(text: string): void {
       return;
     }
     if (msg.t === 'ready') {
-      setLiveStatus('Live');
+      // Hidden between connecting and now: `pause` is only heard once the server has
+      // registered the socket, and `ready` is the first frame that proves it has.
+      if (hidden && !serverPaused) pauseStream();
+      else if (!serverPaused) setLiveStatus('Live');
       if (msg.browserId) {
         // `ready` is the server's answer both to a fresh connection and to an
         // `attach`, so it is the one place that always knows which target the

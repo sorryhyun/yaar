@@ -1,6 +1,6 @@
 # Proposal: live browser — a video codec for the screencast, and HiDPI frames
 
-> **Status:** proposed (2026-09-30). Measured (bench committed); nothing else built. Covers issue #148
+> **Status:** proposed (2026-09-30). Measured (bench committed); Phase 0 built. Covers issue #148
 > (live frames are soft on HiDPI displays) and replaces the per-frame JPEG stream with a
 > WebCodecs video stream encoded inside the server's own headless Chrome.
 
@@ -193,9 +193,8 @@ earlier:
 - **The screencast upgrade accepts `?dpr=`**, clamped to 1–2 in `clampedStreamParams`, and so does
   the `viewport` message, so a window moved between displays can re-announce its DPR. The viewer's
   DPR becomes the session's emulated DSF while that viewer is attached.
-- **`setViewport(w, h)` preserves the current DSF instead of defaulting to 1.** Today one
-  live-mode resize silently drops a mobile session from DSF 3 to 1. That is a bug with or without
-  this proposal.
+- **`setViewport(w, h)` preserves the current DSF instead of defaulting to 1.** One live-mode
+  resize used to silently drop a mobile session from DSF 3 to 1. Fixed in Phase 0.
 - **1x viewers are capped, not upscaled.** A viewer at DPR 1, and every JPEG viewer, gets
   `maxWidth` equal to its CSS width. Under the flag, an emulated-1x tab still produces 2x frames
   that are merely upscaled, which quadruples the bytes for nothing.
@@ -208,11 +207,19 @@ earlier:
 
 ## Plan
 
-**Phase 0 — cheap fixes on the JPEG path**
-- Make `setViewport` preserve DSF.
-- Pause the stream while the window is hidden. The 2026-08 spike called this "the largest single
-  bandwidth win available", and it is still not built: `apps/browser` has no `visibilitychange`
-  handling.
+**Phase 0 — cheap fixes on the JPEG path** (done, 2026-09-30)
+- ~~Make `setViewport` preserve DSF~~: it keeps the session's scale factor unless one is passed.
+- ~~Pause the stream while the window is hidden~~. A `visibilitychange` handler alone would not
+  have done it: a minimized window, or one on another monitor, stays mounted under
+  `visibility: hidden`, and a frame's `document.visibilityState` follows only the top-level page.
+  So the desktop now reports per-window `visible` on `yaar.device` (not minimized, on the active
+  monitor), and the SDK folds in the page's own `visibilitychange`. The app sends `pause`/`resume`
+  on the open socket: the server releases its share of the screencast refcount while the socket,
+  the popup tab strip and the counters stay up, and a resume answers with `ready`, so the canvas
+  reseeds and the viewport resyncs. A connect asked for while hidden is deferred until the window
+  is shown. The detach log reports `pausedSeconds`, and `fps`/`kbps` cover streaming time only.
+  Not counted as hidden: a phone card covered by another card, which is still on the active
+  monitor.
 - ~~Commit the bench~~: done, as `scripts/bench/screencast-codec.ts` (`make screencast-bench`).
 
 **Phase 1 — HiDPI plumbing (#148)**

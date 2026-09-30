@@ -19,6 +19,11 @@
  * knows whether its downloads are saved by the shell (`downloadBlob`) and which platform's
  * settings to point a user at.
  *
+ * `visible` is whether anyone can see this frame: the desktop says whether the window is on
+ * screen (not minimized, on the active monitor — a frame cannot tell, because a hidden window
+ * stays mounted under `visibility: hidden`), and the frame's own `visibilitychange` says
+ * whether the whole page is (a backgrounded tab or phone). Either one hiding it is hidden.
+ *
  * Mirrored onto `<html data-form-factor data-orientation>` and a present-or-absent
  * `data-fullscreen`, so app CSS can branch on it without script.
  */
@@ -37,7 +42,19 @@ export const IFRAME_DEVICE_SDK_SCRIPT = `
     return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
   }
 
-  var state = { formFactor: 'desktop', orientation: localOrientation(), fullscreen: false, host: null };
+  function pageVisible() {
+    return document.visibilityState !== 'hidden';
+  }
+
+  // The desktop's half of "visible"; true until it says otherwise, and forever outside YAAR.
+  var shown = true;
+  var state = {
+    formFactor: 'desktop',
+    orientation: localOrientation(),
+    fullscreen: false,
+    visible: pageVisible(),
+    host: null
+  };
   var callbacks = [];
 
   function mirror() {
@@ -54,11 +71,33 @@ export const IFRAME_DEVICE_SDK_SCRIPT = `
       formFactor: state.formFactor,
       orientation: state.orientation,
       fullscreen: state.fullscreen,
+      visible: state.visible,
       host: state.host
     };
   }
 
+  function commit(next) {
+    if (
+      next.formFactor === state.formFactor &&
+      next.orientation === state.orientation &&
+      next.fullscreen === state.fullscreen &&
+      next.visible === state.visible &&
+      JSON.stringify(next.host) === JSON.stringify(state.host)
+    ) return;
+    state = next;
+    mirror();
+    for (var i = 0; i < callbacks.length; i++) {
+      try { callbacks[i](snapshot()); } catch(err) {}
+    }
+  }
+
   mirror();
+
+  document.addEventListener('visibilitychange', function() {
+    var next = snapshot();
+    next.visible = shown && pageVisible();
+    commit(next);
+  });
 
   window.addEventListener('message', function(e) {
     var d = e.data;
@@ -66,20 +105,18 @@ export const IFRAME_DEVICE_SDK_SCRIPT = `
     var formFactor = d.formFactor === 'mobile' ? 'mobile' : 'desktop';
     var orientation = d.orientation === 'landscape' ? 'landscape' : 'portrait';
     var fullscreen = d.fullscreen === true;
+    // Absent means shown: a desktop older than the field never hid anything it could report.
+    shown = d.visible !== false;
     var host = d.host && typeof d.host.platform === 'string' && Array.isArray(d.host.caps)
       ? { platform: d.host.platform, caps: d.host.caps.filter(function(c) { return typeof c === 'string'; }) }
       : null;
-    if (
-      formFactor === state.formFactor &&
-      orientation === state.orientation &&
-      fullscreen === state.fullscreen &&
-      JSON.stringify(host) === JSON.stringify(state.host)
-    ) return;
-    state = { formFactor: formFactor, orientation: orientation, fullscreen: fullscreen, host: host };
-    mirror();
-    for (var i = 0; i < callbacks.length; i++) {
-      try { callbacks[i](snapshot()); } catch(err) {}
-    }
+    commit({
+      formFactor: formFactor,
+      orientation: orientation,
+      fullscreen: fullscreen,
+      visible: shown && pageVisible(),
+      host: host
+    });
   });
 
   if (window.parent && window.parent !== window) {

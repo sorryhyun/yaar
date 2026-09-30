@@ -298,8 +298,9 @@ export const APP_MSG = {
   console: 'yaar:console',
 
   // Device SDK (iframe-scripts/device-sdk.ts): the frame asks once on install, the
-  // desktop answers and then pushes `{ formFactor, orientation, fullscreen }` on every
-  // change. `fullscreen` is the frame's own window, so each frame gets its own answer.
+  // desktop answers and then pushes `{ formFactor, orientation, fullscreen, visible }` on
+  // every change. `fullscreen` and `visible` are the frame's own window, so each frame gets
+  // its own answer.
   deviceRequest: 'yaar:device-request',
   deviceUpdate: 'yaar:device-update',
   // Frame → desktop: `{ on }`, the app asking to put its phone card in or out of full screen.

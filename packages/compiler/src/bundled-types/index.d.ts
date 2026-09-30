@@ -1192,6 +1192,13 @@ interface YaarDeviceState {
    */
   fullscreen: boolean;
   /**
+   * Whether anyone can see this app: its window is on screen (not minimized, on the active
+   * monitor) and the page itself is not backgrounded. A hidden window's frame stays mounted
+   * and its own `document.visibilityState` stays `visible`, so this is the only way to
+   * know — use it to stop work only a viewer needs, such as a live stream.
+   */
+  visible: boolean;
+  /**
    * What YAAR's own desktop window offers (`platform`: `macos`, `windows`, …; `caps`:
    * `download`, `clipboard`, …), or `null` in a browser tab. Lets an app word a message for
    * both — e.g. a refused microphone is fixed in System Settings in the window, in the
@@ -1735,7 +1742,7 @@ declare module '@bundled/yaar' {
   export const app: YaarApp;
   /** The desktop's notifications: `list`, `count`, `onChange`. */
   export const notifications: YaarNotifications;
-  /** The screen this app is shown on (form factor, orientation, fullscreen): `get`, `onChange`, `setFullscreen`. */
+  /** The screen this app is shown on (form factor, orientation, fullscreen, visible): `get`, `onChange`, `setFullscreen`. */
   export const device: YaarDevice;
   /** Other windows on the desktop: `read`, `list`, `openUrl`. */
   export const windows: YaarWindows;

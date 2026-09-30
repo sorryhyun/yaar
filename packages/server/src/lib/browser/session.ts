@@ -1699,9 +1699,14 @@ export class BrowserSession extends EventEmitter {
 
   /**
    * Re-emulate the viewport at a new size, so the remote page reflows to match the
-   * window the human is actually looking at.
+   * window the human is actually looking at. The scale factor is kept unless one is
+   * given: a live-mode resize must not drop a mobile session from DSF 3 to 1.
    */
-  async setViewport(width: number, height: number, deviceScaleFactor = 1): Promise<void> {
+  async setViewport(
+    width: number,
+    height: number,
+    deviceScaleFactor = this.viewport?.deviceScaleFactor ?? (this.mobile ? 3 : 1),
+  ): Promise<void> {
     this.touch();
     this.viewport = {
       width: Math.max(1, Math.round(width)),

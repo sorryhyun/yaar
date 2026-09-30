@@ -95,6 +95,7 @@ describe('answering a device request', () => {
         formFactor: 'mobile',
         orientation: 'landscape',
         fullscreen: true,
+        visible: true,
         host: null,
       },
     ]);
@@ -104,6 +105,7 @@ describe('answering a device request', () => {
         formFactor: 'mobile',
         orientation: 'landscape',
         fullscreen: false,
+        visible: true,
         host: null,
       },
     ]);
@@ -128,5 +130,61 @@ describe('answering a device request', () => {
     } finally {
       delete w.yaarHost;
     }
+  });
+});
+
+describe('telling a frame whether its window is on screen', () => {
+  beforeEach(() => {
+    useDesktopStore.setState({
+      windows: {},
+      zOrder: [],
+      focusedWindowId: null,
+      activeMonitorId: MONITOR_ID,
+      formFactor: 'desktop',
+      orientation: 'landscape',
+      fullscreenWindowId: null,
+    });
+  });
+  afterEach(() => {
+    for (const el of mounted.splice(0)) el.remove();
+  });
+
+  const visibleOf = (frame: Frame) =>
+    frame.received.map((m) => (m as { visible: boolean }).visible);
+
+  it('pushes visible: false on minimize and true again on restore, to that frame', () => {
+    const a = openCard('a');
+    const b = openCard('b');
+    const frameA = mountFrame(a);
+    const frameB = mountFrame(b);
+
+    const minimize = (on: boolean) =>
+      useDesktopStore.setState((s) => ({
+        windows: { ...s.windows, [a]: { ...s.windows[a], minimized: on } },
+      }));
+    minimize(true);
+    minimize(false);
+
+    expect(visibleOf(frameA)).toEqual([false, true]);
+    // Every frame hears the broadcast; the SDK drops the ones that change nothing for it.
+    expect(visibleOf(frameB)).toEqual([true, true]);
+  });
+
+  it('counts a window on another monitor as hidden', () => {
+    const frame = mountFrame(openCard('a'));
+    useDesktopStore.setState({ activeMonitorId: 'other' });
+    expect(visibleOf(frame)).toEqual([false]);
+  });
+
+  it('posts nothing for a change that moves no window on or off screen', () => {
+    const a = openCard('a');
+    const frame = mountFrame(a);
+    useDesktopStore.setState((s) => ({
+      windows: {
+        ...s.windows,
+        [a]: { ...s.windows[a], bounds: { x: 10, y: 10, w: 400, h: 300 } },
+      },
+    }));
+    expect(frame.received).toEqual([]);
   });
 });
