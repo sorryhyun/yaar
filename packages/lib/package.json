@@ -43,6 +43,10 @@
       "types": "./dist/webview/index.d.ts",
       "import": "./dist/webview/index.js"
     },
+    "./win32": {
+      "types": "./dist/win32/index.d.ts",
+      "import": "./dist/win32/index.js"
+    },
     "./termux": {
       "types": "./dist/termux/index.d.ts",
       "import": "./dist/termux/index.js"

@@ -33,6 +33,7 @@ Two live examples: `pdf/poppler-pdf.ts` takes `binDir` (`IS_BUNDLED_EXE` is the 
 | `tls/` | Self-signed loopback certificate (via `openssl`) + its Chromium SPKI hash, for a local h2 socket |
 | `tunnel/` | Tailscale Serve tunnel driver and `config/tunnel.json` parsing |
 | `webview/` | One native window with a WebView in it, via `bun:ffi` over the vendored webview/webview C API (`webview/native/` — C/ObjC that `tsc` never sees, built by `scripts/build/webview-native.ts`). `runWebviewWindow()` blocks its thread until the window closes — the caller is a process that does nothing else. Page bindings (synchronous handlers, gated to the top frame of one origin), downloads, popups, loopback-only capture grants and a loopback SPKI pin live in `webview/native/webview_extras.mm` |
+| `win32/` | Win32 calls through `bun:ffi` where one syscall replaces a PowerShell spawn: `readProcessCommandLine(pid)` (`NtQueryInformationProcess`). DLLs open on first call; throws off Windows |
 | `ytdlp/` | Optional yt-dlp binary wrapper — discovered on PATH, never bundled |
 | `errors.ts` | `errMessage(unknown)` |
 | `ids.ts` | `genId` / `genStamp` |

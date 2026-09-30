@@ -10,6 +10,7 @@ import { rm, readFile, readdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { isProcessAlive, readProcessStartTime } from '@yaar/lib/process';
+import { readProcessCommandLine } from '@yaar/lib/win32';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('browser');
@@ -110,10 +111,19 @@ function ownerIsRunningElsewhere(ownerPid: number, ownerStart?: string): boolean
 
 /**
  * The full command line of a running process, or null when it can't be read.
+ * Windows reads it in-process (`@yaar/lib/win32`, a few ms); PowerShell, which blocks the
+ * event loop for 1–2 s, is only the fallback for when the FFI call throws.
  * `-ww` because `ps` otherwise truncates to the terminal width, which can cut off
  * the very flag {@link isRecordedChrome} matches on.
  */
 function readCommandLine(pid: number): string | null {
+  if (process.platform === 'win32') {
+    try {
+      return readProcessCommandLine(pid);
+    } catch {
+      // FFI unavailable — take the PowerShell path below.
+    }
+  }
   try {
     const cmd =
       process.platform === 'win32'

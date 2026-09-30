@@ -1,9 +1,9 @@
 # Proposal: Windows Native Calls via `bun:ffi` — Command-Line Lookup and Folder Picker
 
-**Status:** draft, not implemented. Written on macOS, where none of the Windows code below can
-run; every Win32 detail is checked against Wine's headers (`shobjidl.idl`, `winternl.h`,
-`objbase.h`, `winerror.h`) but **not executed**. §5 is the checklist to work through on a real
-Windows machine before any of this lands.
+**Status:** Design A **implemented** (`@yaar/lib/win32`, wired into `pid-file.ts`). Design B
+**redesigned** after the first Windows run — §5 check #2 showed a Worker cannot contain a native
+crash, so the dialog moves to a helper process (§4). Written on macOS against Wine's headers;
+§5 checks #1–4 and #8 have since been run on Windows 11 (build 26200), Bun 1.4.2.
 
 Two places on Windows start PowerShell to do something one Win32 call can do. Both are slow,
 one blocks the whole server while it waits, and the other leaves the user on a tree-style
@@ -18,7 +18,7 @@ this proposal extends that pattern to exactly those two sites, and no further.
 | Site | Windows today | Proposed on Windows | Other platforms |
 |------|---------------|---------------------|-----------------|
 | `readCommandLine()` in `packages/server/src/lib/browser/pid-file.ts` | `spawnSync` PowerShell + `Get-CimInstance Win32_Process` | `OpenProcess` → `NtQueryInformationProcess` → `CloseHandle`, synchronous | macOS: keep `ps` (**measured 2.2 ms**, runs once before Chrome launch). Linux: `/proc/<pid>/cmdline`, no FFI needed — a separate small change |
-| `tryPowerShell()` in `packages/lib/src/pick-directory.ts` | PowerShell + `Add-Type` inline C# + WinForms `FolderBrowserDialog`, results via polled temp files | `IFileOpenDialog` with `FOS_PICKFOLDERS`, run in a Worker | **No change.** macOS keeps `osascript` (`NSOpenPanel` must own the process main thread). Linux keeps zenity/kdialog. **WSL keeps PowerShell** — a Linux process cannot load Windows DLLs |
+| `tryPowerShell()` in `packages/lib/src/pick-directory.ts` | PowerShell + `Add-Type` inline C# + WinForms `FolderBrowserDialog`, results via polled temp files | `IFileOpenDialog` with `FOS_PICKFOLDERS`, run in a helper process (the exe re-spawned, like `--window`) | **No change.** macOS keeps `osascript` (`NSOpenPanel` must own the process main thread). Linux keeps zenity/kdialog. **WSL keeps PowerShell** — a Linux process cannot load Windows DLLs |
 
 PowerShell stays in both sites as the **fallback**, reached when the FFI path throws. Neither
 change is allowed to make a working Windows install worse.
@@ -42,8 +42,8 @@ Bun.spawnSync(['powershell', '-NoProfile', '-NonInteractive', '-Command',
   `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`]);
 ```
 
-`spawnSync` holds the event loop for PowerShell's cold start plus a WMI query — commonly
-reported in the 1–2 s range, **not measured here** (§5 measures it). The call only happens when
+`spawnSync` holds the event loop for PowerShell's cold start plus a WMI query — **measured
+1.7 s cold, 1.0 s warm**, against **0.5–2.7 ms** for the FFI path (§5 #4). The call only happens when
 a stale PID file names a live PID, so it is rare, but when it happens nothing else on the server
 moves. The FFI path is three syscalls.
 
@@ -134,17 +134,19 @@ export function readProcessCommandLine(pid: number): string | null {
 }
 ```
 
-`HANDLE` is typed `u64`, not `ptr`, following Bun's FFI docs for Windows handles
-(`hide-console.ts` uses `ptr` for an `HWND` and works — §5 settles which is right for a
-`HANDLE`). Lazy-`dlopen` inside the function on first use, as `hide-console.ts` does, so importing
-the module on macOS/Linux never touches `bun:ffi`.
+`HANDLE` is typed `u64`, following Bun's FFI docs for Windows handles; `ptr` was verified to
+work too (§5 #3). The DLLs are `dlopen`ed on first call, so importing the module on macOS/Linux
+never loads one; off Windows the function throws and `pid-file.ts` keeps its PowerShell/`ps` path.
+As shipped, the decoded offset is also bounds-checked against the buffer before slicing.
 
 ### Testing
 
 `packages/server/src/tests/browser-stale-cleanup.test.ts` already covers this end to end on
 every platform: it spawns an idler carrying `--user-data-dir=<dir>` and asserts that
 `cleanupStaleChrome()` kills it, and that an idler without the flag survives. It needs no changes;
-on Windows it exercises the FFI path. CI is Ubuntu-only, so the Windows run is manual (§5).
+on Windows it exercises the FFI path (13/13 pass, 1.9 s). `packages/lib/src/tests/win32-process-command-line.test.ts`
+covers the function itself — spaces, Hangul, a >4 KiB command line (the retry path), a missing
+PID — and asserts it throws off Windows. CI is Ubuntu-only, so the Windows run is manual (§5).
 
 ---
 
@@ -154,37 +156,52 @@ on Windows it exercises the FFI path. CI is Ubuntu-only, so the Windows run is m
 
 ```
 POST /api/pick-directory
-  └─ pickDirectory()                      packages/lib/src/pick-directory.ts
-       └─ win32 && !WSL → tryFileDialog() packages/lib/src/win32/folder-dialog.ts
-            └─ new Worker(folder-dialog-worker)
-                 CoInitializeEx(STA) → CoCreateInstance(FileOpenDialog)
-                 → GetOptions / SetOptions / SetTitle → Show(owner) ── blocks this thread only
-                 → GetResult → IShellItem.GetDisplayName → postMessage(path | null)
-       └─ on throw → tryPowerShell()      (unchanged, fallback)
+  └─ pickDirectory({ helperArgv })         packages/lib/src/pick-directory.ts
+       └─ win32 && !WSL && helperArgv → tryFileDialog(helperArgv)
+            └─ Bun.spawn([...helperArgv])  a child process, stdout piped
+                 child: runFolderDialog()  packages/lib/src/win32/folder-dialog.ts
+                   CoInitializeEx(STA) → CoCreateInstance(FileOpenDialog)
+                   → GetOptions / SetOptions / SetTitle → Show(owner) ── blocks the child only
+                   → GetResult → IShellItem.GetDisplayName → one JSON line on stdout, exit
+       └─ child exits without a result line → tryPowerShell()   (unchanged, fallback)
 ```
 
-### Why a Worker is not optional
+### Why a separate process, not a Worker
 
-`IModalWindow::Show` runs its own modal message loop and does not return until the user answers.
-On the main thread it would freeze every WebSocket, MCP call and agent turn for as long as the
-dialog is open. In a Worker it blocks only that thread.
+`IModalWindow::Show` runs its own modal message loop and does not return until the user answers,
+so it cannot run on the server's main thread. The draft put it in a Worker. **§5 check #2 rules
+that out:** a bad native call inside a Worker (tested with a call through address `0xAA8`) takes
+down the whole Bun process — exit code 3, no `error` event, main thread gone. A slot mistake, a
+crash in a third-party shell extension loaded into the dialog (cloud-drive overlays, archivers and
+context-menu handlers all load into `IFileOpenDialog`), or a fault in COM would kill every session.
 
-**Verified on macOS (Bun 1.4.2):** `bun:ffi` `dlopen` works inside a Worker, both under
-`bun run` and in a `bun build --compile` binary. The spelling that works in **both** is
-`new Worker(new URL('./worker.ts', import.meta.url))`; a bare `new Worker('./worker.ts')` resolves
-against the cwd under `bun run` and fails (`ModuleNotFound`). In the compiled binary the worker
-must be listed as an **extra entrypoint** (Bun docs, and confirmed): add it to `buildArgs` in
-`scripts/build/exe-bundle.js` next to `exe-bundle-entry.ts`.
+A child process contains all of that, and removes three other problems at once:
 
-Open point (§6): `@yaar/lib` exports resolve to `dist/*.js`, and the exe bundles lib source into
-the server entry, so `import.meta.url` means a different file in dev, `dist`, and the exe. The
-spelling above must be checked in all three.
+- **No Worker URL question.** The draft's open point about what `import.meta.url` means in lib
+  source, lib `dist` and the exe bundle disappears. The exe already re-spawns itself for the
+  desktop window (`yaar --window`, routed in `exe-bundle-entry.ts` before any server module
+  loads, spawned by `desktop-window/launch.ts`); the picker is one more flag on the same switch.
+  In dev, the argv is `[process.execPath, <helper script>]`.
+- **Deadline = kill.** `proc.kill()` (`TerminateProcess`) ends a thread blocked in `Show`, and the
+  dialog's windows die with their process. No cross-thread `GetWindow`/`PostMessageW` dance.
+- **Result channel = stdout.** `launch.ts` already reads its child's stdout inside the compiled
+  exe (`waitForLine`), so the "stdout piping is broken in the exe" note that forced the
+  PowerShell script onto polled temp files is about *that* child, not child processes in general.
+  One JSON line — `{"path": "..."}` / `{"cancelled": true}` / `{"error": "..."}` — then exit.
+
+Cost: one process spawn per pick (a Bun cold start, far below PowerShell + `Add-Type`). Picks are
+rare and user-initiated; that is the right trade.
+
+`@yaar/lib` keeps its rule: `pickDirectory` takes `helperArgv` as a parameter (the `binDir` shape
+`@yaar/lib/pdf` uses), and the server — which knows whether it is the exe — builds it. With no
+`helperArgv`, Windows goes straight to `tryPowerShell()` as today.
 
 ### COM through FFI
 
 No COM support in `bun:ffi`, so methods are called by vtable slot: the object pointer's first
 8 bytes are the vtable pointer, and slot *n* is at vtable offset `n × 8`. Every method takes
-`this` as its first argument and returns an `HRESULT` (`i32`).
+`this` as its first argument — **pass it explicitly**; the first Windows run forgot, `GetOptions`
+returned `E_INVALIDARG`, and the next call segfaulted — and returns an `HRESULT` (`i32`).
 
 ```ts
 import { CFunction, FFIType, read } from 'bun:ffi';
@@ -193,12 +210,13 @@ function method(obj: number, slot: number, args: FFIType[]) {
   const fn = read.ptr(read.ptr(obj, 0), slot * 8);
   return CFunction({ ptr: fn, args: [FFIType.ptr, ...args], returns: FFIType.i32 });
 }
+// method(dialog, 10, [FFIType.ptr])(dialog, optsOut)
 ```
 
-**Slot table.** Order checked against Wine's `shobjidl.idl`. `IModalWindow` declares
-`[local] Show` and `[call_as(Show)] RemoteShow`; `call_as` methods do **not** take a vtable slot,
-so `Show` is the only slot IModalWindow adds. If this is wrong, every IFileDialog slot is off by
-one, and the first call will crash the Worker — this is check #1 in §5.
+**Slot table — verified on Windows (§5 #1).** `CoCreateInstance`, `GetOptions` (default
+`0x1808`), `SetOptions` (re-read `0x1868`, pick-folders set) and `SetTitle` all return `S_OK`;
+`GetResult` before `Show` returns `E_UNEXPECTED` (`0x8000FFFF`) — the right answer from the right
+method; `Release` returns refcount 0. `Show` (3) and `GetDisplayName` (5) are not yet exercised.
 
 | Slot | Interface | Method | Used for |
 |------|-----------|--------|----------|
@@ -208,7 +226,6 @@ one, and the first call will crash the Worker — this is check #1 in §5.
 | 10 | IFileDialog | **GetOptions**(DWORD\*) | read defaults first |
 | 17 | IFileDialog | **SetTitle**(LPCWSTR) | "Select folder to mount" |
 | 20 | IFileDialog | **GetResult**(IShellItem\*\*) | the picked folder |
-| 23 | IFileDialog | Close(HRESULT) | not used — see deadline below |
 | 5 | IShellItem | **GetDisplayName**(SIGDN, LPWSTR\*) | filesystem path |
 
 (Full IFileDialog order from slot 4: SetFileTypes, SetFileTypeIndex, GetFileTypeIndex, Advise,
@@ -216,7 +233,7 @@ Unadvise, SetOptions, GetOptions, SetDefaultFolder, SetFolder, GetFolder, GetCur
 SetFileName, GetFileName, SetTitle, SetOkButtonLabel, SetFileNameLabel, GetResult, AddPlace,
 SetDefaultExtension, Close, SetClientGuid, ClearClientData, SetFilter.)
 
-**Constants** (all from Wine headers):
+**Constants** (from Wine headers; the CLSID/IID pair confirmed by `CoCreateInstance`):
 
 | Name | Value |
 |------|-------|
@@ -232,24 +249,26 @@ A GUID is 16 bytes, little-endian for the first three fields: `Data1` u32, `Data
 u16, then `Data4` as 8 raw bytes in written order. Compare `HRESULT`s as `hr >>> 0` — they are
 negative as `i32`.
 
-### Worker sequence
+### Helper sequence
 
-1. `ole32!CoInitializeEx(null, COINIT_APARTMENTTHREADED)` — the dialog needs an STA, and the
-   Worker's thread is fresh, so this is ours to own.
+1. `ole32!CoInitializeEx(null, COINIT_APARTMENTTHREADED)` — the helper's main thread, ours to own.
 2. `ole32!CoCreateInstance(&CLSID_FileOpenDialog, null, CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog, &out)`
-   → `dialog = read.ptr(out, 0)`.
+   → `dialog = out[0]`.
 3. `GetOptions(&opts)` → `SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)`.
 4. `SetTitle(utf16z("Select folder to mount"))` — a NUL-terminated UTF-16LE `Uint8Array`.
-5. `hr = Show(owner)` (owner: see focus below). `0x800704C7` → post `null`. Other failure → post
-   an error, so the main thread falls back to PowerShell.
+5. `hr = Show(owner)` (owner: see focus below). `0x800704C7` → print `{"cancelled":true}`. Other
+   failure → print `{"error":...}`, so the parent falls back to PowerShell.
 6. `GetResult(&itemOut)` → `item.GetDisplayName(SIGDN_FILESYSPATH, &pszOut)` → read UTF-16 until
    NUL (`read.u16` loop, or `toArrayBuffer(psz, 0, n)`).
-7. `ole32!CoTaskMemFree(psz)`, `item.Release()`, `dialog.Release()`, `CoUninitialize()`, post the
-   path.
+7. `ole32!CoTaskMemFree(psz)`, `item.Release()`, `dialog.Release()`, `CoUninitialize()`, print
+   `{"path":...}`, exit 0.
+
+Like the window process, the helper takes `--parent <pid>` and exits if the parent goes away, so
+a server crash never strands a dialog.
 
 ### Focus: the dialog must not open behind the browser
 
-The server is a background process; Windows' foreground lock lets it create a window but not
+The helper is a background process; Windows' foreground lock lets it create a window but not
 bring one to the front. The current script works around this with a hidden 0×0 topmost WinForms
 form, `AttachThreadInput` to the foreground thread, `SetForegroundWindow` on the form, then the
 form as the dialog's owner. The same trick through FFI, with no window class to register:
@@ -258,9 +277,12 @@ form as the dialog's owner. The same trick through FFI, with no window class to 
    — a system class, so no `WndProc` and no `JSCallback`.
 2. `GetForegroundWindow` → `GetWindowThreadProcessId` → `AttachThreadInput(ours, theirs, TRUE)`
    → `SetForegroundWindow(owner)` → `AttachThreadInput(…, FALSE)`.
-3. `Show(owner)`; `DestroyWindow(owner)` afterwards, on the same thread.
+3. `Show(owner)`; `DestroyWindow(owner)` afterwards.
 
-This is the part most likely to need adjusting on a real desktop (§5 #5).
+A cheaper first try: the parent calls `user32!AllowSetForegroundWindow(child.pid)` right after the
+spawn, handing the helper whatever foreground right the server holds. Measure both (§5 #5). This
+is the part most likely to need adjusting on a real desktop — and the dev machine runs the server
+**elevated**, which changes foreground and UIPI rules against a lower-integrity browser window.
 
 ### Deadline: no dialog outlives its request
 
@@ -268,74 +290,60 @@ This is the part most likely to need adjusting on a real desktop (§5 #5).
 `TRANSPORT_IDLE_TIMEOUT_S` = **255 s** (`packages/server/src/config/deadlines.ts`), and nothing
 overrides it for this route. `apiFetch` adds no timeout of its own, so 255 s is the outer bound.
 Following that file's rule — an inner deadline must fire before whoever is waiting gives up — the
-picker waits `MAX_REQUEST_DEADLINE_MS` (240 s) and then **cancels the dialog**, rather than
-returning `null` with the dialog still on screen (today's 60 s bug).
-
-Cancelling from the main thread must not touch the dialog's COM object (its thread is blocked in
-`Show`), and `Worker.terminate()` cannot interrupt a native call. Cross-thread *messages* are
-safe, though, and the owner window makes the dialog findable without a callback:
-
-- The Worker posts the owner `HWND` to the main thread before calling `Show`.
-- On deadline, main thread: `dlg = user32!GetWindow(owner, GW_ENABLEDPOPUP /* 6 */)` →
-  `PostMessageW(dlg, WM_COMMAND /* 0x111 */, IDCANCEL /* 2 */, 0)`.
-- `Show` returns cancelled, the Worker cleans up normally, and the route answers
-  `{ path: null, cancelled: true }`.
-
-240 s is a large improvement on 60 s and fits inside the transport. A pick taking longer than
-four minutes cancels visibly, which is honest.
+picker waits `MAX_REQUEST_DEADLINE_MS` (240 s) and then **kills the helper**, which takes the
+dialog with it, rather than returning `null` with the dialog still on screen (today's 60 s bug).
+The route answers `{ path: null, cancelled: true }`.
 
 ### Fallback matrix
 
 | Failure | Result |
 |---------|--------|
-| `bun:ffi` import or `dlopen` throws | `tryPowerShell()` |
-| Worker fails to start (wrong URL in exe, missing entrypoint) | `tryPowerShell()` |
-| `CoCreateInstance` / `SetOptions` / `Show` returns failure other than cancel | `tryPowerShell()` |
-| Worker crashes (bad slot → access violation) | Worker `error` event → `tryPowerShell()`. **Check in §5 whether an access violation in a Worker takes down the whole process** — if it does, the fallback does not help, and the slot table must be proven before shipping |
+| No `helperArgv` passed, or the spawn fails | `tryPowerShell()` |
+| Helper crashes (bad slot, shell-extension fault) — exits without a result line | `tryPowerShell()`; **only the helper dies** |
+| `CoCreateInstance` / `SetOptions` / `Show` fails other than cancel → `{"error"}` | `tryPowerShell()` |
+| Deadline | helper killed, `null`, no fallback (a second dialog after four minutes is worse) |
 | User cancels | `null`, no fallback (cancel is an answer) |
 
 ---
 
 ## 5. Windows verification checklist
 
-Run in dev (`make dev`) **and** against the compiled exe (`bun run build:exe`).
+Run in dev (`make dev`) **and** against the compiled exe (`bun run build:exe`). Results so far:
+Windows 11 Home 10.0.26200, Bun 1.4.2, dev only.
 
-1. **Slots.** A standalone script that creates the dialog, calls `GetOptions`, `SetOptions`,
-   `SetTitle` and `Release` — no `Show` — and prints each `HRESULT`. All zero means the slot
-   table is right. Do this before anything else.
-2. **Crash containment.** Deliberately call a wrong slot inside a Worker. Does the main process
-   survive? This decides whether §4's fallback matrix is real.
-3. **`HANDLE` type.** `OpenProcess` with `returns: FFIType.u64` vs `FFIType.ptr`; confirm the handle
-   round-trips into `NtQueryInformationProcess` and `CloseHandle`.
-4. **Timing.** Time the current PowerShell `Get-CimInstance` lookup (cold, and warm) and the FFI
-   lookup; time from click to dialog-visible for both pickers. Put the numbers in this file.
-5. **Focus.** Click the folder button in Chrome, and in the exe's own Chrome window: does the
-   dialog open in front, with keyboard focus? Repeat with another app focused in between.
-6. **Deadline.** Temporarily set the deadline to 5 s; confirm the dialog closes itself, the Worker
-   exits, and the route returns `cancelled`.
-7. **Paths.** A folder with non-ASCII characters (한글), a path over 260 chars, a mapped network
+1. ✅ **Slots.** Create the dialog, call `GetOptions`, `SetOptions`, `SetTitle`, `GetResult`,
+   `Release` — no `Show` — and print each `HRESULT`. All as expected; see §4's slot table.
+2. ✅ **Crash containment — answered: a Worker does not contain it.** A native fault in a Worker
+   kills the process (exit 3, no `error` event). This is why §4 uses a helper process. Re-run the
+   same test against the helper: the server must survive and fall back.
+3. ✅ **`HANDLE` type.** `u64` and `ptr` both round-trip through `NtQueryInformationProcess` and
+   `CloseHandle`. Shipped as `u64`.
+4. ◐ **Timing.** Command-line lookup: PowerShell `Get-CimInstance` **1.7 s cold, 1.0 s warm**;
+   FFI **0.5–2.7 ms**. Still to do: click to dialog-visible for both pickers.
+5. ☐ **Focus.** Click the folder button in Chrome, and in the exe's own window: does the dialog
+   open in front, with keyboard focus? Repeat with another app focused in between, and with the
+   server elevated and not.
+6. ☐ **Deadline.** Temporarily set the deadline to 5 s; confirm the helper is killed, the dialog
+   disappears, and the route returns `cancelled`.
+7. ☐ **Paths.** A folder with non-ASCII characters (한글), a path over 260 chars, a mapped network
    drive, a OneDrive folder. `FOS_FORCEFILESYSTEM` should grey out Libraries and "This PC".
-8. **Command-line lookup.** `bun run --filter @yaar/server test` for
-   `browser-stale-cleanup.test.ts`; also a Chrome whose `--user-data-dir` contains spaces and
-   non-ASCII.
-9. **Worker URL in all three builds** — dev, lib `dist`, exe (§6).
-10. **WSL** still reaches `tryPowerShell()` and `wslpath` unchanged.
+8. ✅ **Command-line lookup.** `browser-stale-cleanup.test.ts` 13/13; the new
+   `win32-process-command-line.test.ts` covers spaces, Hangul and a >4 KiB command line.
+9. ☐ **Helper argv in both builds** — dev (`[bun, script]`) and exe (`[yaar.exe, --pick-directory]`).
+10. ☐ **WSL** still reaches `tryPowerShell()` and `wslpath` unchanged.
 
 ---
 
 ## 6. Open questions for the Windows discussion
 
-- **Worker file location.** `new URL('./win32/folder-dialog-worker.ts', import.meta.url)` in lib
-  source vs lib `dist` (`.js`) vs the exe bundle, where lib is inlined into the server entry.
-  Options: keep the Worker in `packages/server/src/` next to `exe-bundle-entry.ts` and inject the
-  URL into `pickDirectory({ workerUrl })` — the same "take it as a parameter" shape `@yaar/lib/pdf`
-  uses for `binDir` — or have the exe build pass a define.
 - **`hide-console.ts`.** Move it into `@yaar/lib/win32` alongside the new code, so all Win32 FFI
   lives in one place? It needs no server internals.
 - **Code signing.** The release exe is signed (`release.yml`). FFI into system DLLs needs nothing
-  extra, but confirm SmartScreen/Defender does not flag the new behaviour.
+  extra, but confirm SmartScreen/Defender does not flag the exe re-spawning itself to show a dialog.
 - **Owner window vs `IFileDialogEvents`.** If focus stays unreliable, the next step is an events
   sink (`Advise`, slot 7) implemented with `JSCallback` vtables, which is a large jump in
-  complexity. Try the owner window first.
+  complexity. Try `AllowSetForegroundWindow`, then the owner window, first.
 - **Linux `/proc` change.** Independent of Windows and testable in CI; land it separately rather
   than waiting on this proposal.
+- **Pre-existing Windows test failures.** `packages/lib/src/tests/paths.test.ts` has 4 tests that
+  assert POSIX separators and fail on Windows — unrelated to this proposal, noticed while running it.
