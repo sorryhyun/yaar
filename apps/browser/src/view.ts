@@ -11,9 +11,9 @@ import {
   showScreenshot,
   placeholderText,
   currentUrl,
-  pageTitle,
   activeBrowserId,
 } from './store';
+import { canGoBack, canGoForward, canReload } from './history';
 import {
   liveMode,
   liveStatus,
@@ -73,7 +73,8 @@ function UrlBar() {
         class="y-btn y-btn-sm y-btn-ghost"
         title="Back"
         aria-label="Back"
-        onClick=${() => handleNav('navigate_back')}
+        disabled=${() => !canGoBack()}
+        onClick=${() => void handleNav('navigate_back')}
       >
         ←
       </button>
@@ -81,7 +82,8 @@ function UrlBar() {
         class="y-btn y-btn-sm y-btn-ghost"
         title="Forward"
         aria-label="Forward"
-        onClick=${() => handleNav('navigate_forward')}
+        disabled=${() => !canGoForward()}
+        onClick=${() => void handleNav('navigate_forward')}
       >
         →
       </button>
@@ -96,7 +98,8 @@ function UrlBar() {
         class="y-btn y-btn-sm y-btn-ghost"
         title="Reload"
         aria-label="Reload"
-        onClick=${handleReload}
+        disabled=${() => !canReload()}
+        onClick=${() => void handleReload()}
       >
         ↻
       </button>
@@ -119,7 +122,6 @@ function UrlBar() {
       </button>
       ${ShieldToggle()} ${() => (liveMode() ? QualitySelect() : null)}
       <span class="download-status y-text-xs y-truncate">${() => downloadStatus()}</span>
-      <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
     </div>
   `;
 }

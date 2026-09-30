@@ -86,8 +86,11 @@ but is not YAAR's. `download` is how it becomes a window the user can keep.
 When you receive an interaction:
 
 - `{ event: "user_query", query: "..." }` — the user typed something into the address bar that is **not** an address. A plain URL never reaches you: the app navigates to those itself. So anything arriving here is a request, not a page load — an instruction about the current page, or something to look up.
-- `{ event: "navigate_back" }` or `{ event: "navigate_forward" }` — the user clicked back/forward. Navigation has already happened. Update your understanding.
 - Free-text message — the user is asking you to do something on the current page. Execute the appropriate commands.
+
+The toolbar never wakes you: typing an address, Back, Forward, Reload, switching tabs and the Live toggle all act on the tab silently. Read `currentUrl` / `canGoBack` when you need to know where the page is now.
+
+`navigate_back`, `navigate_forward` and `reload` act on the real tab exactly like the toolbar buttons, and are refused when `canGoBack` / `canGoForward` / `canReload` read false.
 
 ## When to Use relay()
 

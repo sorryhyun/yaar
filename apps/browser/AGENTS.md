@@ -24,6 +24,7 @@ store.ts         display signals (url, title, loading, placeholder, lock)
 endpoints.ts     every /api/browser/... URL, with the iframe token attached
 dom.ts           the shared <img> handle (see "no cycles" below)
 actions.ts       toolbar handlers + the still-screenshot refresh
+history.ts       back/forward/reload on the real tab; canGoBack/canGoForward read from the page
 url.ts           address-vs-phrase parsing (imports nothing)
 sse.ts           the event stream and the 200 ms still-screenshot poll
 schema.ts        zod boundary schema for SSE frames
@@ -41,12 +42,14 @@ live/index.ts    barrel + the live-mode design notes; implementation beside it
   live/ime.ts      the hidden anchor that makes composition possible
 ```
 
-## The address bar does not wake the agent
+## The toolbar does not wake the agent
 
-Typing an address and pressing Enter is a **local** action, start to finish:
-`handleUrlKeydown` navigates the remote tab itself and tells no one. Do not add an
-`app.sendInteraction` for it: it would wake the agent for a page load that has already
-happened.
+Every toolbar control is a **local** action, start to finish: typing an address and
+pressing Enter (`handleUrlKeydown`), Back/Forward (`handleNav`), Reload, the tab strip,
+Live, the shield and download all act on the remote tab and tell no one. Do not add an
+`app.sendInteraction` for any of them: it would start an agent turn for something that
+has already happened. What they change is readable on demand from state (`currentUrl`,
+`canGoBack`, `tabs`, ...).
 
 What decides this is `parseAddress` in `url.ts`: a string it can read as an address is
 navigated locally, and a string it cannot (`what is the weather`, `summarize this
@@ -70,7 +73,8 @@ The import graph is acyclic and should stay that way. Two files exist only to ke
   `live/ime.ts` can `send()` without importing `live/socket.ts`, which imports it.
 
 The one-way edges worth remembering: `live/socket -> {paint, tabs, ime, input, stats,
-fallback}`, `live/input -> live/ime`, `live/tabs -> sse`, `sse -> actions`, `{live/socket,
+fallback}`, `live/input -> live/ime`, `live/tabs -> sse`, `sse -> actions`,
+`{sse, actions, view, protocol} -> history` (which imports only `store`), `{live/socket,
 live/tabs, live/input} -> live/seed`, `session -> {live, sse, actions}`. Never the reverse.
 
 `live/stats.ts` and `live/fallback.ts` both reach `live/context.ts` and never each other:

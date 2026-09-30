@@ -19,9 +19,14 @@ export interface LiveStats {
  * The two levers Chrome's screencast actually has. Named for the link they are
  * meant for, because the spike's remaining open question is whether a phone over
  * Tailscale can be served by ramping these rather than by a real video codec.
+ *
+ * `maxWidth: 0` is uncapped: frames arrive at the remote viewport's full size, which
+ * `syncViewport` sets to the canvas's CSS size. So on `high` only JPEG quality can
+ * still rise; more pixels would need a device scale factor, which neither the
+ * screencast URL nor the `viewport` message carries.
  */
 export const QUALITY_PRESETS = {
-  high: { quality: 70, maxWidth: 0 },
+  high: { quality: 80, maxWidth: 0 },
   medium: { quality: 45, maxWidth: 1024 },
   low: { quality: 30, maxWidth: 800 },
 } as const;

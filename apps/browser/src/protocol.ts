@@ -12,6 +12,7 @@ import * as web from '@bundled/yaar-web';
 import { currentUrl, pageTitle, activeBrowserId, updateUrlBar, clearDisplay } from './store';
 import { refreshScreenshot } from './actions';
 import { liveMode } from './live';
+import { canGoBack, canGoForward, canReload, reloadPage, stepHistory } from './history';
 import {
   adBlockEnabled,
   blockedCount,
@@ -47,6 +48,24 @@ export const browserState = {
   browserId: {
     description: 'Currently connected browser ID',
     get: () => activeBrowserId(),
+  },
+  canGoBack: {
+    description:
+      'False only when the tab\'s own history proves there is no entry behind this page ' +
+      '(the toolbar Back is greyed out then). True can also mean "cannot tell": the page ' +
+      'sees other-origin entries only as a count, not a position.',
+    schema: { type: 'boolean' },
+    get: () => canGoBack(),
+  },
+  canGoForward: {
+    description: 'Like canGoBack, for the entry ahead of this page.',
+    schema: { type: 'boolean' },
+    get: () => canGoForward(),
+  },
+  canReload: {
+    description: 'Whether a page is loaded to reload — false on about:blank.',
+    schema: { type: 'boolean' },
+    get: () => canReload(),
   },
   liveMode: {
     description:
@@ -148,14 +167,22 @@ export const navigationCommands = {
     },
   }),
   navigate_back: defineAppCommand({
-    description: 'Go back in browser history',
+    description:
+      "Go back one entry in the tab's real history. Refused when canGoBack is false.",
     params: { type: 'object', properties: {} },
-    run: async () => web.navigate({ direction: 'back', browserId: await ensureBrowserId() }),
+    run: async () => stepHistory('back', await ensureBrowserId(), true),
   }),
   navigate_forward: defineAppCommand({
-    description: 'Go forward in browser history',
+    description:
+      "Go forward one entry in the tab's real history. Refused when canGoForward is false.",
     params: { type: 'object', properties: {} },
-    run: async () => web.navigate({ direction: 'forward', browserId: await ensureBrowserId() }),
+    run: async () => stepHistory('forward', await ensureBrowserId(), true),
+  }),
+  reload: defineAppCommand({
+    description:
+      'Reload the page in the remote tab (a real reload, not a re-capture). Refused on about:blank.',
+    params: { type: 'object', properties: {} },
+    run: async () => reloadPage(await ensureBrowserId()),
   }),
   scroll: defineAppCommand({
     description: 'Scroll the page',

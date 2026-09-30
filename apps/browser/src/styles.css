@@ -59,23 +59,22 @@
   visibility: hidden;
 }
 
+.url-bar .y-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .url-bar .url-text {
   flex: 1;
   min-width: 6em;
   border-radius: 16px;
 }
 
-.url-bar .title-text {
-  flex-shrink: 0;
-  max-width: 200px;
-}
-
 /*
- * A phone-width window has room for the controls or the title, not both — and the
- * title is the one the URL already stands in for. The download status stays, but
- * truncates instead of holding its full width. The rest is tightening so the controls
- * fit one row at ~355px: the Live button keeps its dot (primary-filled when on, which
- * is the state), and the URL gives up the width a desktop spends on it.
+ * The download status stays at phone width, but truncates instead of holding its full
+ * width. The rest is tightening so the controls fit one row at ~355px: the Live button
+ * keeps its dot (primary-filled when on, which is the state), and the URL gives up the
+ * width a desktop spends on it.
  */
 @media (max-width: 560px) {
   .url-bar {
@@ -97,10 +96,6 @@
 
   .url-bar .quality-select {
     padding-inline: var(--yaar-sp-1);
-  }
-
-  .url-bar .title-text {
-    display: none;
   }
 
   .url-bar .download-status {

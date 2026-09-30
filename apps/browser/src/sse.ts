@@ -12,6 +12,7 @@ import { getScreenshotEl } from './dom';
 import { refreshScreenshot } from './actions';
 import { onNavigated, onPopup } from './adblock';
 import { claimDownload } from './downloads';
+import { resetHistory, watchHistory } from './history';
 import { BrowserEventSchema } from './schema';
 
 type BrowserEvent = z.infer<typeof BrowserEventSchema>;
@@ -110,6 +111,7 @@ function parseFrame(
 export function connectSSE(browserId: string): void {
   disconnectSSE();
   lastVersion = -1;
+  resetHistory();
 
   let sseErrorCount = 0;
   let warnedMalformed = false;
@@ -157,6 +159,7 @@ export function connectSSE(browserId: string): void {
       // The only navigation signal this app gets. `onNavigated` de-duplicates,
       // so the repeated frames of one page load cost one injection.
       onNavigated(data.url);
+      watchHistory(browserId);
     }
     // Live: the screencast paints the new page itself, and a still here would be
     // the second encode the poll above refuses. The navigation the bar was raised

@@ -4,6 +4,7 @@ import { activeBrowserId, setLoading, setShowScreenshot } from './store';
 import { getScreenshotEl } from './dom';
 import { screenshotUrl } from './endpoints';
 import { parseAddress } from './url';
+import { reloadPage, stepHistory } from './history';
 
 /** One wording for every fire-and-forget failure, so the console reads consistently. */
 function logFailure(what: string, err: unknown): void {
@@ -25,20 +26,28 @@ export function refreshScreenshot(fresh = false): void {
   el.src = screenshotUrl(activeBrowserId(), fresh);
 }
 
-/** Navigate back/forward — invoke directly for immediate effect, then notify agent. */
+/**
+ * Move the real tab through its history. Like the address bar, this is local: the agent
+ * is not told, since the move already happened and `currentUrl` / `canGoBack` report it.
+ */
 export async function handleNav(direction: 'navigate_back' | 'navigate_forward'): Promise<void> {
-  const browserId = activeBrowserId();
+  const dir = direction === 'navigate_back' ? 'back' : 'forward';
   try {
-    const dir = direction === 'navigate_back' ? 'back' : 'forward';
-    await navigate({ direction: dir, browserId });
+    const res = await stepHistory(dir, activeBrowserId(), false);
+    if (!res.ok) logFailure(direction, res.error);
   } catch (err) {
     logFailure(direction, err);
   }
-  app?.sendInteraction({ event: direction });
 }
 
-export function handleReload(): void {
-  refreshScreenshot(true);
+/** Reload the real tab. The still poll and the screencast bring the reloaded page back. */
+export async function handleReload(): Promise<void> {
+  try {
+    const res = await reloadPage(activeBrowserId());
+    if (!res.ok) logFailure('reload', res.error);
+  } catch (err) {
+    logFailure('reload', err);
+  }
 }
 
 export function handleUrlFocus(e: FocusEvent): void {
