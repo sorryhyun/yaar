@@ -60,6 +60,11 @@ import {
   type StorageVerb,
 } from './storage-override.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
+import {
+  BUILTIN_STATE,
+  isBuiltinStateKey,
+  readBuiltinState,
+} from '../../features/window/builtin-state.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
 import { getActiveSession, getActivePool } from '../../handlers/utils.js';
 import {
@@ -244,7 +249,10 @@ export const APP_TOOL_DESCRIPTIONS = {
   commandParam: 'Command name to execute.',
   query:
     'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest.',
-  queryParam: 'State key to query (omit for manifest).',
+  queryParam:
+    "State key to query (omit for manifest). Besides the app's own keys, every window " +
+    'answers "__screenshot" (a picture of what it is showing), "__content" (its raw ' +
+    'content) and "__console" (its captured console output).',
 } as const;
 
 /**
@@ -264,6 +272,25 @@ function withLaunchNote(result: VerbResult, appId: string, windowId: string): Ve
       `No window of "${appId}" was open on this monitor, so one was opened: ${windowId}.`,
     ),
   );
+}
+
+/**
+ * `query` of a window built-in (`__screenshot`, `__content`), or null for anything else —
+ * `__console` included, which the injected script answers down the app path.
+ *
+ * The result names the window by the id an agent addresses it by, not its session handle,
+ * since that is the id its `__content` URI is built on.
+ */
+async function queryWindowBuiltin(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  stateKey: string | undefined,
+): Promise<VerbResult | null> {
+  if (!stateKey || !isBuiltinStateKey(stateKey)) return null;
+  const win = windowState.getWindow(windowId);
+  if (!win) return error(`window "${windowId}" not found.`);
+  const rawId = windowState.handleMap.getRawWindowId(win.id);
+  return readBuiltinState(windowState, rawId, win, stateKey);
 }
 
 /**
@@ -632,9 +659,12 @@ export function registerAppAgentTools(server: McpServer): void {
       const target = await resolveTarget(windowId, args.appId);
       if (!target.ok) return error(target.error);
 
-      const result = await handleAppQuery(windowState, target.windowId, {
-        stateKey,
-      });
+      // The window's own keys (`__screenshot`, `__content`) are the OS's to answer, not the
+      // app's — the app has never heard of them. Same builder as the verbs door, reached
+      // after `resolveTarget` so another app's window costs the same `controls` entry.
+      const result =
+        (await queryWindowBuiltin(windowState, target.windowId, stateKey)) ??
+        (await handleAppQuery(windowState, target.windowId, { stateKey }));
       return {
         ...(target.launched ? withLaunchNote(result, args.appId!, target.windowId) : result),
       };
@@ -894,7 +924,16 @@ export function registerAppAgentTools(server: McpServer): void {
       if (!facts.protocol && !facts.skill) {
         return error(`app "${targetAppId}" exposes no protocol and ships no SKILL.md.`);
       }
-      return okJson({ uri: `yaar://apps/${targetAppId}`, appId: targetAppId, ...facts });
+      // The window's own keys ride beside the app's manual, never merged into it — the
+      // verbs door's `builtinState`, so the two describes agree on which keys exist.
+      return okJson({
+        uri: `yaar://apps/${targetAppId}`,
+        appId: targetAppId,
+        ...facts,
+        builtinState: Object.fromEntries(
+          Object.entries(BUILTIN_STATE).map(([key, { description }]) => [key, description]),
+        ),
+      });
     },
   );
 

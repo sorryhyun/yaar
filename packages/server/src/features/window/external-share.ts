@@ -3,7 +3,7 @@
  *
  * The user presses the share button in a window's titlebar; the server mints a capability
  * token on that window's side record (`WindowStateRegistry.shareExternally`) and answers a
- * URL, `/mcp/x/{token}`. Whoever holds the URL connects to it as an ordinary MCP server and
+ * URL, `/mcp/window/{token}`. Whoever holds the URL connects to it as an ordinary MCP server and
  * gets exactly the **app agent's** tools for that window — `describe`, `query`, `command`,
  * `relay` — with the app agent's authority: its own storage tree, the shared commons, what
  * its app.json grants, and cross-app control through `controls`. Nothing else is served.
@@ -26,8 +26,14 @@ import type { LiveSession } from '../../session/live-session.js';
 import { getAgentId, type AgentRole } from '../../agents/agent-context.js';
 import { getActivePool } from '../../handlers/utils.js';
 
-/** Path prefix of a shared window's MCP endpoint. The rest of the path is the token. */
-export const EXTERNAL_MCP_PREFIX = '/mcp/x/';
+/**
+ * Path prefix of a shared window's MCP endpoint. The rest of the path is the token.
+ *
+ * Named for what the token is bound to — one window, not its app: a second window of the
+ * same app is not reachable through it, and closing this one revokes it. Not a
+ * `CORE_SERVERS` name either way: those match `/mcp/{name}` exactly, with no further segment.
+ */
+export const EXTERNAL_MCP_PREFIX = '/mcp/window/';
 
 /** The agent id an outside client's calls run under — what history and the timeline show. */
 export function externalAgentId(windowKey: string): string {

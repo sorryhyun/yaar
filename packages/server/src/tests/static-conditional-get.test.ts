@@ -21,6 +21,7 @@ import {
   fsValidators,
   embeddedValidators,
   staticResponse,
+  servesSpaFallback,
 } from '../http/routes/static.js';
 
 let dir: string;
@@ -199,5 +200,22 @@ describe('embeddedValidators — bundled exe branch', () => {
       v,
     );
     expect(res.status).toBe(304);
+  });
+});
+
+describe('servesSpaFallback', () => {
+  it('gives a desktop route the SPA', () => {
+    expect(servesSpaFallback('/')).toBe(true);
+    expect(servesSpaFallback('/some/client/route')).toBe(true);
+  });
+
+  it('answers a path only a machine asks with a 404, never the desktop', () => {
+    // An MCP client probing for discovery, and a mistyped shared-window URL, used to get
+    // a 200 of index.html — a file that "exists" and will not parse.
+    expect(servesSpaFallback('/.well-known/mcp.json')).toBe(false);
+    expect(servesSpaFallback('/mcp/window')).toBe(false);
+    expect(servesSpaFallback('/mcp/unknown/thing')).toBe(false);
+    expect(servesSpaFallback('/api/nope')).toBe(false);
+    expect(servesSpaFallback('/ws')).toBe(false);
   });
 });

@@ -21,10 +21,10 @@
  *
  * Three of those state keys belong to the *window* rather than to the app inside it —
  * `__content`, `__screenshot`, `__console` (see BUILTIN_STATE). They are what a window
- * with no protocol has to list, and what a bare read of an app window is composed of.
+ * with no protocol has to list, and what a bare read of an app window is composed of. They
+ * live in features/window/builtin-state.ts, since the app agent's `query` answers them too.
  */
 
-import type { SoftKeyboard } from '@yaar/shared';
 import type { ResourceRegistry, ResourceHandler } from './uri-registry.js';
 import {
   ok,
@@ -35,12 +35,19 @@ import {
   prependNote,
   type VerbResult,
 } from '../lib/verb-result.js';
-import { hasLineFilter, applyReadOptionsToValue, type ReadOptions } from '../lib/read-options.js';
-import { getActiveSession, getActiveSessionId, assertUri, requireAction } from './utils.js';
+import type { ReadOptions } from '../lib/read-options.js';
+import { getActiveSession, assertUri, requireAction } from './utils.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowState, WindowStateRegistry } from '../session/window-state.js';
-import { clientAwayNote } from '../session/client-presence.js';
 import { formatWindowFlags } from '../features/window/helpers.js';
+import {
+  BUILTIN_STATE,
+  isBuiltinStateKey,
+  builtinStateFor,
+  describeKeyboard,
+  captureWindow,
+  readBuiltinState,
+} from '../features/window/builtin-state.js';
 import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage, handleGeometry } from '../features/window/manage.js';
@@ -69,10 +76,8 @@ import {
   handleAppSubscribe,
 } from '../features/window/subscribe.js';
 import { getMonitorId, requireMonitorId } from '../agents/agent-context.js';
-import { actionEmitter } from '../session/action-emitter.js';
 import { genId } from '@yaar/lib/ids';
 import { captureForModel } from '@yaar/lib/image';
-import { valueOf } from '../session/pending-store.js';
 import { defineActions } from './define-actions.js';
 import { createLogger } from '../observability/log.js';
 
@@ -124,56 +129,6 @@ function nonAppActions(names: readonly string[]): string[] {
   return names.filter((n) => n !== 'create' && !n.startsWith('app_') && n !== 'message');
 }
 
-/**
- * The state keys a *window* answers for, as opposed to the ones the app inside it answers.
- *
- * `__console` is the precedent: a key that has always been addressable, answered without the
- * app's involvement, and documented nowhere but in one param description. Making the set
- * explicit is what lets `list` on a window with no protocol return what it *has* instead of an
- * error about what it lacks — a markdown window is not a failed collection, it is a window
- * whose only addressable value is its content.
- *
- * `__content` and `__screenshot` are answered here, from the registry and from a capture round
- * trip; `__console` is listed here and dispatched to the app path, since the injected
- * app-protocol script is what holds the buffer. The `__` prefix is reserved for this: an app
- * declaring one of these names is shadowed, not merged, because a window's own content is not
- * something the app inside it gets to redefine.
- */
-const BUILTIN_STATE = {
-  __content: {
-    description:
-      "This window's content, exactly as the registry holds it — no capture, no round trip " +
-      'to the app. This is the field a bare read omits when it returns a screenshot instead.',
-    iframeOnly: false,
-  },
-  __screenshot: {
-    description:
-      'A capture of what this window is showing right now. Iframe windows only — it is what ' +
-      'a bare read of one returns alongside its metadata.',
-    iframeOnly: true,
-  },
-  __console: {
-    description:
-      "The iframe's captured console output. Answered by the injected app-protocol script, so " +
-      'it works before — and without — the app ever registering.',
-    iframeOnly: true,
-  },
-} as const;
-
-type BuiltinStateKey = keyof typeof BUILTIN_STATE;
-
-function isBuiltinStateKey(key: string): key is BuiltinStateKey {
-  return Object.prototype.hasOwnProperty.call(BUILTIN_STATE, key);
-}
-
-/** The built-in keys that apply to one window — two of the three need an iframe to answer. */
-function builtinStateFor(win: WindowState): BuiltinStateKey[] {
-  const isIframe = win.content.renderer === 'iframe';
-  return (Object.keys(BUILTIN_STATE) as BuiltinStateKey[]).filter(
-    (key) => isIframe || !BUILTIN_STATE[key].iframeOnly,
-  );
-}
-
 /** The built-ins as `list` links — the same shape a protocol state key gets. */
 function builtinLinks(windowId: string, win: WindowState) {
   return builtinStateFor(win).map((key) => ({
@@ -207,40 +162,6 @@ function badSubPath(resolved: ResolvedWindow, subPath: string): VerbResult {
       `yaar://windows/${resolved.windowId}/commands/{key} or yaar://windows/${resolved.windowId}/history; ` +
       `list("yaar://windows/${resolved.windowId}") ` +
       'shows both.',
-  );
-}
-
-/**
- * The sentence that has to sit next to a degraded screenshot.
- *
- * A `__screenshot` read answers with the image alone, so there is no JSON field to
- * hang the caveat on — and an image that quietly omits a region is believed. The
- * text block leads the response for the same reason.
- */
-function describeCaptureDegraded(notes: string[]): string {
-  return (
-    'This screenshot is incomplete — the capture succeeded but knows it left ' +
-    'content out:\n' +
-    notes.map((n) => `- ${n}`).join('\n') +
-    '\nDo not read a blank region here as "the app rendered nothing there". An app ' +
-    'that paints imperatively can supply its own image via defineApp({ onCapture }).'
-  );
-}
-
-/**
- * The sentence that has to sit next to a screenshot taken with the soft keyboard up.
- *
- * On a phone the window is resized to fit above the keyboard, so its picture is squished —
- * and a squished picture of an app, with nothing saying why, is read as that app's layout
- * being broken. The agent that reads it then "fixes" CSS that was fine (#125).
- */
-function describeKeyboard(keyboard: SoftKeyboard): string {
-  const { visible, full } = keyboard;
-  return (
-    `The phone's soft keyboard was open when this was captured: only ${visible.w}×${visible.h} ` +
-    `of its ${full.w}×${full.h} screen was visible above it, and the window was shrunk to ` +
-    'fit. A squished or cut-off layout here is the keyboard, not a layout bug — do not ' +
-    'change the app for it.'
   );
 }
 
@@ -355,113 +276,6 @@ export function registerWindowHandlers(
   });
 
   /**
-   * Ask the frontend for a capture of this window.
-   *
-   * Addressed by the *window's* monitor, never the caller's: an iframe-SDK read (agentId
-   * `iframe:*`, e.g. devtools' viewPreview) carries no monitor of its own, so a capture sent
-   * out on the caller's monitor goes unaddressed and its feedback never comes back — which
-   * left the one tool that builds a window as the only tool that could not look at it.
-   *
-   * A failure names its cause: a capture that failed because the canvas was tainted is
-   * unfixable by retrying, while one that timed out may well succeed on the next call.
-   * Reported as the same empty result, both looked like "it may not have painted yet".
-   */
-  async function captureWindow(win: WindowState): Promise<{
-    imageData?: string;
-    captureFailure?: string;
-    captureError?: string;
-    captureDegraded?: string[];
-    keyboard?: SoftKeyboard;
-  }> {
-    const outcome = await actionEmitter.emitActionWithFeedback(
-      { type: 'window.capture', windowId: win.id },
-      5000,
-      undefined,
-      getWindowState().getMonitorForWindow(win.id),
-    );
-    const feedback = valueOf(outcome);
-    if (feedback?.success && feedback.imageData) {
-      // A capture that succeeded while omitting content says so here, or the
-      // omission reaches the reader as an ordinary picture. See
-      // RenderingFeedbackEvent.captureDegraded.
-      const degraded = feedback.captureDegraded;
-      return {
-        imageData: feedback.imageData,
-        ...(degraded && degraded.length > 0 ? { captureDegraded: degraded } : {}),
-        ...(feedback.keyboard ? { keyboard: feedback.keyboard } : {}),
-      };
-    }
-    if (!feedback) return { captureFailure: 'no-response' };
-    return { captureFailure: feedback.captureFailure, captureError: feedback.error };
-  }
-
-  /**
-   * `read` of a built-in state key.
-   *
-   * Returns null only for `__console`, whose buffer lives in the injected script — that one
-   * falls through to the app path like any declared key. The other two are answered here, and
-   * deliberately *before* the app is consulted: a markdown window has no app to ask, and an
-   * iframe whose app never registered would otherwise wait out the readiness deadline to be
-   * told it cannot answer for a value the OS was holding all along.
-   */
-  async function readBuiltinState(
-    windowId: string,
-    win: WindowState,
-    key: BuiltinStateKey,
-    readOptions?: ReadOptions,
-  ): Promise<VerbResult | null> {
-    if (!builtinStateFor(win).includes(key)) {
-      return error(
-        `"${key}" needs an iframe; window "${windowId}" is a ${win.content.renderer} window. ` +
-          `list("yaar://windows/${windowId}") shows what this one has.`,
-      );
-    }
-
-    if (key === '__content') {
-      const uri = buildWindowResourceUri(windowId, 'state', key);
-      // Filtered on the content alone — a markdown window's text, a table's rows — since
-      // the `{ renderer, content }` wrapper is what a line filter would otherwise match.
-      if (hasLineFilter(readOptions)) {
-        const text = applyReadOptionsToValue(win.content.data, uri, readOptions);
-        return { content: [{ type: 'text', text }], readFiltered: true };
-      }
-      return okJsonResource(uri, {
-        renderer: win.content.renderer,
-        content: win.content.data,
-      });
-    }
-
-    if (key === '__screenshot') {
-      const askedAt = Date.now();
-      const { imageData, captureFailure, captureError, captureDegraded, keyboard } =
-        await captureWindow(win);
-      if (!imageData) {
-        // A capture is a round trip into the page, so "no image" can equally mean the
-        // page was not running. Say which, where the desktop told us — and pass the
-        // desktop's own sentence through: it is the only record of why, since the
-        // feedback frame itself is not logged.
-        const away = clientAwayNote(getActiveSessionId(), askedAt);
-        return error(
-          `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.` +
-            (captureError ? ` ${captureError}` : '') +
-            (away ? ` ${away}` : ''),
-        );
-      }
-      const image = { type: 'image' as const, ...(await captureForModel(imageData)) };
-      // The caveats lead, because they change how the image below should be read.
-      const caveats = [
-        ...(captureDegraded ? [describeCaptureDegraded(captureDegraded)] : []),
-        ...(keyboard ? [describeKeyboard(keyboard)] : []),
-      ];
-      return {
-        content: [...caveats.map((text) => ({ type: 'text' as const, text })), image],
-      };
-    }
-
-    return null;
-  }
-
-  /**
    * One door for `app_query` and for a `state/{key}` read.
    *
    * The invoke schema calls the two equivalent, and they are — so a built-in that answered on
@@ -477,7 +291,13 @@ export function registerWindowHandlers(
     if (isBuiltinStateKey(stateKey)) {
       const win = getWindowState().getWindow(windowId);
       if (!win) return error(`Window "${windowId}" not found.`);
-      const builtin = await readBuiltinState(windowId, win, stateKey, readOptions);
+      const builtin = await readBuiltinState(
+        getWindowState(),
+        windowId,
+        win,
+        stateKey,
+        readOptions,
+      );
       if (builtin) return builtin;
     }
     return handleAppQuery(getWindowState(), windowId, payload, readOptions);
@@ -1071,7 +891,7 @@ export function registerWindowHandlers(
       // addressable by nothing. `__content` is that half, and this says where it went.
       if (win.content.renderer === 'iframe') {
         const { imageData, captureFailure, captureError, captureDegraded, keyboard } =
-          await captureWindow(win);
+          await captureWindow(getWindowState(), win);
         if (imageData) {
           const { content: _content, ...infoWithoutContent } = windowInfo;
           return {

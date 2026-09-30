@@ -212,6 +212,19 @@ async function serveEmbeddedAsset(req: Request, filePath: string, urlPath: strin
 
 // ── Main handler ─────────────────────────────────────────────────────
 
+/**
+ * Whether an unmatched path gets the desktop's index.html (the SPA fallback).
+ *
+ * Not for paths a *machine* asks: `/api` and `/ws` are the server's, `/mcp/` holds MCP
+ * endpoints, and `/.well-known/` is where clients look for discovery documents. A 200 of
+ * HTML there reads as "the file exists but will not parse" — an MCP client probing
+ * `/.well-known/mcp.json`, or one with a mistyped shared-window URL, got the desktop
+ * instead of a 404.
+ */
+export function servesSpaFallback(pathname: string): boolean {
+  return !['/api', '/ws', '/mcp/', '/.well-known/'].some((prefix) => pathname.startsWith(prefix));
+}
+
 export async function handleStaticRoutes(req: Request, url: URL): Promise<Response | null> {
   // Try embedded assets first when bundled
   if (IS_BUNDLED_EXE) {
@@ -224,8 +237,7 @@ export async function handleStaticRoutes(req: Request, url: URL): Promise<Respon
         return serveEmbeddedAsset(req, embeddedPath, reqPath);
       }
 
-      // SPA fallback: serve index.html for non-API/non-WS routes
-      if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/ws')) {
+      if (servesSpaFallback(url.pathname)) {
         const indexPath = assets.get('/index.html');
         if (indexPath) {
           return serveEmbeddedAsset(req, indexPath, '/index.html');
@@ -250,8 +262,7 @@ export async function handleStaticRoutes(req: Request, url: URL): Promise<Respon
     return staticResponse(req, file, staticPath, fsValidators(file));
   }
 
-  // SPA fallback: serve index.html for non-API/non-WS routes
-  if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/ws')) {
+  if (servesSpaFallback(url.pathname)) {
     const indexPath = join(FRONTEND_DIST, 'index.html');
     const indexFile = Bun.file(indexPath);
     if (await indexFile.exists()) {

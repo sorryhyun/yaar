@@ -4,7 +4,7 @@
  * GET  /api/window-share?windowId=…&sessionId=…  — `{ shared, path?, localUrl? }`
  * POST /api/window-share  `{ windowId, sessionId?, shared }` — share or unshare; same answer
  *
- * `path` is `/mcp/x/{token}`: the credential itself, answered only to the tab that asks.
+ * `path` is `/mcp/window/{token}`: the credential itself, answered only to the tab that asks.
  * `localUrl` is that path on the plain loopback socket, which is what a local agent should
  * be handed. The desktop's own origin is the wrong base: on the local TLS socket
  * (`https://localhost:8443`, http/local-tls.ts) it names a self-signed certificate that

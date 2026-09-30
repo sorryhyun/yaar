@@ -324,7 +324,7 @@ function createFetchHandlerInner() {
       }
     }
 
-    // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/apps, /mcp/basic, ...)
+    // MCP endpoints for tool calls (/mcp/system, /mcp/verbs, /mcp/app, ... — CORE_SERVERS)
     const mcpMatch = url.pathname.match(/^\/mcp\/(\w+)$/);
     if (mcpMatch && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
       const serverName = mcpMatch[1] as McpServerName;

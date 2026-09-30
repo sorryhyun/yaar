@@ -1,6 +1,6 @@
 # App MCP: a window, shared by URL
 
-**Source:** `packages/server/src/features/window/external-share.ts`, `packages/server/src/mcp/server.ts` (`handleExternalMcpRequest`), `packages/server/src/http/routes/window-share.ts`, `packages/frontend/src/lib/windowShare.ts`
+**Source:** `packages/server/src/features/window/external-share.ts`, `packages/server/src/mcp/server.ts` (`handleExternalMcpRequest`), `packages/server/src/mcp/external-help.ts` (the GET page), `packages/server/src/http/routes/window-share.ts`, `packages/frontend/src/lib/windowShare.ts`
 
 An agent outside YAAR — a Claude Code session in some repo, a Codex thread — can drive one
 YAAR window the user shared with it. The user presses the wifi button in the window's
@@ -8,12 +8,17 @@ titlebar, the URL lands on the clipboard, and the user pastes it wherever the ou
 takes an MCP server:
 
 ```
-http://127.0.0.1:8000/mcp/x/{token}
+http://127.0.0.1:8000/mcp/window/{token}
 ```
 
 That URL is an ordinary MCP endpoint (Streamable HTTP, revision 2026-07-28). What it serves
 is the **window's app agent**: the same tools, the same authority, pointed at that one
-window.
+window. The path says `window` because that is what the token is bound to — one window, not
+its app.
+
+Fetched with GET (a browser, or an agent probing it with curl), the URL describes itself: which
+window and app it is bound to, the revision, the `claude mcp add` line, the headers and `_meta`
+envelope a raw request needs with a working curl, the tool list, and how the URL is revoked.
 
 This is a rough first cut of [the proposal](../proposals/external_window_access_proposal.md),
 and it deliberately takes a smaller path than the proposal describes (see the last section).
@@ -47,6 +52,7 @@ holds, and nothing needed a new access tier:
 | Reaches | Why |
 |---|---|
 | The app protocol (`query` / `command` / `describe`) | the window in context |
+| The window's own `__screenshot` / `__content` / `__console` (`query`) | the window in context — the same builders as `read('yaar://windows/{id}/state/…')` |
 | The app's own storage tree and the commons (`storage:*`, `storage/…`) | built into the app tools for every app |
 | Shared storage past the commons | only what the app's `app.json` grants |
 | Other apps | only what the app's `controls` names |
@@ -66,9 +72,11 @@ titlebar click ──POST /api/window-share──▶ setWindowShared()          
             ◀── { path, localUrl } ──────────┘
 clipboard ← localUrl (or the remote server URL + path in remote mode)
 
-outside agent ──POST /mcp/x/{token}──▶ handleExternalMcpRequest()
+outside agent ──POST /mcp/window/{token}──▶ handleExternalMcpRequest()
                                          ├─ resolveExternalShare(token) → { sessionId, monitorId, windowId, role: 'app' }
                                          └─ runWithAgentContext(...) → app + messaging tools → app protocol → the iframe
+                                                                                  └─ __screenshot → window.capture → the desktop
+anyone ──GET /mcp/window/{token}──▶ the self-describing page (markdown; `Accept: text/event-stream` still 405)
 ```
 
 Reloads and reconnects get the shared set in the `SNAPSHOT` (`sharedWindows`), so the lit
@@ -80,7 +88,7 @@ tab that pressed the button ever sees it.
 - **The URL is built on the plain loopback socket, never `location.origin`.** A desktop
   opened on the local TLS socket (`https://localhost:8443`) would hand out a URL whose
   self-signed certificate Node, Bun, and therefore Claude Code refuse before sending a byte.
-  The route answers `localUrl` (`http://127.0.0.1:{PORT}/mcp/x/…`); a remote desktop uses its
+  The route answers `localUrl` (`http://127.0.0.1:{PORT}/mcp/window/…`); a remote desktop uses its
   remote server URL, which carries a real certificate.
 - **Current Claude Code needs no flags.** 2.1.285 negotiated 2026-07-28 on its own with
   `--mcp-config '{"type":"http","url":…}'`, with and without `MCP_SDK_GENERATION` /
@@ -93,6 +101,19 @@ tab that pressed the button ever sees it.
 - **A window needs a page.** The app's state lives in its iframe, so a desktop tab (or the
   companion tab) has to be hosting it; otherwise commands time out like any app agent's would.
 - **App windows only**, and the button is hidden on phones for now.
+- **The window's own keys are the OS's, not the app's.** `__screenshot` and `__content` are
+  answered by `features/window/builtin-state.ts` for both doors — the verbs door's `read` and
+  the app agent's `query`. `query` used to hand every key to the iframe, which has never heard
+  of them, so the app agent (and any outside agent borrowing it) could drive a window it could
+  not look at. The `query` tool's parameter description names them, since an outside agent
+  never sees the app agent's system prompt.
+- **The GET page is measured, not recalled.** Every stateless POST needs
+  `Content-Type: application/json`, an `Mcp-Method` header (plus `Mcp-Name` on `tools/call`),
+  and a `_meta` with the protocol version and client capabilities; `Accept` is not checked.
+  The page's tool list is asked of the endpoint itself, so it cannot drift from what is served.
+- **Unmatched `/mcp/*` and `/.well-known/*` paths answer 404**, not the desktop's SPA
+  fallback: a client probing `/.well-known/mcp.json`, or holding a mistyped share URL, used to
+  get a 200 of HTML (`servesSpaFallback` in `http/routes/static.ts`).
 
 ## Where this departs from the proposal
 

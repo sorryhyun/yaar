@@ -53,6 +53,7 @@ import { registerSubAgentTools } from './sub-agent/index.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 import { createLogger } from '../observability/log.js';
 import { resolveExternalShare } from '../features/window/external-share.js';
+import { envelope, renderSharedWindowHelp, type SharedWindowHelp } from './external-help.js';
 
 const log = createLogger('MCP');
 
@@ -301,7 +302,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
 }
 
 /**
- * Serve one MCP request from a shared window's capability URL (`/mcp/x/{token}`).
+ * Serve one MCP request from a shared window's capability URL (`/mcp/window/{token}`).
  *
  * The token is the whole credential: no bearer, no agent token. It resolves to the window
  * the user shared, and the request runs in that window's app-agent context — the tools
@@ -321,9 +322,62 @@ export async function handleExternalMcpRequest(req: Request, token: string): Pro
       { status: 404 },
     );
   }
+  // A GET that is not asking for an event stream is someone reading the URL — a person in a
+  // browser, an agent probing it with curl. Answer with how to use it rather than a 405.
+  if (req.method === 'GET' && !(req.headers.get('accept') ?? '').includes('text/event-stream')) {
+    return runWithAgentContext(share, () => describeSharedWindow(req, share.windowId));
+  }
   return runWithAgentContext(share, () =>
     serveStateless(req, EXTERNAL_LABEL, getExternalHandler()),
   );
+}
+
+/**
+ * The GET page of a shared window's URL (`mcp/external-help.ts`).
+ *
+ * The tool list is asked of the endpoint itself, in the share's context, so the page lists
+ * exactly what a client connecting to this URL would be served — not a second copy of it.
+ */
+async function describeSharedWindow(req: Request, windowKey: string): Promise<Response> {
+  const url = new URL(req.url);
+  url.search = '';
+  url.hash = '';
+  const win = getActiveSession().windowState.getWindow(windowKey);
+
+  const body = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/list',
+    params: { _meta: envelope() },
+  };
+  const listed = await getExternalHandler().fetch(
+    new Request(url.href, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'mcp-method': 'tools/list' },
+      body: JSON.stringify(body),
+    }),
+    { parsedBody: body },
+  );
+  const tools =
+    ((await listed.json().catch(() => null)) as { result?: { tools?: SharedWindowHelp['tools'] } })
+      ?.result?.tools ?? [];
+
+  const text = renderSharedWindowHelp({
+    url: url.href,
+    appId: win?.appId ?? 'app',
+    title: win?.title || windowKey,
+    tools,
+  });
+  // A browser asking for HTML is shown plain text: `text/markdown` is downloaded by some.
+  const wantsHtml = (req.headers.get('accept') ?? '').includes('text/html');
+  return new Response(text, {
+    headers: {
+      'content-type': `${wantsHtml ? 'text/plain' : 'text/markdown'}; charset=utf-8`,
+      // The page names the credential it was fetched with.
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    },
+  });
 }
 
 /**
