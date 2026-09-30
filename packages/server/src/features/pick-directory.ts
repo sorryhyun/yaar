@@ -10,7 +10,7 @@
  * The deadline is `MAX_REQUEST_DEADLINE_MS`, so the dialog closes before the HTTP transport
  * gives up on the request (`config/deadlines.ts`).
  */
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { pickDirectory } from '@yaar/lib/pick-directory';
 import { IS_BUNDLED_EXE } from '../config/env.js';
 import { MAX_REQUEST_DEADLINE_MS } from '../config/deadlines.js';
@@ -19,7 +19,8 @@ export const PICK_DIRECTORY_FLAG = '--pick-directory';
 
 function folderDialogHelperArgv(): string[] {
   if (IS_BUNDLED_EXE) return [process.execPath, PICK_DIRECTORY_FLAG];
-  return [process.execPath, fileURLToPath(new URL('../folder-dialog-helper.ts', import.meta.url))];
+  // import.meta.dir, not a converted import.meta.url: see bundled-exe-module-paths.test.ts.
+  return [process.execPath, join(import.meta.dir, '..', 'folder-dialog-helper.ts')];
 }
 
 export function pickHostDirectory(): Promise<string | null> {
