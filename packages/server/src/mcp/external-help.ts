@@ -8,8 +8,9 @@
  * round trip, in markdown, which a browser shows and a model reads.
  *
  * The raw-request section is written from what the stateless handler actually enforces
- * (measured against `createMcpHandler`, SDK 2.0): `Content-Type: application/json`,
- * `Mcp-Method` on every request and `Mcp-Name` on `tools/call`, and a `_meta` carrying the
+ * (measured against `createMcpHandler`, SDK 2.2): `Content-Type: application/json`,
+ * `MCP-Protocol-Version` and `Mcp-Method` on every request (SDK 2.1 began refusing a missing
+ * `MCP-Protocol-Version`) and `Mcp-Name` on `tools/call`, and a `_meta` carrying the
  * protocol version and client capabilities. `Accept` is not checked. The same list, run
  * against one POST, is {@link missingFromRawRequest}: a refused request is told every gap at
  * once and pointed back here.
@@ -97,17 +98,20 @@ export function renderSharedWindowHelp({ url, appId, title, tools }: SharedWindo
     'Every request is a standalone POST carrying:',
     '',
     '- `Content-Type: application/json`',
+    `- \`MCP-Protocol-Version: ${MCP_REVISION}\``,
     '- `Mcp-Method: <the JSON-RPC method>`, and `Mcp-Name: <tool name>` on `tools/call`',
     `- \`params._meta\` with \`"${PROTOCOL_VERSION_META_KEY}": "${MCP_REVISION}"\` and ` +
       `\`"${CLIENT_CAPABILITIES_META_KEY}"\` (\`{}\` will do)`,
     '',
     '```sh',
     `curl -s ${url} \\`,
-    `  -H 'Content-Type: application/json' -H 'Mcp-Method: tools/list' \\`,
+    `  -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: ${MCP_REVISION}' \\`,
+    `  -H 'Mcp-Method: tools/list' \\`,
     `  -d ${quoteBody(listBody)}`,
     '',
     `curl -s ${url} \\`,
-    `  -H 'Content-Type: application/json' -H 'Mcp-Method: tools/call' -H 'Mcp-Name: describe' \\`,
+    `  -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: ${MCP_REVISION}' \\`,
+    `  -H 'Mcp-Method: tools/call' -H 'Mcp-Name: describe' \\`,
     `  -d ${quoteBody(describeBody)}`,
     '```',
     '',
@@ -131,7 +135,7 @@ export function renderSharedWindowHelp({ url, appId, title, tools }: SharedWindo
  *
  * The handler refuses one thing per round trip, and not in the order a person fixes them:
  * a body without `_meta` is classified as the 2025 era and refused with advice about CLI
- * opt-in gates; then each envelope key, then `Mcp-Method`, then `Mcp-Name`. An outside
+ * opt-in gates; then each envelope key, then each standard header. An outside
  * agent writing requests by hand measured four 400s before its first answer. This names
  * every gap in one answer, and the refusal points at the GET page with working examples.
  *
@@ -153,6 +157,14 @@ export function missingFromRawRequest(headers: Headers, body: unknown): string[]
 
   if (!(headers.get('content-type') ?? '').includes('application/json')) {
     missing.push('header `Content-Type: application/json`');
+  }
+  // Required on every request POST; a notification is dispatched without it.
+  if (!method.startsWith('notifications/')) {
+    const versionHeader = headers.get('mcp-protocol-version');
+    if (!versionHeader) missing.push(`header \`MCP-Protocol-Version: ${MCP_REVISION}\``);
+    else if (versionHeader !== MCP_REVISION) {
+      missing.push(`header \`MCP-Protocol-Version: ${MCP_REVISION}\` — it says "${versionHeader}"`);
+    }
   }
   const methodHeader = headers.get('mcp-method');
   if (!methodHeader) missing.push(`header \`Mcp-Method: ${method}\``);

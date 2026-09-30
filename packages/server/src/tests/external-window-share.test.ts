@@ -396,6 +396,7 @@ describe('/mcp/window/{token}', () => {
       expect(page).toContain('`notes` app');
       expect(page).toContain('2026-07-28');
       expect(page).toContain('Mcp-Method');
+      expect(page).toContain("-H 'MCP-Protocol-Version: 2026-07-28'");
       expect(page).toContain('claude mcp add --transport http yaar-notes http://127.0.0.1:');
       expect(page).toContain(`${EXTERNAL_MCP_PREFIX}${token}`);
       // The tool list is the endpoint's own, not a copy.
@@ -428,7 +429,11 @@ describe('/mcp/window/{token}', () => {
       try {
         const res = await fetch(`http://127.0.0.1:${server.port}${EXTERNAL_MCP_PREFIX}${token}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'mcp-method': 'tools/list' },
+          headers: {
+            'content-type': 'application/json',
+            'mcp-protocol-version': '2026-07-28',
+            'mcp-method': 'tools/list',
+          },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,
@@ -471,8 +476,9 @@ describe('/mcp/window/{token}', () => {
         };
         expect(id).toBe(7);
         expect(error.data.guide).toBe(url);
-        expect(error.data.missing).toHaveLength(4);
+        expect(error.data.missing).toHaveLength(5);
         for (const needed of [
+          'MCP-Protocol-Version: 2026-07-28',
           'Mcp-Method: tools/call',
           'Mcp-Name: describe',
           'io.modelcontextprotocol/protocolVersion',
@@ -487,7 +493,11 @@ describe('/mcp/window/{token}', () => {
 
         // Doing exactly what that one answer said is enough.
         const fixed = await post(
-          { 'mcp-method': 'tools/call', 'mcp-name': 'describe' },
+          {
+            'mcp-protocol-version': '2026-07-28',
+            'mcp-method': 'tools/call',
+            'mcp-name': 'describe',
+          },
           {
             ...bare,
             params: {

@@ -107,8 +107,11 @@ tab that pressed the button ever sees it.
   not look at. The `query` tool's parameter description names them, since an outside agent
   never sees the app agent's system prompt.
 - **The GET page is measured, not recalled.** Every stateless POST needs
-  `Content-Type: application/json`, an `Mcp-Method` header (plus `Mcp-Name` on `tools/call`),
-  and a `_meta` with the protocol version and client capabilities; `Accept` is not checked.
+  `Content-Type: application/json`, `MCP-Protocol-Version` and `Mcp-Method` headers (plus
+  `Mcp-Name` on `tools/call`), and a `_meta` with the protocol version and client
+  capabilities; `Accept` is not checked. SDK 2.1 added the `MCP-Protocol-Version`
+  requirement; the page's own internal `tools/list` must send it too, or the
+  handler's 400 is swallowed and the page lists no tools.
   The page's tool list is asked of the endpoint itself, so it cannot drift from what is served.
 - **A malformed POST is refused once, completely.** `serveStateless` takes a `preflight`; this
   door's is `missingFromRawRequest`, the GET page's requirements run against the request, so a

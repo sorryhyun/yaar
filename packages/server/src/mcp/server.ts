@@ -55,6 +55,7 @@ import { createLogger } from '../observability/log.js';
 import { resolveExternalShare } from '../features/window/external-share.js';
 import {
   envelope,
+  MCP_REVISION,
   missingFromRawRequest,
   refuseIncomplete,
   renderSharedWindowHelp,
@@ -380,7 +381,11 @@ async function describeSharedWindow(req: Request, windowKey: string): Promise<Re
   const listed = await getExternalHandler().fetch(
     new Request(url.href, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'mcp-method': 'tools/list' },
+      headers: {
+        'content-type': 'application/json',
+        'mcp-protocol-version': MCP_REVISION,
+        'mcp-method': 'tools/list',
+      },
       body: JSON.stringify(body),
     }),
     { parsedBody: body },
