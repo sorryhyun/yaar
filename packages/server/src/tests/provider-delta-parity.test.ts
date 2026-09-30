@@ -106,6 +106,18 @@ describe('provider delta parity — Codex', () => {
   it('reports an interrupted or failed turn as an error, not a clean complete', () => {
     expect(mapNotification('turn/completed', { turn: { status: 'interrupted' } })).toMatchObject({
       type: 'error',
+      error: 'Turn was interrupted',
+      errorCode: 'interrupted',
+    });
+    // An interrupted turn that says why keeps the `interrupted` code but reads the reason.
+    expect(
+      mapNotification('turn/completed', {
+        turn: { status: 'interrupted', error: { codexErrorInfo: 'tooManyDenials', message: '' } },
+      }),
+    ).toEqual({
+      type: 'error',
+      error: 'The turn was stopped after too many denied actions.',
+      errorCode: 'interrupted',
     });
     // `toMatchObject`, not `toEqual`: the mapper also stamps an `errorCode` off
     // the failure's typed `codexErrorInfo` (see `codex/errors.ts`). What this row

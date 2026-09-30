@@ -295,7 +295,7 @@ describe('codex model catalog rewrite', () => {
       JSON.stringify({
         models: [
           {
-            slug: 'gpt-5.6-terra',
+            slug: 'gpt-6-luna',
             tool_mode: 'code_mode_only',
             multi_agent_version: 'v2',
             apply_patch_tool_type: 'freeform',

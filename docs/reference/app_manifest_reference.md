@@ -64,7 +64,7 @@ in a checkout is picked up without a restart.
 
 | Field | Type | When absent | Read by / effect |
 |---|---|---|---|
-| `agentType` | `string` | Sonnet tier | The **model** the app agent runs on: `"haiku"`, `"sonnet"`, `"opus"`, or any full model id. Under Codex, `opus` maps to `gpt-5.6-sol`, `sonnet` and `haiku` to `gpt-5.6-terra`, and an unknown id falls back to the Codex default. `FABLE=1` pins every app agent to Opus whatever this says (`agents/profiles/model-tiers.ts`) |
+| `agentType` | `string` | Sonnet tier | The **model** the app agent runs on: `"haiku"`, `"sonnet"`, `"opus"`, or any full model id. Under Codex, `opus` maps to `gpt-6.1-sol`, `sonnet` and `haiku` to `gpt-6-luna`, and an unknown id falls back to the Codex default. `FABLE=1` pins every app agent to Opus whatever this says (`agents/profiles/model-tiers.ts`) |
 | `agent` | `{ prompt?, hint?, skill? }` (string paths) | `agent/prompt.md`, `agent/hint.md`, `agent/SKILL.md` | Where the agent docs live, relative to the app folder. An absolute path, or one containing `..`, is ignored and the default is used. Clone and deploy copy the docs from these paths. Read through `agentDocPaths()` in `discovery.ts`, not `normalizeManifest` |
 | `messaging` | `"all"` | Monitor and user only | Gives the app agent `direct_message` to other apps' agents and windows |
 | `controls` | `(string \| { appId, commands?, minimized? })[]` | None | **Bundled apps only**; on an installed app it is dropped. Lists other apps this app's agent may `describe`/`query`/`command` by passing their `appId`. `commands` restricts the target to the named commands (omitted means all). If the target has no window on the caller's monitor, one is opened. `minimized: true` opens it minimized |

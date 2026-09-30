@@ -115,8 +115,8 @@ signature macOS records permission grants against.
 whatever its `agentType`, and every sub-agent, including one spawned with an explicit `model`.
 Off, the usual tiers apply (monitor and session agent Opus, apps Sonnet unless declared).
 The flag is read per turn (`isFableMode()`). Under `PROVIDER=codex` Fable maps to `gpt-6-astra`
-and Opus to `gpt-5.6-sol`, so the monitor agent runs on Astra and app and sub-agents move from
-Terra to Sol.
+and Opus to `gpt-6.1-sol`, so the monitor agent runs on Astra and app and sub-agents move from
+Luna to Sol.
 
 **Source:** `packages/server/src/agents/profiles/model-tiers.ts`, `packages/server/src/agents/profiles/turn-options.ts`
 

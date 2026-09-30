@@ -164,7 +164,10 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     case 'turn/completed': {
       const p = params as TurnCompletedNotification;
       if (p.turn?.status === 'interrupted') {
-        return { type: 'error', error: 'Turn was interrupted', errorCode: 'interrupted' };
+        // Since 0.159 an interrupted turn can carry a `TurnError` saying why (e.g.
+        // `tooManyDenials`). Keep the `interrupted` code; only the sentence gains the reason.
+        const { text } = describeTurnError(p.turn.error, 'Turn was interrupted');
+        return { type: 'error', error: text, errorCode: 'interrupted' };
       }
       if (p.turn?.status === 'failed') {
         // The typed `codexErrorInfo` and `additionalDetails` beside `message`

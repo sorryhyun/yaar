@@ -32,7 +32,7 @@ export function subordinateModel(model: string | undefined): string | undefined 
 /** Resolve an app's `agentType` to the model its agent runs on. */
 export function resolveAgentModel(agentType?: string): string | undefined {
   // App agents default to the Sonnet capability tier. Keep that default explicit
-  // so Codex can translate it to Terra explicitly instead of omitting `model`
+  // so Codex can translate it to Luna explicitly instead of omitting `model`
   // from thread/start and inheriting the shared app-server default.
   if (!agentType) return subordinateModel(AGENT_TYPE_MODELS.sonnet);
   return subordinateModel(AGENT_TYPE_MODELS[agentType] ?? agentType); // allow full model ID as fallback
@@ -46,9 +46,9 @@ export function resolveAgentModel(agentType?: string): string | undefined {
 export function claudeModelToCodex(model?: string): string | undefined {
   if (!model) return undefined;
   if (model.includes('fable')) return 'gpt-6-astra';
-  if (model.includes('opus')) return 'gpt-5.6-sol';
-  // Codex has no tier below Terra. Naming it keeps a haiku request explicit rather than
+  if (model.includes('opus')) return 'gpt-6.1-sol';
+  // Codex has no tier below Luna. Naming it keeps a haiku request explicit rather than
   // omitting `model` and inheriting whatever the shared app-server booted with.
-  if (model.includes('sonnet') || model.includes('haiku')) return 'gpt-5.6-terra';
+  if (model.includes('sonnet') || model.includes('haiku')) return 'gpt-6-luna';
   return undefined;
 }

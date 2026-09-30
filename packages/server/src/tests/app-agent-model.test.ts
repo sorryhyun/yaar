@@ -13,11 +13,11 @@ import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
 import { claudeModelToCodex } from '../agents/profiles/model-tiers.js';
 
 describe('app agent model selection', () => {
-  it('defaults apps without agentType to Sonnet/Terra', async () => {
+  it('defaults apps without agentType to Sonnet/Luna', async () => {
     const profile = await buildAppAgentProfile('dock');
 
     expect(profile.model).toBe('claude-sonnet-5');
-    expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-terra');
+    expect(claudeModelToCodex(profile.model)).toBe('gpt-6-luna');
     expect(profile.appStateKeys).toEqual([
       'agents',
       'appearance',
@@ -32,11 +32,11 @@ describe('app agent model selection', () => {
     const profile = await buildAppAgentProfile('devtools');
 
     expect(profile.model).toBe('claude-opus-5-5');
-    expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-sol');
+    expect(claudeModelToCodex(profile.model)).toBe('gpt-6.1-sol');
   });
 
-  it('maps haiku to Terra rather than dropping it — Codex has no smaller tier', () => {
-    expect(claudeModelToCodex('claude-haiku-4-5-20251001')).toBe('gpt-5.6-terra');
-    expect(claudeModelToCodex('haiku')).toBe('gpt-5.6-terra');
+  it('maps haiku to Luna rather than dropping it — Codex has no smaller tier', () => {
+    expect(claudeModelToCodex('claude-haiku-4-5-20251001')).toBe('gpt-6-luna');
+    expect(claudeModelToCodex('haiku')).toBe('gpt-6-luna');
   });
 });

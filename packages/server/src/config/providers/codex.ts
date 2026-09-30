@@ -178,9 +178,9 @@ export function detectUserMcpServers(): string[] {
  * two things. `effective_tool_mode()` is `model_info.tool_mode.unwrap_or_else(|| …features…)` and
  * `resolve_multi_agent_version_for_model()` prefers `model_info.multi_agent_version` — so a
  * `-c features.code_mode=false` that `codex doctor` reports as *accepted* still changes nothing
- * when the model declares a mode, and `gpt-5.6-terra` declares both:
+ * when the model declares a mode, and `gpt-6-luna` declares both:
  *
- *   gpt-5.6-terra   tool_mode = "code_mode_only"   multi_agent_version = "v2"
+ *   gpt-6-luna      tool_mode = "code_mode_only"   multi_agent_version = "v2"
  *
  * That is the whole reason YAAR's Codex agents were running model-authored JS against
  * `ALL_TOOLS` / `tools.mcp__verbs__invoke` inside an `exec` cell — the second, untracked path to
@@ -452,9 +452,9 @@ export function getCodexAppServerArgs(): string[] {
     // **not** reach them: `codex app-server` threads run `multi_agent_version: v2` no matter what
     // the feature flags say, because the model preset wins. `effective_tool_mode` and
     // `resolve_multi_agent_version_for_model` both read `model_info` first and only fall back to
-    // `multi_agent_version_from_features()` when the model declares nothing — and `gpt-5.6-terra`
-    // declares v2. Measured against codex-cli 0.147.0 with YAAR's own arg set: `codex doctor`
-    // reports `multi_agent=false` accepted, and a real turn still opens with the 2.2 KB
+    // `multi_agent_version_from_features()` when the model declares nothing — and `gpt-6-luna`
+    // declares v2, as `gpt-5.6-terra` did. Measured against codex-cli 0.147.0 (on Terra) with
+    // YAAR's own arg set: `codex doctor` reports `multi_agent=false` accepted, and a real turn still opens with the 2.2 KB
     // "You are `/root`, the primary agent in a team of agents…" developer message plus a
     // `<multi_agent_mode>` follow-up telling the model to ignore it. Adding an explicit
     // `features.multi_agent_v2=false` changes nothing (doctor: "none").

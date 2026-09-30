@@ -18,7 +18,7 @@
  * generated against and `codex-version.test.ts` refuses to let it ship.
  *
  * So the floor moves only when a release actually breaks something we send or read — not
- * on every codex version. It currently sits at 0.145.0 with bindings from 0.155.0.
+ * on every codex version. It currently sits at 0.145.0 with bindings from 0.159.2.
  *
  * 0.147.0 is the first regeneration whose diff is *not* purely additive, so the "only adds
  * fields" reasoning above does not cover it on its own and the floor was re-derived by hand.
@@ -53,6 +53,14 @@
  * others. Two additions reached `errors.ts`: `CodexErrorInfo.rateLimitExceeded` (the total
  * `Record` forced a sentence again) and `TurnError.misalignment`, whose explanation is now
  * surfaced beside the policy code.
+ *
+ * 0.159.2 is the fourth. Two non-additive changes, neither read outside `generated/`:
+ * `PluginSummary.extensions` was dropped (taking `PluginExtensions` and its seven helper types
+ * with it), and `ThreadItemsListParams.cursor` widened from `string` to a string-or-item-anchor
+ * union. The additions that reached non-generated code are two more `CodexErrorInfo` codes,
+ * `flexUnavailable` and `tooManyDenials` (the total `Record` in `errors.ts` again), and
+ * `Turn.error` now filled on *interrupted* turns too, so the message mapper reads the reason
+ * there instead of saying only "interrupted".
  *
  * The additive half worth knowing about: `InitializeCapabilities.extensions`, the successor
  * to the `mcpServerOpenaiFormElicitation` flag and the seam a client declares MCP extensions

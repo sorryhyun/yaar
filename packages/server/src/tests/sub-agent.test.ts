@@ -465,13 +465,13 @@ describe("a sub-agent turn's model", () => {
   // devtools spawns its workers with `model: 'sonnet'`; handed to Codex verbatim, that
   // is a model name `thread/start` does not know.
   it('translates the alias on Codex', async () => {
-    expect(await turnModel('codex', 'sonnet')).toBe('gpt-5.6-terra');
-    expect(await turnModel('codex', 'haiku')).toBe('gpt-5.6-terra');
+    expect(await turnModel('codex', 'sonnet')).toBe('gpt-6-luna');
+    expect(await turnModel('codex', 'haiku')).toBe('gpt-6-luna');
   });
 
   it("holds fable mode's Opus pin over the app's choice", async () => {
     process.env.FABLE = '1';
     expect(await turnModel('claude', 'sonnet')).toBe(AGENT_TYPE_MODELS.opus);
-    expect(await turnModel('codex', 'sonnet')).toBe('gpt-5.6-sol');
+    expect(await turnModel('codex', 'sonnet')).toBe('gpt-6.1-sol');
   });
 });
