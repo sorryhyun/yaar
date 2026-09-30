@@ -117,7 +117,15 @@
     "close": "关闭",
     "fullscreen": "全屏",
     "exitFullscreen": "退出全屏",
-    "changed": "已更新"
+    "changed": "已更新",
+    "share": {
+      "button": "与外部代理共享（复制 URL）",
+      "active": "已与外部代理共享 — 点击复制 URL，右键停止共享",
+      "copied": "已复制共享 URL。在你停止共享（右键）或关闭窗口之前，持有它的任何代理都能操作此窗口。",
+      "copyFailed": "已共享，但无法使用剪贴板。URL：{{url}}",
+      "stopped": "已停止共享 {{title}}",
+      "failed": "无法更改共享状态：{{error}}"
+    }
   },
   "recentActions": {
     "title": "最近操作 ({{count}})",

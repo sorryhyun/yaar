@@ -46,6 +46,7 @@ export interface ServerEventDispatchHandlers {
     status: 'assigned' | 'active' | 'released',
   ) => void;
   updateWindowAgentStatus: (agentId: string, status: 'assigned' | 'active' | 'released') => void;
+  setWindowShared: (windowId: string, shared: boolean) => void;
   updateCliStreaming: (
     agentId: string,
     content: string,
@@ -88,7 +89,11 @@ export interface ServerEventDispatchHandlers {
   settleOutbox: (messageId: string) => void;
   clearMessageStatus: (messageId: string) => void;
   clearAllMessageStatuses: () => void;
-  applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => void;
+  applySnapshot: (
+    actions: OSAction[],
+    agents: ActiveAgentSnapshot[],
+    sharedWindows?: string[],
+  ) => void;
   /** Send everything buffered while the socket was down (interactions, outbox). */
   flushPending: () => void;
   /** Ask the server for authoritative state, once the flush is on the wire. */
@@ -169,7 +174,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     }
     case ServerEventType.SNAPSHOT:
       // Authoritative. Replaces; does not merge. See `applySnapshot` in store/desktop.ts.
-      handlers.applySnapshot(message.actions, message.agents);
+      handlers.applySnapshot(message.actions, message.agents, message.sharedWindows);
       break;
     case ServerEventType.CONNECTION_STATUS:
       handlers.setConnectionStatus(
@@ -318,6 +323,9 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       }
       break;
     }
+    case ServerEventType.WINDOW_EXTERNAL_SHARE:
+      handlers.setWindowShared(message.windowId, message.shared);
+      break;
     case ServerEventType.APPROVAL_REQUEST: {
       // Convert to a dialog.confirm action and route through the existing dialog system.
       // This keeps the existing ConfirmDialog UI working; can be upgraded to inline later.

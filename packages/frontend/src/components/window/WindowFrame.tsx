@@ -29,8 +29,10 @@ import {
   MaximizeIcon,
   MinimizeIcon,
   RestoreIcon,
+  ShareIcon,
 } from './WindowControlIcons';
 import { exportContent } from '@/lib/exportContent';
+import { shareAndCopy, stopSharing } from '@/lib/windowShare';
 import { useDragWindow } from '@/hooks/useDragWindow';
 import { beginShellDrag } from '@/lib/selection';
 import { useResizeWindow } from '@/hooks/useResizeWindow';
@@ -110,6 +112,10 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
     () => ({ onRenderSuccess, onRenderError, onComponentAction }),
     [onRenderSuccess, onRenderError, onComponentAction],
   );
+
+  // Only an app window can be shared: the outside agent gets the app agent's tools, which
+  // reach the app protocol. Not on a phone for now — the URL is for an agent on a computer.
+  const shareable = !isMobile && !!window.appId && window.content.renderer === 'iframe';
 
   // Selection action input state
   const [selectionAction, setSelectionAction] = useState<{
@@ -296,6 +302,24 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
                 onClick={() => exportContent(window.content, window.title, window.id)}
               >
                 <ExportIcon />
+              </button>
+            )}
+            {shareable && (
+              <button
+                className={styles.controlBtn}
+                data-action="share"
+                aria-pressed={!!window.sharedExternally}
+                title={t(window.sharedExternally ? 'window.share.active' : 'window.share.button')}
+                aria-label={t(
+                  window.sharedExternally ? 'window.share.active' : 'window.share.button',
+                )}
+                onClick={() => void shareAndCopy(window)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  void stopSharing(window);
+                }}
+              >
+                <ShareIcon />
               </button>
             )}
             <button

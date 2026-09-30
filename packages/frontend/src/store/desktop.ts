@@ -281,7 +281,11 @@ export const useDesktopStore = create<DesktopStore>()(
      * what it sent, and resending rebuilds status from the acks that come back. See
      * `slices/outboxSlice.ts`.
      */
-    applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => {
+    applySnapshot: (
+      actions: OSAction[],
+      agents: ActiveAgentSnapshot[],
+      sharedWindows?: string[],
+    ) => {
       const [set] = a;
 
       // A snapshot always names windows by their scoped handle ("0/notes"); the fallback
@@ -378,6 +382,14 @@ export const useDesktopStore = create<DesktopStore>()(
       useDesktopStore.getState().applyActions(reconciled);
       set((state) => {
         state.iframeTokensStale = false;
+        // Share state is replace-state too, applied once the windows exist. An older
+        // server sends none, and then there is nothing to say either way.
+        if (sharedWindows) {
+          const shared = new Set(sharedWindows);
+          for (const [key, win] of Object.entries(state.windows)) {
+            win.sharedExternally = shared.has(key);
+          }
+        }
       });
     },
 

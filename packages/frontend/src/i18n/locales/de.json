@@ -117,7 +117,15 @@
     "close": "Schließen",
     "fullscreen": "Vollbild",
     "exitFullscreen": "Vollbild beenden",
-    "changed": "Aktualisiert"
+    "changed": "Aktualisiert",
+    "share": {
+      "button": "Mit externem Agenten teilen (kopiert die URL)",
+      "active": "Mit externen Agenten geteilt — klicken kopiert die URL, Rechtsklick beendet das Teilen",
+      "copied": "Freigabe-URL kopiert. Jeder Agent mit dieser URL kann dieses Fenster steuern, bis du das Teilen beendest (Rechtsklick) oder es schließt.",
+      "copyFailed": "Geteilt, aber die Zwischenablage war nicht verfügbar. URL: {{url}}",
+      "stopped": "Teilen von {{title}} beendet",
+      "failed": "Teilen konnte nicht geändert werden: {{error}}"
+    }
   },
   "recentActions": {
     "title": "Letzte Aktionen ({{count}})",

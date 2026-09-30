@@ -40,6 +40,17 @@ export function ExportIcon() {
   );
 }
 
+/** Broadcast arcs over a dot: this window is reachable from outside. */
+export function ShareIcon() {
+  return (
+    <svg {...common}>
+      <path d="M3.5 8.25a9.25 9.25 0 0 1 13 0" {...stroke} />
+      <path d="M6 11a5.75 5.75 0 0 1 8 0" {...stroke} />
+      <circle cx="10" cy="14.5" r="1.25" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function MinimizeIcon() {
   return (
     <svg {...common}>

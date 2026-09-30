@@ -8,6 +8,7 @@
  * never constructs composite keys directly.
  */
 
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { OSAction, WindowState, AppProtocolRequest, UserInteraction } from '@yaar/shared';
 import { applyContentOperation, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getMonitorId } from '../agents/agent-context.js';
@@ -126,6 +127,27 @@ interface WindowSideState {
    * window, like the grants.
    */
   undelegated?: Set<string>;
+  /**
+   * The capability token of an outside MCP client's access to this window, while the user
+   * has it shared (the titlebar's share button; `features/window/external-share.ts`).
+   * Whoever holds the URL built from it acts as this window's app agent.
+   *
+   * On the side record rather than keyed by URI because window ids are reused: closing
+   * Notes and reopening it yields `notes` again, and a share keyed by that string would
+   * silently cover the new window. Here the close that drops the record revokes the URL.
+   */
+  externalShare?: { token: string; createdAt: number };
+}
+
+/** 32 random bytes, base64url — the whole credential of a shared window's URL. */
+function mintShareToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+function tokensEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 /** Add `entries` to a record's grants — additive, deduplicated by URI. */
@@ -918,6 +940,68 @@ export class WindowStateRegistry {
    */
   getNoReplayCommands(windowId: string): ReadonlySet<string> {
     return this.peekSide(windowId)?.noReplay ?? NO_COMMANDS;
+  }
+
+  /**
+   * Share a live window with outside MCP clients and answer its token. Idempotent: an
+   * already-shared window answers the token it has, so a second click in another tab
+   * never invalidates a URL an agent is using.
+   *
+   * Only a window that exists. A record filed before its window is adopted by whichever
+   * window next takes the id (`adoptPreCreateState`), and a share must never outlive the
+   * window the user pointed at.
+   */
+  shareExternally(windowId: string): string | undefined {
+    const key = this.liveKey(windowId);
+    if (!key) return undefined;
+    const rec = this.sideOf(key);
+    rec.externalShare ??= { token: mintShareToken(), createdAt: Date.now() };
+    return rec.externalShare.token;
+  }
+
+  /** Revoke a window's share. True when there was one to revoke. */
+  unshareExternally(windowId: string): boolean {
+    const key = this.liveKey(windowId);
+    const rec = key ? this.side.get(key) : undefined;
+    if (!rec?.externalShare) return false;
+    delete rec.externalShare;
+    return true;
+  }
+
+  /** The token of a live window's share, or undefined when it is not shared. */
+  getExternalShareToken(windowId: string): string | undefined {
+    const key = this.liveKey(windowId);
+    return key ? this.side.get(key)?.externalShare?.token : undefined;
+  }
+
+  /**
+   * The window a share token opens, as its registry key, or undefined. Scans rather than
+   * indexing: a second map is a second thing a close has to remember, and a token that
+   * outlived its window would be a live credential. Compared in constant time.
+   */
+  findExternalShare(token: string): string | undefined {
+    for (const [key, rec] of this.side) {
+      const own = rec.externalShare?.token;
+      if (own && this.windows.has(key) && tokensEqual(own, token)) return key;
+    }
+    return undefined;
+  }
+
+  /** Every live window that is currently shared, by registry key. */
+  listExternallyShared(): string[] {
+    const shared: string[] = [];
+    for (const [key, rec] of this.side) {
+      if (rec.externalShare && this.windows.has(key)) shared.push(key);
+    }
+    return shared;
+  }
+
+  /** The key of a window that exists — `sideKey` steps 1–2, never the pre-create step 3. */
+  private liveKey(windowId: string): string | undefined {
+    const live = this.targetKey(windowId);
+    if (live) return live;
+    const raw = this.handleMap.getRawWindowId(windowId);
+    return raw !== windowId && this.windows.has(raw) ? raw : undefined;
   }
 
   hasWindow(windowId: string): boolean {

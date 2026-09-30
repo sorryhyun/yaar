@@ -58,8 +58,12 @@ export class SessionSnapshotService {
     return refreshRestoredWindowActions(actions, this.deps.sessionId);
   }
 
-  /** Windows, live surfaces, and the agents currently working. */
-  async build(): Promise<{ actions: OSAction[]; agents: ActiveAgentSnapshot[] }> {
+  /** Windows, live surfaces, the agents currently working, and which windows are shared. */
+  async build(): Promise<{
+    actions: OSAction[];
+    agents: ActiveAgentSnapshot[];
+    sharedWindows: string[];
+  }> {
     const windows = await this.windowActions();
     const agents = this.deps
       .listAgents()
@@ -73,6 +77,10 @@ export class SessionSnapshotService {
         kind: a.type,
         ...(a.monitorId ? { monitorId: a.monitorId } : {}),
       }));
-    return { actions: [...windows, ...this.deps.surfaces.snapshot()], agents };
+    return {
+      actions: [...windows, ...this.deps.surfaces.snapshot()],
+      agents,
+      sharedWindows: this.deps.windowState.listExternallyShared(),
+    };
   }
 }

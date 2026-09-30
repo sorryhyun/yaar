@@ -117,7 +117,15 @@
     "close": "閉じる",
     "fullscreen": "全画面",
     "exitFullscreen": "全画面を終了",
-    "changed": "更新あり"
+    "changed": "更新あり",
+    "share": {
+      "button": "外部エージェントと共有（URL をコピー）",
+      "active": "外部エージェントと共有中 — クリックで URL をコピー、右クリックで共有を停止",
+      "copied": "共有 URL をコピーしました。共有を停止（右クリック）するかウィンドウを閉じるまで、この URL を持つエージェントがこのウィンドウを操作できます。",
+      "copyFailed": "共有しましたが、クリップボードを使えませんでした。URL: {{url}}",
+      "stopped": "{{title}} の共有を停止しました",
+      "failed": "共有を変更できませんでした: {{error}}"
+    }
   },
   "recentActions": {
     "title": "最近のアクション ({{count}})",

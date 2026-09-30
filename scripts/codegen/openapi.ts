@@ -30,6 +30,7 @@ import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from '../../packages/server/src/h
 import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from '../../packages/server/src/http/routes/settings.js';
 import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from '../../packages/server/src/http/routes/shortcuts.js';
 import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from '../../packages/server/src/http/routes/verb.js';
+import { PUBLIC_ENDPOINTS as WINDOW_SHARE_PUBLIC } from '../../packages/server/src/http/routes/window-share.js';
 
 const ALL_ENDPOINTS: EndpointMeta[] = [
   ...API_PUBLIC,
@@ -46,6 +47,7 @@ const ALL_ENDPOINTS: EndpointMeta[] = [
   ...SETTINGS_PUBLIC,
   ...SHORTCUTS_PUBLIC,
   ...VERB_PUBLIC,
+  ...WINDOW_SHARE_PUBLIC,
 ];
 
 // Guard: every route file (except index.ts/static.ts, which don't export
@@ -66,6 +68,7 @@ const WIRED_ROUTE_FILES = new Set([
   'settings.ts',
   'shortcuts.ts',
   'verb.ts',
+  'window-share.ts',
 ]);
 const SKIPPED_ROUTE_FILES = new Set(['index.ts', 'static.ts']);
 const routesDir = join(import.meta.dir, '..', '..', 'packages', 'server', 'src', 'http', 'routes');

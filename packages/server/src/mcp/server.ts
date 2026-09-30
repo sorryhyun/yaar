@@ -52,6 +52,7 @@ import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.
 import { registerSubAgentTools } from './sub-agent/index.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 import { createLogger } from '../observability/log.js';
+import { resolveExternalShare } from '../features/window/external-share.js';
 
 const log = createLogger('MCP');
 
@@ -81,7 +82,7 @@ export type McpServerName = (typeof CORE_SERVERS)[number];
  * warning this replaces, the request was not served, so there is no quiet-but-working state
  * for a rate limit to protect.
  */
-function refuseLegacyEra(serverName: McpServerName, clientLabel: string): Response {
+function refuseLegacyEra(serverName: string, clientLabel: string): Response {
   const message =
     'This MCP endpoint serves revision 2026-07-28 only; the stateful 2025-era leg was ' +
     'removed. The client did not negotiate up — a stale CLI, or an opt-in gate that was ' +
@@ -200,6 +201,36 @@ function getModernHandler(serverName: McpServerName): McpHttpHandler {
   return handler;
 }
 
+/** Log label for the shared-window endpoint, which is not one of `CORE_SERVERS`. */
+const EXTERNAL_LABEL = 'external';
+
+let externalHandler: McpHttpHandler | null = null;
+
+/**
+ * The shared-window endpoint's handler: the app agent's whole tool set on one server.
+ *
+ * An app agent connects two namespaces — `app` and `messaging` (`APP_AGENT_TOOL_NAMES`) —
+ * but an outside client is handed one URL, and one URL is one MCP server. So both are
+ * registered here. Their tool names do not collide (`describe`/`query`/`command`/`relay`
+ * and `direct_message`), and each keeps its own authority checks, which read the context
+ * `handleExternalMcpRequest` built rather than anything about the endpoint.
+ */
+function getExternalHandler(): McpHttpHandler {
+  externalHandler ??= createMcpHandler(
+    async () => {
+      const server = new McpServer(
+        { name: 'yaar-window', version: '1.0.0' },
+        { capabilities: { tools: {} } },
+      );
+      registerAppAgentTools(server);
+      registerMessagingTools(server);
+      return server;
+    },
+    { legacy: 'reject' },
+  );
+  return externalHandler;
+}
+
 /**
  * Initialize MCP subsystem.
  * Generates the auth token and probes browser availability.
@@ -264,52 +295,88 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   const windowId = hub.findWindowForAgent(agentId);
   const role = hub.findRoleForAgent(agentId);
 
-  return runWithAgentContext(
-    { agentId, sessionId: yaarSessionId, monitorId, windowId, role },
-    async () => {
-      // A session id can only come from a client that handshook on the retired stateful
-      // leg — a 2026-07-28 connection has none by construction. Checked before the body is
-      // read because it is the cheap half of the classification.
-      if (req.headers.get('mcp-session-id')) {
-        return refuseLegacyEra(serverName, 'a client holding an mcp-session-id');
-      }
-
-      if (req.method !== 'POST') {
-        return Response.json(
-          {
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Method not allowed' },
-            id: null,
-          },
-          { status: 405 },
-        );
-      }
-
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json(
-          {
-            jsonrpc: '2.0',
-            error: { code: -32700, message: 'Parse error' },
-            id: null,
-          },
-          { status: 400 },
-        );
-      }
-
-      // Handing the classifier the body we already parsed matters: given `parsedBody` it
-      // inspects that instead of re-reading the request, so the stream is consumed once and
-      // the same object is passed on to the handler.
-      if (await isLegacyRequest(req, body)) {
-        const messages = Array.isArray(body) ? body : [body];
-        return refuseLegacyEra(serverName, clientLabelFrom(messages));
-      }
-
-      return getModernHandler(serverName).fetch(req, { parsedBody: body });
-    },
+  return runWithAgentContext({ agentId, sessionId: yaarSessionId, monitorId, windowId, role }, () =>
+    serveStateless(req, serverName, getModernHandler(serverName)),
   );
+}
+
+/**
+ * Serve one MCP request from a shared window's capability URL (`/mcp/x/{token}`).
+ *
+ * The token is the whole credential: no bearer, no agent token. It resolves to the window
+ * the user shared, and the request runs in that window's app-agent context — the tools
+ * take all of their authority from it, so this grants exactly what the window's app agent
+ * holds. See `features/window/external-share.ts`.
+ */
+export async function handleExternalMcpRequest(req: Request, token: string): Promise<Response> {
+  if (!initialized) {
+    return Response.json({ error: 'MCP server not initialized' }, { status: 503 });
+  }
+  const share = resolveExternalShare(token);
+  if (!share) {
+    // One answer for "never existed", "unshared" and "window closed" — telling them apart
+    // would tell a guesser which tokens were once real.
+    return Response.json(
+      { error: 'No shared window at this URL. It was unshared, or its window was closed.' },
+      { status: 404 },
+    );
+  }
+  return runWithAgentContext(share, () =>
+    serveStateless(req, EXTERNAL_LABEL, getExternalHandler()),
+  );
+}
+
+/**
+ * The stateless serve both doors share, run inside the caller's context: refuse the 2025
+ * era with a diagnostic, then hand the parsed body to a 2026-07-28 handler. `label` only
+ * names the endpoint in the refusal's log line.
+ */
+async function serveStateless(
+  req: Request,
+  label: string,
+  handler: McpHttpHandler,
+): Promise<Response> {
+  // A session id can only come from a client that handshook on the retired stateful
+  // leg — a 2026-07-28 connection has none by construction. Checked before the body is
+  // read because it is the cheap half of the classification.
+  if (req.headers.get('mcp-session-id')) {
+    return refuseLegacyEra(label, 'a client holding an mcp-session-id');
+  }
+
+  if (req.method !== 'POST') {
+    return Response.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Method not allowed' },
+        id: null,
+      },
+      { status: 405 },
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32700, message: 'Parse error' },
+        id: null,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Handing the classifier the body we already parsed matters: given `parsedBody` it
+  // inspects that instead of re-reading the request, so the stream is consumed once and
+  // the same object is passed on to the handler.
+  if (await isLegacyRequest(req, body)) {
+    const messages = Array.isArray(body) ? body : [body];
+    return refuseLegacyEra(label, clientLabelFrom(messages));
+  }
+
+  return handler.fetch(req, { parsedBody: body });
 }
 
 /**

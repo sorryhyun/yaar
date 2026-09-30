@@ -117,7 +117,15 @@
     "close": "Fermer",
     "fullscreen": "Plein écran",
     "exitFullscreen": "Quitter le plein écran",
-    "changed": "Mis à jour"
+    "changed": "Mis à jour",
+    "share": {
+      "button": "Partager avec un agent externe (copie l'URL)",
+      "active": "Partagée avec des agents externes — clic pour copier l'URL, clic droit pour arrêter le partage",
+      "copied": "URL de partage copiée. Tout agent qui la détient peut piloter cette fenêtre jusqu'à ce que vous arrêtiez le partage (clic droit) ou la fermiez.",
+      "copyFailed": "Partagée, mais le presse-papiers est indisponible. URL : {{url}}",
+      "stopped": "Partage de {{title}} arrêté",
+      "failed": "Impossible de modifier le partage : {{error}}"
+    }
   },
   "recentActions": {
     "title": "Actions récentes ({{count}})",

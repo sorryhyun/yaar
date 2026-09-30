@@ -189,8 +189,13 @@ export class ClientEventController {
 
   /** Send the authoritative state of this session to one connection. */
   private async sendSnapshot(connectionId: ConnectionId): Promise<void> {
-    const { actions, agents } = await this.deps.snapshots.build();
-    this.deps.sendTo(connectionId, { type: ServerEventType.SNAPSHOT, actions, agents });
+    const { actions, agents, sharedWindows } = await this.deps.snapshots.build();
+    this.deps.sendTo(connectionId, {
+      type: ServerEventType.SNAPSHOT,
+      actions,
+      agents,
+      sharedWindows,
+    });
   }
 
   /**

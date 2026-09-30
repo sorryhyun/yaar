@@ -118,7 +118,15 @@
     "close": "Close",
     "fullscreen": "Full screen",
     "exitFullscreen": "Exit full screen",
-    "changed": "Updated"
+    "changed": "Updated",
+    "share": {
+      "button": "Share with an outside agent (copies its URL)",
+      "active": "Shared with outside agents — click to copy the URL, right-click to stop sharing",
+      "copied": "Share URL copied. Any agent with it can drive this window until you stop sharing (right-click) or close it.",
+      "copyFailed": "Shared, but the clipboard was unavailable. URL: {{url}}",
+      "stopped": "Stopped sharing {{title}}",
+      "failed": "Couldn't change sharing: {{error}}"
+    }
   },
   "recentActions": {
     "title": "Recent Actions ({{count}})",

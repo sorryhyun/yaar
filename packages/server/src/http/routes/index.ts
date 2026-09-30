@@ -13,3 +13,4 @@ export { handleSettingsRoutes } from './settings.js';
 export { handleShortcutRoutes } from './shortcuts.js';
 export { handleStaticRoutes } from './static.js';
 export { handleVerbRoutes } from './verb.js';
+export { handleWindowShareRoutes } from './window-share.js';

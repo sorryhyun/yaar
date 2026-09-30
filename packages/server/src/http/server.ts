@@ -7,7 +7,13 @@
  */
 
 import { getLocalTlsEndpoint } from './local-tls.js';
-import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
+import {
+  handleMcpRequest,
+  handleExternalMcpRequest,
+  CORE_SERVERS,
+  type McpServerName,
+} from '../mcp/server.js';
+import { EXTERNAL_MCP_PREFIX } from '../features/window/external-share.js';
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
 
@@ -37,6 +43,7 @@ import {
   handleShortcutRoutes,
   handleStaticRoutes,
   handleVerbRoutes,
+  handleWindowShareRoutes,
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { extractIframeToken, requireBundledApp } from './access.js';
@@ -327,6 +334,15 @@ function createFetchHandlerInner() {
       }
     }
 
+    // A shared window's endpoint (features/window/external-share.ts). The token in the path
+    // is the credential, so this sits beside the bearer-authenticated servers rather than
+    // behind their check. Not on the iframe allowlist: an app presenting its token is
+    // refused above like at every other /mcp/ path.
+    if (url.pathname.startsWith(EXTERNAL_MCP_PREFIX)) {
+      const token = url.pathname.slice(EXTERNAL_MCP_PREFIX.length);
+      return withCors(await handleExternalMcpRequest(req, token), corsHeaders);
+    }
+
     if (_devReloadHandler && url.pathname === '/dev-reload') {
       return _devReloadHandler();
     }
@@ -343,6 +359,9 @@ function createFetchHandlerInner() {
 
     const shortcutResponse = await handleShortcutRoutes(req, url);
     if (shortcutResponse) return withCors(shortcutResponse, corsHeaders);
+
+    const windowShareResponse = await handleWindowShareRoutes(req, url);
+    if (windowShareResponse) return withCors(windowShareResponse, corsHeaders);
 
     const sessionResponse = await handleSessionRoutes(req, url);
     if (sessionResponse) return withCors(sessionResponse, corsHeaders);

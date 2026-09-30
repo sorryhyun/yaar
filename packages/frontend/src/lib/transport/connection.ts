@@ -99,6 +99,7 @@ function handleMessage(event: MessageEvent): void {
       clearAgent: store.clearAgent,
       registerWindowAgent: store.registerWindowAgent,
       updateWindowAgentStatus: store.updateWindowAgentStatus,
+      setWindowShared: store.setWindowShared,
       updateCliStreaming: store.updateCliStreaming,
       appendCliStreaming: store.appendCliStreaming,
       finalizeCliStreaming: store.finalizeCliStreaming,

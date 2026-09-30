@@ -38,6 +38,12 @@ export interface WindowModel {
   changeNonce?: number;
   /** An agent changed this window while the user wasn't looking at it. Cleared on focus. */
   unseenChange?: boolean;
+  /**
+   * The user shared this window with outside MCP clients (the titlebar's share button).
+   * Server-owned: set from `WINDOW_EXTERNAL_SHARE` and the snapshot, never locally. The URL
+   * itself is not kept here — it is a credential, fetched when the popover opens.
+   */
+  sharedExternally?: boolean;
 }
 
 export interface CliEntry {

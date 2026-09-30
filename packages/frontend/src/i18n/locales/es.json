@@ -117,7 +117,15 @@
     "close": "Cerrar",
     "fullscreen": "Pantalla completa",
     "exitFullscreen": "Salir de pantalla completa",
-    "changed": "Actualizado"
+    "changed": "Actualizado",
+    "share": {
+      "button": "Compartir con un agente externo (copia la URL)",
+      "active": "Compartida con agentes externos — clic para copiar la URL, clic derecho para dejar de compartir",
+      "copied": "URL copiada. Cualquier agente que la tenga puede controlar esta ventana hasta que dejes de compartirla (clic derecho) o la cierres.",
+      "copyFailed": "Compartida, pero el portapapeles no estaba disponible. URL: {{url}}",
+      "stopped": "Se dejó de compartir {{title}}",
+      "failed": "No se pudo cambiar el uso compartido: {{error}}"
+    }
   },
   "recentActions": {
     "title": "Acciones recientes ({{count}})",

@@ -117,7 +117,15 @@
     "close": "Fechar",
     "fullscreen": "Tela cheia",
     "exitFullscreen": "Sair da tela cheia",
-    "changed": "Atualizado"
+    "changed": "Atualizado",
+    "share": {
+      "button": "Compartilhar com um agente externo (copia a URL)",
+      "active": "Compartilhada com agentes externos — clique para copiar a URL, clique direito para parar de compartilhar",
+      "copied": "URL copiada. Qualquer agente com ela pode controlar esta janela até você parar de compartilhar (clique direito) ou fechá-la.",
+      "copyFailed": "Compartilhada, mas a área de transferência não estava disponível. URL: {{url}}",
+      "stopped": "Parou de compartilhar {{title}}",
+      "failed": "Não foi possível alterar o compartilhamento: {{error}}"
+    }
   },
   "recentActions": {
     "title": "Ações recentes ({{count}})",

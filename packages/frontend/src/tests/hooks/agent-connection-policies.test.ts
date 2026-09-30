@@ -60,6 +60,7 @@ function createHandlers() {
     clearAgent: mock(() => {}),
     registerWindowAgent: mock(() => {}),
     updateWindowAgentStatus: mock(() => {}),
+    setWindowShared: mock(() => {}),
     updateCliStreaming: mock(() => {}),
     appendCliStreaming: mock(() => {}),
     finalizeCliStreaming: mock(() => {}),

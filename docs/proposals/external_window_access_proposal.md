@@ -1,7 +1,9 @@
 # Proposal: External Window Access — an outside agent drives a window the user shared
 
-**Status:** proposed (2026-09-29). Nothing below exists in the tree yet; every "today" claim
-carries the file:line it was read at.
+**Status:** proposed (2026-09-29). A smaller v1 shipped instead — one capability URL per
+window, with the window's app-agent authority, no pairing and no gate table — see
+[`architecture/app_mcp.md`](../architecture/app_mcp.md). The rest below is not in the tree;
+every "today" claim carries the file:line it was read at.
 
 An agent outside YAAR — a Claude Code session in some repo, a Codex thread, another machine's
 YAAR — is the same kind of model as YAAR's own monitor and app agents. Today it cannot touch a

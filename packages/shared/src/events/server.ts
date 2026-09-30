@@ -188,6 +188,18 @@ export interface WindowAgentStatusEvent {
 }
 
 /**
+ * A window was shared with, or unshared from, outside MCP clients (the titlebar's share
+ * button). Carries only the fact — never the URL, which is the credential and goes back
+ * to the tab that asked for it and nowhere else. A close ends a share without this event:
+ * the window, and its button, are gone with it.
+ */
+export interface WindowExternalShareEvent {
+  type: typeof ServerEventType.WINDOW_EXTERNAL_SHARE;
+  windowId: string;
+  shared: boolean;
+}
+
+/**
  * The `agentId` on the ack for a command that no agent runs.
  *
  * A context reset carries a `messageId` so the client can hold it in its outbox until the
@@ -356,6 +368,11 @@ export interface SnapshotEvent {
   type: typeof ServerEventType.SNAPSHOT;
   actions: OSAction[];
   agents: ActiveAgentSnapshot[];
+  /**
+   * Windows currently shared with outside MCP clients. Replace-state like the rest: a
+   * window not named here is not shared. Absent from an older server.
+   */
+  sharedWindows?: string[];
 }
 
 export type ServerEvent =
@@ -369,6 +386,7 @@ export type ServerEvent =
   | ErrorEvent
   | AgentNoticeEvent
   | WindowAgentStatusEvent
+  | WindowExternalShareEvent
   | MessageAcceptedEvent
   | MessageQueuedEvent
   | ApprovalRequestEvent

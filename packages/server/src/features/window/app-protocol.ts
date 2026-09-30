@@ -36,6 +36,7 @@ import {
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
+import { noteExternalCommand } from './external-share.js';
 import { splitStatePath, selectStatePath } from '../../lib/state-path.js';
 import {
   gatedStoragePath,
@@ -608,6 +609,11 @@ export async function handleAppCommand(
   const timeoutMs = resolveTimeout(payload, deadlines.appCommandMs);
 
   const agentId = getAgentId();
+  const monitorId = windowState.getMonitorForWindow(key);
+  const record = (result: { ok: true } | { ok: false; error: string }) => {
+    windowState.recordAppCommand(key, req, result, agentId);
+    noteExternalCommand(key, monitorId, req.command, result.ok);
+  };
   const askedAt = Date.now();
   const outcome = await request(key, req, timeoutMs);
   if (!outcome.ok) {
@@ -621,15 +627,15 @@ export async function handleAppCommand(
     );
     // A timeout is history too: the app may well have applied the command before the
     // deadline passed, and a reader of the log should see that it was sent.
-    windowState.recordAppCommand(key, req, { ok: false, error: 'timeout' }, agentId);
+    record({ ok: false, error: 'timeout' });
     return error(message);
   }
   const response = outcome.value;
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) {
-    windowState.recordAppCommand(key, req, { ok: false, error: response.error }, agentId);
+    record({ ok: false, error: response.error });
     return withResponderNote(error(response.error), key);
   }
-  windowState.recordAppCommand(key, req, { ok: true }, agentId);
+  record({ ok: true });
   return withResponderNote(wrapAppValue(response.result), key);
 }
