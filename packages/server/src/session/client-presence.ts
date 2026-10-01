@@ -30,6 +30,12 @@ import type { SessionId } from './types.js';
 
 interface ConnectionPresence {
   state: ClientPresenceState;
+  /**
+   * Running and able to answer, with nobody looking: the Android app keeps its page
+   * `visible` in the background (`ClientPresenceEvent.unattended`). It changes who is
+   * watching and nothing about who can answer.
+   */
+  unattended: boolean;
   /** When this connection last became unable to answer; null while it can. */
   awaySince: number | null;
   /** When it last became able to answer again; null if it has never been away. */
@@ -66,7 +72,8 @@ function notifyPresence(sessionId: SessionId): void {
  * "could this tab answer?", where silence has to count as yes; this asks "is anyone
  * looking?", where the costly mistake is the other way — a phone whose tab was killed
  * outright has no connection left to report anything, and that is exactly the user who
- * needs telling. So only a reported `visible` counts.
+ * needs telling. So only a reported `visible` counts, and not from a page that says it is
+ * running out of sight.
  */
 export function isUserWatching(sessionId: SessionId): boolean {
   const byConnection = sessions.get(sessionId);
@@ -74,7 +81,7 @@ export function isUserWatching(sessionId: SessionId): boolean {
   const companionSet = companions.get(sessionId);
   for (const [connectionId, presence] of byConnection) {
     if (companionSet?.has(connectionId)) continue;
-    if (presence.state === 'visible') return true;
+    if (presence.state === 'visible' && !presence.unattended) return true;
   }
   return false;
 }
@@ -122,6 +129,7 @@ export function noteClientPresence(
   connectionId: ConnectionId,
   state: ClientPresenceState,
   now: number = Date.now(),
+  unattended = false,
 ): void {
   let byConnection = sessions.get(sessionId);
   if (!byConnection) {
@@ -134,6 +142,7 @@ export function noteClientPresence(
 
   byConnection.set(connectionId, {
     state,
+    unattended,
     // A tab that reports `hidden` and then `frozen` is still away since the *first* of
     // them — re-stamping here would shorten every span to its last transition.
     awaySince: isAway ? (wasAway ? (previous?.awaySince ?? now) : now) : null,

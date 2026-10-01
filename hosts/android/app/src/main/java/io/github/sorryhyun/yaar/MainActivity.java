@@ -84,7 +84,7 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private FrameLayout root;
-    private WebView web;
+    private DesktopWebView web;
     private View waiting;
     private TextView waitingText;
     /** Shown only for a Termux that cannot be asked to start the server. */
@@ -101,6 +101,9 @@ public final class MainActivity extends Activity {
     private int watchGeneration;
     private int watchRefused;
     private int watchTimedOut;
+
+    /** A person can see the desktop: between onStart and onStop. */
+    private boolean attended;
 
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingCapture;
@@ -168,7 +171,7 @@ public final class MainActivity extends Activity {
             root.removeView(web);
             web.destroy();
         }
-        web = new WebView(this);
+        web = new DesktopWebView(this);
         web.setBackgroundColor(Color.BLACK);
         configure(web.getSettings());
         // App iframes are on 127.0.0.1, a different site from the desktop's localhost.
@@ -176,7 +179,7 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new DesktopClient());
         web.setWebChromeClient(new DesktopChrome());
         web.setDownloadListener(this::onDownload);
-        if (!HostBridge.install(this, web, origin())) {
+        if (!HostBridge.install(this, web, origin(), () -> attended)) {
             Toast.makeText(this, "This WebView is too old for YAAR's host bridge; "
                     + "saving and clipboard fall back to the browser's.", Toast.LENGTH_LONG).show();
         }
@@ -437,6 +440,7 @@ public final class MainActivity extends Activity {
                         probing = false;
                         loaded = true;
                         web.loadUrl(desktop.toString());
+                        keepAlive();
                     });
                     return;
                 }
@@ -688,12 +692,77 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** Per-WebView pause only. Never the global pauseTimers(): the page decides what to throttle. */
+    // ── Out of sight ────────────────────────────────────────────────────────────────────
+
+    /*
+     * An agent goes on working after the user has left for another app, and what it asks the
+     * desktop (an app's state, a screenshot) has to be answered by the page that ran its
+     * earlier commands. Measured on a Galaxy S25 (Android 16, WebView 153), a backgrounded
+     * activity loses that page in two steps:
+     *
+     *  - Android caches the process and freezes it within 20 s. Nothing runs at all.
+     *  - With the process kept alive, the page still turns `hidden` with its window, its
+     *    timers drop to one a second, and after 60 s WebView freezes the page itself.
+     *
+     * So it takes both halves: KeepAliveService keeps the process out of the cached state,
+     * and DesktopWebView.stayVisible keeps the page `visible`. With both, timers run at full
+     * rate and fetch and DOM capture answer, through 7 minutes in the background and with the
+     * screen off. requestAnimationFrame does not fire: there is no surface to draw to.
+     *
+     * The page can then no longer tell that nobody is looking, so the host says it
+     * (yaarHost.attended and the `attention` event), which is what lets the server go on
+     * mirroring notifications into the shade.
+     */
+
+    /**
+     * Keep the desktop running out of sight, from the first load on. The page is held visible
+     * only if the service is running: a visible page in a frozen process would look able to
+     * answer and never do it. Android 12 and later refuse the start from the background, so
+     * onStart tries again.
+     */
+    private void keepAlive() {
+        if (!loaded || web == null) return;
+        boolean running = KeepAliveService.running;
+        if (!running) {
+            try {
+                KeepAliveService.start(this);
+                running = true;
+            } catch (RuntimeException e) {
+                Log.w(TAG, "the keep-alive service did not start: " + e);
+            }
+        }
+        web.stayVisible = running;
+    }
+
+    private void setAttended(boolean now) {
+        attended = now;
+        if (web == null || !loaded) return;
+        web.evaluateJavascript("window.dispatchEvent(new CustomEvent('yaarhost:attention',"
+                + "{detail:{attended:" + now + "}}))", null);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        keepAlive();
+        setAttended(true);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        setAttended(false);
+    }
+
+    /**
+     * Per-WebView pause only, and not for a page that is being kept running. Never the global
+     * pauseTimers().
+     */
     @Override
     protected void onPause() {
         super.onPause();
         stopWatch();
-        if (web != null) web.onPause();
+        if (web != null && !web.stayVisible) web.onPause();
     }
 
     @Override
@@ -707,6 +776,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         probing = false;
         stopWatch();
+        KeepAliveService.stop(this);
         closePopup(popupView);
         if (web != null) {
             web.destroy();

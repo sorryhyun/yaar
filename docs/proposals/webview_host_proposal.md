@@ -160,11 +160,13 @@ F-Droid or GitHub Termux; the Play one takes one `yaar` by hand).
   relay the socket to Termux with no adb. It should serve an abstract socket that checks the
   peer's uid against Termux's, never a bare loopback port. WebView targets are page-level (no
   `Target.createTarget`), so the Browser app keeps Termux Chromium.
-- **Companion inside the APK (spike).** The companion tab is just a second, always-visible client
-  (`features/companion/companion-tab.ts`) and needs no CDP. If a second WebView under a foreground
-  service stays unthrottled and reports `visible` while backgrounded **(verify — a detached
-  WebView likely reports hidden)**, it replaces a whole Termux Chromium. That would be the one real
-  performance win in this proposal.
+- **Dropping the Termux Chromium companion.** The spike landed as something simpler than a
+  second WebView: the desktop's own WebView, under a foreground service and held visible, keeps
+  answering in the background ([android.md](../installations/android.md#what-happens-when-you-leave)).
+  The companion is still parked, as the fallback for Chrome and for an app Android killed.
+  Whether a phone that has the app can go without it (a whole Chromium, and a second live
+  iframe per app window) is the open question: it needs the server to know that the app is
+  the client, and something to answer while the app is not running at all.
 - **Home launcher.** Add a `category.HOME` intent filter, which is the phone version of replacing
   `explorer.exe`. It needs `listApps`/`launchApp` in the contract, an escape hatch to the stock
   launcher, and a boot path.

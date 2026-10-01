@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   noteClientPresence,
+  connectionPresence,
   clientAwayNote,
   forgetConnectionPresence,
   forgetSessionPresence,
@@ -157,6 +158,18 @@ describe('isUserWatching', () => {
 
     noteClientPresence(SESSION, TAB, 'hidden', t(1));
     expect(isUserWatching(SESSION)).toBe(false);
+  });
+
+  it('does not count a page that is running out of sight', () => {
+    // The Android app keeps its page visible in the background so it can answer; it is
+    // still a phone in a pocket, and its owner still needs the notification.
+    noteClientPresence(SESSION, TAB, 'visible', t(0), true);
+    expect(isUserWatching(SESSION)).toBe(false);
+    expect(connectionPresence(SESSION, TAB)).toBe('visible');
+    expect(clientAwayNote(SESSION, t(0), t(30))).toBeNull();
+
+    noteClientPresence(SESSION, TAB, 'visible', t(1));
+    expect(isUserWatching(SESSION)).toBe(true);
   });
 
   it('tells presence listeners about reports and disconnects', () => {

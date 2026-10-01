@@ -9,6 +9,10 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- KeepAliveService: the desktop goes on answering agents while YAAR is in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Starting the server in Termux when a tap finds none running. -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
@@ -17,7 +21,7 @@
     </queries>
 
     <application
-        android:label="YAAR"
+        android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.Yaar"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -43,5 +47,14 @@
                 <data android:scheme="http" android:host="localhost" android:path="/" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a WebView that local AI agents query and screenshot running while the app is in the background" />
+        </service>
     </application>
 </manifest>

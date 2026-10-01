@@ -15,11 +15,16 @@
  * one on another monitor, stays mounted under `visibility: hidden` (WindowManager keeps its
  * state alive that way), and `document.visibilityState` inside a frame follows only the
  * top-level page. An app streaming pixels had no way to know nobody was looking.
+ *
+ * A host that keeps the page running out of sight (`lib/hostAttention.ts`, the Android app)
+ * is the same problem one level up: the page stays `visible` in a pocket, so a frame's own
+ * `visibilitychange` never fires. Unattended, every window is told it is not visible.
  */
 import { APP_MSG, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { hostSummary } from '@/lib/host';
+import { isUnattended, onAttentionChange } from '@/lib/hostAttention';
 import { selectFullscreenCardId } from '../selectors';
 import type { DesktopStore } from '../types';
 import { getDesktopState, getDesktopStore } from './store-access';
@@ -41,7 +46,7 @@ function shownKey(state: DesktopStore): string {
 function deviceUpdate(state: DesktopStore, windowId: string | undefined) {
   const { formFactor, orientation } = state;
   const fullscreen = windowId !== undefined && selectFullscreenCardId(state) === windowId;
-  const visible = windowId === undefined || isShown(state, windowId);
+  const visible = !isUnattended() && (windowId === undefined || isShown(state, windowId));
   // `host` is what the frame is told of the native window — the host itself is main-frame only.
   return {
     type: APP_MSG.deviceUpdate,
@@ -101,6 +106,13 @@ export function initDeviceBroadcaster() {
     prev = state;
     prevFullscreen = fullscreen;
     prevShown = shown;
+    for (const iframe of windowFrames()) {
+      postToIframe(iframe, deviceUpdate(state, windowIdOf(iframe)));
+    }
+  });
+
+  onAttentionChange(() => {
+    const state = store.getState();
     for (const iframe of windowFrames()) {
       postToIframe(iframe, deviceUpdate(state, windowIdOf(iframe)));
     }

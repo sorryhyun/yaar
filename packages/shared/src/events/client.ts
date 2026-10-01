@@ -345,6 +345,12 @@ export type ClientPresenceState = 'visible' | 'hidden' | 'frozen';
 export interface ClientPresenceEvent {
   type: typeof ClientEventType.CLIENT_PRESENCE;
   state: ClientPresenceState;
+  /**
+   * The page is running and can answer, but nobody is looking at it. Only a host that
+   * keeps a backgrounded page alive sends this (`YaarHost.attended`, the Android app);
+   * a browser tab that nobody is looking at is `hidden` and cannot answer either.
+   */
+  unattended?: boolean;
 }
 
 export interface SubscribeMonitorEvent {

@@ -22,6 +22,7 @@ android {
         targetSdk = 36
         versionCode = yaarVersion[0] * 1_000_000 + yaarVersion[1] * 1_000 + yaarVersion[2]
         versionName = yaarVersion.joinToString(".")
+        manifestPlaceholders["appLabel"] = "YAAR"
     }
 
     // The release key, which release.yml decodes from its secrets. It is the app's identity
@@ -39,6 +40,15 @@ android {
     }
 
     buildTypes {
+        // -PsideBySide gives the debug build its own package, so it installs beside a release
+        // app instead of needing that uninstalled (the two are signed by different keys).
+        // termux-open-desktop.sh opens the release package only.
+        debug {
+            if (project.hasProperty("sideBySide")) {
+                applicationIdSuffix = ".debug"
+                manifestPlaceholders["appLabel"] = "YAAR debug"
+            }
+        }
         release {
             signingConfig = signingConfigs.findByName("release")
         }

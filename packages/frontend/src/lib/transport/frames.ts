@@ -6,6 +6,7 @@ import { useDesktopStore } from '@/store';
 import { ClientEventType, type ClientEvent } from '@/types';
 import type { SubscribeMonitorEvent } from '@yaar/shared';
 import { settledViewport } from '@/lib/device';
+import { isUnattended } from '@/lib/hostAttention';
 
 /**
  * The one spelling of "this tab is looking at `monitorId`": which monitor, how big the
@@ -37,5 +38,6 @@ export function clientPresence(): ClientEvent {
   return {
     type: ClientEventType.CLIENT_PRESENCE,
     state: document.visibilityState === 'hidden' ? 'hidden' : 'visible',
+    ...(isUnattended() ? { unattended: true } : {}),
   };
 }

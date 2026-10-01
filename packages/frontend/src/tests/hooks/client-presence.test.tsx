@@ -18,6 +18,8 @@ import { renderHook } from '@testing-library/react';
 import type { ClientEvent } from '@yaar/shared';
 import { useClientPresence } from '@/hooks/use-agent-connection/useClientPresence';
 import { wsManager } from '@/lib/transport/transport-manager';
+import { resetHostAttentionForTest } from '@/lib/hostAttention';
+import { clientPresence } from '@/lib/transport/frames';
 
 function fakeOpenSocket(): WebSocket & { sent: string[] } {
   const sent: string[] = [];
@@ -73,6 +75,8 @@ describe('useClientPresence', () => {
   afterEach(() => {
     wsManager.ws = null;
     Date.now = realNow;
+    delete (window as { yaarHost?: unknown }).yaarHost;
+    resetHostAttentionForTest();
   });
 
   const mount = () => renderHook(() => useClientPresence(() => void recovered++));
@@ -84,6 +88,57 @@ describe('useClientPresence', () => {
     setVisibility('visible');
 
     expect(presenceStates(ws)).toEqual(['hidden', 'visible']);
+    hook.unmount();
+  });
+
+  it('says when a host keeps it running with nobody looking', async () => {
+    // The Android app holds the page visible in the background, so visibility never
+    // changes and the host is the only one who knows the user has left.
+    let push: (payload: unknown) => void = () => {};
+    (window as { yaarHost?: unknown }).yaarHost = {
+      version: 1,
+      platform: 'android',
+      caps: ['attention'],
+      attended: () => Promise.resolve(true),
+      on: (_event: string, cb: (payload: unknown) => void) => {
+        push = cb;
+        return () => {};
+      },
+    };
+    resetHostAttentionForTest();
+    const hook = mount();
+    await Promise.resolve();
+
+    push({ attended: false });
+    push({ attended: true });
+
+    const frames = framesOf(ws).filter((f) => f.type === 'CLIENT_PRESENCE');
+    expect(frames).toEqual([
+      { type: 'CLIENT_PRESENCE', state: 'visible', unattended: true },
+      { type: 'CLIENT_PRESENCE', state: 'visible' },
+    ]);
+    expect(recovered).toBe(0);
+    hook.unmount();
+  });
+
+  it('carries it on a reconnect, for a page that loaded out of sight', async () => {
+    (window as { yaarHost?: unknown }).yaarHost = {
+      version: 1,
+      platform: 'android',
+      caps: ['attention'],
+      attended: () => Promise.resolve(false),
+      on: () => () => {},
+    };
+    resetHostAttentionForTest();
+    const hook = mount();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(clientPresence()).toEqual({
+      type: 'CLIENT_PRESENCE',
+      state: 'visible',
+      unattended: true,
+    });
     hook.unmount();
   });
 
