@@ -176,6 +176,8 @@ export interface PageState {
   viewportHeight?: number;
   visibleLinks?: Array<{ text: string; href: string }>;
   newTab?: { browserId: string; url: string };
+  /** Where the tab sits in its own history. Set by the operations that move through it. */
+  history?: { index: number; length: number; canGoBack: boolean; canGoForward: boolean };
 }
 
 export interface PageContent {

@@ -24,7 +24,7 @@ store.ts         display signals (url, title, loading, placeholder, lock)
 endpoints.ts     every /api/browser/... URL, with the iframe token attached
 dom.ts           the shared <img> handle (see "no cycles" below)
 actions.ts       toolbar handlers + the still-screenshot refresh
-history.ts       back/forward/reload on the real tab; canGoBack/canGoForward read from the page
+history.ts       back/forward/reload on the real tab; canGoBack/canGoForward as the SSE frames report them
 url.ts           address-vs-phrase parsing (imports nothing)
 sse.ts           the event stream and the 200 ms still-screenshot poll
 schema.ts        zod boundary schema for SSE frames

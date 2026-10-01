@@ -42,6 +42,7 @@ const SHARED_MODULE: Record<string, string> = {
   BrowserTabSummary: 'browser',
   BrowserScrollToBottomResult: 'browser',
   BrowserHtmlWithMeta: 'browser',
+  BrowserNavigationHistory: 'browser',
   BrowserAnnotatedElement: 'browser',
   BrowserCookie: 'browser',
 };
@@ -59,6 +60,7 @@ const PAIRS: Array<[shared: string, app: string, module: string]> = [
   ['BrowserTabSummary', 'WebTab', '@bundled/yaar-web'],
   ['BrowserScrollToBottomResult', 'WebScrollToBottomResult', '@bundled/yaar-web'],
   ['BrowserHtmlWithMeta', 'WebHtmlWithMeta', '@bundled/yaar-web'],
+  ['BrowserNavigationHistory', 'WebNavigationHistory', '@bundled/yaar-web'],
   ['BrowserAnnotatedElement', 'WebAnnotatedElement', '@bundled/yaar-web'],
   ['BrowserCookie', 'WebCookie', '@bundled/yaar-web'],
 ];

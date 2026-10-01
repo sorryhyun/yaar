@@ -480,3 +480,153 @@ describe('BrowserSession shield', () => {
     expect(session.getNetworkLog({ resourceType: 'fetch' }).entries).toHaveLength(1);
   });
 });
+
+// ── Navigation history and reload (issue #147) ──────────────────────────────
+
+describe('BrowserSession history', () => {
+  /** Three entries on two origins, the way Chrome reports them. */
+  const ENTRIES = [
+    { id: 11, url: 'https://a.test/', title: 'A', userTypedURL: 'a.test', transitionType: 'typed' },
+    { id: 12, url: 'https://b.test/x', title: 'B', userTypedURL: '', transitionType: 'link' },
+    { id: 13, url: 'https://a.test/y', title: 'A2', userTypedURL: '', transitionType: 'link' },
+  ];
+  let currentIndex = 1;
+
+  const handlersOf = () => {
+    const handlers = new Map<string, (p: unknown) => void>();
+    for (const call of mockOn.mock.calls as unknown as Array<[string, (p: unknown) => void]>) {
+      handlers.set(call[0], call[1]);
+    }
+    return handlers;
+  };
+
+  beforeEach(() => {
+    mockSend.mockClear();
+    mockWaitForEvent.mockClear();
+    mockOn.mockClear();
+    (CDPClient.connect as ReturnType<typeof mock>).mockClear();
+    mockWaitForEvent.mockResolvedValue(undefined);
+    currentIndex = 1;
+    mockSend.mockImplementation((method: string, params?: { entryId?: number }) => {
+      if (method === 'Page.getNavigationHistory') {
+        return Promise.resolve({ currentIndex, entries: ENTRIES });
+      }
+      if (method === 'Page.navigateToHistoryEntry') {
+        currentIndex = ENTRIES.findIndex((e) => e.id === params?.entryId);
+        return Promise.resolve({});
+      }
+      return defaultSendHandler(method);
+    });
+  });
+
+  it('reads the history a tab arrives with, without announcing it', async () => {
+    const session = await BrowserSession.create('h-1', 'ws://127.0.0.1:9222/devtools/page/a');
+    expect(session.canGoBack).toBe(true);
+    expect(session.canGoForward).toBe(true);
+    expect(session.version).toBe(0);
+  });
+
+  it('getNavigationHistory reports every entry by URL, across origins, with the index', async () => {
+    const session = await BrowserSession.create('h-2', 'ws://127.0.0.1:9222/devtools/page/a');
+    expect(await session.getNavigationHistory()).toEqual({
+      currentIndex: 1,
+      entries: [
+        { url: 'https://a.test/', title: 'A' },
+        { url: 'https://b.test/x', title: 'B' },
+        { url: 'https://a.test/y', title: 'A2' },
+      ],
+      canGoBack: true,
+      canGoForward: true,
+    });
+  });
+
+  it('navigateHistory moves by entry id, not by history.back() in the page', async () => {
+    const session = await BrowserSession.create('h-3', 'ws://127.0.0.1:9222/devtools/page/a');
+    mockSend.mockClear();
+
+    const state = await session.navigateHistory('back');
+
+    expect(mockSend).toHaveBeenCalledWith('Page.navigateToHistoryEntry', { entryId: 11 });
+    const evaluated = (mockSend.mock.calls as unknown as Array<[string, { expression?: string }?]>)
+      .filter(([method]) => method === 'Runtime.evaluate')
+      .map(([, params]) => params?.expression ?? '');
+    expect(evaluated.some((e) => e.includes('history.back'))).toBe(false);
+
+    expect(state.history).toEqual({ index: 0, length: 3, canGoBack: false, canGoForward: true });
+    expect(session.canGoBack).toBe(false);
+    expect(session.canGoForward).toBe(true);
+  });
+
+  it('navigateHistory refuses a move with no entry in that direction', async () => {
+    const session = await BrowserSession.create('h-4', 'ws://127.0.0.1:9222/devtools/page/a');
+    currentIndex = 2;
+    mockSend.mockClear();
+
+    await expect(session.navigateHistory('forward')).rejects.toThrow(
+      'No history entry ahead of this page.',
+    );
+    expect(mockSend).not.toHaveBeenCalledWith('Page.navigateToHistoryEntry', expect.anything());
+  });
+
+  it('announces canGoBack / canGoForward when a navigation nobody drove changes them', async () => {
+    const session = await BrowserSession.create('h-5', 'ws://127.0.0.1:9222/devtools/page/a');
+    const updates: Array<{ canGoBack: boolean; canGoForward: boolean; version: number }> = [];
+    session.on('updated', (u) => updates.push(u));
+
+    // A subframe navigation is a history entry too.
+    currentIndex = 2;
+    handlersOf().get('Page.frameNavigated')!({ frame: { id: 'child', parentId: 'top' } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ canGoBack: true, canGoForward: false, version: 1 });
+
+    // Same answers again: nothing to say.
+    handlersOf().get('Page.navigatedWithinDocument')!({ frameId: 'child', url: 'https://x/#a' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(updates).toHaveLength(1);
+  });
+
+  it('reload is a Page.reload, waited on like a navigation', async () => {
+    const session = await BrowserSession.create('h-6', 'ws://127.0.0.1:9222/devtools/page/a');
+    mockSend.mockClear();
+    mockWaitForEvent.mockClear();
+
+    const state = await session.reload({ ignoreCache: true });
+
+    expect(mockSend).toHaveBeenCalledWith('Page.reload', { ignoreCache: true });
+    expect(mockSend).not.toHaveBeenCalledWith('Page.navigate', expect.anything());
+    expect(mockWaitForEvent).toHaveBeenCalledWith('Page.domContentEventFired', 15_000);
+    expect(mockWaitForEvent).toHaveBeenCalledWith('Page.loadEventFired', 15_000);
+    expect(state.history).toEqual({ index: 1, length: 3, canGoBack: true, canGoForward: true });
+  });
+
+  it('waits out the moment a cross-site commit leaves no active page', async () => {
+    const session = await BrowserSession.create('h-8', 'ws://127.0.0.1:9222/devtools/page/a');
+    let refusals = 2;
+    mockSend.mockImplementation((method: string) => {
+      if (method !== 'Page.getNavigationHistory') return defaultSendHandler(method);
+      if (refusals-- > 0) return Promise.reject(new Error('Not attached to an active page'));
+      return Promise.resolve({ currentIndex: 0, entries: ENTRIES });
+    });
+
+    const history = await session.getNavigationHistory();
+    expect(history.currentIndex).toBe(0);
+    expect(history.canGoBack).toBe(false);
+  });
+
+  it('keeps the last answers when the tab will not report its history', async () => {
+    const session = await BrowserSession.create('h-7', 'ws://127.0.0.1:9222/devtools/page/a');
+    mockSend.mockImplementation((method: string) =>
+      method === 'Page.getNavigationHistory'
+        ? Promise.reject(new Error('target closed'))
+        : defaultSendHandler(method),
+    );
+
+    handlersOf().get('Page.loadEventFired')!({});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(session.canGoBack).toBe(true);
+    expect(session.canGoForward).toBe(true);
+    await expect(session.getNavigationHistory()).rejects.toThrow('navigation history');
+  });
+});

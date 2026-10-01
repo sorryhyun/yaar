@@ -326,6 +326,29 @@ async function handleNavigate(
   return ok(formatPageState(state));
 }
 
+async function handleReload(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  const state = await session.reload({ ignoreCache: p.ignoreCache === true });
+  return ok(formatPageState(state));
+}
+
+/**
+ * The tab's history as Chrome holds it: every entry with its real URL, other origins
+ * included, and the index of the one on screen. Not a mutation, but it is a read of
+ * where the tab has been — the same reach `list_tabs` has over where tabs are.
+ */
+async function handleGetNavigationHistory(
+  pool: BrowserProvider,
+  browserId: string,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  return okJson(await session.getNavigationHistory());
+}
+
 async function handleHover(
   pool: BrowserProvider,
   browserId: string,
@@ -855,6 +878,8 @@ const BROWSER_ACTION_TABLE = {
   create: { mutates: false, run: handleCreate },
   open: { mutates: true, run: handleOpen },
   navigate: { mutates: true, run: handleNavigate },
+  reload: { mutates: true, run: handleReload },
+  get_navigation_history: { mutates: false, run: handleGetNavigationHistory },
   click: { mutates: true, run: handleClick },
   type: { mutates: true, run: handleType },
   press: { mutates: true, run: handlePress },

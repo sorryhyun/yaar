@@ -12,7 +12,7 @@ import { getScreenshotEl } from './dom';
 import { refreshScreenshot } from './actions';
 import { onNavigated, onPopup } from './adblock';
 import { claimDownload } from './downloads';
-import { resetHistory, watchHistory } from './history';
+import { noteHistory, resetHistory } from './history';
 import { BrowserEventSchema } from './schema';
 
 type BrowserEvent = z.infer<typeof BrowserEventSchema>;
@@ -154,12 +154,15 @@ export function connectSSE(browserId: string): void {
     if (data.version <= lastVersion) return;
     lastVersion = data.version;
 
+    // Outside the url check: a move to a history entry with the same URL changes
+    // these and nothing else.
+    noteHistory(data);
+
     if (data.url) {
       updateUrlBar(data.url, data.title);
       // The only navigation signal this app gets. `onNavigated` de-duplicates,
       // so the repeated frames of one page load cost one injection.
       onNavigated(data.url);
-      watchHistory(browserId);
     }
     // Live: the screencast paints the new page itself, and a still here would be
     // the second encode the poll above refuses. The navigation the bar was raised
