@@ -415,7 +415,7 @@ paths:
               schema:
                 type: object
     post:
-      summary: Write a storage file (body = file content)
+      summary: 'Write a storage file (body = file content) / Append the body to a storage file, creating it if absent; answers its new size'
       responses:
         '200':
           description: JSON

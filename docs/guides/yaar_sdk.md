@@ -146,7 +146,7 @@ import without it. The bundle is the grant, so there is no `permissions` entry t
 | `@bundled/yaar-dev` | `yaar-dev` | `compile`, `typecheck`, `findReferences`, `deploy`, `bundledLibraries`, and per-app version history (`gitHistory`/`gitDiff`/`gitRestore`/`gitCheckpoint`) |
 | `@bundled/yaar-web` | `yaar-web` | Headless browser automation: `open`, `click`, `type`, `extract` |
 | `@bundled/yaar-ml` | `yaar-ml` | In-browser model inference; see [`yaar_ml_runtime.md`](./yaar_ml_runtime.md) |
-| `@bundled/yaar-media` | `yaar-media` | `mediaUrl(url, { referer? })` streams big media through the server with Range passthrough; optional yt-dlp audio download into `shared/media/` |
+| `@bundled/yaar-media` | `yaar-media` | `mediaUrl(url, { referer? })` streams big media through the server with Range passthrough; optional yt-dlp audio download into `shared/media/`; camera/microphone capture — `openCamera`, `capturePhoto`, and `recordToStorage(stream, path)`, which appends each recorded chunk to a storage file as it is captured (no size cap, nothing held in memory) |
 
 ## UI Chrome & Headless Primitives
 
@@ -486,6 +486,7 @@ const blob = await appStorage.readBlob('image.png');              // bytes as st
 const entries = await appStorage.list('renders');                 // direct children only
 await appStorage.remove('data.json');
 await appStorage.save('a.otf', bytesToBase64(buf), { encoding: 'base64' }); // binary
+const size = await appStorage.append('log.ndjson', line + '\n');      // grow a file, raw bytes
 ```
 
 A binary write without `encoding: 'base64'` stores the base64 text itself.

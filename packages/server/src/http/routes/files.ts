@@ -52,6 +52,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description: 'Write a storage file (body = file content)',
   },
   {
+    method: 'POST',
+    path: '/api/storage/{path}?append=true',
+    response: 'JSON',
+    description: 'Append the body to a storage file, creating it if absent; answers its new size',
+  },
+  {
     method: 'DELETE',
     path: '/api/storage/{path}',
     response: 'JSON',
@@ -64,7 +70,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description: 'Render PDF page as PNG',
   },
 ];
-import { storageWrite, storageDelete, storageList } from '../../storage/storage-manager.js';
+import {
+  storageAppend,
+  storageWrite,
+  storageDelete,
+  storageList,
+} from '../../storage/storage-manager.js';
 
 /** Content types eligible for gzip compression. */
 const COMPRESSIBLE = new Set([
@@ -192,10 +203,18 @@ function storageVerb(req: Request, url: URL): Verb | null {
  */
 const MUTATION_QUERY_PARAMS = new Set(['__yaar_token', 'token']);
 
+/**
+ * `append=true` turns a write into an append (`storageAppend`). It changes how the bytes
+ * land, never which file they land in, so it is the one non-credential parameter a write
+ * takes — and only a write: a delete carrying it is as confused as one carrying `path`.
+ */
+const WRITE_QUERY_PARAMS = new Set([...MUTATION_QUERY_PARAMS, 'append']);
+
 /** A 400 for a write or delete whose query string would be ignored, else `null`. */
 function refuseStrayQuery(req: Request, url: URL): Response | null {
   if (req.method !== 'POST' && req.method !== 'DELETE') return null;
-  const stray = [...new Set(url.searchParams.keys())].filter((k) => !MUTATION_QUERY_PARAMS.has(k));
+  const allowed = req.method === 'POST' ? WRITE_QUERY_PARAMS : MUTATION_QUERY_PARAMS;
+  const stray = [...new Set(url.searchParams.keys())].filter((k) => !allowed.has(k));
   if (stray.length === 0) return null;
   return errorResponse(
     `Unsupported query parameter${stray.length > 1 ? 's' : ''} ${stray.map((k) => `'${k}'`).join(', ')} ` +
@@ -275,7 +294,16 @@ async function handleStorage(
   if (req.method === 'POST') {
     if (resolved.readOnly) return errorResponse('Mount is read-only', 403);
     try {
+      const append = url.searchParams.get('append');
+      if (append !== null && append !== 'true') {
+        return errorResponse(`append must be 'true' when present, got '${append}'`, 400);
+      }
       const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
+      if (append === 'true') {
+        const result = await storageAppend(filePath, buf);
+        if (!result.success) return errorResponse(result.error ?? 'Append failed');
+        return jsonResponse({ ok: true, path: result.path, size: result.bytes });
+      }
       const result = await storageWrite(filePath, buf);
       if (!result.success) return errorResponse(result.error ?? 'Write failed');
       return jsonResponse({ ok: true, path: result.path });

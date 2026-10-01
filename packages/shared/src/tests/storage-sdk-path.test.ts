@@ -17,6 +17,7 @@ import { IFRAME_STORAGE_SDK_SCRIPT } from '../iframe-scripts/storage-sdk.js';
 
 interface StorageApi {
   save(path: string, data: unknown): Promise<unknown>;
+  append(path: string, data: unknown): Promise<unknown>;
   read(path: string, options?: { as?: string }): Promise<unknown>;
   list(dirPath?: string): Promise<unknown>;
   remove(path: string): Promise<unknown>;
@@ -167,6 +168,13 @@ describe('every method accepts every spelling', () => {
       '/api/storage/apps/self/a.txt',
       '/api/storage/apps/self/dir?list=true',
     ]);
+  });
+
+  it('appends through the write route with append=true', async () => {
+    const { storage: s, fetched } = installStorage();
+    await s.append('yaar://apps/self/storage/rec/clip.webm', new Uint8Array([1, 2, 3]));
+    expect(fetched).toEqual(['/api/storage/apps/self/rec/clip.webm?append=true']);
+    await expect(s.append('https://example.com/x', 'x')).rejects.toThrow(/storage\.append/);
   });
 
   it('lists the storage root when given nothing', async () => {

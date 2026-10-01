@@ -130,16 +130,16 @@ const BASE_FRAME_ALLOW = [
 ];
 
 /**
- * The `allow` attribute for a local app frame: the base set plus the microphone.
+ * The `allow` attribute for a local app frame: the base set plus the microphone and camera.
  *
- * `microphone` defaults to `'self'`, so an isolated app — cross-origin to the desktop —
- * gets a silent `NotAllowedError` from `getUserMedia` unless the desktop delegates it
- * here. It is withheld from external embeds on purpose: Chrome attributes a delegated
- * frame's prompt to the *top* origin, so an arbitrary site would ask for the mic
- * wearing the desktop's name. The grant is likewise stored against the desktop origin,
- * so allowing it once allows it for every app frame.
+ * Both default to `'self'`, so an isolated app — cross-origin to the desktop — gets a
+ * silent `NotAllowedError` from `getUserMedia` unless the desktop delegates them here.
+ * They are withheld from external embeds on purpose: Chrome attributes a delegated
+ * frame's prompt to the *top* origin, so an arbitrary site would ask for the mic or
+ * camera wearing the desktop's name. The grant is likewise stored against the desktop
+ * origin, so allowing it once allows it for every app frame.
  */
-export const APP_FRAME_ALLOW = [...BASE_FRAME_ALLOW, 'microphone'].join('; ');
+export const APP_FRAME_ALLOW = [...BASE_FRAME_ALLOW, 'microphone', 'camera'].join('; ');
 export const EXTERNAL_FRAME_ALLOW = BASE_FRAME_ALLOW.join('; ');
 
 /**

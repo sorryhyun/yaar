@@ -127,9 +127,9 @@ describe('IframeRenderer sandbox wiring', () => {
     expect(iframe?.getAttribute('sandbox')).toBeNull();
   });
 
-  // `microphone` defaults to 'self': without delegation an isolated app's getUserMedia
-  // is refused with no prompt at all.
-  it('delegates the microphone to isolated and same-origin app frames', () => {
+  // `microphone` and `camera` default to 'self': without delegation an isolated app's
+  // getUserMedia is refused with no prompt at all.
+  it('delegates the microphone and camera to isolated and same-origin app frames', () => {
     for (const isolateOrigin of [true, false]) {
       const { container } = render(
         <MemoizedIframeRenderer
@@ -142,15 +142,17 @@ describe('IframeRenderer sandbox wiring', () => {
       cleanup();
     }
     expect(APP_FRAME_ALLOW.split('; ')).toContain('microphone');
+    expect(APP_FRAME_ALLOW.split('; ')).toContain('camera');
   });
 
   // A delegated frame's prompt is attributed to the top origin, so an external embed
-  // would ask for the mic in the desktop's name.
-  it('withholds the microphone from an external embed', () => {
+  // would ask for the mic or camera in the desktop's name.
+  it('withholds the microphone and camera from an external embed', () => {
     const { container } = render(<MemoizedIframeRenderer data="https://example.com/" />);
     const allow = container.querySelector('iframe')?.getAttribute('allow') ?? '';
     expect(allow).toBe(EXTERNAL_FRAME_ALLOW);
     expect(allow.split('; ')).not.toContain('microphone');
+    expect(allow.split('; ')).not.toContain('camera');
   });
 });
 

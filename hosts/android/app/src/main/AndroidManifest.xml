@@ -2,8 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Asked for only when a loopback page asks for the microphone (onPermissionRequest). -->
+    <!-- Asked for only when a loopback page asks for the microphone or camera (onPermissionRequest). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- The camera is optional: without this, CAMERA would make it a hard install requirement. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Starting the server in Termux when a tap finds none running. -->

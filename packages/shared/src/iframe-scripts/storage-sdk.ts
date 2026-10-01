@@ -1,7 +1,7 @@
 /**
  * Inline JS storage SDK for iframe apps.
  *
- * Provides window.yaar.storage with save/read/list/remove/url methods
+ * Provides window.yaar.storage with save/append/read/list/remove/url methods
  * that dispatch to the /api/storage REST endpoints.
  *
  * ## Every spelling of a stored file arrives here
@@ -134,29 +134,44 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
     return p;
   }
 
+  function requestBody(data) {
+    if (typeof data === 'string' || data instanceof Blob || data instanceof ArrayBuffer) {
+      return data;
+    }
+    if (data instanceof Uint8Array) {
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    }
+    return String(data);
+  }
+
   window.yaar.storage = {
     path: storageRefPath,
     save: function(path, data) {
       var p = storageRefPath(path);
       if (p === null) return Promise.reject(pathError(path, 'save'));
-      var body;
-      if (typeof data === 'string') {
-        body = data;
-      } else if (data instanceof Blob) {
-        body = data;
-      } else if (data instanceof ArrayBuffer) {
-        body = data;
-      } else if (data instanceof Uint8Array) {
-        body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-      } else {
-        body = String(data);
-      }
       return fetch(API_BASE + '/api/storage/' + encodePath(p), {
         method: 'POST',
         headers: tokenHeaders(),
-        body: body
+        body: requestBody(data)
       }).then(function(res) {
         if (!res.ok) return throwJsonError(res, 'Save failed');
+        return res.json();
+      });
+    },
+    // Add bytes to the end of a file, creating it if absent; resolves with
+    // { ok, path, size } — size is the file's length after this append. Each call is
+    // one request under the upload cap, so a file that grows past it (a recording)
+    // arrives as many appends. The caller keeps them in order: await one before the
+    // next, or two in flight land in whichever order the requests arrive.
+    append: function(path, data) {
+      var p = storageRefPath(path);
+      if (p === null) return Promise.reject(pathError(path, 'append'));
+      return fetch(API_BASE + '/api/storage/' + encodePath(p) + '?append=true', {
+        method: 'POST',
+        headers: tokenHeaders(),
+        body: requestBody(data)
+      }).then(function(res) {
+        if (!res.ok) return throwJsonError(res, 'Append failed');
         return res.json();
       });
     },

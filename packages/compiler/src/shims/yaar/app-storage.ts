@@ -79,6 +79,14 @@ export const appStorage = {
       return false;
     }
   },
+  /**
+   * Through the raw storage door: the bytes go up as the request body, not as base64
+   * inside a verb payload — a recording's chunks are the case this exists for.
+   */
+  async append(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<number> {
+    const result = await y.storage.append(appStorageUri(path), data);
+    return result.size;
+  },
   async read(path: string): Promise<string> {
     // Through the raw storage door (an HTTP GET of the file), not the verb layer. A verb
     // read of a text file whose content happens to parse as JSON hands back the parsed
