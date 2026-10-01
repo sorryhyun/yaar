@@ -147,7 +147,7 @@ Every blocking dialog renders inside `components/overlays/Modal.tsx`, and every 
 | `table` | `{headers, rows}` | Table rendering |
 | `html` | `string` | Raw HTML |
 | `text` | `string` | Plain text |
-| `iframe` | `string \| { url, sandbox? }` | Embedded iframe (injects SDK scripts for app protocol, storage, fetch proxy, etc.) |
+| `iframe` | `string \| { url, sandbox? }` | Embedded iframe (injects SDK scripts for app protocol, storage, fetch proxy, etc.). A stored PDF on a browser with no inline viewer (`navigator.pdfViewerEnabled === false` — Chrome on Android) is drawn by `PdfPagesRenderer` instead, as the server's page rasters (`lib/pdfPages.ts`, `/api/pdf/{path}/{page}`) |
 | `component` | `ComponentNode` | Interactive React components from JSON |
 
 ## Adding a New Content Renderer

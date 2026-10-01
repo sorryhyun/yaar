@@ -3,7 +3,7 @@
  */
 
 import { extname } from 'path';
-import { renderPdfPage } from '../../features/pdf.js';
+import { getPdfInfo, PopplerNotInstalledError, renderPdfPage } from '../../features/pdf.js';
 import { MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
@@ -65,9 +65,15 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
   {
     method: 'GET',
+    path: '/api/pdf/{path}',
+    response: 'JSON',
+    description: 'PDF page count and first-page size',
+  },
+  {
+    method: 'GET',
     path: '/api/pdf/{path}/{page}',
     response: 'image/png',
-    description: 'Render PDF page as PNG',
+    description: 'Render PDF page as PNG (?scale=, default 1.5)',
   },
 ];
 import {
@@ -101,6 +107,22 @@ function maybeGzip(
   return Bun.gzipSync(new Uint8Array(body));
 }
 
+/**
+ * Raster scale bounds for `/api/pdf/{path}/{page}?scale=` (1 = 72 DPI). The ceiling is
+ * what a phone needs to keep a zoomed page sharp; past it one page is tens of megabytes
+ * of bitmap for whoever asked.
+ */
+const PDF_SCALE_MIN = 0.5;
+const PDF_SCALE_MAX = 4;
+const PDF_SCALE_DEFAULT = 1.5;
+
+/** The requested scale, the default when none was given, or `null` for one out of range. */
+function pdfScale(raw: string | null): number | null {
+  if (raw === null) return PDF_SCALE_DEFAULT;
+  const scale = Number(raw);
+  return raw.trim() !== '' && scale >= PDF_SCALE_MIN && scale <= PDF_SCALE_MAX ? scale : null;
+}
+
 /** The path prefixes this file owns. Anything else belongs to a later handler. */
 function ownsPath(pathname: string): boolean {
   return (
@@ -125,19 +147,25 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
   const principal = resolvePrincipal(req, url);
   if (principal instanceof Response) return principal;
 
-  // Render PDF page as image
-  // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
-  const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);
-  if (pdfMatch && req.method === 'GET') {
-    const pdfPath = decodeURIComponent(pdfMatch[1]);
-    const pageNum = parseInt(pdfMatch[2], 10);
+  // PDF pages as images, and the page count a viewer needs before asking for any.
+  //   /api/pdf/<path>          -> { pages, pageSize? }
+  //   /api/pdf/<path>/<page>   -> image/png   (e.g. /api/pdf/documents/paper.pdf/1)
+  if (url.pathname.startsWith('/api/pdf/') && req.method === 'GET') {
+    const rest = url.pathname.slice('/api/pdf/'.length);
+    const pageMatch = rest.match(/^(.+)\/(\d+)$/);
+    const requested = decodeURIComponent(pageMatch ? pageMatch[1] : rest);
 
-    // Rendering a page of a PDF is reading the file. Same gate as reading it.
-    const pdfUri = storageUriFor(principal, pdfPath);
+    // Rendering a page of a PDF is reading the file. Same gate as reading it, and the
+    // same `self` expansion, so a storage URL and its raster name one file.
+    const pdfUri = storageUriFor(principal, requested);
     if (pdfUri instanceof Response) return pdfUri;
     const denied = requirePermission(principal, pdfUri, 'read');
     if (denied) return denied;
 
+    const pdfPath = expandSelfPath(
+      requested,
+      principal.kind === 'app' ? principal.appId : undefined,
+    );
     const resolved = resolvePath(pdfPath);
     if (!resolved) {
       return errorResponse('Access denied', 403);
@@ -149,7 +177,19 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
     }
 
     try {
-      const pngBuffer = await renderPdfPage(normalizedPath, pageNum, 1.5);
+      if (!pageMatch) {
+        if (!(await Bun.file(normalizedPath).exists())) return errorResponse('File not found', 404);
+        return jsonResponse(await getPdfInfo(normalizedPath));
+      }
+
+      const scale = pdfScale(url.searchParams.get('scale'));
+      if (scale === null) {
+        return errorResponse(
+          `scale must be a number from ${PDF_SCALE_MIN} to ${PDF_SCALE_MAX}`,
+          400,
+        );
+      }
+      const pngBuffer = await renderPdfPage(normalizedPath, parseInt(pageMatch[2], 10), scale);
       return new Response(pngBuffer, {
         headers: {
           'Content-Type': 'image/png',
@@ -157,12 +197,14 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
         },
       });
     } catch (err) {
+      // Its own status and its own sentence: "install poppler" is something the reader
+      // can act on, and it was arriving as a bare "Failed to render PDF page".
+      if (err instanceof PopplerNotInstalledError) return errorResponse(err.message, 501);
       const error = err instanceof Error ? err.message : 'Unknown error';
       if (error.includes('Failed to render page')) {
         return errorResponse(error, 404);
-      } else {
-        return errorResponse('Failed to render PDF page');
       }
+      return errorResponse(pageMatch ? 'Failed to render PDF page' : 'Failed to read PDF');
     }
   }
 

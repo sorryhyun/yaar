@@ -104,6 +104,7 @@ describe('every query-param consumer is on the coarse allowlist', () => {
     ['storage file (<img src>)', 'GET', '/api/storage/shared/example.png'],
     ['storage listing', 'GET', '/api/storage/shared?list=true'],
     ['app static file (the iframe document itself)', 'GET', '/api/apps/notes/index.html'],
+    ['PDF page count (a window drawing a stored PDF)', 'GET', '/api/pdf/files/example.pdf'],
     ['PDF page raster (<img src>)', 'GET', '/api/pdf/files/example.pdf/1'],
     ['browser screenshot (<img src>)', 'GET', '/api/browser/sess-1/screenshot'],
     ['browser events (EventSource)', 'GET', '/api/browser/sess-1/events'],

@@ -122,6 +122,16 @@ install_termux() {
     fi
   fi
 
+  # poppler, for everything the server does with a PDF: reading one for an agent, and
+  # drawing its pages in a window — Chrome on Android has no PDF viewer to put in a frame,
+  # so the server rasterizes the pages instead. Small, so there is no switch to skip it,
+  # and non-fatal: without it a PDF window says what to install.
+  if ! command -v pdfinfo > /dev/null 2>&1; then
+    if ! pkg install -y poppler; then
+      echo "⚠  Could not install poppler — PDFs will not open. Later: pkg install poppler" >&2
+    fi
+  fi
+
   # Chromium, for the companion desktop (which keeps __screenshot answering while the phone
   # shows another app) and the Browser app. The server finds `chromium-browser` on the PATH;
   # Termux ships it in x11-repo, which has to be enabled first. A large download, and

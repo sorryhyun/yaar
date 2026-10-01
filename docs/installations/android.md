@@ -75,6 +75,7 @@ What each piece does:
 | `~/.shortcuts/YAAR` | The same launcher, as a Termux:Widget button | install.sh |
 | `~/.cache/yaar/claude-js/<sdk-version>-<arch>/` | Claude Code, unpacked for Android, and a `claude` wrapper | `ensure-claude-android.sh`, from install.sh or the first launch |
 | `~/.claude/` | The Claude login | `claude auth login`, from the first launch |
+| `$PREFIX/bin/pdfinfo`, `pdftocairo`, `pdftotext` | poppler, for reading PDFs and for drawing their pages in a window (Chrome on Android has no inline PDF viewer) | install.sh (`pkg install poppler`) |
 | `$PREFIX/bin/chromium-browser` | Termux's Chromium (`x11-repo`), for the companion desktop and the Browser app | install.sh (`pkg install chromium`) |
 | The YAAR app, `io.github.sorryhyun.yaar` | The display: one activity, about 5.5 MB | Android's installer, offered by install.sh ([Installing the app](#installing-the-app)) |
 | `/data/data/io.github.sorryhyun.yaar/` | The WebView's own storage (localStorage, IndexedDB, service worker, HTTP cache), private to the app | the WebView |

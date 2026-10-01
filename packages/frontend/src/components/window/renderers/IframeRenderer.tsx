@@ -21,8 +21,10 @@ import {
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
 import { injectScriptOnce } from '@/lib/injectScriptOnce';
+import { hasInlinePdfViewer, storagePdf } from '@/lib/pdfPages';
 import { useDesktopStore } from '@/store';
 import styles from '@/styles/window/renderers.module.css';
+import { PdfPagesRenderer } from './PdfPagesRenderer';
 
 /**
  * The SDK scripts injected into a same-origin app frame, in the order they must
@@ -295,6 +297,12 @@ function IframeRenderer({
 
   const loadingTarget = loadingHost(resolved);
 
+  // A stored PDF on a browser that cannot draw one in a frame (Chrome on Android): the
+  // frame would load nothing and report nothing, so the pages are shown as images
+  // instead. See `lib/pdfPages`.
+  const pdfPages =
+    !appOrigin && isSameOrigin(url) && !hasInlinePdfViewer() ? storagePdf(url) : null;
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -544,6 +552,18 @@ function IframeRenderer({
   const handleError = () => {
     reportError('Failed to load iframe content');
   };
+
+  if (pdfPages) {
+    return (
+      <PdfPagesRenderer
+        pdf={pdfPages}
+        fileUrl={url}
+        // Success is only owed when the server is waiting on this render.
+        onRenderSuccess={requestId ? onRenderSuccess : undefined}
+        onRenderError={(message) => onRenderError?.(message, url)}
+      />
+    );
+  }
 
   if (navigatedAway) {
     return (

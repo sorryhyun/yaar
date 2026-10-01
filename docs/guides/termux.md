@@ -67,12 +67,15 @@ few minutes, mostly for the Claude Code download:
    big download (about 220 MB).
 5. Installs **yt-dlp** with `pkg`, for YouTube audio download. If that fails, the install
    continues without it.
-6. Installs **Chromium** (`x11-repo`, then `chromium`), for the
+6. Installs **poppler** with `pkg`, for PDFs. Chrome on Android cannot show a PDF inside a
+   window, so YAAR draws the pages itself. If that fails, the install continues, and a PDF
+   window tells you to run `pkg install poppler`.
+7. Installs **Chromium** (`x11-repo`, then `chromium`), for the
    [companion desktop](#chromium-page-reads-while-youre-in-another-app) and the Browser app.
    This is the other large download. If it fails, the install continues without it.
-7. Adds the `yaar` command, and a home-screen shortcut in `~/.shortcuts/YAAR`
+8. Adds the `yaar` command, and a home-screen shortcut in `~/.shortcuts/YAAR`
    ([Termux:Widget](#termuxwidget-a-home-screen-button)).
-8. Offers the **YAAR app**. See [Step 4](#step-4-install-the-yaar-app).
+9. Offers the **YAAR app**. See [Step 4](#step-4-install-the-yaar-app).
 
 Options go in front of `bash`, e.g. `curl -fsSL … | VERSION=v0.20.4 bash`:
 

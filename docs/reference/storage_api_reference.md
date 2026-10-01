@@ -275,14 +275,25 @@ DELETE /api/storage/documents/old.pdf
 ## PDF Rendering Endpoint
 
 ```
-GET /api/pdf/{storagePath}/{pageNumber}
+GET /api/pdf/{storagePath}
+GET /api/pdf/{storagePath}/{pageNumber}[?scale=1.5]
 ```
 
-Renders a single PDF page as a PNG image at 1.5× scale via poppler.
+The first form answers `{ "pages": number, "pageSize"?: { "width", "height" } }` — the page
+count, and the first page's size in points. The second renders one page as a PNG via poppler.
+`scale` is a multiple of 72 DPI, from 0.5 to 4 (default 1.5).
+
+Both take the same permission as reading the file through `/api/storage/{path}`, and the same
+`self` path expansion.
+
+The frontend uses the pair to show a stored PDF in an iframe window on a browser with no
+inline PDF viewer (Chrome on Android): the frame would stay blank there, so the window draws
+the pages as images instead. See `lib/pdfPages.ts` in the frontend.
 
 **Example:** `GET /api/pdf/documents/paper.pdf/1` returns page 1 as `image/png`.
 
-**Status codes:** 200, 400 (not a PDF), 404 (page not found).
+**Status codes:** 200, 400 (not a PDF, or `scale` out of range), 404 (file or page not found),
+501 (poppler is not installed — the error names the command that installs it).
 
 ---
 

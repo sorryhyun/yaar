@@ -28,11 +28,59 @@ export interface PopplerOptions {
 // whichever one asked first winning for the life of the process.
 const popplerInstances = new Map<string, Poppler>();
 
+/**
+ * Poppler is not on this machine.
+ *
+ * node-poppler says so from its constructor, as "Unable to find android Poppler
+ * binaries, please pass the installation directory as a parameter to the Poppler
+ * instance" — accurate, and no help to whoever is looking at a PDF that will not
+ * open: the fix is a package to install, not a parameter to pass. Typed so a caller
+ * can tell "nothing here can render a PDF" from "this PDF is broken" and say which.
+ */
+export class PopplerNotInstalledError extends Error {
+  constructor() {
+    super(`PDF rendering needs poppler, which is not installed. ${popplerInstallHint()}`);
+    this.name = 'PopplerNotInstalledError';
+  }
+}
+
+/** The one command that installs poppler here. Android first: Termux reports `android`. */
+function popplerInstallHint(): string {
+  switch (process.platform as string) {
+    case 'android':
+      return 'In Termux: pkg install poppler';
+    case 'darwin':
+      return 'Install it with: brew install poppler';
+    case 'win32':
+      return 'Install poppler and put its bin folder on PATH.';
+    default:
+      return 'Install it with your package manager, e.g. apt install poppler-utils';
+  }
+}
+
 function getPoppler(binDir?: string): Poppler {
   const key = binDir ?? '';
   let instance = popplerInstances.get(key);
   if (!instance) {
-    instance = new Poppler(binDir);
+    // Asked here rather than left to node-poppler, whose own PATH probe shells out to
+    // `which` and answers a missing binary with whatever that happened to produce.
+    // Windows is excepted: there it falls back to an optional package, not to PATH.
+    // A failure is never cached, so installing poppler takes effect without a restart.
+    if (
+      !binDir &&
+      process.platform !== 'win32' &&
+      !Bun.which('pdfinfo', { PATH: process.env.PATH })
+    ) {
+      throw new PopplerNotInstalledError();
+    }
+    try {
+      instance = new Poppler(binDir);
+    } catch (err) {
+      if (err instanceof Error && /Unable to find .* Poppler binaries/i.test(err.message)) {
+        throw new PopplerNotInstalledError();
+      }
+      throw err;
+    }
     popplerInstances.set(key, instance);
   }
   return instance;
@@ -179,6 +227,33 @@ export async function pdfToText(
   // No outputFile → node-poppler resolves with the extracted text on stdout.
   const out = await poppler.pdfToText(pdfPath, undefined, options);
   return typeof out === 'string' ? out : '';
+}
+
+/** What a viewer needs before it has drawn anything: how many pages, and how big. */
+export interface PdfInfo {
+  pages: number;
+  /** The first page's size in points. Absent when pdfinfo did not report one. */
+  pageSize?: { width: number; height: number };
+}
+
+/**
+ * Page count and first-page size of a PDF. Unlike {@link getPdfPageCount} this throws
+ * when poppler cannot read the file — its caller is about to render pages and needs the
+ * reason, not a zero.
+ */
+export async function getPdfInfo(pdfPath: string, opts?: PopplerOptions): Promise<PdfInfo> {
+  const poppler = getPoppler(opts?.binDir);
+  const info = await poppler.pdfInfo(pdfPath);
+  const infoStr = typeof info === 'string' ? info : JSON.stringify(info);
+  const pages = parseInt(infoStr.match(/Pages:\s*(\d+)/i)?.[1] ?? '', 10);
+  if (!Number.isFinite(pages) || pages < 1) throw new Error('PDF has no readable pages');
+  const size = infoStr.match(/Page size:\s*([\d.]+)\s*x\s*([\d.]+)\s*pts/i);
+  const width = size ? parseFloat(size[1]) : NaN;
+  const height = size ? parseFloat(size[2]) : NaN;
+  return {
+    pages,
+    ...(width > 0 && height > 0 ? { pageSize: { width, height } } : {}),
+  };
 }
 
 /**

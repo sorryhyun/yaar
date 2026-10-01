@@ -337,6 +337,22 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/pdf/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: PDF page count and first-page size
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
   /api/pdf/{path}/{page}:
     parameters:
       - name: path
@@ -350,7 +366,7 @@ paths:
         schema:
           type: string
     get:
-      summary: Render PDF page as PNG
+      summary: 'Render PDF page as PNG (?scale=, default 1.5)'
       responses:
         '200':
           description: image/png
