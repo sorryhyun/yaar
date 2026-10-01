@@ -949,6 +949,16 @@ interface YaarStorageEntry {
 
 interface YaarStorage {
   save(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<{ ok: boolean }>;
+  /**
+   * Add bytes to the end of a file, creating it if absent. `size` is the file's length
+   * after this append. Each call is one request under the 50MB upload cap, so a file
+   * that outgrows it (a recording) arrives as many appends — await each before the next,
+   * or two in flight land in whichever order the requests arrive.
+   */
+  append(
+    path: string,
+    data: string | Blob | ArrayBuffer | Uint8Array,
+  ): Promise<{ ok: boolean; path: string; size: number }>;
   read(path: string, options?: YaarStorageReadOptions): Promise<unknown>;
   /** Omit (or pass an empty string) for the storage root. */
   list(dirPath?: string): Promise<YaarStorageEntry[]>;
@@ -991,6 +1001,13 @@ interface YaarAppStorage {
    * Failures are logged, and toasted at most once per 5s per path.
    */
   trySave(path: string, content: string, options?: YaarAppStorageTrySaveOptions): Promise<boolean>;
+  /**
+   * Add bytes to the end of a file in this app's storage, creating it if absent.
+   * Resolves with the file's size after the append. For a file built up over time —
+   * a recording's chunks, a log — where each piece stays under the upload cap but the
+   * whole does not. Keep calls in order: await one before starting the next.
+   */
+  append(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<number>;
   read(path: string): Promise<string>;
   readJson<T = unknown>(path: string): Promise<T>;
   /**
@@ -3459,4 +3476,97 @@ declare module '@bundled/yaar-media' {
       onUpdate?: (job: YtDlpJob) => void;
     },
   ): Promise<YtDlpJob>;
+
+  // Camera / microphone capture, recorded straight into storage. No server grant is
+  // involved: the browser (or Android app) asks the user for the device, and the bytes go
+  // to the app's own storage. Needs a secure context — localhost, 127.0.0.1 or https.
+
+  export interface OpenCameraOptions {
+    /** `true` (default), `false`, or full constraints (`{ width: 1280, deviceId }`). */
+    video?: boolean | MediaTrackConstraints;
+    /** Also open the microphone. Default `false`. */
+    audio?: boolean | MediaTrackConstraints;
+    /** Shorthand for the video `facingMode` constraint: 'environment' is the back camera. */
+    facingMode?: 'user' | 'environment';
+  }
+
+  /**
+   * Open the camera (and optionally the microphone). Rejects with a user-readable message
+   * when permission is denied, no camera exists, or it is busy; the original DOMException
+   * is the error's `cause` and its `name` is kept. Stop it with `stopStream`.
+   */
+  export function openCamera(opts?: OpenCameraOptions): Promise<MediaStream>;
+  /** Open the microphone alone. */
+  export function openMicrophone(
+    constraints?: boolean | MediaTrackConstraints,
+  ): Promise<MediaStream>;
+  /** Stop every track of a stream — the camera light goes off. Null-safe. */
+  export function stopStream(stream: MediaStream | null | undefined): void;
+  /** The device's cameras. Labels are empty until a camera has been granted once. */
+  export function listCameras(): Promise<{ deviceId: string; label: string }[]>;
+
+  /**
+   * One still frame as an image Blob at the stream's resolution, from a playing `<video>`
+   * or the stream itself. Default `image/jpeg` at 0.92.
+   */
+  export function capturePhoto(
+    source: HTMLVideoElement | MediaStream,
+    opts?: { type?: string; quality?: number },
+  ): Promise<Blob>;
+
+  /** The first container/codec MediaRecorder supports here (WebM first), or '' for its default. */
+  export function pickRecordingType(kind?: 'video' | 'audio'): string;
+
+  export interface RecordToStorageOptions {
+    /** Force a container/codec; defaults to `pickRecordingType`. */
+    mimeType?: string;
+    /** Chunk length; each chunk is one upload. Default 2000ms. */
+    timesliceMs?: number;
+    videoBitsPerSecond?: number;
+    audioBitsPerSecond?: number;
+    /** After each chunk lands on the server. */
+    onProgress?: (p: { bytes: number; durationMs: number }) => void;
+    /** An upload failed: the recording has stopped, and `stop()` will reject with this. */
+    onError?: (error: Error) => void;
+  }
+
+  export interface RecordingResult {
+    /** Final path, relative to the app's storage (extension included). */
+    path: string;
+    /** The same file as a `yaar://` URI. */
+    uri: string;
+    mimeType: string;
+    bytes: number;
+    durationMs: number;
+  }
+
+  export interface StorageRecording {
+    readonly path: string;
+    readonly uri: string;
+    readonly mimeType: string;
+    /** Bytes on the server so far. */
+    readonly bytes: number;
+    readonly state: 'recording' | 'paused' | 'inactive';
+    readonly durationMs: number;
+    pause(): void;
+    resume(): void;
+    /** Stop, wait for the last chunk to land, and resolve with the finished file. */
+    stop(): Promise<RecordingResult>;
+  }
+
+  /**
+   * Record a stream into storage as it is captured: each chunk is appended to the file on
+   * the server, so the recording never sits whole in the frame's memory and has no size
+   * cap. `path` is relative to the app's own storage (or a full `yaar://` storage URI);
+   * without an extension one matching the container is added. An existing file is
+   * replaced. The stream keeps running after `stop()` — end it with `stopStream`.
+   *
+   * WebM from MediaRecorder carries no duration header, so a `<video>` may show the
+   * length as unknown and seek poorly; it plays from the start fine.
+   */
+  export function recordToStorage(
+    stream: MediaStream,
+    path: string,
+    opts?: RecordToStorageOptions,
+  ): StorageRecording;
 }

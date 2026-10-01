@@ -1,0 +1,126 @@
+.cam-app {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2);
+  overflow-y: auto;
+}
+
+.cam-stage {
+  position: relative;
+  flex-shrink: 0;
+  aspect-ratio: 4 / 3;
+  max-height: 60vh;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  overflow: hidden;
+}
+
+.cam-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* The front camera reads as a mirror; the recording itself is not flipped. */
+.cam-video.mirrored {
+  transform: scaleX(-1);
+}
+
+.cam-off {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--yaar-sp-2);
+  color: var(--yaar-text-muted);
+}
+
+.cam-rec {
+  position: absolute;
+  top: var(--yaar-sp-2);
+  left: var(--yaar-sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg);
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+}
+
+.cam-rec-bytes {
+  color: var(--yaar-text-muted);
+}
+
+.cam-back {
+  position: absolute;
+  top: var(--yaar-sp-2);
+  left: var(--yaar-sp-2);
+}
+
+.cam-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.cam-rec-btn {
+  min-width: 96px;
+}
+
+.cam-audio {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  font-size: var(--yaar-text-sm);
+}
+
+.cam-banner {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  font-size: var(--yaar-text-sm);
+}
+
+.cam-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+}
+
+.cam-empty {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+  padding: var(--yaar-sp-2);
+}
+
+.cam-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  cursor: pointer;
+}
+
+.cam-item.active {
+  border-color: var(--yaar-accent);
+}
+
+.cam-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+}
+
+.cam-item-size {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+}

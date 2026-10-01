@@ -4,7 +4,7 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, unlink, rename, rm, stat, lstat } from 'fs/promises';
+import { appendFile, mkdir, readdir, unlink, rename, rm, stat, lstat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { join, relative, dirname, extname, posix } from 'path';
 import { pdfToImages, pdfToText, getPdfPageCount } from '../features/pdf.js';
@@ -509,6 +509,43 @@ export async function storageWrite(
 
     await Bun.write(validatedPath, content);
     return { success: true, path: filePath };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath) };
+  }
+}
+
+/**
+ * Add bytes to the end of a storage file, creating it (and its parents) if absent.
+ *
+ * The door for a producer whose bytes arrive across many requests — a recorder handing
+ * over a few seconds of video at a time. Each request stays small (under the upload cap)
+ * while the file grows without bound, and neither side holds the whole thing in memory.
+ *
+ * Unlike {@link storageWriteStream} the bytes land at the destination as they come: an
+ * interrupted producer leaves the file it had written so far, which for a recording is
+ * the right outcome (what was captured survives). Ordering is the caller's to keep —
+ * two appends in flight to one path land in whichever order the requests arrive.
+ */
+export async function storageAppend(
+  filePath: string,
+  content: Uint8Array
+): Promise<StorageWriteResult & { bytes?: number }> {
+  const resolved = resolvePath(filePath);
+  if (!resolved) {
+    return { success: false, path: filePath, error: 'Invalid path: path traversal detected' };
+  }
+  if (resolved.readOnly) {
+    return { success: false, path: filePath, error: 'Mount is read-only' };
+  }
+  const validatedPath = resolved.absolutePath;
+
+  try {
+    await ensureStorageDir();
+    await mkdir(dirname(validatedPath), { recursive: true });
+    await appendFile(validatedPath, content);
+    const { size } = await stat(validatedPath);
+    return { success: true, path: filePath, bytes: size };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath) };

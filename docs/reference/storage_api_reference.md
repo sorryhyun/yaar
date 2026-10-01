@@ -204,7 +204,7 @@ All paths are relative to the storage directory. Path traversal is blocked (HTTP
 
 Every storage HTTP call also goes through the access chokepoint (`packages/server/src/http/access.ts`): `resolvePrincipal` resolves the caller to `host` (the desktop, unconfined) or `app` (an iframe token, confined to its `app.json` permissions), then `requirePermission` checks it against the storage URI equivalent of the path and verb (`read`/`list`/`invoke`/`delete`), which can 403 with `"Not permitted: {verb} {uri}"`. A path under `apps/self/` is rewritten to `apps/{appId}/` for the calling app (`storageUriFor`) before the check.
 
-**Write and delete name their file by the URL path only.** Any query parameter other than the credentials (`__yaar_token`, `token`) on POST/DELETE is a 400. GET query strings are unaffected.
+**Write and delete name their file by the URL path only.** Any query parameter other than the credentials (`__yaar_token`, `token`) on POST/DELETE is a 400 — except `append=true` on POST, which changes how the bytes land, not where. GET query strings are unaffected.
 
 ### GET — Serve file
 
@@ -243,6 +243,22 @@ Creates parent directories if needed. Binary-safe (supports any file type).
 **Maximum body size:** 50 MB. Returns HTTP 413 if exceeded.
 
 **Response:** `{ "ok": true, "path": "notes/memo.txt" }`
+
+### POST `?append=true` — Append to file
+
+```
+POST /api/storage/apps/self/recordings/clip.webm?append=true
+Body: <bytes to add>
+```
+
+Adds the body to the end of the file, creating it (and its parents) if absent. Each request is
+capped at 50 MB like a write; the file itself is not, so a producer whose output outgrows the cap
+(a camera recording) sends it as many appends. Bytes land at the destination as they arrive — an
+interrupted producer leaves what it sent. Requests are applied in arrival order, so a caller keeps
+its appends sequential. Any value of `append` other than `true` is a 400. Same permission as a
+write (`invoke`).
+
+**Response:** `{ "ok": true, "path": "apps/self/recordings/clip.webm", "size": 3145728 }` — `size` is the file's length after this append.
 
 ### DELETE — Remove file
 
@@ -471,6 +487,7 @@ Use `storage` for a path *someone else* produced (`shared/anima/`, `mounts/`); `
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `save` | `(path, data) → Promise<{ok, path}>` | Write file. Accepts `string`, `Blob`, `ArrayBuffer`, `Uint8Array`. |
+| `append` | `(path, data) → Promise<{ok, path, size}>` | Add bytes to the end of a file, creating it if absent (`POST ?append=true`). Same body types as `save`. Await each before the next. |
 | `read` | `(path, options?) → Promise<*>` | Read file. `options.as`: `'text'`, `'json'`, `'blob'`, `'arraybuffer'`, or `'auto'` (default, guesses from Content-Type). |
 | `list` | `(dirPath?) → Promise<StorageEntry[]>` | List directory contents. |
 | `remove` | `(path) → Promise<{ok, path}>` | Delete file. |
@@ -482,6 +499,7 @@ Use `storage` for a path *someone else* produced (`shared/anima/`, `mounts/`); `
 |--------|-----------|-------------|
 | `save` | `(path, content, options?) → Promise<void>` | Write a string; `options.encoding` is `'utf-8'` (default) or `'base64'`. |
 | `trySave` | `(path, content, options?) → Promise<boolean>` | `save()` that reports failure instead of throwing — resolves whether the write landed. Toasts the failure (throttled to once per 5s per path) unless `options.onError` is given. |
+| `append` | `(path, data) → Promise<number>` | Add bytes (`string`, `Blob`, `ArrayBuffer`, `Uint8Array`) to the end of a file, creating it if absent; resolves with the new size. Sent as a raw request body, not base64. For a file built over time — a recording, a log. |
 | `read` | `(path) → Promise<string>` | Read file as text. |
 | `readJson` | `(path) → Promise<T>` | Read and parse JSON; throws if the file is missing or unparseable. |
 | `readJsonOr` | `(path, fallback) → Promise<T>` | `readJson`, but returns `fallback` instead of throwing. Sends `missingOk`, so an absent file costs nothing — reach for this on any optional file rather than wrapping `readJson` in a `try/catch`, which handles absence for your app and still records it against the session. |

@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
     private static final String TAG = "YaarHost";
     private static final int DEFAULT_PORT = 8000;
     private static final int REQ_FILES = 1;
-    private static final int REQ_MIC = 2;
+    private static final int REQ_CAPTURE = 2;
     private static final int REQ_TERMUX = 3;
     private static final long PROBE_INTERVAL_MS = 1000;
     private static final int PROBE_TIMEOUT_MS = 800;
@@ -103,7 +103,7 @@ public final class MainActivity extends Activity {
     private int watchTimedOut;
 
     private ValueCallback<Uri[]> fileCallback;
-    private PermissionRequest pendingMic;
+    private PermissionRequest pendingCapture;
     private Dialog popup;
     private WebView popupView;
 
@@ -277,29 +277,38 @@ public final class MainActivity extends Activity {
             }
         }
 
-        /** The microphone, for the two loopback origins only, asking Android first. */
+        /**
+         * The microphone and camera, for the two loopback origins only, asking Android first.
+         * A request naming anything else (protected media, MIDI) is refused whole.
+         */
         @Override
         public void onPermissionRequest(PermissionRequest request) {
-            boolean audio = false;
-            for (String r : request.getResources()) {
-                if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) audio = true;
-            }
-            if (!audio || !isLoopback(request.getOrigin())) {
+            String[] resources = request.getResources();
+            if (resources.length == 0 || !isLoopback(request.getOrigin())) {
                 request.deny();
                 return;
             }
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                request.grant(new String[] {PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            List<String> missing = new ArrayList<>();
+            for (String r : resources) {
+                String perm = androidPermissionFor(r);
+                if (perm == null) {
+                    request.deny();
+                    return;
+                }
+                if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) missing.add(perm);
+            }
+            if (missing.isEmpty()) {
+                request.grant(resources);
                 return;
             }
-            if (pendingMic != null) pendingMic.deny();
-            pendingMic = request;
-            requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+            if (pendingCapture != null) pendingCapture.deny();
+            pendingCapture = request;
+            requestPermissions(missing.toArray(new String[0]), REQ_CAPTURE);
         }
 
         @Override
         public void onPermissionRequestCanceled(PermissionRequest request) {
-            if (pendingMic == request) pendingMic = null;
+            if (pendingCapture == request) pendingCapture = null;
         }
 
         /**
@@ -725,15 +734,34 @@ public final class MainActivity extends Activity {
         fileCallback = null;
     }
 
+    /** The Android permission a WebView capture resource needs, or null for one we never grant. */
+    private static String androidPermissionFor(String resource) {
+        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+            return Manifest.permission.RECORD_AUDIO;
+        }
+        if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+            return Manifest.permission.CAMERA;
+        }
+        return null;
+    }
+
+    /**
+     * All or nothing: getUserMedia for camera and microphone fails if either is missing, so a
+     * half grant would only move the failure from Android's dialog to the page.
+     */
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-        if (requestCode != REQ_MIC || pendingMic == null) return;
-        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-            pendingMic.grant(new String[] {PermissionRequest.RESOURCE_AUDIO_CAPTURE});
-        } else {
-            pendingMic.deny();
+        if (requestCode != REQ_CAPTURE || pendingCapture == null) return;
+        boolean all = results.length == permissions.length && results.length > 0;
+        for (int r : results) {
+            if (r != PackageManager.PERMISSION_GRANTED) all = false;
         }
-        pendingMic = null;
+        if (all) {
+            pendingCapture.grant(pendingCapture.getResources());
+        } else {
+            pendingCapture.deny();
+        }
+        pendingCapture = null;
     }
 
     /** {@code accept} entries as MIME types: {@code .txt} is looked up, empty means any. */

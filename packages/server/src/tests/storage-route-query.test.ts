@@ -61,3 +61,36 @@ describe('POST/DELETE /api/storage/{path} query strings', () => {
     expect(res?.status).toBe(200);
   });
 });
+
+describe('POST /api/storage/{path}?append=true', () => {
+  it('creates the file on the first append and grows it on the next', async () => {
+    const path = `${SCRATCH}/rec/clip.webm`;
+    const first = await call('POST', `/api/storage/${path}?append=true`, 'abc');
+    expect(first?.status).toBe(200);
+    expect(((await first!.json()) as { size: number }).size).toBe(3);
+
+    const second = await call('POST', `/api/storage/${path}?append=true`, 'def');
+    expect(((await second!.json()) as { size: number }).size).toBe(6);
+    expect(await Bun.file(resolvePath(path)!.absolutePath).text()).toBe('abcdef');
+  });
+
+  it('leaves a plain write a replace', async () => {
+    const path = `${SCRATCH}/rec/replace.txt`;
+    await call('POST', `/api/storage/${path}?append=true`, 'old');
+    await call('POST', `/api/storage/${path}`, 'new');
+    expect(await Bun.file(resolvePath(path)!.absolutePath).text()).toBe('new');
+  });
+
+  it('refuses any value but true, and writes nothing', async () => {
+    const path = `${SCRATCH}/rec/bad.txt`;
+    const res = await call('POST', `/api/storage/${path}?append=1`, 'x');
+    expect(res?.status).toBe(400);
+    expect(await exists(path)).toBe(false);
+  });
+
+  it('is still a stray parameter on DELETE', async () => {
+    const res = await call('DELETE', `/api/storage/${SCRATCH}/rec/clip.webm?append=true`);
+    expect(res?.status).toBe(400);
+    expect(await exists(`${SCRATCH}/rec/clip.webm`)).toBe(true);
+  });
+});
