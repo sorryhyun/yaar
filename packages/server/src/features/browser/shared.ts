@@ -45,6 +45,10 @@ export function formatPageState(state: PageState): string {
     );
     result += `\nScroll: ${state.scrollY ?? 0}/${state.scrollHeight} (${percent}% scrolled)`;
   }
+  if (state.history) {
+    const h = state.history;
+    result += `\nHistory: entry ${h.index + 1} of ${h.length} (back: ${h.canGoBack ? 'yes' : 'no'}, forward: ${h.canGoForward ? 'yes' : 'no'})`;
+  }
   if (state.clickTarget) {
     const ct = state.clickTarget;
     result += `\nClicked: <${ct.tag}> "${ct.text}"`;

@@ -110,6 +110,15 @@ export async function navigate(
   return browserPost({ action: 'navigate', browserId: bid, ...params });
 }
 
+export async function reload(opts?: { ignoreCache?: boolean; browserId?: string }) {
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'reload', browserId, ...params });
+}
+
+export async function getNavigationHistory(opts?: { browserId?: string }) {
+  return browserPost({ action: 'get_navigation_history', browserId: opts?.browserId });
+}
+
 // ── Interaction ─────────────────────────────────────────────────
 
 export async function click(opts: {

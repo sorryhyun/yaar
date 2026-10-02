@@ -1,6 +1,6 @@
 # YAAR on Android
 
-**Source:** `hosts/android/` (`MainActivity.java`, `HostBridge.java`, `Termux.java`), `scripts/dev/start-termux.sh`, `scripts/dev/termux-open-desktop.sh`, `scripts/dev/ensure-claude-android.sh`, `scripts/dev/unbun-claude.ts`, `packages/server/src/features/android/`, `packages/server/src/features/companion/`, `packages/server/src/launcher-watchdog.ts`, `packages/server/src/desktop-window/host-bridge.ts`, `scripts/codegen/android-host-script.ts`
+**Source:** `hosts/android/` (`MainActivity.java`, `HostBridge.java`, `KeepAliveService.java`, `DesktopWebView.java`, `Termux.java`), `scripts/dev/start-termux.sh`, `scripts/dev/termux-open-desktop.sh`, `scripts/dev/ensure-claude-android.sh`, `scripts/dev/unbun-claude.ts`, `packages/server/src/features/android/`, `packages/server/src/features/companion/`, `packages/server/src/launcher-watchdog.ts`, `packages/server/src/desktop-window/host-bridge.ts`, `scripts/codegen/android-host-script.ts`
 
 This page describes how YAAR is put together on an Android phone: which processes run where,
 what the launcher does, what happens when you tap the app, and what the app's window does that
@@ -75,6 +75,7 @@ What each piece does:
 | `~/.shortcuts/YAAR` | The same launcher, as a Termux:Widget button | install.sh |
 | `~/.cache/yaar/claude-js/<sdk-version>-<arch>/` | Claude Code, unpacked for Android, and a `claude` wrapper | `ensure-claude-android.sh`, from install.sh or the first launch |
 | `~/.claude/` | The Claude login | `claude auth login`, from the first launch |
+| `$PREFIX/bin/pdfinfo`, `pdftocairo`, `pdftotext` | poppler, for reading PDFs and for drawing their pages in a window (Chrome on Android has no inline PDF viewer) | install.sh (`pkg install poppler`) |
 | `$PREFIX/bin/chromium-browser` | Termux's Chromium (`x11-repo`), for the companion desktop and the Browser app | install.sh (`pkg install chromium`) |
 | The YAAR app, `io.github.sorryhyun.yaar` | The display: one activity, about 5.5 MB | Android's installer, offered by install.sh ([Installing the app](#installing-the-app)) |
 | `/data/data/io.github.sorryhyun.yaar/` | The WebView's own storage (localStorage, IndexedDB, service worker, HTTP cache), private to the app | the WebView |
@@ -165,7 +166,7 @@ can read, so the server knows which state it is in (`features/android/child-proc
 
 ### The companion desktop
 
-Android hides YAAR's page when you switch apps and then freezes it; anything the server asks the page (`__screenshot` included) stops answering, though the socket stays open. So the server parks a **companion desktop**: a second, always-visible desktop in a headless Termux Chromium (a child of Termux, so on the server's side of the freeze). It uses the desktop layout and answers app commands only while your own page cannot. It needs `chromium-browser` on `PATH` (install.sh installs it from `x11-repo`); without it the server does without and says so once. Details: [`server_env.md` → Companion desktop](../reference/server_env.md#companion-desktop).
+Android hides YAAR's page when you switch apps and then freezes it; anything the server asks the page (`__screenshot` included) stops answering, though the socket stays open. So the server parks a **companion desktop**: a second, always-visible desktop in a headless Termux Chromium (a child of Termux, so on the server's side of the freeze). It uses the desktop layout and answers app commands only while your own page cannot, which with the YAAR app is rarely: the app keeps its page answering in the background ([below](#what-happens-when-you-leave)), and the companion is what is left for Chrome, and for an app that Android killed. It needs `chromium-browser` on `PATH` (install.sh installs it from `x11-repo`); without it the server does without and says so once. Details: [`server_env.md` → Companion desktop](../reference/server_env.md#companion-desktop).
 
 ### Termux:API
 
@@ -284,9 +285,58 @@ The desktop is the same frontend Chrome would show. It learns that it is in YAAR
 | Back | Puts one layer of the desktop away, as in Chrome. With nothing left, YAAR goes to the background instead of closing |
 | Screen edges and keyboard | The status bar is hidden (swipe down from the edge to see it); the desktop is laid out above the navigation bar and clear of the camera cutout, and the keyboard pushes it up |
 | A renderer crash | The WebView is recreated and the desktop reloads. The app does not die with it |
+| Leaving for another app, or turning the screen off | The desktop keeps running and keeps answering agents ([below](#what-happens-when-you-leave)). A browser tab is frozen |
 
 The Browser app, and anything else that drives a browser for an agent, still uses Termux
 Chromium. The YAAR app is only for you.
+
+### What happens when you leave
+
+An agent goes on working after you have switched to another app, and what it asks the desktop
+(an app's state, a screenshot) has to be answered by the page that ran its earlier commands.
+A page that cannot answer hands its windows to the [companion desktop](#the-companion-desktop),
+whose copy of each app has its own in-memory state and has run none of those commands. The
+agent is told the window it was working in is now a different copy, and is told again when you
+come back.
+
+So the app keeps its own page answering. It takes two things, and neither is enough alone.
+Measured on a Galaxy S25 (Android 16, WebView 153), 60 s behind two other apps:
+
+| Foreground service | Page held visible | The process | The page | Answers after 60 s |
+|---|---|---|---|---|
+| no | no | cached, frozen within 20 s | `hidden` | no |
+| yes | no | kept | `hidden`: timers once a second, and WebView freezes it at 60 s | no |
+| no | yes | cached, frozen within 20 s | `visible` until the freeze | no |
+| yes | yes | kept | `visible`: timers at full rate | yes (`fetch` 13 ms, DOM capture 12 ms) |
+
+- **`KeepAliveService`** is a foreground service (type `specialUse`), started when the desktop
+  first loads and stopped when the activity is destroyed. It keeps the process, and the
+  WebView's renderer with it, out of Android's cached state. Its notification ("Desktop
+  running") is the price. On Android 13 and later it shows only if you allow YAAR's
+  notifications, and the service runs either way.
+- **`DesktopWebView`** goes on telling the page its window is visible after the activity has
+  stopped, and `onPause` no longer pauses the WebView. It does this only while the service is
+  running: a visible page in a frozen process would look able to answer and never do it.
+  Android 12 and later refuse to start the service from the background, so a desktop that
+  first loads there (after a renderer crash) is an ordinary hidden page until you open the app.
+
+With both, a Memo window went on answering through 7 minutes behind other apps and through 2
+minutes with the screen off: the app protocol's manifest request in about 1 ms, and its
+screenshot in 100 to 380 ms (130 ms in front).
+
+What does not run is `requestAnimationFrame`: with no window there is no surface to draw to. A
+query, a command and a DOM screenshot do not need it. A canvas that an app redraws every frame
+stays on its last frame until you are back.
+
+**Nobody is looking, and the page cannot tell.** `document.visibilityState` stays `visible`, so
+the app says it instead: `yaarHost.attended()` and the `attention` event, from the activity's
+`onStart` and `onStop`. The desktop reports itself `visible` and `unattended`
+(`CLIENT_PRESENCE`), which changes who is watching and nothing about who can answer:
+
+- the server goes on mirroring notifications and permission dialogs into the shade
+  (`isUserWatching`), as it does for a hidden tab;
+- app frames are told they are not visible (`yaar.device`), so the Browser app stops its live
+  stream.
 
 ### How `window.yaarHost` gets into the page
 
@@ -323,10 +373,11 @@ It goes through androidx.core's `WindowInsetsCompat`, because the platform's `Wi
 
 The YAAR app and the server have separate lives:
 
-- **Back with nothing to put away, or Home,** sends the app to the background. The WebView is
-  paused (`onPause`), the desktop reports itself hidden, and the server keeps running.
-- **Swiping YAAR away from Recents** closes the display only. The server keeps running in
-  Termux, held awake by its wake lock.
+- **Back with nothing to put away, or Home,** sends the app to the background, where the
+  desktop keeps running and reports itself unattended
+  ([What happens when you leave](#what-happens-when-you-leave)). The server keeps running.
+- **Swiping YAAR away from Recents** closes the display, and the keep-alive service with it.
+  The server keeps running in Termux, held awake by its wake lock.
 - **Stopping the server** is done in Termux: `Ctrl-C` in its session, or closing the session,
   which the [launcher watchdog](#how-the-server-ends) turns into a clean shutdown.
 - **A server that goes away under an open desktop** brings the waiting screen back, through the
@@ -388,7 +439,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   (API 29) and later.
 - A debug build is signed with your machine's debug key, and a release is signed with the
   release key. Moving between the two takes an uninstall, because Android refuses an update
-  signed by another key.
+  signed by another key. `./gradlew assembleDebug -PsideBySide` builds the debug app as its
+  own package instead (`io.github.sorryhyun.yaar.debug`, "YAAR debug"), which installs beside
+  a release app. `termux-open-desktop.sh` opens the release package only, so start that one
+  with `am start`.
 - `assembleRelease` signs only when `YAAR_ANDROID_KEYSTORE` and its three companions are set
   (see `app/build.gradle.kts`). Without them the APK comes out unsigned.
 - After changing `desktop-window/host-bridge.ts`, regenerate the page half with

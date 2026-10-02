@@ -147,7 +147,13 @@ export class ClientEventController {
           event.orientation,
         ),
       [ClientEventType.CLIENT_PRESENCE]: (event, connectionId) =>
-        noteClientPresence(this.deps.sessionId, connectionId, event.state),
+        noteClientPresence(
+          this.deps.sessionId,
+          connectionId,
+          event.state,
+          Date.now(),
+          event.unattended === true,
+        ),
       [ClientEventType.ADD_MONITOR]: (_event, connectionId) => this.deps.monitors.add(connectionId),
       [ClientEventType.REMOVE_MONITOR]: (event) => this.deps.monitors.remove(event.monitorId),
     };

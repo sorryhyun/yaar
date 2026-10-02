@@ -23,7 +23,14 @@ export const YAAR_HOST_VERSION = 1;
 export type YaarHostPlatform = 'windows' | 'macos' | 'linux' | 'android';
 
 /** What a host can do. A caller checks `caps` before relying on an optional member. */
-export type YaarHostCap = 'download' | 'clipboard' | 'share' | 'openExternal' | 'insets' | 'back';
+export type YaarHostCap =
+  | 'download'
+  | 'clipboard'
+  | 'share'
+  | 'openExternal'
+  | 'insets'
+  | 'back'
+  | 'attention';
 
 export interface YaarHostFile {
   name: string;
@@ -45,17 +52,28 @@ export interface YaarHost {
   /** Open a URL outside YAAR, in the user's default browser (or the app that owns it). */
   openExternal(url: string): void;
   /**
+   * Whether a person can see the window right now (`attention`).
+   *
+   * Only a host that keeps the page running while its window is not shown has this: the
+   * Android app holds the page `visible` in the background so it goes on answering agents,
+   * which leaves `document.visibilityState` unable to say that nobody is looking. This
+   * says it instead, and the `attention` event says when it changes.
+   */
+  attended?(): Promise<boolean>;
+  /**
    * Subscribe to a host event; returns the unsubscribe.
    *
    * - `closeWindow` — the platform's close key (⌘W on macOS) was pressed and nothing in
    *   the page claimed it: close the window on top, as Ctrl+W does. The host no longer
    *   closes itself on that key.
    * - `back`, `insets` — the phone's Back button and safe-area changes (Android).
+   * - `attention` — `{ attended: boolean }`: the window went out of, or came back into,
+   *   sight while the page kept running. See `attended`.
    */
   on(event: YaarHostEvent, cb: (payload: unknown) => void): () => void;
 }
 
-export type YaarHostEvent = 'closeWindow' | 'back' | 'insets';
+export type YaarHostEvent = 'closeWindow' | 'back' | 'insets' | 'attention';
 
 /**
  * How a desktop host delivers `on()` events: a plain `Event` named this prefix plus the
@@ -80,4 +98,5 @@ export type YaarHostOp =
     }
   | { op: 'clipboard.readText'; args: Record<string, never>; result: { text: string } }
   | { op: 'clipboard.writeText'; args: { text: string }; result: Record<string, never> }
-  | { op: 'openExternal'; args: { url: string }; result: Record<string, never> };
+  | { op: 'openExternal'; args: { url: string }; result: Record<string, never> }
+  | { op: 'attention.get'; args: Record<string, never>; result: { attended: boolean } };

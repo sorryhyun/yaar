@@ -67,12 +67,15 @@ few minutes, mostly for the Claude Code download:
    big download (about 220 MB).
 5. Installs **yt-dlp** with `pkg`, for YouTube audio download. If that fails, the install
    continues without it.
-6. Installs **Chromium** (`x11-repo`, then `chromium`), for the
+6. Installs **poppler** with `pkg`, for PDFs. Chrome on Android cannot show a PDF inside a
+   window, so YAAR draws the pages itself. If that fails, the install continues, and a PDF
+   window tells you to run `pkg install poppler`.
+7. Installs **Chromium** (`x11-repo`, then `chromium`), for the
    [companion desktop](#chromium-page-reads-while-youre-in-another-app) and the Browser app.
    This is the other large download. If it fails, the install continues without it.
-7. Adds the `yaar` command, and a home-screen shortcut in `~/.shortcuts/YAAR`
+8. Adds the `yaar` command, and a home-screen shortcut in `~/.shortcuts/YAAR`
    ([Termux:Widget](#termuxwidget-a-home-screen-button)).
-8. Offers the **YAAR app**. See [Step 4](#step-4-install-the-yaar-app).
+9. Offers the **YAAR app**. See [Step 4](#step-4-install-the-yaar-app).
 
 Options go in front of `bash`, e.g. `curl -fsSL … | VERSION=v0.20.4 bash`:
 
@@ -217,11 +220,13 @@ approval dialog. Photos are mounted read-only unless you say otherwise.
 install.sh installs this one for you (Step 2), unless you set `YAAR_SKIP_CHROMIUM=1` or the
 install failed.
 
-When you switch apps, Android freezes the desktop, and agents can no longer read from it. The
-one that matters is taking screenshots: an agent building an app can no longer see what it
-built. A Termux Chromium lets the server keep a hidden
+When you switch apps, Android freezes a desktop that is open in Chrome, and agents can no
+longer read from it. The one that matters is taking screenshots: an agent building an app can
+no longer see what it built. A Termux Chromium lets the server keep a hidden
 [companion desktop](../installations/android.md#the-companion-desktop) that keeps answering.
-The Browser app uses the same Chromium. To install it by hand:
+The YAAR app does not need it for that: its own desktop
+[keeps running in the background](../installations/android.md#what-happens-when-you-leave).
+The Browser app uses the same Chromium either way. To install it by hand:
 
 ```bash
 pkg install x11-repo
@@ -266,7 +271,9 @@ The YAAR app and an installed Chrome app still come first.
 | Update | Run the install one-liner again. The next `yaar` reinstalls dependencies and, if needed, a newer Claude Code |
 
 While YAAR runs, Termux shows a persistent **wake-lock** notification. That is what keeps the
-server alive with the screen off, and it goes away when YAAR stops.
+server alive with the screen off, and it goes away when YAAR stops. The YAAR app has one of
+its own ("Desktop running"), which keeps the desktop answering agents while you are in another
+app. It goes away when you swipe YAAR out of Recents.
 
 Only one YAAR runs per phone. A second `yaar` opens the first one's desktop and exits.
 
@@ -341,9 +348,11 @@ Android reports for the desktop URL:
 A line with `org.chromium.webapk.…` means the app is found. No such line means it was added
 as a shortcut rather than installed: remove it and use **Install app**.
 
-**Screenshots or other page reads time out while you're in another app.** The companion
-desktop is not running. [Install Chromium](#chromium-page-reads-while-youre-in-another-app),
-and check that `YAAR_COMPANION_TAB` is not set to `0`.
+**Screenshots or other page reads time out while you're in another app.** In Chrome, the
+companion desktop is not running:
+[install Chromium](#chromium-page-reads-while-youre-in-another-app), and check that
+`YAAR_COMPANION_TAB` is not set to `0`. The YAAR app keeps its own desktop answering, through
+a service that Android only lets it start while the app is in front: open the app once.
 
 ## Related
 

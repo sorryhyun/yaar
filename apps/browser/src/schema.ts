@@ -12,8 +12,8 @@
 // standard Zod would add ~260KB.
 import * as z from '@bundled/zod';
 
-// The server sends `{ url, title, version, driving?, isSelf }` on connect and on
-// every update (packages/server/src/http/routes/browser.ts). `version` is required
+// The server sends `{ url, title, version, driving?, canGoBack, canGoForward, isSelf }`
+// on connect and on every update (packages/server/src/http/routes/browser.ts). `version` is required
 // because it is the de-duplication key — a frame without one cannot be ordered
 // against the last, so it is not usable. `url`/`title` are read straight into the
 // URL bar. Loose so added fields (`driving`, `isSelf`, future ones) pass through.
@@ -21,6 +21,11 @@ export const BrowserEventSchema = z.looseObject({
   url: z.string(),
   title: z.string(),
   version: z.number(),
+  // Whether the tab's history holds an entry behind / ahead of this page, read by the
+  // server from the browser itself. Optional so a frame without them reads as "not
+  // told" (history.ts) instead of failing the whole frame.
+  canGoBack: z.optional(z.boolean()),
+  canGoForward: z.optional(z.boolean()),
   // Present on the frame that announces a popup this tab opened. Such a frame
   // repeats the tab's own state and does NOT advance `version`, so it has to be
   // read before the version gate (sse.ts).

@@ -11,7 +11,7 @@
 import { errMessage } from '@yaar/lib/errors';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp, type AppPrincipal } from '../access.js';
-import { getHeadlessBrowser } from '../../lib/browser/index.js';
+import { getHeadlessBrowser, type BrowserSessionUpdate } from '../../lib/browser/index.js';
 import { enforceBrowserGuards, isYaarOriginUrl } from '../../features/browser/guards.js';
 import { getSessionId, runWithAgentContext } from '../../agents/agent-context.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -216,16 +216,22 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             }
           };
 
-          const onUpdate = (update: {
-            url: string;
-            title: string;
-            version: number;
-            driving?: boolean;
-          }) => {
+          const onUpdate = (update: BrowserSessionUpdate) => {
             write(
               `data: ${JSON.stringify({ ...update, isSelf: isYaarOriginUrl(update.url) })}\n\n`,
             );
           };
+          // The tab's own state, for a frame that is not an update: one that repeats it
+          // around a download or a popup, and the first one a new listener gets.
+          const snapshot = () => ({
+            url: session.currentUrl,
+            title: session.currentTitle,
+            version: session.version,
+            driving: session.driving,
+            canGoBack: session.canGoBack,
+            canGoForward: session.canGoForward,
+            isSelf: isYaarOriginUrl(session.currentUrl),
+          });
           const onClosed = () => cleanup();
           // A download Chrome performed on its own — the page's download button, an
           // attachment navigation. The file is already on disk; this frame is the app's
@@ -240,11 +246,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
           }) => {
             write(
               `data: ${JSON.stringify({
-                url: session.currentUrl,
-                title: session.currentTitle,
-                version: session.version,
-                driving: session.driving,
-                isSelf: isYaarOriginUrl(session.currentUrl),
+                ...snapshot(),
                 download: {
                   id: d.id,
                   url: d.url,
@@ -262,11 +264,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             if (event.type !== 'opened' || event.openerBrowserId !== browserId) return;
             write(
               `data: ${JSON.stringify({
-                url: session.currentUrl,
-                title: session.currentTitle,
-                version: session.version,
-                driving: session.driving,
-                isSelf: isYaarOriginUrl(session.currentUrl),
+                ...snapshot(),
                 popup: { browserId: event.browserId, url: event.url, openerBrowserId: browserId },
               })}\n\n`,
             );
@@ -283,14 +281,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
 
           // Sent last, so cleanup()/heartbeat are already initialized if the very
           // first enqueue throws (otherwise the catch touches them in the TDZ).
-          const initial = JSON.stringify({
-            url: session.currentUrl,
-            title: session.currentTitle,
-            version: session.version,
-            driving: session.driving,
-            isSelf: isYaarOriginUrl(session.currentUrl),
-          });
-          write(`data: ${initial}\n\n`);
+          write(`data: ${JSON.stringify(snapshot())}\n\n`);
         },
       });
 

@@ -13,16 +13,19 @@
  */
 
 import {
+  getPdfInfo as libGetPdfInfo,
   getPdfPageCount as libGetPdfPageCount,
   pdfToImages as libPdfToImages,
   pdfToText as libPdfToText,
   renderPdfPage as libRenderPdfPage,
+  type PdfInfo,
   type PdfPageImage,
   type PdfPageRange,
 } from '@yaar/lib/pdf';
 import { getPopplerBinDir } from '../config.js';
 
-export type { PdfPageImage, PdfPageRange };
+export { PopplerNotInstalledError } from '@yaar/lib/pdf';
+export type { PdfInfo, PdfPageImage, PdfPageRange };
 
 /** Convert pages of a PDF to images. Without a range, converts the whole document. */
 export function pdfToImages(
@@ -51,4 +54,9 @@ export function pdfToText(pdfPath: string, range?: PdfPageRange): Promise<string
 /** Number of pages in a PDF, or 0 if poppler could not read it. */
 export function getPdfPageCount(pdfPath: string): Promise<number> {
   return libGetPdfPageCount(pdfPath, { binDir: getPopplerBinDir() });
+}
+
+/** Page count and first-page size. Throws when poppler is missing or cannot read the file. */
+export function getPdfInfo(pdfPath: string): Promise<PdfInfo> {
+  return libGetPdfInfo(pdfPath, { binDir: getPopplerBinDir() });
 }

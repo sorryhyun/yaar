@@ -3011,6 +3011,21 @@ declare module '@bundled/yaar-web' {
     readyState: string;
   }
 
+  /**
+   * What `getNavigationHistory()` answers: the tab's history as the browser holds it.
+   *
+   * The page cannot report this itself — `history.length` is a count with no position,
+   * and the Navigation API sees only the same-origin run around the current entry.
+   */
+  export interface WebNavigationHistory {
+    /** Index into `entries` of the page on screen. */
+    currentIndex: number;
+    /** Oldest first. Other-origin entries are included, with their real URLs. */
+    entries: Array<{ url: string; title: string }>;
+    canGoBack: boolean;
+    canGoForward: boolean;
+  }
+
   /** One element the `annotate()` overlay numbered. */
   export interface WebAnnotatedElement {
     index: number;
@@ -3072,12 +3087,30 @@ declare module '@bundled/yaar-web' {
       waitUntil?: 'load' | 'domcontentloaded' | 'networkidle';
     },
   ): Promise<WebResult>;
-  /** Navigate to a URL or go back/forward in history. */
+  /**
+   * Navigate to a URL, or move one entry back/forward in the tab's history. A move
+   * with no entry in that direction is refused (`ok: false`), not silently ignored.
+   * The summary ends with the tab's place in its history.
+   */
   export function navigate(url: string, browserId?: string): Promise<WebResult>;
   export function navigate(opts: {
     direction: 'back' | 'forward';
     browserId?: string;
   }): Promise<WebResult>;
+  /**
+   * Reload the page — a real browser reload, so it works on a POST result and on a
+   * page that refuses `evaluate`. `ignoreCache` is the shift-reload.
+   */
+  export function reload(opts?: { ignoreCache?: boolean; browserId?: string }): Promise<WebResult>;
+  /**
+   * The tab's history: every entry with its real URL (other origins included), the
+   * index of the page on screen, and whether Back / Forward have anywhere to go.
+   * `/api/browser/{id}/events` carries the same `canGoBack` / `canGoForward` on every
+   * frame, so a view that only greys out two buttons need not poll this.
+   */
+  export function getNavigationHistory(opts?: {
+    browserId?: string;
+  }): Promise<WebResult<WebNavigationHistory>>;
   /** Scroll by `amount` pixels (default 500) in one step. */
   export function scroll(opts: {
     direction: 'up' | 'down';

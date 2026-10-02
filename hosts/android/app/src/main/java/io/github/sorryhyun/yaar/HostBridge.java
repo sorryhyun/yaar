@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
 
 /**
  * {@code window.yaarHost} for the desktop, the Android half of {@code @yaar/shared}'s host
@@ -65,20 +66,24 @@ final class HostBridge implements WebViewCompat.WebMessageListener {
 
     private final Context context;
     private final String origin;
+    private final BooleanSupplier attended;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
-    private HostBridge(Context context, String origin) {
+    private HostBridge(Context context, String origin, BooleanSupplier attended) {
         this.context = context.getApplicationContext();
         this.origin = origin;
+        this.attended = attended;
     }
 
     /**
      * Give {@code web} a {@code window.yaarHost} on {@code origin} (e.g. {@code http://localhost:8000}).
      * Returns false when the installed WebView is too old for either half, in which case the
      * page has no host and keeps its browser paths, exactly as in Chrome.
+     *
+     * <p>{@code attended} answers {@code attention.get}: whether a person can see the desktop.
      */
-    static boolean install(Context context, WebView web, String origin) {
+    static boolean install(Context context, WebView web, String origin, BooleanSupplier attended) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             return false;
@@ -91,7 +96,7 @@ final class HostBridge implements WebViewCompat.WebMessageListener {
             return false;
         }
         Set<String> rules = Set.of(origin);
-        WebViewCompat.addWebMessageListener(web, BINDING, rules, new HostBridge(context, origin));
+        WebViewCompat.addWebMessageListener(web, BINDING, rules, new HostBridge(context, origin, attended));
         WebViewCompat.addDocumentStartJavaScript(web, script, rules);
         return true;
     }
@@ -151,6 +156,8 @@ final class HostBridge implements WebViewCompat.WebMessageListener {
             case "openExternal":
                 openExternal(context, args.getString("url"));
                 return new JSONObject();
+            case "attention.get":
+                return new JSONObject().put("attended", attended.getAsBoolean());
             default:
                 throw new IllegalArgumentException("unknown host op: " + op);
         }

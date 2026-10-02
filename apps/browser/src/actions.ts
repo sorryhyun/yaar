@@ -33,7 +33,7 @@ export function refreshScreenshot(fresh = false): void {
 export async function handleNav(direction: 'navigate_back' | 'navigate_forward'): Promise<void> {
   const dir = direction === 'navigate_back' ? 'back' : 'forward';
   try {
-    const res = await stepHistory(dir, activeBrowserId(), false);
+    const res = await stepHistory(dir, activeBrowserId());
     if (!res.ok) logFailure(direction, res.error);
   } catch (err) {
     logFailure(direction, err);

@@ -16,6 +16,7 @@ import type {
   BrowserAnnotatedElement,
   BrowserCookie,
   BrowserHtmlWithMeta,
+  BrowserNavigationHistory,
   BrowserScrollToBottomResult,
 } from '@yaar/shared';
 import type { PageState, PageContent } from './types.js';
@@ -55,6 +56,17 @@ const SCREENSHOT_QUALITY = 95;
  */
 const MODEL_SCREENSHOT_MAX_EDGE = 1568;
 const TEXT_SNIPPET_LENGTH = 500;
+
+/** How long a navigation may take to reach DOMContentLoaded / `load` before we stop waiting. */
+const NAV_TIMEOUT_MS = 15_000;
+/** How long a history move may take to commit. A move within one document commits at once. */
+const HISTORY_MOVE_TIMEOUT_MS = 5_000;
+/**
+ * How long, and how often, a history command waits for the page to become the active
+ * one again. See {@link BrowserSession.sendToActivePage}.
+ */
+const ACTIVE_PAGE_WAIT_MS = 1_000;
+const ACTIVE_PAGE_RETRY_MS = 25;
 
 /** How long the DOM must hold still before a settle wait returns early. */
 const SETTLE_QUIET_MS = 100;
@@ -114,6 +126,16 @@ export interface BrowserSessionUpdate {
   version: number;
   /** True while an agent is actively driving this tab (for the "agent is driving" indicator). */
   driving?: boolean;
+  /** Whether the tab's history holds an entry behind / ahead of this page. */
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+/** A history entry with the id `Page.navigateToHistoryEntry` wants. Never leaves this file. */
+interface HistoryEntry {
+  id: number;
+  url: string;
+  title: string;
 }
 
 /** CDP `Page.screencastFrame` metadata — the viewport the frame was taken of. */
@@ -218,6 +240,14 @@ export class BrowserSession extends EventEmitter {
   /** Whether an agent is currently driving this tab (Phase 3 "agent is driving" indicator). */
   driving = false;
   /**
+   * Whether the tab's history holds an entry behind / ahead of the page on screen, as
+   * Chrome last reported it. Kept current by {@link syncHistory} on every navigation
+   * event, so it is right for moves nobody made through this class too — a human
+   * clicking through the live screencast, a page calling `history.pushState`.
+   */
+  canGoBack = false;
+  canGoForward = false;
+  /**
    * Exempt this session from the idle sweep.
    *
    * Idleness is a proxy for "nobody wants this tab any more", and it is a good one for a
@@ -242,6 +272,8 @@ export class BrowserSession extends EventEmitter {
   /** Chrome's handle for the installed init script on the *current* target. */
   private initScriptId: string | null = null;
   private blockStats: RequestBlockStats = { blocked: 0, requests: 0 };
+  /** Orders {@link syncHistory} reads, so a reply that lost a race is not announced. */
+  private historySeq = 0;
   /**
    * What this tab fetched, metadata only (issue #96). Survives navigation and
    * reattach: the log is per tab, not per socket, and a page's traffic is
@@ -297,6 +329,9 @@ export class BrowserSession extends EventEmitter {
     // Counters are per page, not per socket: the badge that shows them resets on
     // navigation, and "blocked since some earlier tab" is not a number anyone wants.
     cdp.on('Page.frameNavigated', (params: unknown) => {
+      // Before the top-frame filter: a subframe navigation adds an entry to the tab's
+      // history too, and Back undoes it.
+      void this.syncHistory();
       const frame = (
         params as { frame?: { id?: string; parentId?: string; url?: string; urlFragment?: string } }
       ).frame;
@@ -312,10 +347,12 @@ export class BrowserSession extends EventEmitter {
     cdp.on('Page.navigatedWithinDocument', (params: unknown) => {
       const { frameId, url } = params as { frameId?: string; url?: string };
       if (url && frameId === mainFrameId) this.observeLocation(url);
+      void this.syncHistory();
     });
     // `frameNavigated` carries no title; the loaded document does.
     cdp.on('Page.loadEventFired', () => {
       void this.refreshLocation();
+      void this.syncHistory();
     });
     cdp.on('Network.requestWillBeSent', (params: unknown) => {
       this.blockStats.requests++;
@@ -368,6 +405,10 @@ export class BrowserSession extends EventEmitter {
     cdp.onClose((expected) => {
       if (!expected) this.noteCrash(cdp, 'devtools socket closed');
     });
+
+    // An adopted or revived tab arrives with a history already. Quietly: nothing is
+    // listening yet, and the first frame a listener gets reads these fields anyway.
+    await this.syncHistory(false);
 
     // Passive adoption of the user's own tab: leave it exactly as-is — no
     // viewport resize, no touch emulation, no UA spoof. Just CDP plumbing.
@@ -518,6 +559,99 @@ export class BrowserSession extends EventEmitter {
     this.notifyUpdate();
   }
 
+  /**
+   * Send a command Chrome only accepts from the tab's active frame.
+   *
+   * While a cross-site navigation commits, DevTools has already moved to the incoming
+   * frame and that frame is not the active one yet, so for a few milliseconds the
+   * history commands answer "Not attached to an active page". A Back clicked while a
+   * page is still arriving lands exactly there. The window closes by itself, so this
+   * waits it out instead of reporting a failure nobody could act on.
+   */
+  private async sendToActivePage(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<unknown> {
+    const deadline = Date.now() + ACTIVE_PAGE_WAIT_MS;
+    for (;;) {
+      try {
+        return await this.cdp.send(method, params);
+      } catch (err) {
+        const transient = err instanceof Error && err.message.includes('active page');
+        if (!transient || Date.now() >= deadline) throw err;
+        await new Promise((r) => setTimeout(r, ACTIVE_PAGE_RETRY_MS));
+      }
+    }
+  }
+
+  /**
+   * Ask Chrome for this tab's history. Throws when the tab cannot answer.
+   *
+   * This is the browser's own record, so it holds what the page cannot see: the real
+   * URL of every other-origin entry, and where the current one sits among them.
+   */
+  private async readHistory(): Promise<{ currentIndex: number; entries: HistoryEntry[] }> {
+    const res = (await this.sendToActivePage('Page.getNavigationHistory')) as
+      | { currentIndex?: number; entries?: HistoryEntry[] }
+      | undefined;
+    if (!res || !Array.isArray(res.entries) || typeof res.currentIndex !== 'number') {
+      throw new Error('The tab did not report its navigation history.');
+    }
+    return { currentIndex: res.currentIndex, entries: res.entries };
+  }
+
+  /**
+   * Re-read the history and take its two answers, announcing them if they moved.
+   *
+   * Returns the reading, or `undefined` when the tab would not answer — a tab
+   * mid-crash keeps the answers it last gave. `announce: false` is for the read made
+   * while a socket is still being set up.
+   */
+  private async syncHistory(announce = true): Promise<BrowserNavigationHistory | undefined> {
+    const seq = ++this.historySeq;
+    let history: BrowserNavigationHistory;
+    try {
+      const { currentIndex, entries } = await this.readHistory();
+      history = {
+        currentIndex,
+        entries: entries.map(({ url, title }) => ({ url, title })),
+        canGoBack: currentIndex > 0,
+        canGoForward: currentIndex < entries.length - 1,
+      };
+    } catch {
+      return undefined;
+    }
+    // A later read is on its way and will be the one to speak.
+    if (seq !== this.historySeq) return history;
+    if (history.canGoBack !== this.canGoBack || history.canGoForward !== this.canGoForward) {
+      this.canGoBack = history.canGoBack;
+      this.canGoForward = history.canGoForward;
+      if (announce) this.notifyUpdate();
+    }
+    return history;
+  }
+
+  /** The tab's history, oldest entry first, and where the page on screen sits in it. */
+  async getNavigationHistory(): Promise<BrowserNavigationHistory> {
+    const history = await this.syncHistory();
+    if (!history) throw new Error('The tab did not report its navigation history.');
+    return history;
+  }
+
+  /** Stamp a page state with the tab's place in its history, when the tab will say. */
+  private async withHistory(state: PageState): Promise<PageState> {
+    const history = await this.syncHistory();
+    if (history) {
+      state.history = {
+        index: history.currentIndex,
+        length: history.entries.length,
+        canGoBack: history.canGoBack,
+        canGoForward: history.canGoForward,
+      };
+    }
+    return state;
+  }
+
   private touch() {
     this.lastActivity = Date.now();
   }
@@ -530,6 +664,8 @@ export class BrowserSession extends EventEmitter {
       title: this.currentTitle,
       version: this.version,
       driving: this.driving,
+      canGoBack: this.canGoBack,
+      canGoForward: this.canGoForward,
     } satisfies BrowserSessionUpdate);
   }
 
@@ -547,6 +683,8 @@ export class BrowserSession extends EventEmitter {
       title: this.currentTitle,
       version: this.version,
       driving: this.driving,
+      canGoBack: this.canGoBack,
+      canGoForward: this.canGoForward,
     } satisfies BrowserSessionUpdate);
   }
 
@@ -659,27 +797,57 @@ export class BrowserSession extends EventEmitter {
   ): Promise<PageState> {
     this.touch();
 
-    const NAV_TIMEOUT = 15_000;
-
     if (waitUntil === 'domcontentloaded') {
-      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT);
+      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT_MS);
       await this.cdp.send('Page.navigate', { url });
       await dcPromise.catch(() => {});
     } else if (waitUntil === 'networkidle') {
-      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT);
+      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT_MS);
       await this.cdp.send('Page.navigate', { url });
       await loadPromise.catch(() => {});
       await this.waitForNetworkIdle(500, 10_000);
     } else {
-      // 'load' (default) — wait for DOMContentLoaded first, then race load vs timeout.
-      // Many pages fire DOMContentLoaded quickly but 'load' can stall on slow resources.
-      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT);
-      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT);
-      await this.cdp.send('Page.navigate', { url });
-      await dcPromise.catch(() => {});
-      await Promise.race([loadPromise.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))]);
+      await this.sendAndAwaitLoad('Page.navigate', { url });
     }
 
+    const state = await this.stateAfterLoad();
+    log.info('navigated', { browserId: this.id, title: state.title, waitUntil });
+    this.notifyUpdate();
+    return state;
+  }
+
+  /**
+   * Reload the page on screen — a real reload, by the browser, of whatever the tab
+   * holds: a POST result, a page that refuses script evaluation, a document whose URL
+   * no longer answers the way it did. `ignoreCache` is the shift-reload.
+   */
+  async reload(opts?: { ignoreCache?: boolean }): Promise<PageState> {
+    this.touch();
+
+    await this.sendAndAwaitLoad('Page.reload', opts?.ignoreCache ? { ignoreCache: true } : {});
+
+    const state = await this.stateAfterLoad();
+    log.info('reloaded', { browserId: this.id, title: state.title });
+    this.notifyUpdate();
+    return state;
+  }
+
+  /**
+   * Send a command that loads a document, and wait for the load.
+   *
+   * DOMContentLoaded first, then `load` raced against a timeout: many pages fire
+   * DOMContentLoaded quickly but `load` can stall on slow resources.
+   */
+  private async sendAndAwaitLoad(method: string, params: Record<string, unknown>): Promise<void> {
+    const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT_MS);
+    const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT_MS);
+    await this.cdp.send(method, params);
+    await dcPromise.catch(() => {});
+    await Promise.race([loadPromise.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))]);
+  }
+
+  /** What a freshly loaded document reports: settled, captured, and placed in the history. */
+  private async stateAfterLoad(): Promise<PageState> {
     await this.settle(SETTLE_CAP.navigate);
 
     if (!this.closed) {
@@ -691,10 +859,7 @@ export class BrowserSession extends EventEmitter {
         },
       );
     }
-    const state = await this.getPageState();
-    log.info('navigated', { browserId: this.id, title: state.title, waitUntil });
-    this.notifyUpdate();
-    return state;
+    return this.withHistory(await this.getPageState());
   }
 
   /** Wait until no network requests for `quietMs`, up to `timeoutMs`. */
@@ -990,16 +1155,36 @@ export class BrowserSession extends EventEmitter {
     return state;
   }
 
+  /**
+   * Move one entry through the tab's history, by the browser's own record of it.
+   *
+   * `history.back()` in the page would move too, but cannot say whether there is
+   * anywhere to go: a call with no entry behind it is a silent no-op, indistinguishable
+   * from a slow navigation. Reading the entry first turns that into a refusal.
+   */
   async navigateHistory(direction: 'back' | 'forward'): Promise<PageState> {
     this.touch();
 
-    await this.eval(direction === 'back' ? 'history.back()' : 'history.forward()');
-    // Wait for navigation (non-fatal timeout)
-    await this.cdp.waitForEvent('Page.frameNavigated', 5_000).catch(() => {});
+    const { currentIndex, entries } = await this.readHistory();
+    const target = entries[currentIndex + (direction === 'back' ? -1 : 1)];
+    if (!target) {
+      throw new Error(
+        `No history entry ${direction === 'back' ? 'behind' : 'ahead of'} this page.`,
+      );
+    }
+
+    // A move to another document commits as `frameNavigated`; one within the same
+    // document (a pushState entry, a fragment) only as `navigatedWithinDocument`.
+    const moved = Promise.race([
+      this.cdp.waitForEvent('Page.frameNavigated', HISTORY_MOVE_TIMEOUT_MS),
+      this.cdp.waitForEvent('Page.navigatedWithinDocument', HISTORY_MOVE_TIMEOUT_MS),
+    ]);
+    await this.sendToActivePage('Page.navigateToHistoryEntry', { entryId: target.id });
+    await moved.catch(() => {});
     await new Promise((r) => setTimeout(r, 500));
 
     if (!this.closed) await this.takeScreenshot();
-    const state = await this.getPageState();
+    const state = await this.withHistory(await this.getPageState());
     this.notifyUpdate();
     return state;
   }

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ClientEventType } from '@/types';
 import type { ClientPresenceState } from '@yaar/shared';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
+import { isUnattended, onAttentionChange } from '@/lib/hostAttention';
 
 /**
  * How long a tab must have been away before coming back is worth a resync.
@@ -55,7 +56,11 @@ export function useClientPresence(recover: () => void) {
       // Straight to the socket: this describes the transport's own peer, and a frame
       // that cannot be delivered has nothing to say. A closed socket means the server
       // already knows more than this would have told it.
-      sendEvent(wsManager, { type: ClientEventType.CLIENT_PRESENCE, state });
+      sendEvent(wsManager, {
+        type: ClientEventType.CLIENT_PRESENCE,
+        state,
+        ...(isUnattended() ? { unattended: true } : {}),
+      });
     };
 
     const goneAway = (state: ClientPresenceState) => {
@@ -92,6 +97,12 @@ export function useClientPresence(recover: () => void) {
     // Not on every browser; `addEventListener` for an unknown name is a no-op, so no guard.
     document.addEventListener('freeze', onFreeze);
     document.addEventListener('resume', onResume);
+    // A host that keeps the page running out of sight (the Android app): the page never
+    // goes `hidden`, so nothing above fires, and there is nothing to recover from either.
+    // Only who is watching changed.
+    const offAttention = onAttentionChange(() =>
+      report(document.visibilityState === 'hidden' ? 'hidden' : 'visible'),
+    );
 
     // Say where we stand now, rather than waiting for the first change. A tab that
     // connects while already hidden — restored on startup, opened in the background —
@@ -102,6 +113,7 @@ export function useClientPresence(recover: () => void) {
       document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('freeze', onFreeze);
       document.removeEventListener('resume', onResume);
+      offAttention();
     };
   }, []);
 }

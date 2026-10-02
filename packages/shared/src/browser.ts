@@ -52,6 +52,21 @@ export interface BrowserHtmlWithMeta {
   readyState: string;
 }
 
+/**
+ * What `get_navigation_history` answers: the tab's history as Chrome holds it.
+ *
+ * The page cannot report this itself — `history.length` is a count with no position,
+ * and the Navigation API sees only the same-origin run around the current entry.
+ */
+export interface BrowserNavigationHistory {
+  /** Index into `entries` of the page on screen. */
+  currentIndex: number;
+  /** Oldest first. Other-origin entries are included, with their real URLs. */
+  entries: Array<{ url: string; title: string }>;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
 /** One element the `annotate` overlay numbered. */
 export interface BrowserAnnotatedElement {
   index: number;

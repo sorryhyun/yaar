@@ -370,6 +370,25 @@ reader is usually a model.
 
 ---
 
+## History and reload
+
+Back, forward and reload go through the browser, not the page. `navigateHistory` reads
+`Page.getNavigationHistory` and moves with `Page.navigateToHistoryEntry`; `reload` is `Page.reload`.
+`history.back()` and `location.reload()` in the page would move too, but the page cannot say where
+it sits: `history.length` is a count with no position, and the Navigation API sees only the
+same-origin entries around the current one. So a move with nowhere to go used to be a silent no-op
+followed by a five-second wait, and it is now a refusal.
+
+The session keeps `canGoBack` / `canGoForward` current by re-reading the history on every
+`frameNavigated`, `navigatedWithinDocument` and `loadEventFired` (subframes included, since a
+subframe navigation is a history entry too), and announces them only when they change. That makes
+them right for moves nobody made through the session: a human clicking in live mode, a page calling
+`pushState`. Every frame on `/api/browser/{id}/events` carries both, which is all the Browser app's
+toolbar reads. `get_navigation_history` answers the whole list with real URLs and the current
+index; `navigate`, `reload` and `open` end their page-state summary with the tab's place in it.
+
+---
+
 ## Page scripts
 
 `page-scripts.ts` holds every JavaScript snippet the session runs inside the page through

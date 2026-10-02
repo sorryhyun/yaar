@@ -340,6 +340,11 @@ A second, always-visible desktop answers what the phone cannot, with no new mech
 - `clientAwayNote` owes no explanation while **any** connection is visible.
 - A socket that asks for no particular session gets the default one, the user's (`SessionHub.attach`).
 
+With the YAAR app the phone's own page keeps answering in the background
+([android.md](../installations/android.md#what-happens-when-you-leave)): it stays `visible` and
+reports itself `unattended`, so it keeps its windows and the companion takes over only if the
+app is killed. In Chrome on the phone the companion answers as described here.
+
 ### Why the default is Android-only
 
 On a phone client and server are the same device, so "the user switched apps" is the ordinary

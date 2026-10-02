@@ -51,9 +51,9 @@ export const browserState = {
   },
   canGoBack: {
     description:
-      'False only when the tab\'s own history proves there is no entry behind this page ' +
-      '(the toolbar Back is greyed out then). True can also mean "cannot tell": the page ' +
-      'sees other-origin entries only as a count, not a position.',
+      "Whether the tab's history holds an entry behind this page (the toolbar Back is " +
+      "greyed out when it does not). Read from the browser's own history, so entries on " +
+      'other origins count.',
     schema: { type: 'boolean' },
     get: () => canGoBack(),
   },
@@ -167,20 +167,19 @@ export const navigationCommands = {
     },
   }),
   navigate_back: defineAppCommand({
-    description:
-      "Go back one entry in the tab's real history. Refused when canGoBack is false.",
+    description: "Go back one entry in the tab's real history. Refused when canGoBack is false.",
     params: { type: 'object', properties: {} },
-    run: async () => stepHistory('back', await ensureBrowserId(), true),
+    run: async () => stepHistory('back', await ensureBrowserId()),
   }),
   navigate_forward: defineAppCommand({
     description:
       "Go forward one entry in the tab's real history. Refused when canGoForward is false.",
     params: { type: 'object', properties: {} },
-    run: async () => stepHistory('forward', await ensureBrowserId(), true),
+    run: async () => stepHistory('forward', await ensureBrowserId()),
   }),
   reload: defineAppCommand({
     description:
-      'Reload the page in the remote tab (a real reload, not a re-capture). Refused on about:blank.',
+      'Reload the page in the remote tab (a real browser reload, not a re-capture). Refused on about:blank.',
     params: { type: 'object', properties: {} },
     run: async () => reloadPage(await ensureBrowserId()),
   }),
