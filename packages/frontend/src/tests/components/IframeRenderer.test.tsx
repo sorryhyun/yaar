@@ -21,11 +21,12 @@
  * before it. This detector needs nothing from inside the frame: a *second* load event
  * on a frame whose document is no longer the app's is the whole signal.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { render, cleanup, fireEvent, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
+import { act, render, cleanup, fireEvent, screen } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import {
   MemoizedIframeRenderer,
+  violationBlocksFrame,
   ISOLATED_APP_SANDBOX,
   APP_FRAME_ALLOW,
   EXTERNAL_FRAME_ALLOW,
@@ -287,5 +288,124 @@ describe('an app frame that navigates itself away', () => {
     fireEvent.load(iframe);
 
     expect(container.querySelector('iframe')).not.toBeNull();
+  });
+});
+
+/**
+ * #151: a window on the phone came back from another card showing "Cannot embed this
+ * site" over an app that was alive and well. Two paths could do that to a frame that had
+ * done nothing wrong, and both are pinned here.
+ */
+describe('a frame is only declared blocked for its own refusal', () => {
+  const originalHref = window.location.href;
+
+  beforeEach(() => {
+    setUrl('http://localhost:8000/');
+    useDesktopStore.setState({ sessionId: 'sess-1', notifications: {} });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    cleanup();
+    setUrl(originalHref);
+  });
+
+  /** The frame's document is still the initial about:blank — nothing has arrived yet. */
+  function stillBlank(iframe: HTMLIFrameElement) {
+    Object.defineProperty(iframe, 'contentDocument', {
+      configurable: true,
+      value: { location: { href: 'about:blank' } },
+    });
+  }
+
+  function violation(init: { blockedURI: string; effectiveDirective: string }) {
+    const e = new window.Event('securitypolicyviolation');
+    Object.assign(e, { ...init, violatedDirective: init.effectiveDirective });
+    act(() => {
+      document.dispatchEvent(e);
+    });
+  }
+
+  it('waits out a slow app frame instead of tearing it down at 3s', () => {
+    // A phone on Termux, or a server busy compiling a preview: the app's document has
+    // not committed yet. Our own server never refuses framing, so slow is all this is.
+    jest.useFakeTimers();
+    const { container } = render(<MemoizedIframeRenderer data={APP_URL} appId="devtools" />);
+    stillBlank(container.querySelector('iframe') as HTMLIFrameElement);
+
+    act(() => jest.advanceTimersByTime(3500));
+
+    expect(container.querySelector('iframe')).not.toBeNull();
+    expect(container.textContent).not.toContain('Cannot embed this site');
+  });
+
+  it('still gives up on an external site that never delivered a page', () => {
+    jest.useFakeTimers();
+    const { container } = render(<MemoizedIframeRenderer data="https://refuses.example/" />);
+    stillBlank(container.querySelector('iframe') as HTMLIFrameElement);
+
+    act(() => jest.advanceTimersByTime(3500));
+
+    expect(screen.getByText('Cannot embed this site')).toBeTruthy();
+    expect(container.querySelector('iframe')).toBeNull();
+  });
+
+  it("ignores another frame's fetch violation on the same host", () => {
+    // Every app is served from this one host, so a hostname match is no match at all.
+    const { container } = renderApp({ appId: 'devtools' });
+
+    violation({ blockedURI: 'http://localhost:8000/api/fetch', effectiveDirective: 'connect-src' });
+
+    expect(container.querySelector('iframe')).not.toBeNull();
+  });
+
+  it("ignores a frame-src refusal of a different app's frame", () => {
+    const { container } = renderApp({ appId: 'reader' });
+
+    violation({
+      blockedURI: 'http://localhost:8000/apps/preview/index.html',
+      effectiveDirective: 'frame-src',
+    });
+
+    expect(container.querySelector('iframe')).not.toBeNull();
+  });
+
+  it('reports a frame-src refusal that names this frame', () => {
+    const { container } = render(<MemoizedIframeRenderer data="https://refuses.example/page" />);
+
+    violation({ blockedURI: 'https://refuses.example/page', effectiveDirective: 'frame-src' });
+
+    expect(screen.getByText('Cannot embed this site')).toBeTruthy();
+    expect(container.textContent).toContain('frame-src');
+  });
+});
+
+describe('violationBlocksFrame', () => {
+  const frame = document.createElement('iframe');
+  const at = (
+    blockedURI: string,
+    effectiveDirective = 'frame-src',
+    target: EventTarget = document,
+  ) =>
+    violationBlocksFrame(
+      { blockedURI, effectiveDirective, target } as unknown as SecurityPolicyViolationEvent,
+      'https://site.example/a/page?x=1',
+      frame,
+    );
+
+  it('matches this frame, or its origin when the report was trimmed to it', () => {
+    expect(at('https://site.example/a/page')).toBe(true);
+    expect(at('https://site.example')).toBe(true);
+    expect(at('https://site.example/a/page', 'child-src', frame)).toBe(true);
+  });
+
+  it('refuses every other directive, path, origin, element and non-URL', () => {
+    expect(at('https://site.example/a/page', 'connect-src')).toBe(false);
+    expect(at('https://site.example/b/other')).toBe(false);
+    expect(at('https://other.example/a/page')).toBe(false);
+    expect(at('https://site.example/a/page', 'frame-src', document.createElement('iframe'))).toBe(
+      false,
+    );
+    expect(at('inline')).toBe(false);
   });
 });

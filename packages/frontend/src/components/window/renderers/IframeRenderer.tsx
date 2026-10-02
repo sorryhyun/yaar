@@ -200,6 +200,36 @@ function loadingHost(resolvedUrl: string): string | null {
   }
 }
 
+/**
+ * Whether a `securitypolicyviolation` seen on the desktop document is the refusal of
+ * *this* frame.
+ *
+ * Every mounted frame listens on the one shared document, so a test that only asks
+ * "is it my host?" (what this replaced) claims a violation for every frame on that host
+ * — every isolated app shares one origin. Only a navigation blocked under `frame-src` /
+ * `child-src` is a frame being refused at all; a fetch, script or image violation never
+ * is. The blocked URI must then name this frame: same origin, and the same path unless
+ * the browser trimmed the report to the bare origin (it does for cross-origin targets).
+ * A violation dispatched at some other element is that element's, whatever it names.
+ */
+export function violationBlocksFrame(
+  e: Pick<SecurityPolicyViolationEvent, 'blockedURI' | 'effectiveDirective' | 'target'>,
+  frameUrl: string,
+  frame: HTMLIFrameElement | null,
+): boolean {
+  if (e.target instanceof Element && e.target !== frame) return false;
+  const directive = e.effectiveDirective?.split(' ')[0];
+  if (directive !== 'frame-src' && directive !== 'child-src') return false;
+  try {
+    const blocked = new URL(e.blockedURI);
+    const own = new URL(frameUrl, window.location.href);
+    if (blocked.origin !== own.origin) return false;
+    return blocked.pathname === '/' || blocked.pathname === own.pathname;
+  } catch {
+    return false; // Not a URL ('inline', 'eval', …): not a navigation.
+  }
+}
+
 function IframeRenderer({
   data,
   requestId,
@@ -299,6 +329,8 @@ function IframeRenderer({
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const reportedRef = useRef(false);
+  /** Set by the first `load`; the 3s fallback below only judges a frame that never fired it. */
+  const loadedRef = useRef(false);
   /**
    * Where an app frame went when it stopped being the app.
    *
@@ -338,56 +370,59 @@ function IframeRenderer({
     setErrorMessage('');
     setNavigatedAway(null);
     reportedRef.current = false;
+    loadedRef.current = false;
   }, [url]);
 
   // Listen for CSP violations and handle timeout fallback
   useEffect(() => {
     const handleSecurityViolation = (e: SecurityPolicyViolationEvent) => {
-      // Check if this violation is related to our iframe
-      if (e.blockedURI) {
-        try {
-          if (url.includes(new URL(e.blockedURI).hostname)) {
-            reportError(`Site blocked iframe embedding (CSP: ${e.violatedDirective})`);
-          }
-        } catch {
-          // Invalid URL in blockedURI, ignore
-        }
+      if (violationBlocksFrame(e, url, iframeRef.current)) {
+        reportError(`Site blocked iframe embedding (CSP: ${e.effectiveDirective})`);
       }
     };
 
     // Worth keeping for the violations it *can* see, but note what it cannot: a
     // `frame-ancestors` refusal is the framed site's own policy, so the violation is
     // reported by that document and never reaches this one — and the URI it names as
-    // blocked is *our* origin, not theirs, so the hostname test above could not match
+    // blocked is *our* origin, not theirs, so `violationBlocksFrame` could not match
     // it even if it arrived. Nothing here observes that case; `handleLoad`'s
     // about:blank check below is what catches it, and `open-url.ts` asks the server
     // before a window is opened around such a site in the first place.
     document.addEventListener('securitypolicyviolation', handleSecurityViolation);
 
-    // Fallback: If iframe hasn't loaded after timeout, assume it's blocked
-    const timeoutId = setTimeout(() => {
-      // Use ref to check current state without causing re-renders
-      const iframe = iframeRef.current;
-      if (iframe && !reportedRef.current) {
-        try {
-          // This will throw for cross-origin, but if iframe didn't load at all,
-          // contentWindow might be null or document might be about:blank
-          const doc = iframe.contentDocument;
-          if (doc && doc.location.href === 'about:blank') {
-            reportError('Site may have blocked iframe embedding (X-Frame-Options or CSP)');
+    // Fallback for an external site that has not even fired `load` after 3s: a frame
+    // still on its initial about:blank is taken as refused.
+    //
+    // Never for content our own server serves (a same-origin path, or the isolated app
+    // origin). Nothing on that server refuses framing, and its error responses are
+    // caught by `handleLoad`'s JSON check — so an app frame still on about:blank after
+    // 3s is only a slow one (a phone on Termux, a server busy compiling a preview).
+    // Judging it blocked tore the <iframe> out for good while the app itself was fine
+    // (#151).
+    const ownContent = !!appOrigin || isSameOrigin(url);
+    const timeoutId = ownContent
+      ? undefined
+      : setTimeout(() => {
+          const iframe = iframeRef.current;
+          if (!iframe || reportedRef.current || loadedRef.current) return;
+          try {
+            // Readable only while the frame is still on the initial about:blank; once a
+            // cross-origin document is in, this throws and the site evidently loaded.
+            const doc = iframe.contentDocument;
+            if (doc && doc.location.href === 'about:blank') {
+              reportError('Site may have blocked iframe embedding (X-Frame-Options or CSP)');
+            }
+          } catch {
+            // Cross-origin - can't check, assume it loaded if no CSP error was caught
           }
-        } catch {
-          // Cross-origin - can't check, assume it loaded if no CSP error was caught
-        }
-      }
-    }, 3000);
+        }, 3000);
 
     return () => {
       document.removeEventListener('securitypolicyviolation', handleSecurityViolation);
       clearTimeout(timeoutId);
       if (blockedProbeRef.current !== null) clearTimeout(blockedProbeRef.current);
     };
-  }, [url, reportError]);
+  }, [url, appOrigin, reportError]);
 
   /**
    * Whether the `load` that just fired delivered a page or a refusal.
@@ -492,6 +527,7 @@ function IframeRenderer({
       }
 
       setLoadState('loaded');
+      loadedRef.current = true;
 
       // A cross-origin frame that refused to load fires `load` all the same, and the
       // 3s timeout above was the only thing that noticed — three seconds of an empty
