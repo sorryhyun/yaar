@@ -283,6 +283,59 @@ async function evaluateRaw(wid: string, expression: string, timeoutMs?: number):
   });
 }
 
+/** Rule counts this devtools set, by preview window id — the server holds the rules. */
+const faultRuleCounts = new Map<string, number>();
+
+/**
+ * The reminder a preview with fault rules owes every refresh of it, or null when it has none.
+ *
+ * The rules outlive the window being re-created (every compile does that), which is what lets
+ * them reach the app's boot-time calls — and also what makes a forgotten rule look exactly
+ * like the bug it was set up to rehearse.
+ */
+export function previewFaultsNote(): string | null {
+  const wid = previewWindowId();
+  const count = wid ? faultRuleCounts.get(wid) : undefined;
+  if (!count) return null;
+  return (
+    `FAULTS ACTIVE: ${count} fault rule(s) set by previewFaults are failing or stalling ` +
+    "this preview's matching calls. Clear them with previewFaults({ rules: [] }) before " +
+    'judging a failure real.'
+  );
+}
+
+/**
+ * Set, clear or read back the preview's fault rules (the server's `app_faults`).
+ *
+ * The rules live on the server and are enforced at the doors the preview's verb and
+ * cross-origin fetch calls arrive through, so they survive a reload and reach the calls the
+ * app makes while it boots, which a `window.fetch` patched from an eval never can.
+ * Rebuilding into the same window keeps them; reopening the preview drops them.
+ */
+export async function setPreviewFaults(rules: unknown[] | undefined): Promise<unknown> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  const result = await invoke<unknown>(`yaar://windows/${wid}`, {
+    action: 'app_faults',
+    ...(rules !== undefined ? { rules } : {}),
+  });
+  if (rules !== undefined) {
+    if (rules.length > 0) faultRuleCounts.set(wid, rules.length);
+    else faultRuleCounts.delete(wid);
+    addConsoleEntry({
+      level: 'info',
+      args: [
+        rules.length === 0
+          ? '[preview faults] cleared'
+          : `[preview faults] set\n${formatEvaluationContent(rules)}`,
+      ],
+      timestamp: Date.now(),
+      source: 'evaluation',
+    });
+  }
+  return result;
+}
+
 /**
  * Cut one element out of a preview capture, by its bounding box in the iframe.
  *
@@ -429,7 +482,7 @@ const INSPECT_CONSOLE_ENTRIES = 30;
  * right default, and the wrong payload once the interesting region is one row of
  * a list the app renders two hundred of.
  */
-const DOM_NO_MATCH = ' yaar-selector-no-match';
+const DOM_NO_MATCH = '\u0000yaar-selector-no-match';
 
 function domTextExpression(selector?: string): string {
   const root = selector

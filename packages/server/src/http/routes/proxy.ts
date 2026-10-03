@@ -22,6 +22,7 @@ import {
 } from '../../features/http/fetch.js';
 import { resolvePrincipal, requirePermission } from '../access.js';
 import { jarKey } from '../../features/http/cookie-jar.js';
+import { applyPreviewFault } from '../preview-faults.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -73,6 +74,10 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     const denied = requirePermission(principal, 'yaar://http', 'invoke');
     if (denied) return denied;
   }
+
+  // A devtools preview's fault rules (features/window/preview-faults.ts).
+  const faulted = await applyPreviewFault(principal, { targets: [targetUrl] }, req, 'error');
+  if (faulted) return faulted;
 
   // Session and cookie-jar identity come from the validated token only. The body's
   // `sessionId` and the Referer are caller-supplied and were previously trusted,

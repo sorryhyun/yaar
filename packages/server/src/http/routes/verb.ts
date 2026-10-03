@@ -29,6 +29,7 @@ import {
   type Principal,
 } from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
+import { applyPreviewFault } from '../preview-faults.js';
 import {
   isValidSharedKey,
   MAX_SHARED_VALUE_BYTES,
@@ -263,6 +264,16 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       body.action === 'set' ? 'invoke' : 'read',
     );
     if (denied) return denied;
+    const faulted = await applyPreviewFault(
+      principal,
+      {
+        targets: [`yaar://windows/self/shared/${body.key}`],
+        verb: body.action === 'set' ? 'invoke' : 'read',
+      },
+      req,
+      'error',
+    );
+    if (faulted) return faulted;
     const windowKey = sharedWindowKey(principal);
 
     if (body.action === 'get') {
@@ -324,6 +335,13 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         }
         const denied = requirePermission(principal, uri, 'read');
         if (denied) return denied;
+        const faulted = await applyPreviewFault(
+          principal,
+          { targets: [uri], verb: 'read' },
+          req,
+          'error',
+        );
+        if (faulted) return faulted;
         const subscriptionId = subscriptionRegistry.subscribe(
           principal.token,
           principal.windowId,
@@ -371,6 +389,13 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       if (namesSelf(subscribeUri)) {
         return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
       }
+      const faulted = await applyPreviewFault(
+        principal,
+        { targets: [uri, subscribeUri], verb: 'read' },
+        req,
+        'error',
+      );
+      if (faulted) return faulted;
 
       const subscriptionId = subscriptionRegistry.subscribe(
         principal.token,
@@ -474,6 +499,18 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // *into* its own storage and not export back out of it — which is the whole of what
   // devtools was missing to hand a project file to another app.
   const payload = resolveInvokeSources(body.payload, tokenEntry?.appId);
+
+  // A devtools preview's fault rules (features/window/preview-faults.ts). Past every gate
+  // above, so a call the app may not make still answers with its real refusal.
+  if (tokenEntry) {
+    const faulted = await applyPreviewFault(
+      tokenEntry,
+      { targets: [uri, resolvedUri], verb },
+      req,
+      'envelope',
+    );
+    if (faulted) return faulted;
+  }
 
   // Log to session logs. Data-plane verbs (an app's proxied fetch) and the devtools
   // console poll are skipped; the rest are summarized — see lib/format-verb-log.ts.

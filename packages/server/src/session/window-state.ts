@@ -13,6 +13,7 @@ import type { OSAction, WindowState, AppProtocolRequest, UserInteraction } from 
 import { applyContentOperation, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getMonitorId } from '../agents/agent-context.js';
 import type { PermissionEntry } from '../http/access.js';
+import type { PreviewFaultRule } from '../features/window/preview-faults.js';
 import { windowSharedStore } from '../http/window-shared.js';
 import { WindowHandleMap } from './window-handle-map.js';
 import { createLogger } from '../observability/log.js';
@@ -249,6 +250,18 @@ export class WindowStateRegistry {
   /** Top of the stack among non-minimized windows — the desktop's `focusedWindowId`. */
   private focused: string | null = null;
   private onWindowCloseCallback?: (windowId: string, appId?: string, monitorId?: string) => void;
+  /**
+   * Devtools preview fault rules (`features/window/preview-faults.ts`), by window key.
+   *
+   * Deliberately *not* on the side record, which a close drops: devtools refreshes a
+   * preview onto a new build by closing and re-creating it under the same id, so rules
+   * that died with the window would be gone after every compile — and re-applying them
+   * after the create would race the very boot-time calls they exist to break. They last
+   * until cleared or the session ends, and are handed out only while the window under the
+   * key passes the caller's check (`getWindowFaults`), so a non-preview window that later
+   * takes the id is never matched against them.
+   */
+  private faults: Map<string, PreviewFaultRule[]> = new Map();
 
   readonly handleMap: WindowHandleMap;
 
@@ -912,6 +925,35 @@ export class WindowStateRegistry {
    */
   getWindowGrants(windowId: string, monitorId?: string): PermissionEntry[] {
     return [...(this.peekSide(windowId, monitorId)?.grants ?? [])];
+  }
+
+  /**
+   * Replace the fault rules filed under a live window's key (see `faults`); `[]` clears
+   * them. The caller has already checked the window is a preview.
+   */
+  setWindowFaults(windowId: string, rules: PreviewFaultRule[], monitorId?: string): void {
+    const key = this.targetKey(windowId, monitorId);
+    if (!key) return;
+    if (rules.length > 0) this.faults.set(key, rules);
+    else this.faults.delete(key);
+  }
+
+  /**
+   * The fault rules for a live window — the registry's own objects, so the door that
+   * matches one can count the hit — provided the window passes `eligible`. Empty when
+   * there is no such window, it fails the check, or no rules are filed under its key.
+   */
+  getWindowFaults(
+    windowId: string,
+    monitorId: string | undefined,
+    eligible: (win: WindowState) => boolean,
+  ): PreviewFaultRule[] {
+    const key = this.targetKey(windowId, monitorId);
+    if (!key) return [];
+    const rules = this.faults.get(key);
+    if (!rules) return [];
+    const win = this.windows.get(key);
+    return win && eligible(win) ? rules : [];
   }
 
   /**

@@ -8,7 +8,7 @@
  *   describe('yaar://windows/{w}')        → this instance's manual (its live protocol)
  *   read('yaar://windows/{w}')            → view window content/metadata
  *   list('yaar://windows/{w}')            → this window's state keys and commands
- *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, app_eval, message
+ *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, app_eval, app_faults, message
  *   delete('yaar://windows/{w}')          → close window
  *
  *   read('yaar://windows/{w}/state/{k}')       → one state value
@@ -65,6 +65,7 @@ import {
   handleAppDescribe,
   fetchLiveManifest,
 } from '../features/window/app-protocol.js';
+import { handlePreviewFaults } from '../features/window/preview-faults.js';
 import { listApps } from '../features/apps/discovery.js';
 import { buildWindowResourceUri, parseWindowResourceUri } from '../lib/yaar-uri-server.js';
 import { RESERVED_COMMAND_KEYS, declaredParamNames } from '../lib/command-signature.js';
@@ -236,6 +237,7 @@ export function registerWindowHandlers(
     app_query: ({ windowId, p }) => queryWindowState(windowId, p),
     app_command: ({ windowId, p }) => handleAppCommand(getWindowState(), windowId, p),
     app_eval: ({ windowId, p }) => handleAppEval(getWindowState(), windowId, p),
+    app_faults: ({ windowId, p }) => handlePreviewFaults(getWindowState(), windowId, p),
     message: ({ windowId, p }) => {
       const appId = getWindowState().getAppIdForWindow(windowId);
       if (!appId) return error(`Window "${windowId}" is not an app window.`);
@@ -429,7 +431,7 @@ export function registerWindowHandlers(
       "content — the window, its app agent and its subscriptions survive, the iframe's " +
       'in-memory state does not; this is how a window picks up a redeployed bundle without ' +
       'losing its agent), lock, unlock, move (x, y), resize (width, height), app_query, ' +
-      'app_command, app_eval (devtools previews only), message.',
+      'app_command, app_eval and app_faults (devtools previews only), message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -507,6 +509,21 @@ export function registerWindowHandlers(
           description:
             'app_eval only. JS expression evaluated in the iframe. Devtools preview ' +
             'windows only — refused elsewhere. Result is JSON-serialized, capped at 16KB.',
+        },
+        // app_faults fields
+        rules: {
+          type: 'array',
+          description:
+            "app_faults only. Replaces the preview's fault rules ([] clears; omit to read " +
+            'them back with hit counts). Each rule fails, stalls or hangs the preview ' +
+            "iframe's own calls whose target matches: { match: 'yaar://storage/*' | " +
+            "'https://api.example.com/*' (* = any run of characters), kind: 'fail' | " +
+            "'delay' | 'hang', verbs?: [...] (yaar:// only), status?: 400-599, error?: " +
+            'string, retryable?: boolean (verbs: a 503 the SDK retries), delayMs?: number ' +
+            '(required for delay; on fail, stalls before failing), times?: n (stop after n ' +
+            'hits) }. First matching rule wins. Kept across reloads and across the preview being ' +
+            're-created under the same id (every devtools compile); cleared only by [].',
+          items: { type: 'object' },
         },
         timeoutMs: {
           type: 'number',

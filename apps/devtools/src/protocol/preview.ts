@@ -6,6 +6,8 @@ import {
   inspectPreview,
   openPreview,
   previewEvaluate,
+  previewFaultsNote,
+  setPreviewFaults,
   previewStaleNote,
   queryPreviewState,
   readPreview,
@@ -16,7 +18,11 @@ export const previewCommands = {
   preview: defineAppCommand({
     description: 'Open preview window for the compiled app.',
     params: { type: 'object', properties: {} },
-    run: async () => await openPreview(),
+    run: async () => {
+      const opened = await openPreview();
+      const faults = previewFaultsNote();
+      return faults ? { ...opened, faults } : opened;
+    },
   }),
   previewScreenshot: defineAppCommand({
     description:
@@ -133,6 +139,80 @@ export const previewCommands = {
       if (!expression.trim()) throw new AppCommandError('expression is required.');
       const timeoutMs = typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
       return await previewEvaluate(expression, timeoutMs, { changed: p.changed === true });
+    },
+  }),
+  previewFaults: defineAppCommand({
+    description:
+      "Make the preview's own verb and cross-origin fetch calls fail, stall or hang, to " +
+      'exercise error and loading paths. `rules` replaces the whole list ([] clears it); ' +
+      'omit it to read the rules back with how many calls each has caught — 0 hits means ' +
+      'the app never made the call you meant to break. Rules are enforced by the server, so ' +
+      'they survive reloads and every compile, and catch the calls an app makes while it ' +
+      "boots. Same-origin relative fetches and the app agent's own calls are not covered.",
+    params: {
+      type: 'object',
+      properties: {
+        rules: {
+          type: 'array',
+          description:
+            'First matching rule wins. Each: { match, kind, verbs?, status?, error?, ' +
+            'retryable?, delayMs?, times? }.',
+          items: {
+            type: 'object',
+            properties: {
+              match: {
+                type: 'string',
+                description:
+                  'A yaar:// URI for verb calls or an http(s) URL for fetches; * matches ' +
+                  'any run of characters. "yaar://apps/self/storage/*" matches by the ' +
+                  'spelling the app used, so does the resolved ' +
+                  '"yaar://apps/preview--{projectId}/storage/*".',
+              },
+              kind: {
+                type: 'string',
+                enum: ['fail', 'delay', 'hang'],
+                description:
+                  'fail: the call errors the way a real failure does. delay: it runs ' +
+                  'after delayMs. hang: it never answers until the app gives up (capped ' +
+                  'at 240s).',
+              },
+              verbs: {
+                type: 'array',
+                items: { type: 'string', enum: ['describe', 'read', 'list', 'invoke', 'delete'] },
+                description: 'yaar:// rules only: catch just these verbs.',
+              },
+              status: { type: 'number', description: 'fail: HTTP status, 400-599.' },
+              error: { type: 'string', description: 'fail: the error message the app sees.' },
+              retryable: {
+                type: 'boolean',
+                description:
+                  'fail on a verb: answer the retryable 503 the SDK retries (twice, over ' +
+                  '~4s) before throwing. Pair with times to test recovery.',
+              },
+              delayMs: {
+                type: 'number',
+                description: 'Required for delay. On fail, how long to stall first.',
+              },
+              times: {
+                type: 'number',
+                description: 'Stop after this many hits — times: 1 breaks only the first call.',
+              },
+            },
+            required: ['match', 'kind'],
+          },
+        },
+      },
+    },
+    replay: 'never',
+    run: async (p) => {
+      if (p.rules !== undefined && !Array.isArray(p.rules)) {
+        throw new AppCommandError('rules must be an array (pass [] to clear).');
+      }
+      try {
+        return await setPreviewFaults(p.rules as unknown[] | undefined);
+      } catch (err) {
+        throw new AppCommandError(`previewFaults failed: ${errMsg(err)}`);
+      }
     },
   }),
   previewQuery: defineAppCommand({

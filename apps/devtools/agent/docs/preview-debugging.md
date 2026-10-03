@@ -34,6 +34,14 @@ fallback is expected. Put which mode it is in `state:`, or the only evidence is 
 deployed window, where a human's click *does* take the lock, the shell withholds Ctrl+W while
 it is held; that only holds in a Chrome opened with `--app`.
 
+**To test a failure path, break the call with `previewFaults`, not by patching `window.fetch`
+from `previewEval`.** An eval-installed wrapper dies on the next reload, so it never reaches the
+calls the app makes while booting, the "first load fails" case. `previewFaults` rules are
+enforced by the server, match verb calls by their `yaar://` URI, and survive reloads and
+compiles. That last part cuts both ways: `preview` and `compile` say `FAULTS ACTIVE` while any
+are set. Clear them (`rules: []`) before you trust a failure you see. Read the rules back after
+the run: a rule with 0 hits means the app never made the call you meant to break.
+
 When a `previewEval` has to wait a long or open-ended time, don't raise the timeouts
 indefinitely — have the expression stash its result on `window` and return immediately, then
 read that global back in a later, instant eval.
