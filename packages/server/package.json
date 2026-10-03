@@ -1,6 +1,6 @@
 {
   "name": "@yaar/server",
-  "version": "0.23.5",
+  "version": "0.23.8",
   "private": true,
   "type": "module",
   "description": "YAAR TypeScript backend with Claude Agent SDK",
