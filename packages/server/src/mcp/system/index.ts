@@ -1,7 +1,7 @@
 /**
  * Always-on system-namespace MCP tools (active in both verb and legacy modes).
  *
- * - Reload: reload_cached, list_reload_options
+ * - Reload: reload_cached
  */
 
 export { registerReloadTools } from './reload.js';

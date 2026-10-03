@@ -8,12 +8,7 @@
  * On disk: storage/apps/{appId}/{path}
  */
 
-import {
-  hasLineFilter,
-  applyReadOptions,
-  pickGltfOptions,
-  type ReadOptions,
-} from '../../lib/read-options.js';
+import { hasLineFilter, applyReadOptions, type ReadOptions } from '../../lib/read-options.js';
 import {
   ok,
   okJson,
@@ -128,7 +123,7 @@ export async function readStorage(
   if (!storagePath.path) {
     return storageListLinks(storagePath.appId, prefixedPath, { missingIsEmpty: true });
   }
-  const result = await storageRead(prefixedPath, pickGltfOptions(options));
+  const result = await storageRead(prefixedPath, { gltf: options?.gltf });
   if (!result.success) {
     // An archive reads as the folder it stands for. (A plain directory still answers with
     // the error below: this door never fell through to list for one, and the SDK's

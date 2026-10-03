@@ -27,27 +27,33 @@ export interface YaarReadOptions {
   pdfPages?: string;
   /** Images only: the stored bytes instead of the WebP re-encode a read normally applies. */
   rawImage?: boolean;
-  /** glTF/GLB only: scope the model summary to one node's subtree (a name, or "#index"). */
-  gltfNode?: string;
-  /** glTF/GLB only: how many levels of the node tree the summary lists. */
-  gltfDepth?: number;
-  /** glTF/GLB only: an animation (name or "#index") whose keyframes to return in full. */
-  gltfKeys?: string;
   /**
-   * glTF/GLB only: an animation to play. With `gltfAt`, every node in world space and the
-   * posed mesh bounds at that time; without, `gltfNode`'s world path over the clip.
+   * glTF/GLB only: options steering the model summary a read returns. `describe` on the
+   * model (or a plain read of it) names each one under `readOptions.gltf`.
    */
-  gltfPose?: string;
-  /** glTF/GLB only: seconds into the `gltfPose` clip for the snapshot. */
-  gltfAt?: number;
-  /** glTF/GLB only: a time window in seconds, e.g. "0.2-0.8", for keys and pose paths. */
-  gltfRange?: string;
-  /** glTF/GLB only: resample keys (and a pose path) every this many seconds. */
-  gltfStep?: number;
-  /** glTF/GLB only: rotations as XYZ Euler degrees instead of quaternions. */
-  gltfEuler?: boolean;
-  /** glTF/GLB only: sections to leave out, comma-separated, e.g. "meshes,materials,images". */
-  gltfOmit?: string;
+  gltf?: {
+    /** Scope to one node's subtree (a name, or "#index"). */
+    node?: string;
+    /** How many levels of the node tree the summary lists. */
+    depth?: number;
+    /** An animation (name or "#index") whose keyframes to return in full. */
+    keys?: string;
+    /**
+     * An animation to play. With `at`, every node in world space and the posed mesh bounds at
+     * that time; without, `node`'s world path over the clip.
+     */
+    pose?: string;
+    /** Seconds into the `pose` clip for the snapshot. */
+    at?: number;
+    /** A time window in seconds, e.g. "0.2-0.8", for keys and pose paths. */
+    range?: string;
+    /** Resample keys (and a pose path) every this many seconds. */
+    step?: number;
+    /** Rotations as XYZ Euler degrees instead of quaternions. */
+    euler?: boolean;
+    /** Sections to leave out, comma-separated, e.g. "meshes,materials,images". */
+    omit?: string;
+  };
   /**
    * Answer an absent resource with `null` instead of throwing.
    *

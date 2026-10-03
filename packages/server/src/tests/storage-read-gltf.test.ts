@@ -70,7 +70,7 @@ describe('storageRead on a glTF model', () => {
     const summary = JSON.parse(result.content!);
     expect(summary.format).toBe('gltf');
     expect(summary.meshes[0].world[0]).toMatchObject({ node: 'Magazine', size: [0.4, 0.6, 0.2] });
-    expect(summary.readOptions.gltfNode).toBeDefined();
+    expect(summary.readOptions.gltf.node).toBeDefined();
   });
 
   it('resolves a sidecar buffer against the model folder', async () => {
@@ -82,10 +82,9 @@ describe('storageRead on a glTF model', () => {
     });
   });
 
-  it('passes gltfNode and gltfKeys through', async () => {
+  it('passes node and keys through', async () => {
     const result = await storageRead(`${DIR}/models/rifle.gltf`, {
-      gltfNode: 'magazine',
-      gltfKeys: 'Reload',
+      gltf: { node: 'magazine', keys: 'Reload' },
     });
     const summary = JSON.parse(result.content!);
     expect(summary.scope.node).toBe('Magazine');
@@ -101,10 +100,7 @@ describe('storageRead on a glTF model', () => {
     // Reload slides the Magazine's translation from 0 to (0, -0.2, 0) over 2 s, under Rifle's
     // scale 2: its world y is twice the keyed value.
     const result = await storageRead(`${DIR}/models/rifle.gltf`, {
-      gltfNode: 'Magazine',
-      gltfPose: 'Reload',
-      gltfStep: 1,
-      gltfOmit: 'meshes,materials',
+      gltf: { node: 'Magazine', pose: 'Reload', step: 1, omit: 'meshes,materials' },
     });
     const summary = JSON.parse(result.content!);
     expect(summary.pose.path.map((r: number[]) => r.slice(0, 4))).toEqual([
@@ -116,9 +112,7 @@ describe('storageRead on a glTF model', () => {
     const windowed = JSON.parse(
       (
         await storageRead(`${DIR}/models/rifle.gltf`, {
-          gltfKeys: 'Reload',
-          gltfRange: '0.5-1.5',
-          gltfStep: 0.5,
+          gltf: { keys: 'Reload', range: '0.5-1.5', step: 0.5 },
         })
       ).content!,
     );
@@ -127,9 +121,17 @@ describe('storageRead on a glTF model', () => {
 
   it('names every option in the hint a plain read carries', async () => {
     const summary = JSON.parse((await storageRead(`${DIR}/models/rifle.gltf`)).content!);
-    expect(Object.keys(summary.readOptions)).toEqual(
-      expect.arrayContaining(['gltfPose', 'gltfRange', 'gltfStep', 'gltfEuler', 'gltfOmit']),
-    );
+    expect(Object.keys(summary.readOptions.gltf).sort()).toEqual([
+      'at',
+      'depth',
+      'euler',
+      'keys',
+      'node',
+      'omit',
+      'pose',
+      'range',
+      'step',
+    ]);
   });
 
   it('never resolves a sidecar outside storage', async () => {
@@ -147,7 +149,7 @@ describe('storageRead on a glTF model', () => {
   });
 
   it('names an unknown node rather than returning an empty scope', async () => {
-    const result = await storageRead(`${DIR}/models/rifle.gltf`, { gltfNode: 'Stock' });
+    const result = await storageRead(`${DIR}/models/rifle.gltf`, { gltf: { node: 'Stock' } });
     expect(result.success).toBe(false);
     expect(result.error).toContain('No node matches "Stock"');
   });

@@ -12,7 +12,6 @@ import { errMessage } from '@yaar/lib/errors';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import type { ReloadCache } from '../../reload/cache.js';
-import type { CacheEntry } from '../../reload/types.js';
 
 export function registerReloadTools(
   server: McpServer,
@@ -82,32 +81,6 @@ export function registerReloadTools(
         cache.markFailed(entry.id);
         return ok(`Cache replay failed: ${errMessage(err)}. Proceed manually.`);
       }
-    },
-  );
-
-  // list_reload_options - list available cached sequences
-  server.registerTool(
-    'list_reload_options',
-    {
-      description:
-        'List available cached action sequences. ' +
-        'Usually not needed as options are injected into the message automatically.',
-    },
-    async () => {
-      const entries = getCache().listEntries();
-      if (entries.length === 0) {
-        return ok('No cached action sequences available.');
-      }
-
-      const lines = entries
-        .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
-        .slice(0, 10)
-        .map(
-          (e: CacheEntry) =>
-            `- ${e.id}: "${e.label}" (used ${e.useCount}x, ${e.actions.length} actions)`,
-        );
-
-      return ok(`Cached action sequences:\n${lines.join('\n')}`);
     },
   );
 }

@@ -170,7 +170,9 @@ async function extractPdfText(
 }
 
 /** Options controlling how {@link storageRead} handles special file types. */
-export interface StorageReadOptions extends GltfReadOptions {
+export interface StorageReadOptions {
+  /** glTF/GLB only: options steering the model summary. */
+  gltf?: GltfReadOptions;
   /**
    * Extract a PDF's text layer instead of just metadata. `true` (or "all") reads the whole
    * document; a range string like "1-3" scopes it. Cheapest way to read a text-based PDF.
@@ -236,16 +238,9 @@ async function gltfReadResult(
   }
   const folder = posix.dirname(normalizeSeparators(filePath));
   try {
+    const gltf = pickGltfOptions(opts?.gltf);
     const summary = await summarizeGltf(await Bun.file(absolutePath).bytes(), {
-      node: opts?.gltfNode,
-      depth: opts?.gltfDepth,
-      keys: opts?.gltfKeys,
-      pose: opts?.gltfPose,
-      at: opts?.gltfAt,
-      range: opts?.gltfRange,
-      step: opts?.gltfStep,
-      euler: opts?.gltfEuler,
-      omit: opts?.gltfOmit,
+      ...gltf,
       resolveUri: async (uri) => {
         let rel = uri;
         try {
@@ -263,8 +258,8 @@ async function gltfReadResult(
         }
       },
     });
-    if (Object.values(pickGltfOptions(opts)).every((v) => v === undefined)) {
-      summary.readOptions = GLTF_READ_OPTION_HINTS;
+    if (Object.keys(gltf).length === 0) {
+      summary.readOptions = { gltf: GLTF_READ_OPTION_HINTS };
     }
     return { success: true, content: formatSummaryJson(summary) };
   } catch (err) {

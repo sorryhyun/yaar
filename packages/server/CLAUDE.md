@@ -130,7 +130,7 @@ src/
 │   ├── result-size.ts    # The MCP result-size cliff and the per-tool annotation that moves it
 │   ├── result-spill.ts   # Verb results past 100K chars go to yaar://storage/temp/tool-results/, paged back with read `chars`
 │   ├── agent-tokens.ts   # Per-agent token minting, bound to agent id server-side
-│   ├── system/           # Always-active: reload_cached, list_reload_options
+│   ├── system/           # Always-active: reload_cached
 │   ├── app-agent/        # describe / query / command / relay (+ direct_message)
 │   ├── messaging/        # Cross-agent direct messaging
 │   ├── sub-agent/        # A sub-agent's one channel — per-caller tool list

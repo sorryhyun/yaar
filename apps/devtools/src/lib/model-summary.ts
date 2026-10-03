@@ -6,23 +6,11 @@
  * it again with `JSON.stringify(v, null, 2)` gave a vec3 three lines and a node fifteen. This
  * re-lays it out the way the server wrote it (`@yaar/lib/gltf`'s `formatSummaryJson`).
  *
- * The summary's `readOptions` hint names the storage read's `gltf*` options; an agent calling
- * `inspectModel` passes different names, so the hint is replaced with this command's own.
+ * The summary's `readOptions` hint names the storage read's `gltf` bag; `inspectModel` takes
+ * the same options flat, so the hint is unwrapped to the bag's contents.
  */
 
 const MAX_INLINE = 160;
-
-export const INSPECT_MODEL_OPTIONS: Record<string, string> = {
-  node: 'a node name or "#index": scope to its subtree, with per-channel keyframe stats',
-  keys: 'an animation name: its keyframes as [time, ...value] rows (with node, that subtree only)',
-  pose: "an animation to play: with at, every node in world space and posed bounds at that time; without, node's world path over the clip",
-  at: 'seconds into the pose clip for the snapshot',
-  range: '"from-to" seconds: window keys rows and a pose path',
-  step: 'seconds: resample keys (and a pose path) instead of raw keys',
-  euler: 'true: rotations as XYZ Euler degrees',
-  omit: 'comma list of sections to leave out, e.g. "meshes,materials,images"',
-  depth: 'how many levels of the node tree to list',
-};
 
 export function formatModelSummary(result: unknown): string {
   let value = result;
@@ -33,8 +21,9 @@ export function formatModelSummary(result: unknown): string {
       return value as string;
     }
   }
-  if (value && typeof value === 'object' && 'readOptions' in value) {
-    value = { ...(value as Record<string, unknown>), readOptions: INSPECT_MODEL_OPTIONS };
+  const hint = (value as { readOptions?: { gltf?: unknown } } | null)?.readOptions;
+  if (hint && typeof hint === 'object' && 'gltf' in hint) {
+    value = { ...(value as Record<string, unknown>), readOptions: hint.gltf };
   }
   return fmt(value, '');
 }

@@ -160,8 +160,7 @@ export function registerVerbTools(server: McpServer): void {
     'describe',
     {
       description:
-        'Describe a yaar:// resource -- returns supported verbs, description, and invoke schema. ' +
-        'URIs support brace expansion: yaar://storage/{a,b,c} describes all 3 at once.',
+        'Describe a yaar:// resource -- returns supported verbs, description, and invoke schema.',
       inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to describe'),
       }),
@@ -176,14 +175,7 @@ export function registerVerbTools(server: McpServer): void {
       description:
         'Read the current value/state of a yaar:// resource. ' +
         'For text files and window state, optionally filter by line range, regex pattern, or ' +
-        'character range ' +
-        '(elsewhere the filter is ignored, with a note saying so). ' +
-        'Reading a PDF returns its metadata plus a hint to open it in a viewer window — it does ' +
-        'NOT ingest the content unless you pass pdfText (text layer) or pdfPages (page images). ' +
-        'Reading a .glb/.gltf returns a model summary — node tree with TRS, local and world ' +
-        'bounds per mesh, materials, animation channels — steered by the gltf* options; gltfPose ' +
-        'plays a clip into a world-space pose. ' +
-        'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',
+        'character range (elsewhere the filter is ignored, with a note saying so).',
       inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to read'),
         lines: z
@@ -216,85 +208,32 @@ export function registerVerbTools(server: McpServer): void {
         pdfText: z
           .union([z.boolean(), z.string()])
           .optional()
-          .describe(
-            'PDF only: extract the text layer. true (or "all") reads the whole document; ' +
-              'a range like "1-3" scopes it. Cheapest way to read a text-based PDF.',
-          ),
-        pdfPages: z
-          .string()
-          .optional()
-          .describe(
-            'PDF only: page range to rasterize to images, e.g. "1-3", "5", "2-" — for ' +
-              'scanned/visual PDFs. Omit both pdfText and pdfPages to just get metadata + a ' +
-              'hint to open a viewer window.',
-          ),
+          .describe('PDF only: the text layer — true, or a page range like "1-3".'),
+        pdfPages: z.string().optional().describe('PDF only: pages to rasterize, e.g. "1-3".'),
         rawImage: z
           .boolean()
           .optional()
-          .describe(
-            'Images only: return the stored bytes instead of the smaller WebP re-encode ' +
-              'reads normally apply. Only when the exact pixels matter.',
-          ),
-        gltfNode: z
-          .string()
+          .describe('Images only: the stored bytes instead of the WebP re-encode.'),
+        // The options are spelled out by `describe` on a model and by a plain read of one —
+        // a strict bag here keeps a misspelt key refused without their text in every turn.
+        gltf: z
+          .strictObject({
+            node: z.string().optional(),
+            depth: z.number().int().min(0).optional(),
+            keys: z.string().optional(),
+            pose: z.string().optional(),
+            at: z.number().optional(),
+            range: z.string().optional(),
+            step: z.number().positive().optional(),
+            euler: z.boolean().optional(),
+            omit: z.string().optional(),
+          })
           .optional()
-          .describe(
-            'glTF/GLB only: scope the summary to this node\'s subtree (a name, or "#index") — ' +
-              'its meshes, materials and animation channels, each channel with keyframe stats.',
-          ),
-        gltfDepth: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe('glTF/GLB only: how many levels of the node tree to list.'),
-        gltfKeys: z
-          .string()
-          .optional()
-          .describe(
-            'glTF/GLB only: an animation name (or "#index") whose keyframes to return in full, ' +
-              'as [time, ...value] rows. Combine with gltfNode to keep it to one limb.',
-          ),
-        gltfPose: z
-          .string()
-          .optional()
-          .describe(
-            'glTF/GLB only: an animation to play. With gltfAt, every node in world space and ' +
-              "the posed mesh bounds at that time; without, gltfNode's world path over the clip.",
-          ),
-        gltfAt: z
-          .number()
-          .optional()
-          .describe('glTF/GLB only: seconds into the gltfPose clip for the snapshot.'),
-        gltfRange: z
-          .string()
-          .optional()
-          .describe(
-            'glTF/GLB only: a time window in seconds, e.g. "0.2-0.8" (an end may be open), ' +
-              'for gltfKeys rows and a pose path.',
-          ),
-        gltfStep: z
-          .number()
-          .positive()
-          .optional()
-          .describe(
-            'glTF/GLB only: resample gltfKeys rows (and a pose path) every this many seconds.',
-          ),
-        gltfEuler: z
-          .boolean()
-          .optional()
-          .describe('glTF/GLB only: rotations as XYZ Euler degrees instead of quaternions.'),
-        gltfOmit: z
-          .string()
-          .optional()
-          .describe(
-            'glTF/GLB only: sections to leave out, comma-separated — nodes, meshes, ' +
-              'materials, images, animations, skins, cameras, lights.',
-          ),
+          .describe('glTF/GLB only: model summary options — describe the file for what each does.'),
       }),
       _meta: LARGE_RESULT_META,
     },
-    async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage, ...gltf }) =>
+    async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage, gltf }) =>
       exec(reg, 'read', uri, undefined, {
         lines,
         pattern,
@@ -303,7 +242,7 @@ export function registerVerbTools(server: McpServer): void {
         pdfText,
         pdfPages,
         rawImage,
-        ...gltf,
+        gltf,
         // A read that lands on a folder falls back to list — page it as list would.
         defaultLimit: LIST_PAGE_SIZE,
       }),
@@ -315,8 +254,7 @@ export function registerVerbTools(server: McpServer): void {
       description:
         'List child resources under a yaar:// URI. ' +
         `A storage folder returns ${LIST_PAGE_SIZE} entries at a time, with a note giving the ` +
-        'total and the next range; sort/order pick which entries come first. ' +
-        'URIs support brace expansion: yaar://storage/{dir1,dir2} lists both.',
+        'total and the next range; sort/order pick which entries come first.',
       inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to list children of'),
         sort: z
@@ -349,9 +287,9 @@ export function registerVerbTools(server: McpServer): void {
     {
       description:
         'Invoke an action on a yaar:// resource (create, update, trigger). ' +
-        'Batches on either axis: URIs support brace expansion (yaar://storage/{a,b} ' +
-        'invokes on both, in parallel), and payload accepts an ARRAY to run the same URI ' +
-        'once per element, in order, as one call — e.g. invoke(".../commands/setTransform", ' +
+        'Besides brace expansion in the URI (run in parallel), payload accepts an ARRAY to ' +
+        'run the same URI once per element, in order, as one call — e.g. ' +
+        'invoke(".../commands/setTransform", ' +
         '[{id:"a",...},{id:"b",...}]). Use the array form instead of N identical calls that ' +
         'differ only in their payload. It stops at the first failure and reports the index.',
       inputSchema: strictInput(
@@ -378,9 +316,7 @@ export function registerVerbTools(server: McpServer): void {
   server.registerTool(
     'delete',
     {
-      description:
-        'Delete a yaar:// resource. ' +
-        'URIs support brace expansion: yaar://storage/{a,b} deletes both.',
+      description: 'Delete a yaar:// resource.',
       inputSchema: strictInput({
         uri: z.string().describe('yaar:// URI to delete'),
       }),

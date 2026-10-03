@@ -6,75 +6,63 @@
  * without importing from `handlers/`.
  */
 
+import type { GltfSummaryOptions } from '@yaar/lib/gltf';
 import { searchValuePaths } from './state-path.js';
 
 /**
  * glTF/GLB only. A model read returns a structural summary (node tree, bounds, materials,
- * animation channels — `@yaar/lib/gltf`); these steer it. Every door that reads storage
- * passes them through with `pickGltfOptions`, so a new one is added here and nowhere else.
+ * animation channels — `@yaar/lib/gltf`); these steer it. They travel as one bag,
+ * `read(uri, { gltf: { node, keys, … } })`, under the summarizer's own names, so a door
+ * passes the bag through untouched and a new option is added in `@yaar/lib/gltf` and
+ * {@link GLTF_READ_OPTION_HINTS}, nowhere else.
  */
-export interface GltfReadOptions {
-  /** Scope to a node's subtree (a name, or "#index"), with per-channel keyframe stats. */
-  gltfNode?: string;
-  /** How many levels of the node tree to list. */
-  gltfDepth?: number;
-  /** An animation (name or "#index") whose keyframes to return as `[time, ...value]` rows. */
-  gltfKeys?: string;
-  /** An animation to play: with `gltfAt` a world-space snapshot, else `gltfNode`'s world path. */
-  gltfPose?: string;
-  /** Seconds into the `gltfPose` clip for the snapshot. */
-  gltfAt?: number;
-  /** A time window in seconds, "0.2-0.8" (an end may be open), for keys and pose paths. */
-  gltfRange?: string;
-  /** Resample keys (and a pose path) every this many seconds instead of listing raw keys. */
-  gltfStep?: number;
-  /** Rotations as XYZ Euler degrees instead of quaternions. */
-  gltfEuler?: boolean;
-  /** Comma-separated sections to leave out: nodes, meshes, materials, images, animations… */
-  gltfOmit?: string;
-}
+export type GltfReadOptions = Pick<GltfSummaryOptions, (typeof GLTF_OPTION_KEYS)[number]>;
 
 const GLTF_OPTION_KEYS = [
-  'gltfNode',
-  'gltfDepth',
-  'gltfKeys',
-  'gltfPose',
-  'gltfAt',
-  'gltfRange',
-  'gltfStep',
-  'gltfEuler',
-  'gltfOmit',
-] as const satisfies ReadonlyArray<keyof GltfReadOptions>;
+  'node',
+  'depth',
+  'keys',
+  'pose',
+  'at',
+  'range',
+  'step',
+  'euler',
+  'omit',
+] as const satisfies ReadonlyArray<keyof GltfSummaryOptions>;
 
 /**
- * What a plain model read appends so the options that steer it are named where they are
- * needed. Callers that expose the reader under other names (devtools' `inspectModel`) replace
- * this record with their own.
+ * The one model-facing description of the `gltf` bag — the read tool's schema names only the
+ * bag. `describe` on a model and a plain model read both hand it back as
+ * `readOptions: { gltf: … }`; callers that expose the reader flat (devtools' `inspectModel`)
+ * unwrap it.
  */
-export const GLTF_READ_OPTION_HINTS: Record<string, string> = {
-  gltfNode: 'a node name or "#index": scope to its subtree, with per-channel keyframe stats',
-  gltfKeys:
-    'an animation name: its keyframes as [time, ...value] rows (with gltfNode, that subtree only)',
-  gltfPose:
-    "an animation to play: with gltfAt, every node in world space and posed bounds at that time; without, gltfNode's world path over the clip",
-  gltfRange: '"from-to" seconds: window gltfKeys rows and a pose path',
-  gltfStep: 'seconds: resample gltfKeys (and a pose path) instead of raw keys',
-  gltfEuler: 'true: rotations as XYZ Euler degrees',
-  gltfOmit: 'comma list of sections to leave out, e.g. "meshes,materials,images"',
-  gltfDepth: 'how many levels of the node tree to list',
+export const GLTF_READ_OPTION_HINTS: Record<keyof GltfReadOptions, string> = {
+  node: 'a node name or "#index": scope to its subtree, with per-channel keyframe stats',
+  keys: 'an animation name: its keyframes as [time, ...value] rows (with node, that subtree only)',
+  pose: "an animation to play: with at, every node in world space and posed bounds at that time; without, node's world path over the clip",
+  at: 'seconds into the pose clip for the snapshot',
+  range: '"from-to" seconds: window keys rows and a pose path',
+  step: 'seconds: resample keys (and a pose path) instead of raw keys',
+  euler: 'true: rotations as XYZ Euler degrees',
+  omit: 'comma list of sections to leave out, e.g. "meshes,materials,images"',
+  depth: 'how many levels of the node tree to list',
 };
 
-/** Just the glTF options a caller set — what a door hands `storageRead`. */
-export function pickGltfOptions(options?: GltfReadOptions): GltfReadOptions {
+/**
+ * Just the summary options a caller set. The bag reaches the server unvalidated from an
+ * app's `read`, and the summarizer takes more than these (`resolveUri`, caps) — nothing
+ * else in it may get through.
+ */
+export function pickGltfOptions(bag?: GltfReadOptions): GltfReadOptions {
   const out: Record<string, unknown> = {};
   for (const key of GLTF_OPTION_KEYS) {
-    if (options?.[key] !== undefined) out[key] = options[key];
+    if (bag?.[key] !== undefined) out[key] = bag[key];
   }
   return out as GltfReadOptions;
 }
 
 /** Optional filtering params for the read verb (ripgrep-style). */
-export interface ReadOptions extends GltfReadOptions {
+export interface ReadOptions {
   /** Line range to read, e.g. "10-20" or "50" (1-based, inclusive). */
   lines?: string;
   /** Regex pattern to filter matching lines. */
@@ -105,6 +93,8 @@ export interface ReadOptions extends GltfReadOptions {
    * subject rather than the content.
    */
   rawImage?: boolean;
+  /** glTF/GLB only: options steering the model summary — see {@link GltfReadOptions}. */
+  gltf?: GltfReadOptions;
   /**
    * Answer an absent resource with `null` instead of an error.
    *

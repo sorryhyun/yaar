@@ -100,7 +100,7 @@ MCP tools are syscalls. A single HTTP MCP server exposes five namespaces (`CORE_
 
 `subagent` is the one namespace whose tool list depends on *who* is connecting: it registers the app-declared tools of the calling sub-agent and nothing at all for everyone else.
 
-System tools (always active): `reload_cached`, `list_reload_options`. HTTP requests and domain allowlisting also flow through the verb layer (`invoke('yaar://http', ...)`, `invoke('yaar://config/domains', ...)`).
+System tool (always active): `reload_cached`. HTTP requests and domain allowlisting also flow through the verb layer (`invoke('yaar://http', ...)`, `invoke('yaar://config/domains', ...)`).
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.
 

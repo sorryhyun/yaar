@@ -128,7 +128,7 @@ Both providers support warmup for faster first response, but the mechanism diffe
 
 ## MCP Integration
 
-Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging`, `subagent` (5 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`/`list_reload_options`; `subagent` carries the calling [sub-agent](../architecture/monitor_and_windows_guide.md#the-four-laws)'s app-declared tools and is empty for every other caller.
+Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging`, `subagent` (5 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`; `subagent` carries the calling [sub-agent](../architecture/monitor_and_windows_guide.md#the-four-laws)'s app-declared tools and is empty for every other caller.
 
 ### Claude
 

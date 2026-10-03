@@ -1,1 +1,1 @@
-Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay).
+Plus a built-in tool: **reload_cached** (action cache replay).

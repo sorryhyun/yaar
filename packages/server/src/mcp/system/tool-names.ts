@@ -8,7 +8,4 @@
  * initialization" depending on which module the process loaded first.
  */
 
-export const SYSTEM_TOOL_NAMES = [
-  'mcp__system__reload_cached',
-  'mcp__system__list_reload_options',
-] as const;
+export const SYSTEM_TOOL_NAMES = ['mcp__system__reload_cached'] as const;

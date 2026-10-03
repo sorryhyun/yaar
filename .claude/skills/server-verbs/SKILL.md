@@ -28,7 +28,7 @@ import a builder from there and you pull the session hub in with it.
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching via `yaar://` URIs |
-| `mcp/system/` | system | reload_cached, list_reload_options |
+| `mcp/system/` | system | reload_cached |
 | `mcp/app-agent/` | app | describe, query, command, relay (+ direct_message when granted). The `storage:*` built-ins reach the app's own tree and the commons for **every** app — see below |
 | `mcp/messaging/` | messaging | Cross-agent direct messaging |
 | `mcp/sub-agent/` | subagent | app-defined tools of the *calling* sub-agent — the only namespace whose tool list depends on who connects; empty for everyone else |

@@ -120,7 +120,7 @@ export async function describeStoragePath(uri: string, path: string): Promise<Ve
   if (ext === '.glb' || ext === '.gltf') {
     return okJson({
       ...base,
-      readOptions: GLTF_READ_OPTION_HINTS,
+      readOptions: { gltf: GLTF_READ_OPTION_HINTS },
       hint:
         'A plain read returns the node tree with TRS, local and world bounds per mesh, ' +
         'materials, image sizes and animation channels — not the bytes.',

@@ -194,33 +194,8 @@ export function resolveProjectPath(raw: string): string {
   return path;
 }
 
-/**
- * What `readModelSummary` can steer. These are `inspectModel`'s names; each maps onto the
- * storage read's `gltf*` option of the same meaning (`node` → `gltfNode`, …).
- */
-export interface ModelSummaryOptions {
-  node?: string;
-  depth?: number;
-  keys?: string;
-  pose?: string;
-  at?: number;
-  range?: string;
-  step?: number;
-  euler?: boolean;
-  omit?: string;
-}
-
-const GLTF_OPTION_NAMES: Record<keyof ModelSummaryOptions, string> = {
-  node: 'gltfNode',
-  depth: 'gltfDepth',
-  keys: 'gltfKeys',
-  pose: 'gltfPose',
-  at: 'gltfAt',
-  range: 'gltfRange',
-  step: 'gltfStep',
-  euler: 'gltfEuler',
-  omit: 'gltfOmit',
-};
+/** What `readModelSummary` can steer — the storage read's `gltf` bag, under the same names. */
+export type ModelSummaryOptions = NonNullable<NonNullable<Parameters<typeof read>[1]>['gltf']>;
 
 /**
  * A glTF/GLB model's structure — node tree with TRS, local and world bounds per mesh,
@@ -239,12 +214,7 @@ export async function readModelSummary(
     if (!proj) throw new Error('No active project. Open or create one first.');
     uri = `yaar://apps/self/storage/${projectPath(proj.id, resolveProjectPath(ref))}`;
   }
-  const readOpts: Record<string, unknown> = {};
-  for (const [name, gltfName] of Object.entries(GLTF_OPTION_NAMES)) {
-    const v = opts[name as keyof ModelSummaryOptions];
-    if (v !== undefined) readOpts[gltfName] = v;
-  }
-  return formatModelSummary(await read(uri, readOpts as Parameters<typeof read>[1]));
+  return formatModelSummary(await read(uri, { gltf: opts }));
 }
 
 function missingFileError(path: string): Error {
