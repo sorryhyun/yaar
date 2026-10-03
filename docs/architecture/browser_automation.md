@@ -423,6 +423,16 @@ three channels, all gated on `yaar-web`:
   *same* CDP session the agent drives, because co-driving one tab is the point. Frames are dropped
   above 256 KB of unsent data, so a slow link loses frame rate instead of falling behind in time.
 
+A viewer that lists the codecs it can decode (`?codecs=av01,vp09`) gets video instead of JPEGs.
+The JPEGs are re-encoded in one background tab of the same Chrome (`features/live-encoder/`),
+which opens on the first video viewer and closes five minutes after the last. It follows the ML
+host's pattern: a page served inline, keyed by a secret, that dials back over a WebSocket. Each
+viewer gets its own `VideoEncoder` in that tab. AV1 software with `contentHint: 'text'` is
+preferred, then hardware H.264, then VP9 software. The budget is checked *before* a frame is fed
+to the encoder (64 KB, at most three frames in flight), because dropping an encoded chunk would
+break every frame until the next keyframe. An encoder failure, or a viewer that cannot decode,
+puts that socket back on JPEG. Measured in `docs/proposals/browser_proposal.md`.
+
 ---
 
 ## Listing and killing: `yaar://system/browsers`
@@ -508,6 +518,7 @@ bash copy of `LINUX_WEBGPU_FLAGS`, since it cannot import `webgpu-flags.ts`. The
 | Roster / revive / kill | `handlers/system.ts` (`registerBrowserHandlers`) |
 | Companion desktop | `features/companion/companion-tab.ts` |
 | Remote ML compute | `features/ml-host/relay.ts` |
+| Live-stream video encoding | `features/live-encoder/encoder.ts`, `encoder-page.client.js` |
 | Shutdown of both providers | `lifecycle.ts` |
 | App SDK over the sandbox door | `packages/compiler/src/shims/yaar-web.ts` |
 | Dev Chrome launch | `scripts/dev/start.sh` (repo root) |

@@ -1,18 +1,24 @@
 import { getCanvas, getCtx, setRemoteSize, markFramePainted } from './context';
 import { recordFrame } from './stats';
+import { decodeChunk, type VideoHeader } from './video';
 
-/** The JSON header every binary frame carries. `dropped` is a server-side running total. */
+/**
+ * The JSON header every binary frame carries. `dropped` is a server-side running total.
+ * A video frame also has `codec` and the rest of {@link VideoHeader}.
+ */
 interface FrameHeader {
   w: number;
   h: number;
   dropped: number;
+  codec?: string;
 }
 
 /**
  * Decode and paint one frame.
  *
- * Wire format is `[uint32 LE headerLen][JSON header][JPEG]` — see
- * `packages/server/src/websocket/screencast-handlers.ts`.
+ * Wire format is `[uint32 LE headerLen][JSON header][JPEG or encoded chunk]` — see
+ * `packages/server/src/websocket/screencast-handlers.ts`. A header with a `codec` is
+ * video, handed to video.ts in arrival order; everything else is a JPEG.
  */
 export async function paintFrame(buf: ArrayBuffer): Promise<void> {
   const view = new DataView(buf);
@@ -23,6 +29,11 @@ export async function paintFrame(buf: ArrayBuffer): Promise<void> {
   try {
     header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, headerLen)));
   } catch {
+    return;
+  }
+
+  if (header.codec) {
+    decodeChunk(header as VideoHeader, new Uint8Array(buf, 4 + headerLen), buf.byteLength);
     return;
   }
 

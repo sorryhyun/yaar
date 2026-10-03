@@ -34,6 +34,11 @@ export function registerDevReloadHandler(handler: () => Response): void {
 import { checkHttpAuth, checkWsAuth, getRemoteToken } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
 import { handleMlHostRoutes } from '../features/ml-host/relay.js';
+import {
+  handleLiveEncoderRoutes,
+  parseCodecFamilies,
+  type CodecFamily,
+} from '../features/live-encoder/encoder.js';
 import { generateConnectionId } from '../session/broadcast-center.js';
 import {
   handleApiRoutes,
@@ -135,16 +140,17 @@ export function createFetchHandler(options: FetchHandlerOptions = {}) {
 }
 
 /**
- * `?quality=` / `?maxWidth=` on the screencast upgrade, clamped.
+ * `?quality=` / `?maxWidth=` / `?codecs=` on the screencast upgrade, clamped.
  *
- * The values reach `Page.startScreencast`, so they are bounded here rather than
+ * The numbers reach `Page.startScreencast`, so they are bounded here rather than
  * passed on as typed: quality outside 1–100 is a CDP error, and a `maxWidth`
  * larger than the viewport just means Chrome ignores it while the parameter
- * still looks honored.
+ * still looks honored. `codecs` is reduced to the families the encoder knows.
  */
 function clampedStreamParams(url: URL): {
   screencastQuality?: number;
   screencastMaxWidth?: number;
+  screencastCodecs?: CodecFamily[];
 } {
   const read = (name: string, lo: number, hi: number): number | undefined => {
     const raw = url.searchParams.get(name);
@@ -154,9 +160,11 @@ function clampedStreamParams(url: URL): {
   };
   const quality = read('quality', 1, 100);
   const maxWidth = read('maxWidth', 100, 4096);
+  const codecs = parseCodecFamilies(url.searchParams.get('codecs'));
   return {
     ...(quality !== undefined ? { screencastQuality: quality } : {}),
     ...(maxWidth !== undefined ? { screencastMaxWidth: maxWidth } : {}),
+    ...(codecs.length ? { screencastCodecs: codecs } : {}),
   };
 }
 
@@ -204,6 +212,13 @@ function createFetchHandlerInner() {
     // app origin by design.
     if (url.pathname.startsWith('/api/ml-host/')) {
       const res = handleMlHostRoutes(req, url, server);
+      if (res !== null) return res;
+    }
+
+    // Live-stream encoding (features/live-encoder/encoder.ts): the server's own Chrome tab
+    // and its socket, keyed by the tab's secret, so ahead of the auth gate like ML host.
+    if (url.pathname.startsWith('/api/live-encoder/')) {
+      const res = handleLiveEncoderRoutes(req, url, server);
       if (res !== null) return res;
     }
 

@@ -28,9 +28,19 @@ export function eventsUrl(browserId: string): string {
   return withToken(`/api/browser/${browserId}/events`);
 }
 
-/** Absolute ws(s):// URL for the live screencast socket, with the quality preset applied. */
-export function screencastUrl(browserId: string, quality: number, maxWidth: number): string {
-  const params = `?quality=${quality}${maxWidth ? `&maxWidth=${maxWidth}` : ''}`;
+/**
+ * Absolute ws(s):// URL for the live screencast socket, with the quality preset applied.
+ * `codecs` are the video codec families this page can decode; none keeps it on JPEG.
+ */
+export function screencastUrl(
+  browserId: string,
+  quality: number,
+  maxWidth: number,
+  codecs: string[] = [],
+): string {
+  const params =
+    `?quality=${quality}${maxWidth ? `&maxWidth=${maxWidth}` : ''}` +
+    (codecs.length ? `&codecs=${codecs.join(',')}` : '');
   const path = withToken(`/api/browser/${encodeURIComponent(browserId)}/screencast${params}`);
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${scheme}://${window.location.host}${path}`;

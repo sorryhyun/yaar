@@ -18,10 +18,18 @@
  *
  * Frame wire format, one binary message per frame:
  *
- *   [uint32 LE headerLen][headerLen bytes of UTF-8 JSON][JPEG bytes]
+ *   [uint32 LE headerLen][headerLen bytes of UTF-8 JSON][JPEG or encoded chunk]
  *
  * The header is per-frame rather than sent-on-change because `sentAt` is what
  * makes end-to-end latency measurable at the canvas.
+ *
+ * A viewer that offers `?codecs=` gets video instead of JPEGs when the encoder tab
+ * supports one of them (`features/live-encoder/encoder.ts`). Its frames' headers then
+ * add `codec` (the decoder's codec string), `key`, `ts` (µs) and the coded size
+ * `cw`/`ch`, next to the CSS-px `w`/`h`. A decoder is (re)configured from a key
+ * chunk's header, so no separate config message exists. The viewer sends
+ * `{t:'keyframe'}` after a decode error and `{t:'codec', codec:'jpeg'}` to give up on
+ * video for this socket; the encoder failing does the same from this side.
  *
  * Dispatched from `createWsHandlers` in `server.ts` when `ws.data.kind === 'screencast'`.
  */
@@ -37,6 +45,12 @@ import type {
 } from '../lib/browser/session.js';
 import type { BrowserTabEvent } from '../lib/browser/types.js';
 import { createLogger } from '../observability/log.js';
+import {
+  envelope,
+  openVideoStream,
+  type EncodedChunk,
+  type VideoStream,
+} from '../features/live-encoder/encoder.js';
 
 const log = createLogger('screencast');
 
@@ -50,6 +64,33 @@ const log = createLogger('screencast');
  * two frames in flight".
  */
 const MAX_BUFFERED_BYTES = 256 * 1024;
+
+/**
+ * The same budget for a video viewer. A delta chunk is a few KB, so 256 KB would be
+ * dozens of frames of lag. Over budget, a frame is not fed to the encoder at all:
+ * dropping an encoded chunk instead would corrupt every frame until the next keyframe.
+ */
+const MAX_BUFFERED_VIDEO_BYTES = 64 * 1024;
+
+/** Frames fed to the encoder and not yet answered. Past this the encoder is behind. */
+const MAX_FRAMES_IN_ENCODER = 3;
+
+/**
+ * JPEG quality Chrome captures at for a video viewer. The JPEG only crosses loopback
+ * into the encoder, so it is the encoder's source rather than the stream, and its
+ * artifacts would otherwise be encoded as detail.
+ */
+const VIDEO_SOURCE_QUALITY = 90;
+
+/** What a frame header says about the page, copied from CDP's frame metadata. */
+interface FrameMeta {
+  w: number;
+  h: number;
+  top: number;
+  psf: number;
+  sx: number;
+  sy: number;
+}
 
 interface ViewerState {
   session: BrowserSession;
@@ -65,6 +106,13 @@ interface ViewerState {
   /** The screencast levers, kept so a tab switch restarts at the same quality. */
   quality: number;
   maxWidth: number;
+  /** The video stream this viewer is on, or `null` for JPEG. */
+  video: VideoStream | null;
+  /** Each fed frame's metadata, by the timestamp its chunk comes back with. */
+  pendingMeta: Map<number, FrameMeta>;
+  /** The newest metadata, for a chunk whose own was already pruned. */
+  lastMeta: FrameMeta | null;
+  lastTs: number;
   /**
    * The app's window is hidden (minimized, another monitor, a backgrounded page), so
    * this viewer holds no screencast: its share of the refcount is released and no tab
@@ -113,6 +161,10 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     tabs: new Set([browserId]),
     quality: ws.data.screencastQuality ?? 60,
     maxWidth: ws.data.screencastMaxWidth ?? 0,
+    video: null,
+    pendingMeta: new Map(),
+    lastMeta: null,
+    lastTs: 0,
     paused: false,
     pausedAt: 0,
     pausedMs: 0,
@@ -130,33 +182,35 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
   state.onFrame = (frame: ScreencastFrame) => {
     // Paused, the session may still be screencasting for another viewer.
     if (ws.readyState !== 1 || state.paused) return;
+    const m = frame.metadata;
+    const meta: FrameMeta = {
+      w: m.deviceWidth,
+      h: m.deviceHeight,
+      top: m.offsetTop,
+      psf: m.pageScaleFactor,
+      sx: m.scrollOffsetX,
+      sy: m.scrollOffsetY,
+    };
+    if (state.video) {
+      if (
+        ws.getBufferedAmount() > MAX_BUFFERED_VIDEO_BYTES ||
+        state.pendingMeta.size >= MAX_FRAMES_IN_ENCODER
+      ) {
+        state.dropped++;
+        return;
+      }
+      // Our own clock, not CDP's: it must only ever rise, across tab switches too.
+      const ts = Math.max(state.lastTs + 1, Math.round(performance.now() * 1000));
+      state.lastTs = ts;
+      state.pendingMeta.set(ts, meta);
+      state.video.feed(ts, Buffer.from(frame.data, 'base64'));
+      return;
+    }
     if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) {
       state.dropped++;
       return;
     }
-    const jpeg = Buffer.from(frame.data, 'base64');
-    const m = frame.metadata;
-    const header = Buffer.from(
-      JSON.stringify({
-        seq: state.seq++,
-        sentAt: Date.now(),
-        w: m.deviceWidth,
-        h: m.deviceHeight,
-        top: m.offsetTop,
-        psf: m.pageScaleFactor,
-        sx: m.scrollOffsetX,
-        sy: m.scrollOffsetY,
-        dropped: state.dropped,
-      }),
-      'utf8',
-    );
-    const out = Buffer.allocUnsafe(4 + header.length + jpeg.length);
-    out.writeUInt32LE(header.length, 0);
-    header.copy(out, 4);
-    jpeg.copy(out, 4 + header.length);
-    ws.send(out);
-    state.sent++;
-    state.bytes += out.length;
+    sendFrame(ws, state, meta, {}, Buffer.from(frame.data, 'base64'));
   };
 
   // The tab under the canvas dying is not automatically the end of the viewing:
@@ -173,6 +227,15 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
   };
 
   state.unsubscribeTabs = provider.onTabEvent((event) => onTabEvent(ws, state, event));
+
+  // Before the screencast starts: opening the encoder tab activates it, and the
+  // screencast's `bringToFront` is what puts the viewed tab back in front.
+  await startVideo(ws, state);
+  if (ws.readyState !== 1) {
+    state.video?.close();
+    state.unsubscribeTabs();
+    return;
+  }
 
   session.on('screencastFrame', state.onFrame);
   session.on('closed', state.onClosed);
@@ -193,6 +256,7 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     await beginScreencast(state);
   } catch (err) {
     log.warn('failed to start screencast', { browserId, err });
+    state.video?.close();
     state.unsubscribeTabs();
     ws.close(1011, 'Failed to start screencast');
     return;
@@ -214,9 +278,88 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
 async function beginScreencast(state: ViewerState): Promise<void> {
   await state.session.bringToFront().catch(() => {});
   await state.session.startScreencast({
-    quality: state.quality,
+    quality: state.video ? VIDEO_SOURCE_QUALITY : state.quality,
     ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
   });
+  // A switch or a resume starts the canvas on a new picture; begin it with a keyframe.
+  state.video?.requestKeyframe();
+}
+
+/** One binary frame down the socket: the page metadata, any codec fields, the payload. */
+function sendFrame(
+  ws: ServerWebSocket<WsData>,
+  state: ViewerState,
+  meta: FrameMeta,
+  codecFields: Record<string, unknown>,
+  payload: Uint8Array,
+): number {
+  const out = envelope(
+    { seq: state.seq++, sentAt: Date.now(), ...meta, ...codecFields, dropped: state.dropped },
+    payload,
+  );
+  const result = ws.send(out);
+  state.sent++;
+  state.bytes += out.length;
+  return result;
+}
+
+/** Put this viewer on video if it offered a codec the encoder tab has. */
+async function startVideo(ws: ServerWebSocket<WsData>, state: ViewerState): Promise<void> {
+  const offered = ws.data.screencastCodecs ?? [];
+  if (offered.length === 0) return;
+  try {
+    state.video = await openVideoStream(offered, {
+      onChunk: (chunk) => onChunk(ws, state, chunk),
+      // A frame the encoder tab skipped never reaches the viewer either.
+      onSkip: (ts) => {
+        if (state.pendingMeta.delete(ts)) state.dropped++;
+      },
+      onError: (reason) => fallBackToJpeg(ws, state, reason),
+    });
+  } catch (err) {
+    log.warn('video stream unavailable', { browserId: state.browserId, err });
+    state.video = null;
+  }
+}
+
+function onChunk(ws: ServerWebSocket<WsData>, state: ViewerState, chunk: EncodedChunk): void {
+  // Every fed frame up to this one is answered: encoded, or dropped by the encoder.
+  const meta = state.pendingMeta.get(chunk.ts) ?? state.lastMeta;
+  for (const ts of state.pendingMeta.keys()) {
+    if (ts <= chunk.ts) state.pendingMeta.delete(ts);
+  }
+  if (!meta || ws.readyState !== 1) return;
+  state.lastMeta = meta;
+  // Sent whatever the buffer holds: a chunk left out breaks every delta after it.
+  const result = sendFrame(
+    ws,
+    state,
+    meta,
+    { codec: chunk.codec, key: chunk.key, ts: chunk.ts, cw: chunk.cw, ch: chunk.ch },
+    chunk.data,
+  );
+  // Bun's 0 is "dropped": the decoder now lacks a reference, so start a new chain.
+  if (result === 0) state.video?.requestKeyframe();
+}
+
+/**
+ * Give up on video for this socket. The JPEG path is the permanent fallback, so the
+ * viewer keeps streaming; the screencast restarts to drop back to the viewer's quality.
+ */
+function fallBackToJpeg(ws: ServerWebSocket<WsData>, state: ViewerState, reason: string): void {
+  if (!state.video) return;
+  log.warn('video stream fell back to JPEG', { browserId: state.browserId, reason });
+  state.video.close();
+  state.video = null;
+  state.pendingMeta.clear();
+  if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'codec', codec: 'jpeg' }));
+  state.switching = state.switching
+    .then(async () => {
+      if (ws.readyState !== 1 || state.paused) return;
+      await state.session.stopScreencast().catch(() => {});
+      await beginScreencast(state);
+    })
+    .catch(() => {});
 }
 
 /**
@@ -259,6 +402,7 @@ function sendReady(ws: ServerWebSocket<WsData>, state: ViewerState): void {
       browserId: state.browserId,
       url: state.session.currentUrl,
       title: state.session.currentTitle,
+      codec: state.video?.family ?? 'jpeg',
     }),
   );
 }
@@ -436,6 +580,14 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
       setPaused(ws, state, msg.t === 'pause');
       return;
     }
+    case 'keyframe': {
+      state.video?.requestKeyframe();
+      return;
+    }
+    case 'codec': {
+      if (msg.codec === 'jpeg') fallBackToJpeg(ws, state, 'the viewer could not decode');
+      return;
+    }
     case 'viewport': {
       const w = num(msg.width);
       const h = num(msg.height);
@@ -453,6 +605,7 @@ export function handleScreencastClose(ws: ServerWebSocket<WsData>): void {
   viewers.delete(ws);
 
   state.unsubscribeTabs();
+  state.video?.close();
   // Through the switch chain, so a detach that lands mid-switch stops the tab that
   // actually ends up streaming rather than the one that was streaming when it began.
   void state.switching.then(() => {
@@ -468,6 +621,7 @@ export function handleScreencastClose(ws: ServerWebSocket<WsData>): void {
   const seconds = Math.max(0.001, (now - state.startedAt - pausedMs) / 1000);
   log.info('viewer detached', {
     browserId: state.browserId,
+    codec: state.video?.family ?? 'jpeg',
     frames: state.sent,
     dropped: state.dropped,
     fps: Number((state.sent / seconds).toFixed(1)),

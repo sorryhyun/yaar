@@ -17,8 +17,8 @@ export interface LiveStats {
 
 /**
  * The two levers Chrome's screencast actually has. Named for the link they are
- * meant for, because the spike's remaining open question is whether a phone over
- * Tailscale can be served by ramping these rather than by a real video codec.
+ * meant for. On a video stream the JPEG quality only reaches the fallback: the server
+ * captures at its own quality for the encoder, and `maxWidth` still caps the frame size.
  *
  * `maxWidth: 0` is uncapped: frames arrive at the remote viewport's full size, which
  * `syncViewport` sets to the canvas's CSS size. So on `high` only JPEG quality can

@@ -6,7 +6,7 @@
  * `/api/browser/{id}/screencast`, paints CDP frames onto a canvas, and forwards
  * the human's pointer/wheel/key events straight back into the same remote tab.
  *
- * This file is the seam the rest of the app imports; the implementation is six
+ * This file is the seam the rest of the app imports; the implementation is a handful of
  * modules, each one answerable for a single part of that sentence:
  *
  *   state.ts    signals and types — the reactive surface the view reads
@@ -14,6 +14,7 @@
  *   context.ts  the socket, canvas, IME anchor and remote viewport
  *   socket.ts   connect/disconnect and the text control protocol
  *   paint.ts    binary frame → pixels on the canvas
+ *   video.ts    the video codecs: what this page decodes, and decoding the chunks
  *   stats.ts    fps / kbps / dropped / input-to-pixel lag
  *   input.ts    pointer, wheel, touch scroll, keyboard and viewport sync
  *   ime.ts      the hidden anchor that makes composition possible

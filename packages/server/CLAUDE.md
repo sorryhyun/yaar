@@ -147,6 +147,8 @@ src/
 │   ├── fonts/            # The served-face catalog + subsetForText() behind yaar://system/fonts
 │   ├── http/             # fetch.ts — proxied HTTP fetch; binary-body.ts — what a *model* gets
 │   │                     #   when the response is bytes (an app still gets the base64 envelope)
+│   ├── live-encoder/     # Live-mode video: encoder.ts opens one background Chrome tab running
+│   │                     #   encoder-page.client.js (WebCodecs) and turns each viewer's screencast JPEGs into AV1/H.264/VP9
 │   ├── market/ session/ skills/ user/   # Marketplace, session ops, skills, clipboard + secret-scan
 │   ├── ml-host/          # Remote ML compute: relay.ts pairs an app's yaar-ml socket with one headless Chrome tab
 │   │                     #   running host-page.client.js (browser JS, served inline) — YAAR_ML_COMPUTE

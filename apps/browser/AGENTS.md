@@ -6,7 +6,9 @@ never navigates its own frame. Two render paths exist and are mutually exclusive
 - **still** — an `<img>` refreshed from `/api/browser/{id}/screenshot`, driven by an
   SSE stream of `{url, title, version}` frames. This is the agent's view.
 - **live** — a WebSocket screencast painted onto a `<canvas>`, with the human's mouse,
-  wheel, keyboard and IME forwarded back as CDP input. Pre-P0 spike.
+  wheel, keyboard and IME forwarded back as CDP input. Frames are video (AV1, H.264 or
+  VP9, decoded by `live/video.ts`) when this page and the server share a codec, and
+  JPEGs otherwise. Pre-P0 spike.
 
 Running both at once would charge the same remote page for two encodes per frame and
 skew the fps readout, so entering live mode calls `stopPolling()` and leaving it
@@ -72,8 +74,8 @@ The import graph is acyclic and should stay that way. Two files exist only to ke
 - **`live/context.ts`** owns live mode's mutable handles and imports nothing, so
   `live/ime.ts` can `send()` without importing `live/socket.ts`, which imports it.
 
-The one-way edges worth remembering: `live/socket -> {paint, tabs, ime, input, stats,
-fallback}`, `live/input -> live/ime`, `live/tabs -> sse`, `sse -> actions`,
+The one-way edges worth remembering: `live/socket -> {paint, video, tabs, ime, input,
+stats, fallback}`, `live/paint -> live/video`, `live/input -> live/ime`, `live/tabs -> sse`, `sse -> actions`,
 `{sse, actions, view, protocol} -> history` (which imports only `store`), `{live/socket,
 live/tabs, live/input} -> live/seed`, `session -> {live, sse, actions}`. Never the reverse.
 

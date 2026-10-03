@@ -1,9 +1,9 @@
 # Proposal: live browser — a video codec for the screencast, and HiDPI frames
 
-> **Status:** proposed (2026-09-30). Measured on macOS and Linux (bench committed); Phase 0 and
-> the model-screenshot fix built. Replaces the per-frame JPEG stream with a WebCodecs video stream
-> encoded inside the server's own headless Chrome. Issue #148 (live frames are soft on HiDPI
-> displays) waits for that stream: live mode stays at 1x until the video path ships.
+> **Status:** in progress. Measured on macOS and Linux (bench committed). Phase 0, the
+> model-screenshot fix and Phase 1 (the video path, at 1x) are built. Replaces the per-frame JPEG
+> stream with a WebCodecs video stream encoded inside the server's own headless Chrome. Issue #148
+> (live frames are soft on HiDPI displays) is Phase 2.
 
 ## Why
 
@@ -158,18 +158,20 @@ viewer canvas ◀── VideoDecoder ◀── screencast socket ◀── serve
 
 - **Why not ffmpeg:** it would be a new dependency, and it is absent from this machine and from
   every bundled target. The encoder in Chrome gets VideoToolbox for free where it exists.
-- **Scope:** one encoder per screencasting *session*, not per viewer, which matches the existing
-  refcounted `startScreencast`. A viewer joining, a tab switch (`switchTab`) or a resize forces a
-  keyframe. A size change reconfigures the encoder.
-- **Compositing:** the encoder tab must never be activated. Chrome composites only the frontmost
-  target (`apps/browser/src/live/fallback.ts`), and the handlers already call `bringToFront` on
-  the viewed tab. The encoder must therefore be opened in the background. The ML host's tabs set
-  the precedent here.
+- **Scope:** one tab for the whole server, one `VideoEncoder` in it per *viewer*. A per-session
+  encoder would have to force keyframes on every viewer whenever one joined or fell behind, and
+  live mode has one viewer per tab in practice. A tab switch, a resume and a resize start with a
+  keyframe; a size change reconfigures that viewer's encoder.
+- **Compositing:** Chrome composites only the frontmost target
+  (`apps/browser/src/live/fallback.ts`), and opening a tab activates it. So a viewer opens its
+  stream, which opens the encoder tab the first time, *before* its screencast calls
+  `bringToFront` on the viewed tab. The tab is pinned, closes five minutes after its last stream,
+  and is reopened on demand.
 - **Warm-up:** the encoder tab runs one throwaway encode on creation, because the first hardware
   session pays start-up latency.
 - **Throttling:** the encoder page is driven by WebSocket `message` events, not timers, so
-  background-tab timer throttling should not reach it. That is unverified (see
-  [Open questions](#open-questions)).
+  background-tab timer throttling does not reach it. Observed live: the background encoder kept up
+  with every frame the viewed tab produced, with no skips.
 
 The JPEG round trip through the encoder costs a decode per frame and some quality. Removing it
 needs capture inside Chrome (`getDisplayMedia` with auto-accept flags, or `tabCapture`, which
@@ -201,8 +203,12 @@ header gains fields.
 - `cw`/`ch` (coded size, next to the CSS-px `w`/`h`)
 
 Also:
-- The codec string and decoder config travel once per (re)configuration as a text frame
-  `{t:'codec', …}`. H.264 is sent as Annex B, so no `description` blob is needed.
+- No separate config message: a key chunk's header carries the codec string and coded size, and
+  the client (re)configures its decoder whenever they differ from the current ones. That keeps
+  the config and the chunk it describes in one message, so they cannot be reordered. H.264 is
+  sent as Annex B, so no `description` blob is needed.
+- The `ready` frame says which codec the socket got (`codec: 'av01' | … | 'jpeg'`), for the
+  status line. `{t:'codec', codec:'jpeg'}` down says the server fell back.
 - The client decodes with `VideoDecoder` and paints each `VideoFrame` onto the existing canvas.
   `paint.ts` keeps sizing the backing store to the decoded frame.
 - A decode error sends `{t:'keyframe'}` up. A second error in a row sends `{t:'codec', codec:'jpeg'}`
@@ -217,8 +223,8 @@ earlier:
 - While the viewer's socket is over budget, screencast frames are **not fed to the encoder**.
   The encoder then simply sees a lower frame rate.
 - After a long stall the next frame is forced as a keyframe.
-- The byte budget shrinks with the stream. At ~8–16 KB per frame, "two frames in flight" is
-  about 32 KB, not 256 KB.
+- The byte budget shrinks with the stream: 64 KB unsent, and at most three frames inside the
+  encoder. A frame the encoder tab skips (two already queued) counts as dropped too.
 - **The bitrate target is never the lever for a slow link.** Lowering it falls off the quality
   cliff measured above. The target stays a generous ceiling: about 8 Mbps at 1x and 24 Mbps at
   2x, to be retuned on real sites. A slow link loses frame rate first and DPR second.
@@ -275,6 +281,22 @@ the 2x data so far says software stays at 1x.
   as today.
 - Verification: the scroll from the bench, driven live in the app, runs at ≤ 5 Mbps at 1x with no
   visible text blur. A forced decoder failure lands on JPEG without a dead canvas.
+
+Done, 2026-10-03 (`features/live-encoder/`, `apps/browser/src/live/video.ts`, Browser 1.1.6).
+Driven live on Linux (Chrome 151, no hardware encoder) against a Wikipedia article, scrolling with
+synthetic wheel events. The driver capped Chrome's frame rate at ~20–28 fps for both streams:
+
+| Window | Stream | fps | Bitrate | Input-to-pixel lag |
+|---|---|---|---|---|
+| 812×548 | JPEG (`high`) | 20–27 | 16.7–16.9 Mbps | 26–29 ms |
+| 812×548 | **AV1** | 20–21 | **2.0–2.5 Mbps** | 43–46 ms |
+| 1592×908 | JPEG (`high`) | 27–31 | 50–67 Mbps | 16–18 ms |
+| 1592×908 | **AV1** | 25–28 | **3.0–3.5 Mbps** | 28–38 ms |
+
+A viewer's `{t:'codec', codec:'jpeg'}` dropped the socket back to JPEG with the canvas still
+painting. Resizing reconfigured the encoder, and pause and resume kept the stream on AV1. The
+video path adds ~10–20 ms of lag (a JPEG decode, an encode, a decode). Not yet measured: the
+encoder's CPU share over a long session, and a real phone over Tailscale.
 
 **Phase 2 — HiDPI for video viewers (#148)**
 - Launch flag, `dpr` negotiation, and 1x capping for JPEG and DPR-1 viewers (section 5).

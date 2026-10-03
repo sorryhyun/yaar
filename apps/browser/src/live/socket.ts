@@ -25,6 +25,7 @@ import { paintFrame } from './paint';
 import { upsertTab, removeTab, followTab } from './tabs';
 import { placeAnchor, reportNoCaret, resetIme, setRemoteEditable } from './ime';
 import { syncViewport } from './input';
+import { decodableCodecs, resetVideo } from './video';
 
 /**
  * A text frame from the server. Every field is optional because `t` decides which
@@ -43,7 +44,21 @@ interface ControlFrame {
   h?: number;
   found?: boolean;
   editable?: boolean;
+  codec?: string;
 }
+
+/** Bumped by every connect and disconnect, so a connect that awaited the codec probe can tell it was overtaken. */
+let connectAttempt = 0;
+
+/** What `ready` said the stream is, for the status line: `AV1`, `JPEG`, … */
+let streamCodec = '';
+
+const CODEC_NAMES: Record<string, string> = {
+  av01: 'AV1',
+  avc1: 'H.264',
+  vp09: 'VP9',
+  jpeg: 'JPEG',
+};
 
 /**
  * Whether the window is out of sight — minimized, on another monitor, or the whole
@@ -105,8 +120,23 @@ export function connectLive(browserId: string): void {
     setLiveStatus('Paused (window hidden)');
     return;
   }
+  const attempt = ++connectAttempt;
+  setLiveStatus('Connecting…');
+  // Asked once per page, so only the first connect waits on it.
+  void decodableCodecs().then((codecs) => {
+    if (attempt !== connectAttempt) return;
+    if (hidden) {
+      pendingTab = browserId;
+      setLiveStatus('Paused (window hidden)');
+      return;
+    }
+    openSocket(browserId, codecs);
+  });
+}
+
+function openSocket(browserId: string, codecs: string[]): void {
   const preset = QUALITY_PRESETS[quality()];
-  const ws = new WebSocket(screencastUrl(browserId, preset.quality, preset.maxWidth));
+  const ws = new WebSocket(screencastUrl(browserId, preset.quality, preset.maxWidth, codecs));
   ws.binaryType = 'arraybuffer';
   setSocket(ws);
   setDesiredTab(browserId);
@@ -136,8 +166,11 @@ export function connectLive(browserId: string): void {
 }
 
 export function disconnectLive(): void {
+  connectAttempt++;
   const ws = getSocket();
   setSocket(null);
+  resetVideo();
+  streamCodec = '';
   pendingTab = null;
   serverPaused = false;
   setDesiredTab(null);
@@ -174,11 +207,19 @@ function handleControlFrame(text: string): void {
       setLiveStatus('That tab is gone');
       return;
     }
+    // The server gave up on video for this socket; the frames that follow are JPEGs.
+    if (msg.t === 'codec') {
+      resetVideo();
+      streamCodec = msg.codec ?? 'jpeg';
+      if (!serverPaused) setLiveStatus(liveLabel());
+      return;
+    }
     if (msg.t === 'ready') {
+      if (msg.codec) streamCodec = msg.codec;
       // Hidden between connecting and now: `pause` is only heard once the server has
       // registered the socket, and `ready` is the first frame that proves it has.
       if (hidden && !serverPaused) pauseStream();
-      else if (!serverPaused) setLiveStatus('Live');
+      else if (!serverPaused) setLiveStatus(liveLabel());
       if (msg.browserId) {
         // `ready` is the server's answer both to a fresh connection and to an
         // `attach`, so it is the one place that always knows which target the
@@ -202,4 +243,9 @@ function handleControlFrame(text: string): void {
   } catch {
     /* the only text frames are ours; a malformed one is not worth a channel teardown */
   }
+}
+
+function liveLabel(): string {
+  const name = CODEC_NAMES[streamCodec];
+  return name ? `Live · ${name}` : 'Live';
 }
