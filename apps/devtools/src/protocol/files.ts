@@ -427,8 +427,8 @@ export const fileCommands = {
         const to = projectDestination(toRef);
         if (from === to) throw new AppCommandError('Source and destination are the same path');
         try {
-          await copyFile(from, to);
-          return { from, to };
+          const { bytes } = await copyFile(from, to);
+          return { from, to, bytes };
         } catch (err) {
           throw new AppCommandError(errMsg(err));
         }

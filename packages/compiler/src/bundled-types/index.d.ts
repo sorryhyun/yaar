@@ -149,6 +149,30 @@ declare module '*.wav' {
   const src: string;
   export default src;
 }
+declare module '*.flac' {
+  const src: string;
+  export default src;
+}
+declare module '*.ogg' {
+  const src: string;
+  export default src;
+}
+declare module '*.opus' {
+  const src: string;
+  export default src;
+}
+declare module '*.m4a' {
+  const src: string;
+  export default src;
+}
+declare module '*.aac' {
+  const src: string;
+  export default src;
+}
+declare module '*.webm' {
+  const src: string;
+  export default src;
+}
 declare module '*.glb' {
   const src: string;
   export default src;
@@ -158,6 +182,10 @@ declare module '*.gltf' {
   export default src;
 }
 declare module '*.bin' {
+  const src: string;
+  export default src;
+}
+declare module '*.dat' {
   const src: string;
   export default src;
 }

@@ -80,7 +80,11 @@ export function isGeneratedPath(path: string): boolean {
 // Extensions whose bytes are not meaningfully countable as text — skip metadata
 // rather than report the size of a base64/garbled decode. `.gltf` is deliberately
 // absent for the same reason `.svg` is: it is a JSON document worth reading.
-const BINARY_EXT = /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|bin)$/i;
+//
+// A fast path, not the authority: `copyFile` sniffs the bytes of anything not listed,
+// because a missing extension here once meant a UTF-8 round-trip that corrupted it.
+const BINARY_EXT =
+  /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|flac|ogg|opus|m4a|aac|webm|glb|bin|dat)$/i;
 
 // Raster images the editor renders as a picture. SVG is deliberately absent: it is
 // text the user may want to edit, and it highlights fine as markup.
@@ -190,14 +194,12 @@ export function globToRegExp(glob: string): RegExp {
 // What an import turns into a data: URI. Broader than BINARY_EXT because SVG and glTF
 // JSON belong here and not there: text the editor should let you edit, and still assets.
 //
-// The bundler itself inlines ANY extension it has no code loader for — measured:
-// `.glb` -> `data:model/gltf-binary`, `.gltf` -> `data:model/gltf+json`, `.bin` ->
-// `data:application/octet-stream`, with `dist/` still holding index.html alone. So this
-// list is not the bundler's capability; it is the set devtools vouches for by offering an
-// import line. An extension missing from it still builds; do not describe this list as
-// the limit of what builds. `.html`/`.htm` import as the file's text, not a data: URI.
+// This mirrors the compiler's ASSET_MIME_TYPES (packages/compiler/src/bundled/plugins.ts),
+// which is the whole of what inlines: an import of any other extension the bundler has no
+// code loader for FAILS the build, because it would emit a sibling file the single-HTML
+// app cannot serve. `.html`/`.htm` import as the file's text, not a data: URI.
 const ASSET_EXT =
-  /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|gltf|bin|html?)$/i;
+  /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|flac|ogg|opus|m4a|aac|webm|glb|gltf|bin|dat|html?)$/i;
 
 /**
  * The `import` line that turns a file in the project into an inlined asset, or null

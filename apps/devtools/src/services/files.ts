@@ -65,6 +65,9 @@ async function countLines(projectId: string, entries: FileEntry[]): Promise<void
       try {
         const raw = await appStorage.read(projectPath(projectId, entry.path));
         const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+        // A binary with an extension BINARY_EXT does not know arrives decoded, every byte
+        // >= 0x80 a U+FFFD — counting that reported a 247KB .flac as 443KB of 1093 lines.
+        if (text.includes('\uFFFD')) return;
         entry.lines = text.split('\n').length;
         // Recomputed from the text: a JSON file read back parsed and re-serialized
         // is not byte-identical to what is on disk, and the count must match the
@@ -480,30 +483,47 @@ export async function editFile(
 }
 
 /**
- * Read a source file for a copy, naming the path the caller used when it is missing.
+ * Read a source file's bytes for a copy, naming the path the caller used when it is missing.
  *
  * The storage error names the file by its real location
  * (`apps/devtools/projects/1786…/src/x.ts`), which is both unpastable — every input in
  * this protocol is project-relative — and a publication of where the sandbox lives on
  * the host.
+ *
+ * `appStorage.readBlob` reads the served file, so an image is not re-encoded to WebP here.
  */
-async function readCopyText(projectId: string, path: string): Promise<string> {
+async function readCopySource(projectId: string, path: string): Promise<Blob> {
   try {
-    const raw = await appStorage.read(projectPath(projectId, path));
-    return typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+    return await appStorage.readBlob(projectPath(projectId, path));
   } catch {
     throw new Error(`File not found: ${path}`);
   }
 }
 
 /**
- * Copy a file's bytes, for the files that are not text.
+ * The source's text when its bytes are valid UTF-8, or null when they are not.
+ *
+ * `isBinaryPath` alone decided this once, and every binary extension missing from its
+ * list (`.flac`, `.ogg`, `.dat`) went through the text path: decoded, each byte >= 0x80
+ * became U+FFFD, and the copy came out roughly twice the size and undecodable. The
+ * extension list is a fast path; the bytes are the authority. A fatal decoder refuses
+ * rather than substitutes, which is the whole test; `ignoreBOM` keeps a leading BOM in
+ * the string so the copy keeps it too.
+ */
+function decodeCopyText(bytes: ArrayBuffer): string | null {
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write a file's bytes, for the files that are not text.
  *
  * Reading one as text and writing the string back corrupted every image it touched, so
- * the bytes travel as bytes: `readBlob`, then `blobToDataUrl` for the base64 `save`
- * wants. Every binary round-trips exactly this way, images included.
- *
- * `appStorage.readBlob` reads the served file, so an image is not re-encoded to WebP here.
+ * the bytes travel as bytes: `blobToDataUrl` for the base64 `save` wants. Every binary
+ * round-trips exactly this way, images included.
  *
  * A server-side `action: 'copy'` would avoid the read entirely — it is how a storage
  * *import* stays byte-exact — but it cannot express this case. `from` does not expand
@@ -511,9 +531,13 @@ async function readCopyText(projectId: string, path: string): Promise<string> {
  * `yaar://apps/{id}/storage/` and `yaar://storage/apps/{id}/` are refused, the flat-root
  * grant deliberately excluding `apps/`.
  */
-async function copyBytes(projectId: string, from: string, to: string): Promise<void> {
+async function saveCopyBytes(
+  projectId: string,
+  from: string,
+  to: string,
+  blob: Blob,
+): Promise<void> {
   try {
-    const blob = await appStorage.readBlob(projectPath(projectId, from));
     const dataUrl = await blobToDataUrl(blob);
     await appStorage.save(projectPath(projectId, to), dataUrl.slice(dataUrl.indexOf(',') + 1), {
       encoding: 'base64',
@@ -526,24 +550,30 @@ async function copyBytes(projectId: string, from: string, to: string): Promise<v
   }
 }
 
-/** Copies `from` to `to` — text through `writeFile`, bytes through `copyBytes`. */
-export async function copyFile(from: string, to: string): Promise<void> {
+/**
+ * Copies `from` to `to` byte for byte — text through `writeFile`, anything else through
+ * `saveCopyBytes` — and returns the size copied.
+ */
+export async function copyFile(from: string, to: string): Promise<{ bytes: number }> {
   const proj = activeProject();
   if (!proj) throw new Error('No active project');
+
+  const blob = await readCopySource(proj.id, from);
+  const text = isBinaryPath(from) ? null : decodeCopyText(await blob.arrayBuffer());
 
   // Text goes through writeFile, so a copy records a diff like any other write. It also
   // carries the typecheck reset and the file refresh: a copy is a new module in the
   // program, and an orphan still gets type checked.
-  if (!isBinaryPath(from)) {
-    await writeFile(to, await readCopyText(proj.id, from), { label: `copy from ${from}` });
+  if (text !== null) {
+    await writeFile(to, text, { label: `copy from ${from}` });
     setStatusText(`Copied ${from} → ${to}`);
-    return;
+    return { bytes: blob.size };
   }
 
   // Binary cannot go through writeFile at all: it takes a string, and would record
   // mojibake as the diff. Recorded as the fact instead — the shape deleteFile already
   // uses to report removing one.
-  await copyBytes(proj.id, from, to);
+  await saveCopyBytes(proj.id, from, to, blob);
   recordChange({
     path: to,
     kind: 'create',
@@ -554,6 +584,7 @@ export async function copyFile(from: string, to: string): Promise<void> {
   setTypecheckState('unknown');
   await refreshFiles();
   setStatusText(`Copied ${from} → ${to}`);
+  return { bytes: blob.size };
 }
 
 export async function deleteFile(path: string): Promise<void> {

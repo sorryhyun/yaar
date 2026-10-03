@@ -366,9 +366,16 @@ export const ASSET_MIME_TYPES: Record<string, string> = {
   '.wasm': 'application/wasm',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.webm': 'audio/webm',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.bin': 'application/octet-stream',
+  '.dat': 'application/octet-stream',
 };
 
 /**

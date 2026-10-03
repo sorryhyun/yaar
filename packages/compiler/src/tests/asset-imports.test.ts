@@ -68,6 +68,17 @@ describe('imported binary assets', () => {
     expect(built.html).toContain('data:model/gltf-binary;base64,');
   });
 
+  test('a .flac inlines as an audio/flac data URI — browser-decodable audio is not just mp3/wav', async () => {
+    // "fLaC" magic + bytes >= 0x80, which a text round-trip would have mangled.
+    const built = await compileWithAsset(
+      'kick.flac',
+      new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0xfb, 0xb8]),
+    );
+    expect(built.errors ?? []).toEqual([]);
+    expect(built.success).toBe(true);
+    expect(built.html).toContain('data:audio/flac;base64,ZkxhQ/u4');
+  });
+
   test('an .html import inlines as its text, not a data URI', async () => {
     const built = await compileWithAsset(
       'panel.html',

@@ -97,6 +97,8 @@ const paths = suite('paths', {
     eq(isBinaryPath('a/b.glb'), true);
     eq(isBinaryPath('a/b.gltf'), false);
     eq(isBinaryPath('a/b.svg'), false);
+    for (const ext of ['flac', 'ogg', 'opus', 'm4a', 'aac', 'webm', 'dat'])
+      eq(isBinaryPath(`a/b.${ext}`), true, `.${ext} is audio/data, not text`);
   },
 
   'generated output is recognised wherever it sits in the tree'() {
@@ -119,6 +121,7 @@ const paths = suite('paths', {
   'assetImportLine writes a specifier relative to src/main.ts'() {
     eq(assetImportLine('src/assets/my-icon.png'), "import myIcon from './assets/my-icon.png';");
     eq(assetImportLine('src/assets/panel.html'), "import panel from './assets/panel.html';");
+    eq(assetImportLine('src/assets/kick.flac'), "import kick from './assets/kick.flac';");
   },
 
   'assetImportLine declines what the bundler would not inline'() {

@@ -14,10 +14,11 @@ img.src = sprite;                    // <img>, CSS url(), new Audio(), fetch() a
 ```
 
 The bundler inlines the bytes into `dist/index.html`, so no request is made at runtime, and
-`dist/` stays a single HTML file. Vouched for: `.png .jpg .jpeg .gif .svg .webp .avif .ico
-.woff .woff2 .ttf .otf .wasm .mp3 .wav .glb .gltf .bin`. Anything else with no code loader
-inlines too (`.bin` arrives as `data:application/octet-stream`) — the list is what
-`copyFile` offers an import line for, not the limit of what builds. Put the file under
+`dist/` stays a single HTML file. These extensions inline: `.png .jpg .jpeg .gif .svg .webp
+.avif .ico .woff .woff2 .ttf .otf .wasm .mp3 .wav .flac .ogg .opus .m4a .aac .webm .glb .gltf
+.bin .dat` (`.bin`/`.dat` arrive as `data:application/octet-stream`). That list is the limit:
+importing any other binary extension **fails the build** ("sibling asset file(s) that a
+single-file app cannot serve") — rename it to `.bin` if a parser takes raw bytes. Put the file under
 `src/`, next to the code importing it. Use storage only for genuinely dynamic files —
 uploads, generated output, anything that changes without a recompile.
 
