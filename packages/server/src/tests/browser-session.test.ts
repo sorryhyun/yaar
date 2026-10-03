@@ -6,6 +6,7 @@
  */
 import { mock, describe, it, expect, beforeEach } from 'bun:test';
 import { installFakeCdpClient } from './helpers/mock-cdp-client.js';
+import { makePng } from './helpers/png.js';
 
 // ── Mock CDP ────────────────────────────────────────────────────────────────
 
@@ -323,6 +324,45 @@ describe('BrowserSession', () => {
 
     // Session stores the screenshot for later retrieval
     expect(session.lastScreenshot).toBe(buffer);
+  });
+
+  it('screenshot hands the model one image px per CSS px at a scale factor above 1', async () => {
+    // A mobile session renders at DSF 3, so its 390×844 viewport captures 1170×2532.
+    // Clicks land in CSS px, so the model must see 390×844, not the long-edge cap's 724×1568.
+    const deviceWebp = await new Bun.Image(makePng(1170, 2532)).webp({ quality: 90 }).buffer();
+    const session = await BrowserSession.create('ss-2', 'ws://localhost:9222/devtools/page/ss', {
+      mobile: true,
+    });
+    mockSend.mockImplementation((method: string) =>
+      method === 'Page.captureScreenshot'
+        ? Promise.resolve({ data: deviceWebp.toString('base64') })
+        : defaultSendHandler(method),
+    );
+
+    const meta = await new Bun.Image(await session.screenshot()).metadata();
+    expect([meta.width, meta.height]).toEqual([390, 844]);
+    // The app's still keeps the device-px capture.
+    const still = await new Bun.Image(await session.captureStill()).metadata();
+    expect([still.width, still.height]).toEqual([1170, 2532]);
+  });
+
+  it('screenshot asks an adopted tab for its CSS width', async () => {
+    const deviceWebp = await new Bun.Image(makePng(1600, 1000)).webp({ quality: 90 }).buffer();
+    const session = await BrowserSession.create('ss-3', 'ws://localhost:9222/devtools/page/ss', {
+      adopt: true,
+    });
+    mockSend.mockImplementation((method: string) => {
+      if (method === 'Page.captureScreenshot') {
+        return Promise.resolve({ data: deviceWebp.toString('base64') });
+      }
+      if (method === 'Page.getLayoutMetrics') {
+        return Promise.resolve({ cssVisualViewport: { clientWidth: 800, clientHeight: 500 } });
+      }
+      return defaultSendHandler(method);
+    });
+
+    const meta = await new Bun.Image(await session.screenshot()).metadata();
+    expect([meta.width, meta.height]).toEqual([800, 500]);
   });
 
   it('setViewport keeps the scale factor a mobile session was created with', async () => {

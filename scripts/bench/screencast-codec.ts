@@ -356,6 +356,25 @@ const CONFIGS = [
       hardwareAcceleration: 'prefer-software',
     }),
   ),
+  // Linux Chrome encodes in hardware only through VAAPI, which NVIDIA does not offer,
+  // so on such a server the software codecs are the whole field.
+  ...MBPS.map((m) =>
+    videoConfig(`AV1 SW ${m} Mbps`, 'av01.0.08M.08', m, {
+      hardwareAcceleration: 'prefer-software',
+    }),
+  ),
+  ...MBPS.map((m) =>
+    videoConfig(`AV1 SW ${m} Mbps, contentHint text`, 'av01.0.08M.08', m, {
+      hardwareAcceleration: 'prefer-software',
+      contentHint: 'text',
+    }),
+  ),
+  ...MBPS.map((m) =>
+    videoConfig(`VP9 SW ${m} Mbps, contentHint text`, 'vp09.00.51.08', m, {
+      hardwareAcceleration: 'prefer-software',
+      contentHint: 'text',
+    }),
+  ),
   h264(true, MBPS[Math.floor(MBPS.length / 2)]!, false),
 ];
 

@@ -94,17 +94,25 @@ const SETTLE_CAP = {
 const SETTLE_TIMEOUT_SLACK_MS = 1_000;
 
 /**
- * Cap a model-bound screenshot's long edge, re-encoding as WebP via `Bun.Image`
- * off the main thread. Screenshots already within the cap pass through untouched
- * (no re-encode, no quality loss). If `Bun.Image` is unavailable or throws, the
- * original — already WebP — buffer is a safe fallback.
+ * Shrink a model-bound screenshot to one image px per CSS px, then cap its long
+ * edge, re-encoding as WebP via `Bun.Image` off the main thread. The model clicks
+ * in CSS px (`Input.dispatchMouseEvent`), so at a device scale factor above 1 a
+ * device-px capture would put every click it reads off the image that factor off.
+ * Screenshots already within both limits pass through untouched (no re-encode, no
+ * quality loss). If `Bun.Image` is unavailable or throws, the original — already
+ * WebP — buffer is a safe fallback.
  */
-async function downscaleForModel(webp: Buffer): Promise<Buffer> {
+async function downscaleForModel(webp: Buffer, cssWidth: number | undefined): Promise<Buffer> {
   try {
     const { width, height } = await new Bun.Image(webp).metadata();
-    if (Math.max(width, height) <= MODEL_SCREENSHOT_MAX_EDGE) return webp;
+    const scale = Math.min(
+      1,
+      cssWidth ? cssWidth / width : 1,
+      MODEL_SCREENSHOT_MAX_EDGE / Math.max(width, height),
+    );
+    if (scale >= 1) return webp;
     return await new Bun.Image(webp)
-      .resize(MODEL_SCREENSHOT_MAX_EDGE, MODEL_SCREENSHOT_MAX_EDGE, {
+      .resize(Math.round(width * scale), Math.round(height * scale), {
         fit: 'inside',
         withoutEnlargement: true,
       })
@@ -1332,7 +1340,31 @@ export class BrowserSession extends EventEmitter {
       // Magnified region: keep the full 4x detail, don't cap it back down.
       return this.takeScreenshot({ ...opts.clip, scale: 4 });
     }
-    return downscaleForModel(await this.takeScreenshot());
+    const buf = await this.takeScreenshot();
+    return downscaleForModel(buf, await this.cssViewportWidth());
+  }
+
+  /**
+   * A full-resolution capture for the Browser app's still, which is painted for a
+   * human at their own pixel ratio rather than read for coordinates.
+   */
+  async captureStill(): Promise<Buffer> {
+    this.touch();
+    return this.takeScreenshot();
+  }
+
+  /**
+   * The viewport's width in CSS px. Emulated sessions know it; an adopted tab keeps
+   * its own window, so it is asked. Undefined when the tab cannot answer.
+   */
+  private async cssViewportWidth(): Promise<number | undefined> {
+    if (this.viewport) return this.viewport.width;
+    try {
+      const metrics = await this.cdp.send('Page.getLayoutMetrics');
+      return metrics.cssVisualViewport?.clientWidth || undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /**

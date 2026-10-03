@@ -1,8 +1,9 @@
 # Proposal: live browser — a video codec for the screencast, and HiDPI frames
 
-> **Status:** proposed (2026-09-30). Measured (bench committed); Phase 0 built. Covers issue #148
-> (live frames are soft on HiDPI displays) and replaces the per-frame JPEG stream with a
-> WebCodecs video stream encoded inside the server's own headless Chrome.
+> **Status:** proposed (2026-09-30). Measured on macOS and Linux (bench committed); Phase 0 and
+> the model-screenshot fix built. Replaces the per-frame JPEG stream with a WebCodecs video stream
+> encoded inside the server's own headless Chrome. Issue #148 (live frames are soft on HiDPI
+> displays) waits for that stream: live mode stays at 1x until the video path ships.
 
 ## Why
 
@@ -103,8 +104,43 @@ What the tables say:
 - **Resolved:** a 0.5–1.3 s latency spike from an earlier run was hardware encoder start-up. With
   a discarded warm-up session it does not recur. The encoder tab warms up on creation (below).
 
-Not yet measured: real sites, phone-side decode, JPEG capture at 2x, and Linux or Android Chrome,
-where VideoToolbox does not exist and a Chromium build may ship no H.264 encoder at all.
+Not yet measured: phone-side decode, JPEG capture at 2x, and Android Chrome.
+
+### Linux has no hardware encoder; AV1 software with `contentHint: 'text'` beats it anyway
+
+Headless Chrome 151 on Linux with an NVIDIA RTX 5070 Ti, 2026-10-03. Chrome on Linux encodes in
+hardware only through VAAPI, and NVIDIA's driver offers no VAAPI encode. `isConfigSupported`
+answers `false` for every `prefer-hardware` codec (H.264, VP8, VP9, AV1, HEVC), with the default
+SwiftShader GPU and with ANGLE on the real GPU (`--use-angle=vulkan`, `gl-egl`, the VAAPI feature
+flags). Software H.264 and AV1 are available.
+
+The 4 s bench scroll at 1x, 60 fps captured:
+
+| Stream | Bitrate | PSNR mean (min) | Encode latency p50 / p95 |
+|---|---|---|---|
+| JPEG q80 (today's `high`) | 80 Mbps | 38.1 (37.2) | — |
+| H.264 software (OpenH264), target 2–8 Mbps | 4.8–7.7 Mbps | 27–35 (25.5) | 2 / 3 ms |
+| VP9 software, target 4 Mbps | 5.2 Mbps | 33.6 (25.2) | 3 / 8 ms |
+| VP9 software, target 4 Mbps, `contentHint: 'text'` | 4.1 Mbps | 45.4 (37.3) | 5 / 8 ms |
+| AV1 software, target 4 Mbps | 4.7 Mbps | 27.8 (24.0) | 4 / 6 ms |
+| AV1 software, target 2 Mbps, `contentHint: 'text'` | 1.2 Mbps | 45.2 (40.4) | 3 / 4 ms |
+| **AV1 software, target 4 Mbps, `contentHint: 'text'`** | **1.4 Mbps** | **46.2 (41.7)** | **3 / 4 ms** |
+
+The same scroll on a real page (`en.wikipedia.org/wiki/Web_browser`), target 4 Mbps:
+
+| Stream | Bitrate | PSNR mean (min) |
+|---|---|---|
+| JPEG q80 | 82 Mbps | 37.8 (37.0) |
+| VP9 software, `contentHint: 'text'` | 4.1 Mbps | 40.1 (33.4) |
+| **AV1 software, `contentHint: 'text'`** | **3.1 Mbps** | **44.6 (40.6)** |
+
+- **`contentHint: 'text'` is the lever, not the codec.** It switches libaom (and libvpx) to its
+  screen-content tools. Without it, AV1 sits on the same ~27 dB floor as OpenH264.
+- **AV1 software with the hint is the best stream measured anywhere**, including macOS hardware
+  H.264 (3.7 Mbps at 48 dB on the synthetic page). It is ~26x smaller than `high` on a real page
+  and looks better. It encodes in 3 ms per frame and keeps up with 60 fps.
+- **Not measured:** whether hardware H.264 on macOS gains from the hint, AV1 at 2x, and the encoder's
+  CPU share over a long session. Decode is not a concern in Chrome, which ships dav1d everywhere.
 
 ## Design
 
@@ -145,9 +181,10 @@ part of this plan.
 - **The client says what it can decode.** On connect, the app probes
   `VideoDecoder.isConfigSupported` for `avc1` and `vp09` and passes the result on the upgrade
   (`?codecs=avc1,vp09`).
-- **The encoder page says what it can encode**, preferring hardware H.264, then VP9 software.
-  It rejects OpenH264 outright: a `prefer-software` `avc1` configuration is never used. VP9
-  software is offered at 1x only.
+- **The encoder page says what it can encode**, preferring AV1 software with
+  `contentHint: 'text'`, then hardware H.264, then VP9 software with the hint. It rejects OpenH264
+  outright: a `prefer-software` `avc1` configuration is never used. The order between AV1 and
+  hardware H.264 is to be confirmed on macOS with the hint set on both.
 - **The server picks the first codec both ends support**, and otherwise stays on JPEG. The JPEG
   path is the permanent fallback, not a transition shim.
 - **The receiving side's secure context is not a concern.** The server listens on loopback only,
@@ -199,11 +236,8 @@ earlier:
   `maxWidth` equal to its CSS width. Under the flag, an emulated-1x tab still produces 2x frames
   that are merely upscaled, which quadruples the bytes for nothing.
 - **Model-bound screenshots are normalized to CSS px.** Agents click in CSS px
-  (`Input.dispatchMouseEvent`), but `screenshot()` captures device px and caps only the long edge
-  at 1568. At emulated DSF 2 a 1280×800 page comes back 1568×980, and every click read off it
-  lands ~1.22x off. `downscaleForModel` resizes to the CSS viewport first. This also fixes the
-  same mismatch that mobile sessions (DSF 3) appear to have today. The app's cached still
-  (`lastScreenshot`) keeps full resolution.
+  (`Input.dispatchMouseEvent`), and a device-px capture capped only at a 1568 long edge put every
+  click read off it the scale factor off. Done ahead of the rest (see the plan).
 
 ## Plan
 
@@ -222,13 +256,19 @@ earlier:
   monitor.
 - ~~Commit the bench~~: done, as `scripts/bench/screencast-codec.ts` (`make screencast-bench`).
 
-**Phase 1 — HiDPI plumbing (#148)**
-- Launch flag, `dpr` negotiation, 1x capping, and model-screenshot normalization.
-- JPEG viewers stay capped at 1x. HiDPI is switched on only in Phase 3, behind the video path.
-- Verification: a click read off an agent screenshot of a DSF-2 session lands on the element it
-  names, and 1x JPEG bitrate does not regress under the flag.
+**Model-screenshot normalization** (done, 2026-10-03)
+- `downscaleForModel` sizes an agent screenshot to the CSS viewport before the long-edge cap. The
+  width comes from the emulated viewport, or `Page.getLayoutMetrics` for an adopted tab. It fixed
+  mobile sessions (DSF 3), whose 390×844 viewport reached the model as 724×1568.
+- The Browser app's `?fresh` still comes from `captureStill()` instead and keeps device px.
 
-**Phase 2 — the WebCodecs video path**
+**Phase 1 — the WebCodecs video path, at 1x**
+
+The HiDPI plumbing that was Phase 1 moves after it. The launch flag is process-wide, so it would
+cost every tab in the server's Chrome, the companion desktop and ML host included, while JPEG
+viewers stayed at 1x and gained nothing. Software encoders are also the only ones on Linux, and
+the 2x data so far says software stays at 1x.
+
 - Build the encoder tab and its relay, codec negotiation, the wire-format fields, the client
   decoder, backpressure in front of the encoder, and fallback to JPEG.
 - Keep the per-viewer counters (`fps`, `kbps`, `dropped`), add `codec`, and log them per detach
@@ -236,7 +276,10 @@ earlier:
 - Verification: the scroll from the bench, driven live in the app, runs at ≤ 5 Mbps at 1x with no
   visible text blur. A forced decoder failure lands on JPEG without a dead canvas.
 
-**Phase 3 — HiDPI on by default for video viewers**
+**Phase 2 — HiDPI for video viewers (#148)**
+- Launch flag, `dpr` negotiation, and 1x capping for JPEG and DPR-1 viewers (section 5).
+- Measure AV1 software with the hint at 2x first. If it does not hold up, HiDPI is limited to
+  hosts with a hardware encoder.
 - Video viewers get their DPR (up to 2). JPEG viewers stay at 1x.
 - The quality presets become frame-rate and DPR caps for the video path, not bitrate targets
   (see the cliff above). JPEG quality applies to the fallback only.
@@ -245,9 +288,9 @@ earlier:
 
 ## Open questions
 
-1. **Linux, Termux and Android encoders.** Which of hardware H.264 or VP9 software is actually
-   available, and at what CPU cost at 1280×800 and 60 fps? If neither holds up, those targets stay
-   on JPEG, and that should be a measured outcome.
+1. **Termux and Android encoders.** Linux is answered: no hardware encoder, and AV1 software with
+   the hint is the codec. Android still needs measuring, along with the encoder's CPU cost on a
+   phone at 1280×800 and 60 fps.
 2. ~~**The 2 Mbps hardware latency spike.**~~ Resolved: encoder start-up, handled by warming
    the encoder up.
 3. **A background encoder tab.** Confirm that it neither throttles nor steals compositing from the

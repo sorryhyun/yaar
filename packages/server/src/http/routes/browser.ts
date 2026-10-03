@@ -159,7 +159,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
       const session = pool.getSession(browserId);
       if (!session) return errorResponse('Browser not found', 404);
       const fresh = url.searchParams.has('fresh');
-      const buf = fresh ? await session.screenshot() : session.lastScreenshot;
+      const buf = fresh ? await session.captureStill() : session.lastScreenshot;
       if (!buf) return errorResponse('No screenshot available', 404);
       return new Response(buf, {
         headers: {
