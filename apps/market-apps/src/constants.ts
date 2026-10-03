@@ -1,4 +1,4 @@
-import type { Account, GithubStatus, UpdateRun } from './types.js';
+import type { Account, GithubStatus, PublishRun, UpdateRun } from './types.js';
 
 /**
  * The marketplace. There is one, it is fixed, and the app is compiled against it —
@@ -51,6 +51,18 @@ export const IDLE_UPDATE_RUN: UpdateRun = {
   completed: 0,
   current: null,
   results: [],
+};
+
+/** No publishAll run has started yet. A finished run keeps its final state, as Update All's does. */
+export const IDLE_PUBLISH_RUN: PublishRun = {
+  active: false,
+  total: 0,
+  completed: 0,
+  current: null,
+  results: [],
+  stopped: null,
+  startedAt: null,
+  finishedAt: null,
 };
 
 export const SIGNED_OUT_ACCOUNT: Account = {

@@ -1,1 +1,1 @@
-Use the Search app when users want to find content across storage files — text search, regex grep, finding files containing specific patterns. Also clones app source code into storage for inspection and analyzes its import graph (circular imports, change impact, fan-in/fan-out) via analyze-deps. For browsing/navigating directories, use Storage instead.
+Route searching file contents across storage here (text or regex), plus cloning app source for inspection and import-graph analysis. For browsing directories, use Storage instead.

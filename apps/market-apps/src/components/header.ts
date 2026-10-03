@@ -1,7 +1,14 @@
 import html from '@bundled/solid-js/html';
 import { refreshData, updateAllApps } from '../actions/index.js';
 import { MARKET_DOMAIN } from '../constants.js';
-import { lastUpdated, loading, outdatedApps, statusText, updateRun } from '../store/index.js';
+import {
+  lastUpdated,
+  loading,
+  outdatedApps,
+  publishRun,
+  statusText,
+  updateRun,
+} from '../store/index.js';
 import { settingsMenu } from './settings-popover.js';
 
 /**
@@ -36,6 +43,29 @@ function updateAllButton() {
   `;
 }
 
+/**
+ * Progress of an agent's publishAll run, in the slot and N/M wording Update All uses.
+ * A chip rather than a button: the run is started only over the protocol, so there
+ * is nothing here to press. Present only while the run is active; the status line
+ * carries the summary once it ends.
+ */
+function publishRunChip() {
+  if (!publishRun().active) return '';
+  return html`
+    <span
+      class="y-chip y-chip-warning publish-run-chip"
+      title=${() => `Publishing ${publishRun().current ?? ''}`}
+    >
+      <span class="y-dot y-dot-warn y-dot-pulse"></span>
+      ${() => {
+        const run = publishRun();
+        // `completed` counts apps attempted, so the one in flight is the next number up.
+        return `Publishing ${Math.min(run.completed + 1, run.total)}/${run.total}…`;
+      }}
+    </span>
+  `;
+}
+
 /** Title, status line and the domain this app is compiled against, plus the controls. */
 export function headerBar() {
   return html`
@@ -48,7 +78,7 @@ export function headerBar() {
         <div class="header-domain y-text-dim">Domain: ${MARKET_DOMAIN}</div>
       </div>
       <div class="header-actions">
-        ${settingsMenu()} ${() => updateAllButton()}
+        ${settingsMenu()} ${() => publishRunChip()} ${() => updateAllButton()}
         <button
           class="y-btn y-btn-primary refresh-btn"
           disabled=${() => loading()}

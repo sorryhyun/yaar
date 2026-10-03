@@ -5,7 +5,7 @@
   "description": "Simple persistent memo/notes app",
   "permissions": [],
   "run": "dist/index.html",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "author": "YAAR",
   "kind": "system"
 }

@@ -8,6 +8,8 @@ too. Open the app on the monitor the user wants to reach.
 
 ## Flow
 
+Drive the window's `start` / `stop` commands and read its `status` state yourself rather than asking the user to click the toggle.
+
 1. `start` — the user gets a permission dialog every time; a denial fails the command. It
    resolves with the `sessionUrl`, which the window shows with Open and Copy.
 2. `stop` takes the conversation off claude.ai. Shutting YAAR down or resetting the monitor

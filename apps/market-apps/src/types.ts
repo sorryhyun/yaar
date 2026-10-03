@@ -182,6 +182,38 @@ export type PublishResult = {
 };
 
 /**
+ * One app's line in a `publishAll` run. `skipped` marks an app the run never reached
+ * because it stopped early, so `results` always has one entry per requested app once
+ * the run is over.
+ */
+export type PublishRunEntry = {
+  appId: string;
+  version: string | null;
+  published: boolean;
+  status: PublishResult['status'] | 'skipped';
+  message: string;
+  finishedAt: string;
+};
+
+/**
+ * Progress of the sequential `publishAll` run, kept after it ends like `UpdateRun`.
+ * The concurrency guard is the publish slot in actions/publish.ts, not `active`.
+ */
+export type PublishRun = {
+  active: boolean;
+  total: number;
+  /** Apps attempted, published or not — skipped ones are not counted. */
+  completed: number;
+  /** The appId being published right now, or null whenever no run is in flight. */
+  current: string | null;
+  results: PublishRunEntry[];
+  /** Set when the run ended early: the app whose answer made every later one pointless. */
+  stopped: { appId: string; status: string; message: string } | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+/**
  * A publish awaiting the user's confirmation. Holds the frozen digest to show and,
  * once a confirm comes back reporting drift, the list of files that changed since
  * prepare — so the dialog can warn before shipping the frozen snapshot.

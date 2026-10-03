@@ -15,10 +15,10 @@ it and `constants`/`types`/`schema` read by everything.
 | `parsers/` | Pure readers for untrusted input: ids, versions, the two app lists, GitHub status | Touch signals or the network |
 | `api/` | Every outbound call. `http.ts` = marketplace + GitHub + YAAR auth routes; `host.ts` = `yaar://apps/{id}` verbs | Touch signals |
 | `store/` | All state. `signals.ts` (the signals), `queries.ts` (questions about one app), `installed.ts` (install reconciliation), `selectors.ts` (the derived lists) | Perform I/O |
-| `actions/` | Everything the user can *do*, by domain: `catalog`, `update-all`, `publish`, `auth`, `github-status` | Render |
+| `actions/` | Everything the user can *do*, by domain: `catalog`, `update-all`, `publish`, `publish-all`, `auth`, `github-status` | Render |
 | `components/` | One module per band of the UI, each paired with the stylesheet of the same name in `styles/` | Hold state (except a private UI signal) |
 
-`main.ts` is the protocol surface only: `defineApp` with 11 state keys and 9 commands,
+`main.ts` is the protocol surface only: `defineApp` with 12 state keys and 11 commands,
 all delegating into `store` and `actions`.
 
 ## Invariants
@@ -50,6 +50,16 @@ all delegating into `store` and `actions`.
   acceptance is the user's, given once in the dialog; the host enforces that too.
   Versions are not bumped here: this app cannot write another app's app.json, so the
   version to publish is set by deploying the app first.
+- **`publishAll` is the `publish` command in a background loop.** It returns before
+  the first app, holds the same module-level publish slot (`claimPublishSlot` in
+  `actions/publish.ts`) for the whole run, so a `publish` or second `publishAll`
+  mid-run answers `busy`. Like Update All it steps over a refused app; only
+  `terms_required` or a signed-out publisher stop it, since every later app would be
+  refused the same way, and the unreached apps are recorded as `skipped`.
+  `waitPublish` watches the `publishRun` signal rather than the run's promise, so it
+  also answers in a window copy that is only following the run through the shared
+  signal. The slot is released before the final `active: false` write, so a woken
+  waiter can publish at once.
 - **The install grace window** (`INSTALL_RECONCILIATION_GRACE_MS`) exists because the
   host's app list lags a successful install. `store/installed.ts` is the whole of it.
 - **`SearchMode` values appear as literals in three places** — the tuple in

@@ -1,1 +1,1 @@
-Open Camera when the user wants to take a photo or record video with this device's camera ("카메라 켜줘", "영상 찍어줘"). It saves into its own storage under `captures/`. Drive its `openCamera` / `takePhoto` / `startRecording` / `stopRecording` commands; the first use asks the user for camera permission.
+Open Camera when the user wants to take a photo or record video with this device's camera ("카메라 켜줘", "영상 찍어줘"); captures land in its storage under `captures/`. Drive its commands yourself; the first use asks the user for camera permission.

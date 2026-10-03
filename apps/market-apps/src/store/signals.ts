@@ -4,7 +4,12 @@
 
 import { createSignal } from '@bundled/solid-js';
 import { createSharedSignal } from '@bundled/yaar';
-import { GITHUB_STATUS_HEALTHY, IDLE_UPDATE_RUN, SIGNED_OUT_ACCOUNT } from '../constants.js';
+import {
+  GITHUB_STATUS_HEALTHY,
+  IDLE_PUBLISH_RUN,
+  IDLE_UPDATE_RUN,
+  SIGNED_OUT_ACCOUNT,
+} from '../constants.js';
 import type {
   Account,
   GithubStatus,
@@ -12,6 +17,7 @@ import type {
   ListedApp,
   PendingPublish,
   PublishResult,
+  PublishRun,
   UpdateRun,
 } from '../types.js';
 
@@ -65,8 +71,14 @@ export const [confirmBusy, setConfirmBusy] = createSignal(false);
  */
 export const [termsAgreed, setTermsAgreed] = createSignal(false);
 
-/** The last protocol `publish` to settle, or null before one has. Written only by `publishForAgent`. */
+/**
+ * The last protocol publish to settle — a `publish` command or one app of a
+ * `publishAll` run — or null before one has. Written only by actions/publish.ts.
+ */
 export const [lastPublish, setLastPublish] = createSignal<PublishResult | null>(null);
+
+/** Progress of `publishAll`. Written only by actions/publish-all.ts; not the lock. */
+export const [publishRun, setPublishRun] = createSignal<PublishRun>(IDLE_PUBLISH_RUN);
 
 // ── Ambient status ─────────────────────────────────────────────────────
 
@@ -135,9 +147,17 @@ export const [sharedUpdateRun, setSharedUpdateRun] = createSharedSignal<UpdateRu
   { onRemote: (next) => next && setUpdateRun(next) },
 );
 
-/** Written once, by the `publish` command's own settle point (actions/publish.ts). */
+/** Written by the protocol publish's own settle point (actions/publish.ts). */
 export const [sharedLastPublish, setSharedLastPublish] = createSharedSignal<PublishResult | null>(
   'last-publish',
   null,
   { onRemote: (next) => next && setLastPublish(next) },
+);
+
+/** Written wherever `setPublishRun` runs (actions/publish-all.ts). Lets `waitPublish`
+ * answer from whichever copy the server routes it to, not only the one running the batch. */
+export const [sharedPublishRun, setSharedPublishRun] = createSharedSignal<PublishRun | null>(
+  'publish-run',
+  null,
+  { onRemote: (next) => next && setPublishRun(next) },
 );

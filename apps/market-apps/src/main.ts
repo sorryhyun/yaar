@@ -8,7 +8,9 @@ import {
   publishForAgent,
   refreshData,
   startGithubStatusPolling,
+  startPublishAll,
   updateAllApps,
+  waitForPublishRun,
 } from './actions/index.js';
 import {
   marketApps,
@@ -19,6 +21,7 @@ import {
   outdatedApps,
   updateRun,
   lastPublish,
+  publishRun,
   statusText,
   lastUpdated,
   loading,
@@ -114,8 +117,16 @@ export default defineApp({
     },
     lastPublish: {
       description:
-        'Result of the last `publish` command, or null: appId, published, status, message, version, artifactSha256, byteLength, changedFiles (on drift), finishedAt',
+        'Result of the last publish to settle (a `publish` command or one app of a publishAll run), or null: appId, published, status, message, version, artifactSha256, byteLength, changedFiles (on drift), finishedAt',
       get: () => lastPublish(),
+    },
+    publishRun: {
+      description:
+        'Progress of the running or last-finished publishAll: active, total, completed (apps attempted), current appId, results [{ appId, version, published, status, message, finishedAt }] in request order, stopped ({ appId, status, message } when the run ended early, else null), startedAt, finishedAt. Apps the run never reached are listed with status "skipped".',
+      get: () => {
+        const run = publishRun();
+        return { ...run, results: [...run.results] };
+      },
     },
   },
   commands: {
@@ -262,7 +273,7 @@ export default defineApp({
     },
     publish: {
       description:
-        "Publish an installed app's local copy to the marketplace as the signed-in publisher, without the dialog: the host packages apps/{appId} at its app.json version and uploads it. Returns { published, status, message, ... } rather than throwing; fails when no publisher is signed in, the version is not newer than the published one, the publisher has not accepted the Publisher Terms in the dialog, or another publish is running.",
+        "Publish an installed app's local copy to the marketplace as the signed-in publisher, without the dialog: the host packages apps/{appId} at its app.json version and uploads it. Returns { published, status, message, ... } rather than throwing; fails when no publisher is signed in, the version is not newer than the published one, the publisher has not accepted the Publisher Terms in the dialog, or another publish or publishAll run is in progress (status busy). Routinely takes over 30s — call it with timeoutMs of at least 120000, or a still-running publish reads as a timeout. For more than one app use publishAll.",
       params: {
         type: 'object',
         properties: {
@@ -276,6 +287,52 @@ export default defineApp({
         required: ['appId'],
       },
       run: (p) => publishForAgent({ appId: p.appId, expectedVersion: p.expectedVersion }),
+    },
+    publishAll: {
+      description:
+        'Start publishing several installed apps one at a time, in order, and return at once with { started, total } — the results are NOT in this reply: block on `waitPublish` or read `publishRun`. Each app is the `publish` command; one refusal (version_mismatch, not newer, drift) is recorded and the run continues, but terms_required or no signed-in publisher stops it and marks the rest skipped. Returns { started: false, status: "busy" } while any publish, run or publish dialog is in progress.',
+      replay: 'never',
+      params: {
+        type: 'object',
+        properties: {
+          apps: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              properties: {
+                appId: { type: 'string', description: 'Id of the installed app to publish.' },
+                expectedVersion: {
+                  type: 'string',
+                  description:
+                    'Record version_mismatch for this app (and move on) unless its packaged app.json version is exactly this.',
+                },
+              },
+              required: ['appId'],
+            },
+          },
+        },
+        required: ['apps'],
+      },
+      run: (p) => startPublishAll(p.apps),
+    },
+    waitPublish: {
+      description:
+        "Block until the publishAll run finishes or timeoutMs passes, then return `publishRun` plus { done, timedOut }. Answers at once when no run is active. Raise the call's own timeout above timeoutMs; on timedOut just call it again.",
+      params: {
+        type: 'object',
+        properties: {
+          timeoutMs: {
+            type: 'number',
+            description:
+              'How long to wait, in ms (default 25000, max 600000). The default fits the 30s default command timeout.',
+          },
+        },
+      },
+      run: (p) =>
+        waitForPublishRun(
+          Math.min(Math.max(typeof p.timeoutMs === 'number' ? p.timeoutMs : 25_000, 0), 600_000),
+        ),
     },
     clearData: {
       description: 'Clear all app data',

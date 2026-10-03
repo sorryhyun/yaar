@@ -41,6 +41,14 @@
   white-space: nowrap;
 }
 
+.publish-run-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ── Phone / narrow window ───────────────────────────────────────────────── */
 
 @media (max-width: 768px) {

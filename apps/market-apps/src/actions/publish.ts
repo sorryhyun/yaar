@@ -7,6 +7,7 @@ import {
   account,
   installedApps,
   pendingPublish,
+  publishRun,
   setConfirmBusy,
   setLastPublish,
   setPendingPublish,
@@ -103,18 +104,79 @@ export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
 }
 
 /**
- * Held for the whole protocol publish. A plain variable for the reason `runInFlight`
- * in update-all.ts is one: the guard must be up before the first await.
+ * The protocol publish slot, held for a whole `publish` call or a whole `publishAll`
+ * run. A plain variable for the reason `runInFlight` in update-all.ts is one: the guard
+ * must be up before the first await.
  */
 let agentPublishInFlight = false;
 
-type PublishApp = { id: string; name: string };
+/**
+ * Why a protocol publish cannot start now, or null when it can. An open dialog holds
+ * its own freeze; publishing underneath it would race the user.
+ */
+export function publishBusyReason(): string | null {
+  const run = publishRun();
+  if (run.active) {
+    return `A publishAll run is in progress (${run.completed}/${run.total} done) — wait on waitPublish, then retry.`;
+  }
+  if (agentPublishInFlight) {
+    return 'Another publish is in progress in Market Apps — retry once it finishes.';
+  }
+  if (pendingPublish()) {
+    return 'The publish dialog is open in Market Apps — retry once the user closes it.';
+  }
+  return null;
+}
+
+/** Take the slot; false when it is already held. Pair every true with `releasePublishSlot`. */
+export function claimPublishSlot(): boolean {
+  if (agentPublishInFlight || pendingPublish()) return false;
+  agentPublishInFlight = true;
+  return true;
+}
+
+export function releasePublishSlot(): void {
+  agentPublishInFlight = false;
+}
+
+export type PublishApp = { id: string; name: string };
+
+/** The id as given, named after the installed app it matches when there is one. */
+export function resolvePublishApp(appId: string): PublishApp {
+  const id = appId.trim();
+  const target = normalizeId(id);
+  return { id, name: installedApps().find((a) => normalizeId(a.id) === target)?.name ?? id };
+}
 
 function settle(
   app: PublishApp,
   fields: Omit<PublishResult, 'appId' | 'finishedAt'>,
 ): PublishResult {
   return { appId: app.id, ...fields, finishedAt: new Date().toISOString() };
+}
+
+/**
+ * One protocol publish with the slot already held: never throws, and records its
+ * answer in `lastPublish`. A thrown prepare (not newer, not owner, signed out) becomes
+ * status `error`, with a sign-in hint when no publisher is signed in.
+ */
+export async function attemptPublish(
+  app: PublishApp,
+  expectedVersion?: string,
+): Promise<PublishResult> {
+  let result: PublishResult;
+  try {
+    result = await publishOnce(app, expectedVersion?.trim() || undefined);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const hint = account().signedIn
+      ? ''
+      : ' No publisher is signed in — the user must sign in from the Market Apps account panel.';
+    result = settle(app, { published: false, status: 'error', message: message + hint });
+  }
+  setLastPublish(result);
+  setSharedLastPublish(result);
+  return result;
 }
 
 /**
@@ -134,43 +196,30 @@ export async function publishForAgent(params: {
   appId: string;
   expectedVersion?: string;
 }): Promise<PublishResult> {
-  const id = params.appId.trim();
-  const target = normalizeId(id);
-  const app = { id, name: installedApps().find((a) => normalizeId(a.id) === target)?.name ?? id };
+  const app = resolvePublishApp(params.appId);
 
-  // An open dialog holds its own freeze; publishing underneath it would race the user.
-  if (agentPublishInFlight || pendingPublish()) {
+  const busy = publishBusyReason();
+  if (busy || !claimPublishSlot()) {
     return settle(app, {
       published: false,
       status: 'busy',
-      message: 'Another publish is in progress in Market Apps — retry once it finishes.',
+      message: busy ?? 'Another publish is in progress in Market Apps — retry once it finishes.',
     });
   }
 
-  agentPublishInFlight = true;
   let result = settle(app, { published: false, status: 'error', message: 'Publish did not run.' });
   try {
     await runAction(
       `Publishing ${app.name}…`,
       async () => {
-        try {
-          result = await publishOnce(app, params.expectedVersion?.trim());
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          const hint = account().signedIn
-            ? ''
-            : ' No publisher is signed in — the user must sign in from the Market Apps account panel.';
-          result = settle(app, { published: false, status: 'error', message: message + hint });
-        }
+        result = await attemptPublish(app, params.expectedVersion);
       },
       'Publish failed',
     );
   } finally {
-    agentPublishInFlight = false;
+    releasePublishSlot();
   }
 
-  setLastPublish(result);
-  setSharedLastPublish(result);
   setStatus(result.published ? result.message : `Publish failed: ${result.message}`);
   if (result.published) void refreshAccount();
   return result;

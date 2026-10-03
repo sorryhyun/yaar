@@ -4,9 +4,11 @@
   "icon": "📷",
   "description": "Camera test app — live preview, photos, and video recorded straight into this app's storage",
   "permissions": [],
-  "bundles": ["yaar-media"],
+  "bundles": [
+    "yaar-media"
+  ],
   "run": "dist/index.html",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "YAAR",
   "createShortcut": false
 }
