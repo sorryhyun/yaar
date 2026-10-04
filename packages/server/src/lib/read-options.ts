@@ -88,6 +88,17 @@ export interface ReadOptions {
    */
   pdfPages?: string;
   /**
+   * With `pdfPages`: render scale, 72 DPI × scale (0.5-4, default 1.5). Raise it for dense
+   * pages such as sheet music or schematics; fewer pages fit in one read as it rises.
+   */
+  pdfScale?: number;
+  /**
+   * With `pdfPages`: render only this region of each page — `{ x, y, w, h }` as fractions
+   * of the page from its top-left corner. Pair with `pdfScale` to read one part of a dense
+   * page at high resolution without paying for the whole page.
+   */
+  pdfCrop?: { x: number; y: number; w: number; h: number };
+  /**
    * Images only: return the stored bytes as-is instead of the WebP re-encode a read
    * normally applies before the image enters the context. For when the pixels are the
    * subject rather than the content.

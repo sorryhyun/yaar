@@ -18,21 +18,28 @@ import {
   pdfToImages as libPdfToImages,
   pdfToText as libPdfToText,
   renderPdfPage as libRenderPdfPage,
+  type PdfCrop,
   type PdfInfo,
   type PdfPageImage,
   type PdfPageRange,
 } from '@yaar/lib/pdf';
 import { getPopplerBinDir } from '../config.js';
 
-export { PopplerNotInstalledError } from '@yaar/lib/pdf';
-export type { PdfInfo, PdfPageImage, PdfPageRange };
+export {
+  PopplerNotInstalledError,
+  PDF_SCALE_DEFAULT,
+  PDF_SCALE_MAX,
+  PDF_SCALE_MIN,
+  pdfCropError,
+} from '@yaar/lib/pdf';
+export type { PdfCrop, PdfInfo, PdfPageImage, PdfPageRange };
 
 /** Convert pages of a PDF to images. Without a range, converts the whole document. */
 export function pdfToImages(
   pdfPath: string,
   scale?: number,
   range?: PdfPageRange,
-  opts?: { raw?: boolean },
+  opts?: { raw?: boolean; crop?: PdfCrop },
 ): Promise<PdfPageImage[]> {
   return libPdfToImages(pdfPath, scale, range, { ...opts, binDir: getPopplerBinDir() });
 }

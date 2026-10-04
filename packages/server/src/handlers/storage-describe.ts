@@ -147,6 +147,10 @@ export async function describeStoragePath(uri: string, path: string): Promise<Ve
         'true for the whole text layer, or a range like "1-3". Cheapest way to read a text-based PDF.',
       pdfPages:
         'Page range to rasterize to images, e.g. "1-3" — for scanned/visual PDFs or when layout matters.',
+      pdfScale:
+        'With pdfPages: render scale, 72 DPI × scale (0.5-4, default 1.5). Raise it for dense pages; fewer pages fit per read.',
+      pdfCrop:
+        'With pdfPages: { x, y, w, h } page fractions from the top-left — render one region, e.g. at a high pdfScale.',
     },
     hint:
       'Reading with neither option returns metadata only. To show the PDF to the user, open ' +

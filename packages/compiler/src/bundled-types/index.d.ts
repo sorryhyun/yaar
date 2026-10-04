@@ -1608,6 +1608,10 @@ interface YaarReadOptions {
   pdfText?: boolean | string;
   /** PDF only: page range to rasterize to images, e.g. "1-3". */
   pdfPages?: string;
+  /** With `pdfPages`: render scale, 72 DPI × scale (0.5-4, default 1.5). */
+  pdfScale?: number;
+  /** With `pdfPages`: render only this region — fractions of the page from its top-left. */
+  pdfCrop?: { x: number; y: number; w: number; h: number };
   /** Images only: the stored bytes instead of the WebP re-encode a read normally applies. */
   rawImage?: boolean;
   /**

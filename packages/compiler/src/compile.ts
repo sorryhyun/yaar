@@ -118,8 +118,8 @@ export function getSandboxPath(sandboxId: string): string {
   return join(getSandboxDir(), sandboxId);
 }
 
-/** Soft ceiling for a compiled app's single HTML file before we warn (5MB). */
-const LARGE_BUNDLE_WARN_BYTES = 5_000_000;
+/** Soft ceiling for a compiled app's single HTML file before we warn (15MB). */
+const LARGE_BUNDLE_WARN_BYTES = 15_000_000;
 
 /**
  * Escape JS code for safe embedding inside an HTML `<script>` tag.

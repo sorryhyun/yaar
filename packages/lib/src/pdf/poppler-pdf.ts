@@ -106,6 +106,62 @@ export interface PdfPageRange {
 }
 
 /**
+ * Raster scale bounds (1 = 72 DPI). The ceiling is what a phone needs to keep a zoomed
+ * page sharp, or a model to read dense notation; past it one page is tens of megabytes
+ * of bitmap for whoever asked.
+ */
+export const PDF_SCALE_MIN = 0.5;
+export const PDF_SCALE_MAX = 4;
+export const PDF_SCALE_DEFAULT = 1.5;
+
+/**
+ * A region of a page, each field a fraction of the page's rendered width or height,
+ * measured from the top-left corner. `{ x: 0, y: 0.5, w: 1, h: 0.5 }` is the bottom half.
+ */
+export interface PdfCrop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Why `crop` is not a region of a page, or null when it is one. Validated here rather
+ * than by a schema because apps hand read options over as a plain object.
+ */
+export function pdfCropError(crop: PdfCrop): string | null {
+  const { x, y, w, h } = crop;
+  if (![x, y, w, h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+    return 'pdfCrop needs numeric x, y, w, h (fractions of the page, 0-1)';
+  }
+  if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > 1.0001 || y + h > 1.0001) {
+    return 'pdfCrop must lie within the page: x, y >= 0, w, h > 0, x + w <= 1, y + h <= 1';
+  }
+  return null;
+}
+
+/**
+ * Size in points of `page` as it renders — width and height swapped for a page rotated
+ * a quarter turn, since pdftocairo applies the rotation and crops in output pixels.
+ */
+async function renderedPageSize(
+  poppler: Poppler,
+  pdfPath: string,
+  page: number,
+): Promise<{ width: number; height: number }> {
+  const info = await poppler.pdfInfo(pdfPath, {
+    firstPageToConvert: page,
+    lastPageToConvert: page,
+  });
+  const infoStr = typeof info === 'string' ? info : JSON.stringify(info);
+  const size = infoStr.match(/Page(?:\s+\d+)?\s+size:\s*([\d.]+)\s*x\s*([\d.]+)\s*pts/i);
+  if (!size) throw new Error(`Could not read the size of page ${page}`);
+  const rot = parseInt(infoStr.match(/Page(?:\s+\d+)?\s+rot:\s*(\d+)/i)?.[1] ?? '0', 10);
+  const [width, height] = [parseFloat(size[1]), parseFloat(size[2])];
+  return rot % 180 === 90 ? { width: height, height: width } : { width, height };
+}
+
+/**
  * Convert pages of a PDF to images. Without a range, converts the whole document.
  * Page numbers on the results reflect the real 1-based page index, not the array position.
  *
@@ -113,12 +169,16 @@ export interface PdfPageRange {
  * is base64-ing these into a model context and a scanned multi-page PDF is the largest
  * single payload the storage API produces. Pass `raw` to keep poppler's PNG bytes —
  * for a caller that wants the pixels rather than a look at them.
+ *
+ * `crop` renders only that region of each page — poppler skips the rest, so a high
+ * `scale` on a small region costs what the region costs. The pixel box is measured on
+ * the range's first page and applied to every page in it.
  */
 export async function pdfToImages(
   pdfPath: string,
-  scale: number = 1.5,
+  scale: number = PDF_SCALE_DEFAULT,
   range?: PdfPageRange,
-  opts?: PopplerOptions & { raw?: boolean },
+  opts?: PopplerOptions & { raw?: boolean; crop?: PdfCrop },
 ): Promise<PdfPageImage[]> {
   const poppler = getPoppler(opts?.binDir);
   const images: PdfPageImage[] = [];
@@ -138,6 +198,15 @@ export async function pdfToImages(
     };
     if (range?.firstPage !== undefined) options.firstPageToConvert = range.firstPage;
     if (range?.lastPage !== undefined) options.lastPageToConvert = range.lastPage;
+    if (opts?.crop) {
+      const page = await renderedPageSize(poppler, pdfPath, range?.firstPage ?? 1);
+      const px = (fraction: number, points: number) =>
+        Math.round((fraction * points * resolution) / 72);
+      options.cropXAxis = px(opts.crop.x, page.width);
+      options.cropYAxis = px(opts.crop.y, page.height);
+      options.cropWidth = Math.max(1, px(opts.crop.w, page.width));
+      options.cropHeight = Math.max(1, px(opts.crop.h, page.height));
+    }
 
     await poppler.pdfToCairo(pdfPath, outputPrefix, options);
 
@@ -176,7 +245,7 @@ export async function pdfToImages(
 export async function renderPdfPage(
   pdfPath: string,
   pageNumber: number,
-  scale: number = 1.5,
+  scale: number = PDF_SCALE_DEFAULT,
   opts?: PopplerOptions,
 ): Promise<Buffer> {
   const poppler = getPoppler(opts?.binDir);

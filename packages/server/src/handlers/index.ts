@@ -210,6 +210,18 @@ export function registerVerbTools(server: McpServer): void {
           .optional()
           .describe('PDF only: the text layer — true, or a page range like "1-3".'),
         pdfPages: z.string().optional().describe('PDF only: pages to rasterize, e.g. "1-3".'),
+        pdfScale: z
+          .number()
+          .min(0.5)
+          .max(4)
+          .optional()
+          .describe(
+            'With pdfPages: render scale, 72 DPI × scale (default 1.5); raise for dense pages.',
+          ),
+        pdfCrop: z
+          .strictObject({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
+          .optional()
+          .describe('With pdfPages: render only this region, as page fractions from the top-left.'),
         rawImage: z
           .boolean()
           .optional()
@@ -233,7 +245,19 @@ export function registerVerbTools(server: McpServer): void {
       }),
       _meta: LARGE_RESULT_META,
     },
-    async ({ uri, lines, pattern, context, chars, pdfText, pdfPages, rawImage, gltf }) =>
+    async ({
+      uri,
+      lines,
+      pattern,
+      context,
+      chars,
+      pdfText,
+      pdfPages,
+      pdfScale,
+      pdfCrop,
+      rawImage,
+      gltf,
+    }) =>
       exec(reg, 'read', uri, undefined, {
         lines,
         pattern,
@@ -241,6 +265,8 @@ export function registerVerbTools(server: McpServer): void {
         chars,
         pdfText,
         pdfPages,
+        pdfScale,
+        pdfCrop,
         rawImage,
         gltf,
         // A read that lands on a folder falls back to list — page it as list would.

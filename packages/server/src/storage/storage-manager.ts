@@ -7,7 +7,16 @@
 import { appendFile, mkdir, readdir, unlink, rename, rm, stat, lstat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { join, relative, dirname, extname, posix } from 'path';
-import { pdfToImages, pdfToText, getPdfPageCount } from '../features/pdf.js';
+import {
+  pdfToImages,
+  pdfToText,
+  getPdfPageCount,
+  pdfCropError,
+  PDF_SCALE_DEFAULT,
+  PDF_SCALE_MAX,
+  PDF_SCALE_MIN,
+  type PdfCrop,
+} from '../features/pdf.js';
 import { toWebPForModel } from '@yaar/lib/image';
 import { GltfError, formatSummaryJson, summarizeGltf } from '@yaar/lib/gltf';
 import { containedPath, containedRealPath } from '@yaar/lib/paths';
@@ -128,17 +137,52 @@ function parsePdfPageRange(
 }
 
 /**
+ * How many pages one rasterize request may return at this scale and crop: the
+ * {@link MAX_PDF_RASTER_PAGES} budget is for whole pages at the default scale, and a
+ * request that asks for more pixels per page gets proportionally fewer pages.
+ */
+function pdfRasterPageCap(scale: number, crop?: PdfCrop): number {
+  const area = (scale / PDF_SCALE_DEFAULT) ** 2 * (crop ? crop.w * crop.h : 1);
+  return Math.max(1, Math.min(MAX_PDF_RASTER_PAGES, Math.floor(MAX_PDF_RASTER_PAGES / area)));
+}
+
+/** Why these raster options cannot be honored, or null. Apps send options unvalidated. */
+function pdfRasterOptionsError(scale: unknown, crop: unknown): string | null {
+  if (
+    scale !== undefined &&
+    !(typeof scale === 'number' && scale >= PDF_SCALE_MIN && scale <= PDF_SCALE_MAX)
+  ) {
+    return `pdfScale must be a number from ${PDF_SCALE_MIN} to ${PDF_SCALE_MAX}`;
+  }
+  if (crop === undefined) return null;
+  if (typeof crop !== 'object' || crop === null) {
+    return 'pdfCrop must be an object { x, y, w, h } of page fractions';
+  }
+  return pdfCropError(crop as PdfCrop);
+}
+
+/**
  * Rasterize a PDF page range to PNG images (via poppler) for when the agent must actually
  * read the document's content. Callers only reach here on an explicit `pages` opt-in.
  */
 async function convertPdfToImages(
   filePath: string,
   pages: string,
-  raw?: boolean,
+  opts: { raw?: boolean; scale?: number; crop?: PdfCrop },
 ): Promise<{ images: StorageImageContent[]; totalPages: number; firstPage: number; lastPage: number }> {
+  const scale = opts.scale ?? PDF_SCALE_DEFAULT;
   const totalPages = await getPdfPageCount(filePath);
-  const { firstPage, lastPage } = parsePdfPageRange(pages, totalPages);
-  const pdfPages = await pdfToImages(filePath, 1.5, { firstPage, lastPage }, { raw });
+  const { firstPage, lastPage } = parsePdfPageRange(
+    pages,
+    totalPages,
+    pdfRasterPageCap(scale, opts.crop),
+  );
+  const pdfPages = await pdfToImages(
+    filePath,
+    scale,
+    { firstPage, lastPage },
+    { raw: opts.raw, crop: opts.crop },
+  );
 
   const images = pdfPages.map((page) => ({
     type: 'image' as const,
@@ -180,6 +224,10 @@ export interface StorageReadOptions {
   pdfText?: boolean | string;
   /** PDF page range to rasterize to images (e.g. "1-3"), for visual/scanned PDFs. */
   pdfPages?: string;
+  /** With `pdfPages`: render scale, 72 DPI × scale (default 1.5). Fewer pages fit at higher scales. */
+  pdfScale?: number;
+  /** With `pdfPages`: render only this region of each page, as fractions of the page. */
+  pdfCrop?: PdfCrop;
   /**
    * Return image bytes exactly as they are on disk (and PDF pages as poppler's PNG),
    * skipping the WebP re-encode this read normally applies.
@@ -419,14 +467,18 @@ export async function storageRead(
       }
       // Rasterize pages to images — for visual/scanned PDFs, or when layout matters.
       if (opts?.pdfPages) {
+        const optionsError = pdfRasterOptionsError(opts.pdfScale, opts.pdfCrop);
+        if (optionsError) return { success: false, error: optionsError };
         const { images, totalPages, firstPage, lastPage } = await convertPdfToImages(
           validatedPath,
           opts.pdfPages,
-          opts.rawImage,
+          { raw: opts.rawImage, scale: opts.pdfScale, crop: opts.pdfCrop },
         );
+        const scaleNote = opts.pdfScale !== undefined ? ` at scale ${opts.pdfScale}` : '';
+        const cropNote = opts.pdfCrop ? ', cropped' : '';
         return {
           success: true,
-          content: `PDF pages ${firstPage}-${lastPage} of ${totalPages} (rasterized to images).`,
+          content: `PDF pages ${firstPage}-${lastPage} of ${totalPages} (rasterized to images${scaleNote}${cropNote}).`,
           images,
           totalPages,
         };

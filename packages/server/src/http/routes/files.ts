@@ -3,7 +3,14 @@
  */
 
 import { extname } from 'path';
-import { getPdfInfo, PopplerNotInstalledError, renderPdfPage } from '../../features/pdf.js';
+import {
+  getPdfInfo,
+  PDF_SCALE_DEFAULT,
+  PDF_SCALE_MAX,
+  PDF_SCALE_MIN,
+  PopplerNotInstalledError,
+  renderPdfPage,
+} from '../../features/pdf.js';
 import { MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
@@ -106,15 +113,6 @@ function maybeGzip(
   headers['Content-Encoding'] = 'gzip';
   return Bun.gzipSync(new Uint8Array(body));
 }
-
-/**
- * Raster scale bounds for `/api/pdf/{path}/{page}?scale=` (1 = 72 DPI). The ceiling is
- * what a phone needs to keep a zoomed page sharp; past it one page is tens of megabytes
- * of bitmap for whoever asked.
- */
-const PDF_SCALE_MIN = 0.5;
-const PDF_SCALE_MAX = 4;
-const PDF_SCALE_DEFAULT = 1.5;
 
 /** The requested scale, the default when none was given, or `null` for one out of range. */
 function pdfScale(raw: string | null): number | null {

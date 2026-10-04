@@ -241,6 +241,8 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       const result = await storageRead(parsed.path, {
         pdfText: options?.pdfText,
         pdfPages: options?.pdfPages,
+        pdfScale: options?.pdfScale,
+        pdfCrop: options?.pdfCrop,
         rawImage: options?.rawImage,
         gltf: options?.gltf,
       });

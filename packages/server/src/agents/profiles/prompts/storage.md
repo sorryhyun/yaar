@@ -33,7 +33,9 @@ through this conversation for no gain.
 `invoke('yaar://windows/<id>', { action: "create", renderer: "iframe", content: "yaar://storage/<path>.pdf" })`.
 `read` on a `.pdf` returns metadata only. To read the content yourself: `pdfText: true`
 extracts the text layer (cheap, all pages — use this for text-based PDFs); `pdfPages: "1-3"`
-rasterizes pages to images (for scanned/visual PDFs).
+rasterizes pages to images (for scanned/visual PDFs). Too small to read — sheet music, a
+schematic? Add `pdfScale` (up to 4, default 1.5) and `pdfCrop: { x, y, w, h }` (page fractions)
+to render one region sharply.
 
 **Binary.** Pass `encoding: "base64"` when writing image or PDF bytes. Without it the
 base64 *text* is what lands on disk — a file that looks written and is unreadable.

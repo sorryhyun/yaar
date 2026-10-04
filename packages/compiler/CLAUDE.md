@@ -258,7 +258,7 @@ roots import the same `three.core.js` file and Bun dedupes them regardless.
 `new Audio()`. Covers `ASSET_MIME_TYPES`; `*.png`-style ambient declarations in
 `bundled-types/index.d.ts` keep typecheck green, and `asset-imports.test.ts` asserts the two
 lists are the same set. (A plugin because Bun's `loader: { '.png': 'dataurl' }` is a no-op in
-the programmatic bundler.) Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total. The same plugin inlines
+the programmatic bundler.) Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (15MB) warns on the total. The same plugin inlines
 `TEXT_ASSET_EXTENSIONS` (`.html`, `.htm`) as the file's *text* — markup for `innerHTML`/`srcdoc`,
 where a data URI is useless — declared as `const text: string` modules and parity-tested the
 same way. Without it Bun's native HTML loader claims the import and the build fails.

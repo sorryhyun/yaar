@@ -48,6 +48,8 @@ Read a file by URI.
 | `context` | `number` | no | Context lines around pattern matches (default: `0`) |
 | `pdfText` | `boolean \| string` | no | PDF only: extract the text layer. `true` (or `"all"`) reads the whole document; a range like `"1-3"` scopes it. |
 | `pdfPages` | `string` | no | PDF only: page range to rasterize to images, e.g. `"1-3"`, `"5"`, `"2-"` — for scanned/visual PDFs. |
+| `pdfScale` | `number` | no | With `pdfPages`: render scale, 72 DPI × scale, 0.5–4 (default 1.5). Raise it for dense pages (sheet music, schematics). |
+| `pdfCrop` | `{ x, y, w, h }` | no | With `pdfPages`: render only this region of each page, as fractions of the page from its top-left. Measured on the range's first page. |
 | `gltf.node` | `string` | no | glTF/GLB only: scope the model summary to a node's subtree (a name — exact, case-insensitive, or a unique substring — or `"#index"`). Adds per-channel keyframe stats. |
 | `gltf.depth` | `number` | no | glTF/GLB only: how many levels of the node tree to list. |
 | `gltf.keys` | `string` | no | glTF/GLB only: an animation (name or `"#index"`) whose keyframes to return in full, as `[time, ...value]` rows — only under `gltf.node` when that is set. |
@@ -61,7 +63,7 @@ Read a file by URI.
 
 **Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
 
-**Returns (PDF files):** View-first by default — reading a PDF with no `pdfText`/`pdfPages` returns metadata only (`pdfMeta: true`, page count, byte size) plus a hint to open it in a viewer window (`yaar://storage/` iframe content), with zero bytes ingested. Pass `pdfText` to extract the text layer (cheapest way to actually read the content), or `pdfPages` to rasterize a page range to base64 images — capped at `MAX_PDF_RASTER_PAGES` (20 pages) per request, and re-encoded to WebP unless `rawImage: true` (see [File Type Handling](#file-type-handling)).
+**Returns (PDF files):** View-first by default — reading a PDF with no `pdfText`/`pdfPages` returns metadata only (`pdfMeta: true`, page count, byte size) plus a hint to open it in a viewer window (`yaar://storage/` iframe content), with zero bytes ingested. Pass `pdfText` to extract the text layer (cheapest way to actually read the content), or `pdfPages` to rasterize a page range to base64 images — capped at `MAX_PDF_RASTER_PAGES` (20 pages) per request at the default scale (fewer as `pdfScale` raises each page's pixel count, more back as `pdfCrop` shrinks it), and re-encoded to WebP unless `rawImage: true` (see [File Type Handling](#file-type-handling)).
 
 **Returns (image files):** Base64-encoded image content with MIME type.
 
@@ -613,6 +615,6 @@ Stored at `config/{appId}.json`. Managed via verb tools: `read('yaar://config/ap
 | Limit | Value |
 |-------|-------|
 | Max upload size (REST) | 50 MB |
-| Max PDF rasterize pages (`pdfPages` per request) | 20 |
+| Max PDF rasterize pages (`pdfPages` per request) | 20 at scale 1.5, uncropped; scaled down by pixel area (`pdfScale`² × `pdfCrop` area) |
 | Max glTF/GLB size for a model summary | 256 MB |
 | PDF render scale | 1.5× |
