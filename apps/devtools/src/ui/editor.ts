@@ -148,8 +148,13 @@ createEffect(
   }),
 );
 
+/** Counted the way the gutter numbers rows, so the header and the last gutter number agree. */
+function lineCount(): number {
+  return Math.max(1, currentContent().split('\n').length);
+}
+
 function lineNumbers(): string {
-  const total = Math.max(1, currentContent().split('\n').length);
+  const total = lineCount();
   const width = String(total).length;
   return Array.from({ length: total }, (_, i) => String(i + 1).padStart(width, ' ')).join('\n');
 }
@@ -220,6 +225,9 @@ export function Editor() {
             >
               Lines
             </button>
+            <span class="editor-line-count y-text-xs y-text-dim">
+              ${() => `${lineCount()} ${lineCount() === 1 ? 'line' : 'lines'}`}
+            </span>
           <//>
         </div>
         <${Show} when=${openFilePreview} fallback=${TextEditor}>

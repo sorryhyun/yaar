@@ -63,6 +63,13 @@
   margin-left: auto;
 }
 
+.editor-line-count {
+  flex-shrink: 0;
+  padding-left: var(--yaar-sp-1);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .devtools .editor-toggle {
   flex-shrink: 0;
   height: 22px;
