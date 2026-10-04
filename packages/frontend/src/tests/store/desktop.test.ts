@@ -341,6 +341,23 @@ describe('Desktop Store', () => {
       dismissNotification('n1');
       expect(useDesktopStore.getState().notifications['n1']).toBeUndefined();
     });
+
+    it('keeps only the newest notification per monitor', () => {
+      const { applyAction } = useDesktopStore.getState();
+      const interactionsBefore = useDesktopStore.getState().pendingInteractions.length;
+      const show = (id: string, monitorId?: string) =>
+        applyAction({ type: 'notification.show', id, title: id, body: '', monitorId });
+
+      show('a', '0');
+      show('b', '1');
+      show('c', '0');
+      show('x');
+      show('y');
+
+      expect(Object.keys(useDesktopStore.getState().notifications).sort()).toEqual(['b', 'c', 'y']);
+      // Replaced, not dismissed: the agent is not told the user closed it.
+      expect(useDesktopStore.getState().pendingInteractions).toHaveLength(interactionsBefore);
+    });
   });
 
   describe('resetDesktop', () => {

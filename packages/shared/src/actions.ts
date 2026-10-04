@@ -295,6 +295,12 @@ export interface NotificationShowAction {
   body: string;
   icon?: string;
   duration?: number;
+  /**
+   * The monitor that raised it. Agents never send this: it is stamped from the carrying
+   * `ACTIONS` event (server-side for the snapshot, client-side for live traffic), and a
+   * monitor shows only its newest notification — a later one replaces it.
+   */
+  monitorId?: string;
 }
 
 export interface NotificationDismissAction {

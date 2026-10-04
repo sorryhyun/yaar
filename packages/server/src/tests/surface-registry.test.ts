@@ -11,8 +11,8 @@ import { SurfaceRegistry } from '../session/surface-state.js';
 describe('SurfaceRegistry', () => {
   it('forgets a notification the user dismissed', () => {
     const surfaces = new SurfaceRegistry();
-    surfaces.record({ type: 'notification.show', id: 'n1', title: 'One', body: '' });
-    surfaces.record({ type: 'notification.show', id: 'n2', title: 'Two', body: '' });
+    surfaces.record({ type: 'notification.show', id: 'n1', title: 'One', body: '' }, '0');
+    surfaces.record({ type: 'notification.show', id: 'n2', title: 'Two', body: '' }, '1');
 
     surfaces.answered('n1');
 
@@ -24,5 +24,26 @@ describe('SurfaceRegistry', () => {
     surfaces.record({ type: 'notification.show', id: 'n1', title: 'One', body: '' });
     surfaces.record({ type: 'notification.dismiss', id: 'n1' });
     expect(surfaces.snapshot()).toEqual([]);
+  });
+
+  it('keeps only the newest notification per monitor, stamped with its monitor', () => {
+    const surfaces = new SurfaceRegistry();
+    surfaces.record({ type: 'notification.show', id: 'a', title: 'A', body: '' }, '0');
+    surfaces.record({ type: 'notification.show', id: 'b', title: 'B', body: '' }, '1');
+    surfaces.record({ type: 'notification.show', id: 'c', title: 'C', body: '' }, '0');
+
+    expect(surfaces.snapshot()).toEqual([
+      { type: 'notification.show', id: 'b', title: 'B', body: '', monitorId: '1' },
+      { type: 'notification.show', id: 'c', title: 'C', body: '', monitorId: '0' },
+    ]);
+  });
+
+  it('updates a notification in place when the same id is shown again', () => {
+    const surfaces = new SurfaceRegistry();
+    surfaces.record({ type: 'notification.show', id: 'a', title: 'Old', body: '' }, '0');
+    surfaces.record({ type: 'notification.show', id: 'a', title: 'New', body: '' }, '0');
+    expect(surfaces.snapshot()).toEqual([
+      { type: 'notification.show', id: 'a', title: 'New', body: '', monitorId: '0' },
+    ]);
   });
 });

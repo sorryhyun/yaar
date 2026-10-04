@@ -517,4 +517,21 @@ describe('server event dispatcher', () => {
     // contradict the id and there would be no way to tell which one won.
     expect(actions[0]).toEqual({ type: 'window.close', windowId: '0/notes' });
   });
+
+  it('carries the event monitor onto a notification, so the store can keep one per monitor', () => {
+    const handlers = createHandlers();
+    dispatchServerEvent(
+      {
+        type: 'ACTIONS',
+        monitorId: '1',
+        actions: [{ type: 'notification.show', id: 'n', title: 'Hi', body: '' }],
+      } as unknown as Parameters<typeof dispatchServerEvent>[0],
+      handlers,
+    );
+
+    const [actions] = handlers.applyActions.mock.calls[0] as unknown as [
+      Array<{ monitorId?: string }>,
+    ];
+    expect(actions[0].monitorId).toBe('1');
+  });
 });

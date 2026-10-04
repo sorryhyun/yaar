@@ -111,9 +111,15 @@ function extractAgentId(message: ServerEvent): string {
  * emitting event named, so the store keys it there rather than on this tab's active
  * monitor. Actions that already carry a scoped handle, or a monitorId of their own, are
  * returned untouched.
+ *
+ * A `notification.show` is tagged too: a monitor keeps only its newest notification, and
+ * this is how the store learns which monitor one came from.
  */
 function scopeToMonitor(monitorId: string): (action: OSAction) => OSAction {
   return (action) => {
+    if (action.type === 'notification.show') {
+      return action.monitorId ? action : { ...action, monitorId };
+    }
     if (!action.type.startsWith('window.')) return action;
     const a = action as OSAction & { windowId?: string; monitorId?: string };
     if (!a.windowId || a.windowId.includes('/') || a.monitorId) return action;

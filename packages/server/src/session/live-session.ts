@@ -503,7 +503,7 @@ export class LiveSession {
     // travel through, so recording here is what makes the snapshot able to say "this
     // dialog is still up" — and, just as importantly, "this one is not".
     if (event.type === ServerEventType.ACTIONS) {
-      for (const action of event.actions) this.surfaces.record(action);
+      for (const action of event.actions) this.surfaces.record(action, event.monitorId);
     }
 
     const monitorId = (event as { monitorId?: string }).monitorId;

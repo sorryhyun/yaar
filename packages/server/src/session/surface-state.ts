@@ -36,12 +36,23 @@ export class SurfaceRegistry {
    *
    * Show adds, dismiss/close removes. Anything else — window actions, toasts, app badges —
    * is not a surface this registry owns and is ignored.
+   *
+   * `monitorId` is the carrying event's. A monitor shows only its newest notification, so a
+   * show replaces the monitor's previous one (the client's reducer applies the same rule),
+   * and the monitor is stamped onto the stored action so the snapshot still carries it.
    */
-  record(action: OSAction): void {
+  record(action: OSAction, monitorId?: string): void {
     switch (action.type) {
-      case 'notification.show':
-        this.notifications.set(action.id, action);
+      case 'notification.show': {
+        const stamped = action.monitorId || !monitorId ? action : { ...action, monitorId };
+        for (const [id, prior] of this.notifications) {
+          if (id !== stamped.id && prior.monitorId === stamped.monitorId) {
+            this.notifications.delete(id);
+          }
+        }
+        this.notifications.set(stamped.id, stamped);
         break;
+      }
       case 'notification.dismiss':
         this.notifications.delete(action.id);
         break;

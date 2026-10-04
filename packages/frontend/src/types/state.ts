@@ -73,6 +73,8 @@ export interface NotificationModel {
   body: string;
   icon?: string;
   duration?: number;
+  /** One notification per monitor: a newer one from the same monitor replaces it. */
+  monitorId?: string;
   timestamp: number;
 }
 

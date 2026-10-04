@@ -481,9 +481,9 @@ export const useDesktopStore = create<DesktopStore>()(
           // Deliberately untouched when scoped:
           //  - toasts, dialogs, selectedWindowIds, attachedImages, activityLog —
           //    transient or session-wide shell UI, with no monitor identity to scope by.
-          //  - notifications — the model carries no monitorId (`notification.show` does not
-          //    send one), so there is nothing to filter on; the notification center is a
-          //    session-wide surface.
+          //  - notifications — each carries its monitorId now (one per monitor), but a
+          //    context reset is not a dismissal: the server's SurfaceRegistry still holds
+          //    it, and the next snapshot would bring it straight back.
           //  - pendingGestureMessages — plain strings, unattributable, and each one is an
           //    unsent user utterance.
         });
