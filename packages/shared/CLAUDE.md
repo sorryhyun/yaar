@@ -16,6 +16,9 @@ Shared types between frontend and server.
     the key exists and the app defines no `describe()` for it, so the server falls back to the
     manifest's static `description`; only a key that is absent is an error. Answered on demand,
     never folded into the manifest.
+  - An `eval` request (devtools previews only — the server's gate) first installs a `__debug`
+    getter on `window`, serving the registration's `debug` (`defineApp({ debug })`). Lazy on
+    purpose: a window that is never evaluated never gets the global.
   - `AppManifest.$defs` carries subschemas more than one descriptor shares; every
     `{"$ref": "#/$defs/name"}` inside a `params`/`returns`/state `schema` resolves against it,
     so **the manifest is the schema document**. Filled by the compiler

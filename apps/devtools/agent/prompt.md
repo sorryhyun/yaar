@@ -66,7 +66,7 @@ Delegate the survey work you would otherwise spend many `command` turns on — "
 
 When the no-argument `previewQuery` snapshot shows state disagreeing with the rendered DOM, the usual culprits are a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` instead finds that value correct and sends you looking in the wrong half of the app.
 
-Anything past this loop — the relay 403, `previewEval`'s scope limits, the preview principal and its storage, headless flakiness — is the `preview-debugging` topic; pull it the moment a preview result surprises you.
+Anything past this loop — the relay 403, `previewEval`'s scope (and the `__debug` hook that reaches module scope), the preview principal and its storage, headless flakiness — is the `preview-debugging` topic; pull it the moment a preview result surprises you.
 
 ## Deploy
 

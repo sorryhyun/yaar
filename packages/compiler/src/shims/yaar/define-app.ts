@@ -240,6 +240,9 @@ function toRegistration(definition) {
   if (definition.events !== undefined) registration.events = definition.events;
   if (definition.onCapture !== undefined) registration.onCapture = definition.onCapture;
   if (definition.keybindings !== undefined) registration.keybindings = definition.keybindings;
+  // Never in the manifest: the iframe SDK serves it as `__debug`, and only to a devtools
+  // preview's eval (see `installDebugGlobal` in iframe-scripts/app-protocol.ts).
+  if (definition.debug !== undefined) registration.debug = definition.debug;
   return registration;
 }
 

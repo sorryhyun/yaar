@@ -329,7 +329,7 @@ the agent. An app never calls `render()` itself, never registers from `onMount`,
 - **`id`** must equal `appId` in `app.json`; the build checks.
 - **`state.get` / `commands.run`** are the handlers. Other descriptor fields: `description`,
   `params`, `returns`, `aliases`, and on the definition `events`, `keybindings`, `onClose`,
-  `onCapture`.
+  `onCapture`, `debug` (module values a devtools preview's `previewEval` reads as `__debug`).
 - **Schemas.** `params` takes a Zod schema (preferred) or a JSON Schema literal. Zod types `run`'s
   parameter, validates the call before `run` sees it, and folds into `dist/protocol.json`. A JSON
   Schema literal is checked for required and unknown keys only, so `type: "string"` still admits a

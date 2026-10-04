@@ -74,6 +74,9 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     checkDescriptors(config.state, 'state', true);
     checkDescriptors(config.commands, 'commands', true);
     checkDescriptors(config.events, 'events', false);
+    if (config.debug != null && typeof config.debug !== 'object' && typeof config.debug !== 'function') {
+      problems.push('"debug" must be an object or a function returning one (it is what __debug evaluates to in a devtools preview)');
+    }
     if (problems.length) {
       var who = (typeof config.appId === 'string' && config.appId) ? ' for app "' + config.appId + '"' : '';
       throw new Error('[yaar] defineApp()' + who + ' is invalid:\\n  - ' + problems.join('\\n  - '));
@@ -318,6 +321,32 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     return cmdName + ': ' + parts.join('; ') + '. Accepted params: ' +
       (accepted.length ? accepted.join(', ') : '(none)') +
       (required.length ? ' (required: ' + required.join(', ') + ')' : '') + '.';
+  }
+
+  /**
+   * Put \`__debug\` on the global an eval expression runs against: what the app's
+   * \`defineApp({ debug })\` declared — the object, or the function's return, re-read
+   * on every access so a reference the app later replaces is never served stale.
+   *
+   * The bundle is an ES module, so without this an eval sees none of the app's own
+   * bindings. Installed lazily, from the eval handler, because eval is the gate: the
+   * server only sends one to a devtools preview (handleAppEval), so a deployed window
+   * never gets the global and the hook costs it nothing but the declaration.
+   */
+  function installDebugGlobal() {
+    if (Object.prototype.hasOwnProperty.call(window, '__debug')) return;
+    Object.defineProperty(window, '__debug', {
+      configurable: true,
+      get: function() {
+        var hook = registration && registration.debug;
+        if (hook == null) {
+          throw new Error(registration
+            ? '__debug: app "' + registration.appId + '" declares no debug hook. Add defineApp({ debug: () => ({ ...the module values to inspect }) }) and recompile.'
+            : '__debug: the app has not registered (defineApp never ran, or threw before registering).');
+        }
+        return typeof hook === 'function' ? hook() : hook;
+      },
+    });
   }
 
   // Max serialized eval result, in characters. A result bigger than this is almost
@@ -588,6 +617,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         answerEval({ error: String(err && err.message || err) });
       };
       try {
+        installDebugGlobal();
         // Indirect eval: runs in global scope, so the expression sees the app's
         // globals rather than this function's locals.
         var out = (0, eval)(msg.expression);

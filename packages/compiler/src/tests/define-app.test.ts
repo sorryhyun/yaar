@@ -206,6 +206,14 @@ describe('defineApp registration', () => {
     expect(Object.keys(descriptor).sort()).toEqual(['description', 'handler']);
     expect(registered[0].state).toEqual({});
     expect('events' in registered[0]).toBe(false);
+    expect('debug' in registered[0]).toBe(false);
+  });
+
+  test('hands the debug hook to the SDK as-is, for a preview eval to read as __debug', () => {
+    const { registered } = installStubs();
+    const debug = () => ({ engine: 'live' });
+    defineApp({ id: 'synth', name: 'Synth', debug });
+    expect(registered[0].debug).toBe(debug);
   });
 
   test('is import-safe with no DOM at all', () => {
@@ -861,6 +869,7 @@ describe('defineApp type inference', () => {
         view: grid,
         onClose: () => {},
         onCapture: () => null,
+        debug: () => ({ grid }),
       });
     `,
   );

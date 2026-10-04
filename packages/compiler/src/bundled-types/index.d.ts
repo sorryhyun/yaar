@@ -900,6 +900,15 @@ interface YaarAppDefinition<
    * the default DOM+canvas composite capture. May be async.
    */
   onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
+  /**
+   * Module values a devtools preview may inspect: `previewEval` sees the result as
+   * `__debug` (e.g. `__debug.engine.voices.length`). The bundle is an ES module, so
+   * nothing else lets an eval reach the app's own bindings. Prefer the function form,
+   * `() => ({ engine, buildVoice })`: it is re-read on every access, so a reference the
+   * app later replaces is never stale. Exposed only where eval is allowed — a devtools
+   * preview — and never part of the agent-facing manifest; a deployed window ignores it.
+   */
+  debug?: Record<string, unknown> | (() => Record<string, unknown>);
 }
 
 interface YaarApp {

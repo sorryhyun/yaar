@@ -417,6 +417,10 @@ Schema literal.
     // full-window screenshot. May be async.
     return myCanvas.toDataURL('image/png');
   },
+
+  debug: () => ({ engine, buildVoice }),
+    // optional — module values a devtools preview's eval reads as `__debug`.
+    // Never in the manifest; a deployed window does not expose it.
 }
 ```
 

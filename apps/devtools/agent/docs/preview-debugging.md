@@ -18,12 +18,15 @@ checking whether a permission is still needed.
 that is how you catch a broken asset, which produces no `console.log` and does not fail the
 build.
 
-**`previewEval` cannot see your app's module scope, and no expression makes it.** The bundle
-is an ES module, so its top-level bindings — signals, `let`s, helper functions — are not on
-`globalThis`; eval there reaches browser builtins and the injected YAAR runtime only. Module
-state is observable through exactly two projections: `previewQuery` for whatever
-`defineApp({ state })` declares, and the DOM for whatever gets rendered. If you need to
-watch a value that is neither, add it to `state:`.
+**`previewEval` sees your app's module scope only through `__debug`.** The bundle is an ES
+module, so its top-level bindings — signals, `let`s, helper functions — are not on
+`globalThis`. Declare what you need to reach in `defineApp({ debug: () => ({ engine, buildVoice }) })`
+and an eval reads it as `__debug.engine`. The function form is re-read on every access, so a
+reference the app later swaps is never stale. It exists only where eval is allowed (a preview);
+a deployed window never exposes it and the manifest never lists it, so it can stay in the
+source — prefer that to re-implementing a code path inside an eval to measure it, or to planting
+a `globalThis.x = ...` you must remember to remove. For a value an agent *driving* the app
+should see, `state:` is still the place.
 
 **Pointer lock never engages under a click you synthesized.** The sandbox grants it
 (`allow-pointer-lock`, previews included), but `requestPointerLock()` needs transient user

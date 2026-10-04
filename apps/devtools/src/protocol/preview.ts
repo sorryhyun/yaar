@@ -102,6 +102,8 @@ export const previewCommands = {
   previewEval: defineAppCommand({
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
+      'Module scope is not on the global: what the app declares in `defineApp({ debug })` is ' +
+      'reachable as `__debug` (preview only, never deployed). ' +
       'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +
       "that awaits or sleeps for more than 5s needs `timeoutMs` — and this command's own " +
       'timeoutMs raised above it, or that one expires first. With `changed: true` the ' +
