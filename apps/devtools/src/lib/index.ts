@@ -15,3 +15,4 @@ export * from './references';
 export * from './source-scan';
 export * from './model-summary';
 export * from './preview-shape';
+export * from './audio-analysis';

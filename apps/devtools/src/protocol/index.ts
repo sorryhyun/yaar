@@ -36,6 +36,7 @@ export { introspectCommands } from './introspect';
 export { httpCommands } from './http';
 export { workerCommands } from './worker';
 export { testCommands } from './test';
+export { audioCommands } from './audio';
 
 /**
  * The `defineApp({ state })` map. Split from `main.ts` for the same reason the

@@ -48,6 +48,9 @@ import {
   pickFields,
   summarizeSamples,
   collapseAuditText,
+  analyzeAudio,
+  compareReports,
+  kWeightingFilters,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -950,6 +953,114 @@ const previewShape = suite('preview-shape', {
   },
 });
 
+const SR = 48000;
+
+function sine(hz: number, dbfs: number, sec: number): Float32Array {
+  const a = 10 ** (dbfs / 20);
+  const x = new Float32Array(SR * sec);
+  for (let i = 0; i < x.length; i++) x[i] = a * Math.sin((2 * Math.PI * hz * i) / SR);
+  return x;
+}
+
+/** Decaying 5 ms bursts on a beat grid, from a fixed-seed generator so the suite is deterministic. */
+function clicks(bpm: number, sec: number): Float32Array {
+  const x = new Float32Array(SR * sec);
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const period = Math.round((SR * 60) / bpm);
+  for (let start = 0; start < x.length; start += period) {
+    for (let i = 0; i < 240 && start + i < x.length; i++)
+      x[start + i] = rand() * 0.8 * (1 - i / 240);
+  }
+  return x;
+}
+
+const near = (actual: number | null, expected: number, tol: number, what: string) =>
+  ok(
+    actual !== null && Math.abs(actual - expected) <= tol,
+    `${what}: expected ${expected}±${tol}, got ${actual}`,
+  );
+
+const audioAnalysis = suite('audio-analysis', {
+  'K-weighting reproduces the published 48 kHz coefficients'() {
+    const [shelf, hp] = kWeightingFilters(48000);
+    near(shelf.b0, 1.53512485958697, 1e-9, 'shelf b0');
+    near(shelf.a1, -1.69065929318241, 1e-9, 'shelf a1');
+    near(hp.a2, 0.99007225036621, 1e-9, 'highpass a2');
+  },
+
+  'a -20 dBFS 1 kHz sine in both channels reads -20 LUFS'() {
+    const s = sine(997, -20, 5);
+    const r = analyzeAudio({ channels: [s, s], sampleRate: SR });
+    near(r.integratedLufs, -20, 0.1, 'integrated');
+    near(r.peakDb, -20, 0.05, 'peak');
+    near(r.crestDb, 3, 0.1, 'crest of a sine');
+    eq(r.stereo?.correlation, 1);
+    eq(r.bandsDb.mid, 0);
+  },
+
+  'a full-scale sine in one channel reads -3.01 LUFS, at any rate'() {
+    for (const sr of [44100, 96000]) {
+      const x = new Float32Array(sr * 4);
+      for (let i = 0; i < x.length; i++) x[i] = Math.sin((2 * Math.PI * 997 * i) / sr);
+      near(analyzeAudio({ channels: [x], sampleRate: sr }).integratedLufs, -3, 0.1, `${sr} Hz`);
+    }
+  },
+
+  'silence has no loudness and is all silence'() {
+    const r = analyzeAudio({ channels: [new Float32Array(SR * 2)], sampleRate: SR });
+    eq(r.integratedLufs, null);
+    eq(r.peakDb, null);
+    eq(r.silence.silentPct, 100);
+  },
+
+  'leading and trailing silence, and anti-phase, are reported'() {
+    const tone = sine(200, -10, 2);
+    const l = new Float32Array(SR * 4);
+    const r = new Float32Array(SR * 4);
+    l.set(tone, SR);
+    r.set(
+      tone.map((v) => -v),
+      SR,
+    );
+    const rep = analyzeAudio({ channels: [l, r], sampleRate: SR });
+    near(rep.silence.leadingSec, 1, 0.05, 'leading');
+    near(rep.silence.trailingSec, 1, 0.05, 'trailing');
+    eq(rep.stereo?.correlation, -1);
+  },
+
+  'tempo of a click track'() {
+    near(
+      analyzeAudio({ channels: [clicks(120, 10)], sampleRate: SR }).tempo?.bpm ?? null,
+      120,
+      1,
+      '120',
+    );
+    near(
+      analyzeAudio({ channels: [clicks(140, 10)], sampleRate: SR }).tempo?.bpm ?? null,
+      140,
+      1.5,
+      '140',
+    );
+  },
+
+  'a track under four seconds gets no tempo rather than a guess'() {
+    eq(analyzeAudio({ channels: [clicks(120, 3)], sampleRate: SR }).tempo, null);
+  },
+
+  'compareReports is B minus A'() {
+    const quiet = sine(997, -20, 3);
+    const loud = sine(997, -14, 3);
+    const d = compareReports(
+      analyzeAudio({ channels: [quiet], sampleRate: SR }),
+      analyzeAudio({ channels: [loud], sampleRate: SR }),
+    );
+    near(d.integratedLufs, 6, 0.1, 'loudness delta');
+    near(d.peakDb, 6, 0.05, 'peak delta');
+    eq(d['bandsDb.mid'], 0);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -965,4 +1076,5 @@ export const libSuites: Suite[] = [
   sourceScan,
   formatWithin,
   previewShape,
+  audioAnalysis,
 ];

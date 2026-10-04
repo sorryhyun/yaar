@@ -20,6 +20,7 @@ import {
   httpCommands,
   workerCommands,
   testCommands,
+  audioCommands,
 } from './protocol/index';
 
 // Registers the protocol and mounts `AppShell` into the compiler's `#app`.
@@ -54,6 +55,7 @@ export default defineApp({
     ...httpCommands,
     ...workerCommands,
     ...testCommands,
+    ...audioCommands,
   },
   view: AppShell,
 });
