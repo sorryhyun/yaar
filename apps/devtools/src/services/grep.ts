@@ -1,7 +1,7 @@
 export {};
 import { invoke } from '@bundled/yaar';
 import { activeProject } from '../core';
-import { isGeneratedPath } from '../lib';
+import { clipMatchLine, isGeneratedPath } from '../lib';
 
 export interface GrepMatch {
   file: string;
@@ -19,6 +19,9 @@ export interface GrepMatch {
  * them over to be dropped — so a truncated search of a built project can still be missing
  * source matches. `excluded` reports how many were dropped, which is what lets the caller
  * say that rather than present a short result as a complete one.
+ *
+ * Each hit's line is cut to a window around the match (`clipMatchLine`): the storage
+ * grep returns lines whole, and one fixture line can be thousands of characters.
  */
 export async function grep(
   pattern: string,
@@ -32,7 +35,10 @@ export async function grep(
     `yaar://apps/self/storage/${storagePath}`,
     { action: 'grep', pattern, ...(glob ? { glob } : {}) },
   );
-  const matches = result?.matches ?? [];
+  const matches = (result?.matches ?? []).map((m) => ({
+    ...m,
+    content: clipMatchLine(m.content, pattern),
+  }));
   if (includeBuilt) return { matches, truncated: result?.truncated };
   const kept = matches.filter((m) => !isGeneratedPath(m.file));
   return {

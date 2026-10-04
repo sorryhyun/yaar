@@ -526,7 +526,9 @@ export const fileCommands = {
       'Search file contents with regex across the project, source only: generated output ' +
       '(dist/, build/, out/, node_modules/, coverage/, .git/, and .min.js/.map files) is ' +
       'skipped unless includeBuilt says otherwise. A hit inside a bundle is one minified ' +
-      'line thousands of characters wide, which is why it is not the default.',
+      'line thousands of characters wide, which is why it is not the default. A line over ' +
+      '300 characters comes back as a window around the match, marked `…[+N chars]` on ' +
+      'each cut side — readFile with a line range for the whole line.',
     params: {
       type: 'object',
       properties: {

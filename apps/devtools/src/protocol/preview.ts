@@ -11,7 +11,9 @@ import {
   previewStaleNote,
   queryPreviewState,
   readPreview,
+  readPreviewConsole,
   runPreviewScript,
+  samplePreviewState,
 } from '../services';
 
 export const previewCommands = {
@@ -224,7 +226,8 @@ export const previewCommands = {
       'unlocated: state that disagrees with the rendered text is a reactivity bug, not a ' +
       'state bug, and one call already makes that comparison. Snapshot values are truncated ' +
       'and any key dropped for budget is named in `stateOmitted`; pass `stateKey` to read one ' +
-      'key back whole.',
+      'key back whole, `keys` with it to read only some of its fields, and `sampleEveryMs` ' +
+      '+ `durationMs` to watch it over time instead of reading it once.',
     params: {
       type: 'object',
       properties: {
@@ -239,7 +242,28 @@ export const previewCommands = {
           items: { type: 'string' },
           description:
             'Snapshot mode: read only these state keys instead of every declared one. `[]` ' +
-            'reads none, which is how to ask for the render and console alone.',
+            'reads none, which is how to ask for the render and console alone. With ' +
+            '`stateKey`: return only these top-level fields of its value — a field it lacks ' +
+            'is an error naming the ones it has.',
+        },
+        sampleEveryMs: {
+          type: 'number',
+          description:
+            'With `stateKey` and `durationMs`: read the key every this many ms (min 16) and ' +
+            'return { samples, elapsedMs, numeric: { "path.to.leaf": { min, max, last, n } }, ' +
+            'last } — for values that only mean something while the app runs (meters, a ' +
+            'playhead). Each read is a round trip, so the interval is a floor. Start the ' +
+            'activity first (previewCommand), then sample.',
+        },
+        durationMs: {
+          type: 'number',
+          description:
+            "How long to sample (max 120s, at most 300 samples). Past ~25s raise this command's " +
+            'own timeoutMs above it.',
+        },
+        series: {
+          type: 'boolean',
+          description: 'Sampling: also return every sample as `series: [{ t, value }]`.',
         },
         selector: {
           type: 'string',
@@ -250,41 +274,128 @@ export const previewCommands = {
       },
     },
     run: async (p) => {
-      if (p.stateKey !== undefined) {
-        return await queryPreviewState(String(p.stateKey));
-      }
       const keys = Array.isArray(p.keys) ? p.keys.map((k) => String(k)) : undefined;
+      const sampling = p.sampleEveryMs !== undefined || p.durationMs !== undefined;
+      if (p.stateKey !== undefined) {
+        const stateKey = String(p.stateKey);
+        if (!sampling) return await queryPreviewState(stateKey, keys);
+        return await samplePreviewState(stateKey, {
+          everyMs: Number(p.sampleEveryMs),
+          durationMs: Number(p.durationMs),
+          ...(keys ? { fields: keys } : {}),
+          ...(p.series === true ? { series: true } : {}),
+        });
+      }
+      if (sampling) {
+        throw new AppCommandError('sampleEveryMs/durationMs sample one key: pass `stateKey` too.');
+      }
       const selector = typeof p.selector === 'string' ? p.selector : undefined;
       return await inspectPreview({ ...(keys ? { keys } : {}), ...(selector ? { selector } : {}) });
     },
   }),
+  previewConsole: defineAppCommand({
+    description:
+      'The consoleLogs read, filtered: { connected, logs, filtered? } — `filtered` counting ' +
+      'the entries the filters dropped. Audit entries (previewEval inputs and results, ' +
+      'fault-rule changes) stay collapsed to one line unless `full`.',
+    params: {
+      type: 'object',
+      properties: {
+        levels: {
+          type: 'array',
+          items: { type: 'string', enum: ['log', 'info', 'warn', 'error'] },
+          description: 'Keep only these levels. Uncaught errors are logged as error.',
+        },
+        source: {
+          type: 'string',
+          enum: ['app', 'devtools', 'all'],
+          description: "app: the preview's own output. devtools: the audit entries. Default all.",
+        },
+        limit: { type: 'number', description: 'Newest N entries (default and max 200).' },
+        full: { type: 'boolean', description: 'Return audit entries whole.' },
+      },
+    },
+    run: async (p) =>
+      await readPreviewConsole({
+        ...(Array.isArray(p.levels) ? { levels: p.levels.map((l) => String(l)) } : {}),
+        ...(p.source === 'app' || p.source === 'devtools' || p.source === 'all'
+          ? { source: p.source }
+          : {}),
+        ...(typeof p.limit === 'number' ? { limit: p.limit } : {}),
+        ...(p.full === true ? { full: true } : {}),
+      }),
+  }),
   previewCommand: defineAppCommand({
     description:
-      'Send an app protocol command to the preview window. A command that takes longer than ' +
-      "30s needs `timeoutMs` — and this command's own timeoutMs raised above it.",
+      'Send an app protocol command to the preview window — or, with `batch`, several in ' +
+      'order, stopping at the first that fails. A command that takes longer than 30s needs ' +
+      "`timeoutMs` — and this command's own timeoutMs raised above it (above the sum, for " +
+      'a batch).',
     params: {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Command name' },
         params: { type: 'object', description: 'Command parameters' },
+        batch: {
+          type: 'array',
+          description:
+            'Instead of `command`: run these in order and return { steps: [{ command, ' +
+            'result }], stopped? } — a failing step carries `error` in place of `result`, ' +
+            'nothing after it runs, and `stopped` says so. For setup sequences (mute these ' +
+            'tracks, set that mix) that would otherwise be one call each.',
+          items: {
+            type: 'object',
+            properties: {
+              command: { type: 'string' },
+              params: { type: 'object' },
+            },
+            required: ['command'],
+          },
+        },
         timeoutMs: {
           type: 'number',
-          description: 'How long to wait for the preview app (default 30s, max 180s).',
+          description: 'How long to wait for the preview app, per command (default 30s, max 180s).',
         },
       },
-      required: ['command'],
     },
     replay: 'never',
     run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
-      try {
-        return await invoke(`yaar://windows/${wid}`, {
+      const send = (command: string, params: unknown) =>
+        invoke(`yaar://windows/${wid}`, {
           action: 'app_command',
-          command: String(p.command),
-          params: (p.params as Record<string, unknown>) ?? {},
+          command,
+          params: (params as Record<string, unknown>) ?? {},
           ...(typeof p.timeoutMs === 'number' ? { timeoutMs: p.timeoutMs } : {}),
         });
+      if (p.batch !== undefined) {
+        if (p.command !== undefined) {
+          throw new AppCommandError('Pass `command` or `batch`, not both.');
+        }
+        if (!Array.isArray(p.batch) || p.batch.length === 0) {
+          throw new AppCommandError('batch must be a non-empty array of { command, params }.');
+        }
+        const steps: { command: string; result?: unknown; error?: string }[] = [];
+        for (const step of p.batch as { command?: unknown; params?: unknown }[]) {
+          const command = String(step?.command ?? '');
+          try {
+            steps.push({ command, result: await send(command, step?.params) });
+          } catch (err) {
+            steps.push({ command, error: errMsg(err) });
+            return {
+              steps,
+              stopped: `Step ${steps.length} of ${p.batch.length} failed; the rest did not run.`,
+            };
+          }
+        }
+        return { steps };
+      }
+      if (typeof p.command !== 'string' || !p.command) {
+        throw new AppCommandError('command is required (or pass `batch`).');
+      }
+      try {
+        return await send(p.command, p.params);
       } catch (err) {
         throw new AppCommandError(`Preview command failed: ${errMsg(err)}`);
       }

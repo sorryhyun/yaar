@@ -14,3 +14,4 @@ export * from './identifier';
 export * from './references';
 export * from './source-scan';
 export * from './model-summary';
+export * from './preview-shape';

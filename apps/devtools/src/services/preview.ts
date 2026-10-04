@@ -1,5 +1,5 @@
 export {};
-import { errMsg, invoke, list, read, AppCommandError } from '@bundled/yaar';
+import { errMsg, invoke, list, read, wait, AppCommandError } from '@bundled/yaar';
 import {
   activeProject,
   buildSerial,
@@ -12,6 +12,7 @@ import {
   type ConsoleEntry,
 } from '../core';
 import { previewWindowIdFor } from '../lib/paths';
+import { pickFields, summarizeSamples, type NumericRange } from '../lib/preview-shape';
 import { addConsoleEntry } from './console';
 import { getRuntimeManifest } from './manifest';
 import { reclaimOrphanedPreviewStorage } from './projects';
@@ -740,9 +741,13 @@ export async function inspectPreview(opts: InspectOptions = {}): Promise<Inspect
  * key is how you drill into the value the snapshot capped at 2000 chars, and a
  * drill-down that truncates too has nowhere left to go.
  */
-export async function queryPreviewState(stateKey: string): Promise<unknown> {
+export async function queryPreviewState(stateKey: string, fields?: string[]): Promise<unknown> {
   const wid = previewWindowId();
   if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  return narrowState(stateKey, await readStateKey(wid, stateKey), fields);
+}
+
+async function readStateKey(wid: string, stateKey: string): Promise<unknown> {
   try {
     return await invoke(`yaar://windows/${wid}`, { action: 'app_query', stateKey });
   } catch (err) {
@@ -750,4 +755,91 @@ export async function queryPreviewState(stateKey: string): Promise<unknown> {
     // through rather than replaced with a devtools-flavored guess.
     throw new AppCommandError(`Preview query failed: ${errMsg(err)}`);
   }
+}
+
+/**
+ * The named top-level fields of one key's value. Picked here, after the read, because
+ * a state getter takes no arguments: the app still builds the whole value, but only the
+ * fields asked for come back. A field the value lacks is an error naming the ones it has,
+ * since `{}` would read as "every field you asked for is absent".
+ */
+function narrowState(stateKey: string, value: unknown, fields?: string[]): unknown {
+  if (!fields) return value;
+  const picked = pickFields(value, fields);
+  if (!picked) {
+    throw new AppCommandError(
+      `State key "${stateKey}" is ${Array.isArray(value) ? 'an array' : value === null ? 'null' : typeof value}, ` +
+        'so it has no fields to pick. Drop `keys` to read it whole.',
+    );
+  }
+  if (picked.missing.length > 0) {
+    throw new AppCommandError(
+      `State key "${stateKey}" has no field ${picked.missing.map((k) => JSON.stringify(k)).join(', ')}. ` +
+        `Its fields: ${picked.available.join(', ') || '(none)'}.`,
+    );
+  }
+  return picked.value;
+}
+
+/** Bounds on a sampled read: past these it is a recording, not a query. */
+const SAMPLE_MIN_INTERVAL_MS = 16;
+const SAMPLE_MAX_DURATION_MS = 120_000;
+const SAMPLE_MAX_COUNT = 300;
+
+export interface SampledState {
+  stateKey: string;
+  samples: number;
+  /** Wall time the sampling actually took, which a slow getter stretches past `durationMs`. */
+  elapsedMs: number;
+  /** Min, max and last of every numeric leaf, by dotted path. */
+  numeric: Record<string, NumericRange>;
+  pathsCapped?: boolean;
+  /** The final sample, whole — what the value settled on. */
+  last: unknown;
+  /** Every sample with its offset from the first, when asked for. */
+  series?: { t: number; value: unknown }[];
+}
+
+/**
+ * Read one state key repeatedly over a window, and say what its numbers did.
+ *
+ * For values that only mean something while the app is running — meters during playback,
+ * a playhead, a physics body — where one read is a coin toss and a hand-rolled loop of
+ * `previewQuery` calls with `previewEval` sleeps between them costs a round trip per
+ * sample *through the agent*. The interval is a floor, not a clock: each read is a round
+ * trip to the preview, so a sample lands at the later of the interval and the read's return.
+ */
+export async function samplePreviewState(
+  stateKey: string,
+  opts: { everyMs: number; durationMs: number; fields?: string[]; series?: boolean },
+): Promise<SampledState> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!(opts.everyMs > 0) || !(opts.durationMs > 0)) {
+    throw new AppCommandError('sampleEveryMs and durationMs must both be positive.');
+  }
+  const everyMs = Math.max(SAMPLE_MIN_INTERVAL_MS, opts.everyMs);
+  const durationMs = Math.min(SAMPLE_MAX_DURATION_MS, opts.durationMs);
+  const t0 = Date.now();
+  const series: { t: number; value: unknown }[] = [];
+  while (series.length < SAMPLE_MAX_COUNT) {
+    const at = Date.now();
+    series.push({
+      t: at - t0,
+      value: narrowState(stateKey, await readStateKey(wid, stateKey), opts.fields),
+    });
+    const next = at + everyMs;
+    if (next - t0 > durationMs) break;
+    const pause = next - Date.now();
+    if (pause > 0) await wait(pause);
+  }
+  const values = series.map((s) => s.value);
+  return {
+    stateKey,
+    samples: series.length,
+    elapsedMs: Date.now() - t0,
+    ...summarizeSamples(values),
+    last: values[values.length - 1],
+    ...(opts.series ? { series } : {}),
+  };
 }

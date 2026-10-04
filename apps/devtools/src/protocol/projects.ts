@@ -75,7 +75,10 @@ export const projectCommands = {
       'the cloned app.json — the id deploy expects), `files` (the cloned paths), ' +
       '`agentsMd` with the cloned root AGENTS.md contents (null when the app has none), and ' +
       '`previousProject` — the project the clone replaced in front, which deleteProject on ' +
-      'the clone reopens.',
+      'the clone reopens. When clones of the same app were already here, `existingClones` ' +
+      'lists them oldest first as { id, name, lastModified, version?, stale } — `stale` ' +
+      'meaning their version is not the installed one. Check projectList before cloning: ' +
+      'a non-stale clone can be reopened with openProject instead of cloning again.',
     params: {
       type: 'object',
       properties: {
@@ -85,13 +88,20 @@ export const projectCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      const { id: projectId, appId, agentsMd, previous } = await cloneApp(String(p.appId));
+      const {
+        id: projectId,
+        appId,
+        agentsMd,
+        previous,
+        existingClones,
+      } = await cloneApp(String(p.appId));
       const proj = activeProject();
       return {
         projectId,
         appId,
         project: proj ? { id: proj.id, name: proj.name } : undefined,
         ...(previous ? { previousProject: previous } : {}),
+        ...(existingClones.length > 0 ? { existingClones } : {}),
         files: files().map((f) => f.path),
         agentsMd,
       };

@@ -44,6 +44,10 @@ import {
   cssClassReport,
   filesNamedInTask,
   splitBySize,
+  clipMatchLine,
+  pickFields,
+  summarizeSamples,
+  collapseAuditText,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -887,6 +891,65 @@ const formatWithin = suite('format-within', {
   },
 });
 
+const previewShape = suite('preview-shape', {
+  'a short grep line comes back whole'() {
+    eq(clipMatchLine('const x = 1;', 'x'), 'const x = 1;');
+  },
+
+  'a long grep line is cut around the match, both cuts marked'() {
+    const line = 'a'.repeat(5000) + 'NEEDLE' + 'b'.repeat(5000);
+    const out = clipMatchLine(line, 'NEEDLE', 100);
+    ok(out.includes('NEEDLE'), 'match kept');
+    ok(out.startsWith('…[+'), 'head cut marked');
+    ok(out.endsWith(' chars]'), 'tail cut marked');
+    ok(out.length < 140, `clipped to ~100 chars, got ${out.length}`);
+  },
+
+  'a match at the head is not given a head marker'() {
+    const out = clipMatchLine('NEEDLE' + 'x'.repeat(1000), 'NEEDLE', 50);
+    ok(out.startsWith('NEEDLE'), out.slice(0, 20));
+  },
+
+  'a pattern JS cannot compile still clips, from the head'() {
+    const out = clipMatchLine('y'.repeat(1000), '(?<', 50);
+    ok(out.startsWith('y'.repeat(50)), 'head kept');
+    ok(out.length < 80, 'clipped');
+  },
+
+  'pickFields keeps the named fields and reports missing ones'() {
+    const r = pickFields({ tracks: [1], levels: null, effects: {} }, ['levels', 'nope']);
+    eq(r?.value, { levels: null });
+    eq(r?.missing, ['nope']);
+  },
+
+  'pickFields refuses values with no fields'() {
+    eq(pickFields([1, 2], ['0']), null);
+    eq(pickFields(null, ['a']), null);
+    eq(pickFields(3, ['a']), null);
+  },
+
+  'summarizeSamples ranges every numeric leaf by path'() {
+    const r = summarizeSamples([
+      { levels: { master: 0.2 }, tracks: [{ gain: 1 }], name: 'a' },
+      { levels: { master: 0.9 }, tracks: [{ gain: 0.5 }], name: 'b' },
+      { levels: null, tracks: [{ gain: 0.7 }] },
+    ]);
+    eq(r.numeric['levels.master'], { min: 0.2, max: 0.9, last: 0.9, n: 2 });
+    eq(r.numeric['tracks.0.gain'], { min: 0.5, max: 1, last: 0.7, n: 3 });
+    eq(r.numeric['name'], undefined);
+  },
+
+  'summarizeSamples handles a bare number'() {
+    eq(summarizeSamples([3, 1, 2]).numeric['(value)'], { min: 1, max: 3, last: 2, n: 3 });
+  },
+
+  'collapseAuditText flattens and cuts'() {
+    eq(collapseAuditText('a\n  b'), 'a b');
+    const long = collapseAuditText('z'.repeat(500), 10);
+    eq(long, 'zzzzzzzzzz… (500 chars)');
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -901,4 +964,5 @@ export const libSuites: Suite[] = [
   references,
   sourceScan,
   formatWithin,
+  previewShape,
 ];

@@ -426,6 +426,53 @@ export interface CloneAppResult {
   agentsMd: string | null;
   /** The project that was in front before the clone replaced it, if any. */
   previous: { id: string; name: string } | null;
+  /** Clones of the same app that were already here, oldest first. */
+  existingClones: ExistingClone[];
+}
+
+export interface ExistingClone {
+  id: string;
+  name: string;
+  lastModified: number;
+  /** The clone's own app.json version, when it has one. */
+  version?: string;
+  /** True when that version is not the installed one: the clone predates the live source. */
+  stale: boolean;
+}
+
+/**
+ * Clones of `appId` already in the project list, judged against the installed version.
+ *
+ * `cloneApp` never reuses one — a fresh copy of the live source is what was asked for —
+ * but it reports them, because nothing else did: a devtools that lost track of its open
+ * project cloned the same app three times in one session, and an agent may only delete
+ * the clones it made itself, so every earlier one stayed. Named here, the caller can reopen
+ * one instead or tell the user they are piling up.
+ */
+async function existingClonesOf(
+  appId: string,
+  installedVersion: string | undefined,
+  exclude: string,
+): Promise<ExistingClone[]> {
+  const clones = projects().filter((p) => p.origin === `clone:${appId}` && p.id !== exclude);
+  const out: ExistingClone[] = [];
+  for (const p of clones) {
+    const raw = await appStorage
+      .readJsonOr<unknown>(projectPath(p.id, 'app.json'), undefined)
+      .catch(() => undefined);
+    const meta = safeParseOr(ProjectAppJsonSchema, raw, EMPTY_APP_JSON, {
+      label: `projects/${p.id}/app.json`,
+    });
+    const version = typeof meta.version === 'string' ? meta.version : undefined;
+    out.push({
+      id: p.id,
+      name: p.name,
+      lastModified: p.lastModified,
+      ...(version ? { version } : {}),
+      stale: !installedVersion || version !== installedVersion,
+    });
+  }
+  return out.sort((a, b) => Number(a.id) - Number(b.id));
 }
 
 export async function cloneApp(appId: string): Promise<CloneAppResult> {
@@ -466,6 +513,11 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
   await recordOrigin(id, `clone:${appId}`);
   if (previous) await updateReturnMap((m) => (m[id] = previous.id));
   await loadProjects();
+  const existingClones = await existingClonesOf(
+    appId,
+    typeof meta.version === 'string' ? meta.version : undefined,
+    id,
+  );
   await openProject(id);
   setStatusText(`Cloned "${name}"`);
   return {
@@ -473,6 +525,7 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
     appId: typeof meta.appId === 'string' ? meta.appId : appId,
     agentsMd,
     previous,
+    existingClones,
   };
 }
 

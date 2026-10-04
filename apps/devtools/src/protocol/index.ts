@@ -1,5 +1,5 @@
 export {};
-import { describe, invoke, errMsg } from '@bundled/yaar';
+import { describe, errMsg } from '@bundled/yaar';
 import {
   activeProject,
   projects,
@@ -10,11 +10,9 @@ import {
   typecheckState,
   compileErrors,
   previewUrl,
-  previewWindowId,
   previewIsStale,
   files,
   bundledLibs,
-  consoleLogs,
 } from '../core';
 import {
   workerStatus,
@@ -26,7 +24,7 @@ import {
   workerCap,
   summarizeProposal,
 } from '../services/worker';
-import { previewWindowIsOpen } from '../services';
+import { previewWindowIsOpen, readPreviewConsole } from '../services';
 import { resolveCompileStatus } from '../lib';
 
 export { projectCommands } from './projects';
@@ -256,54 +254,11 @@ export const devtoolsState = {
   },
   consoleLogs: {
     description:
-      'Console output from the preview app and Dev Tools evaluation audit entries. ' +
-      '`connected: false` means the preview buffer could not be read — an empty `logs` ' +
-      'then says nothing about whether the app logged anything.',
-    get: async () => {
-      // Pull the live console buffer straight from the preview window over the app
-      // protocol; its console-capture buffer is the source of truth for preview output.
-      // The local signal is updated by the poll in services/console.ts and also retains
-      // Dev Tools' evaluation audit entries.
-      //
-      // Each failure ("no preview open", "preview unreachable") gets its own reason,
-      // distinct from an app that logged nothing.
-      const wid = previewWindowId();
-      if (!wid) {
-        return {
-          connected: false,
-          reason: 'No preview window is open. Run the preview command first.',
-          logs: [],
-        };
-      }
-      try {
-        const entries = await invoke(`yaar://windows/${wid}`, {
-          action: 'app_query',
-          stateKey: '__console',
-        });
-        if (!Array.isArray(entries)) {
-          return {
-            connected: false,
-            reason: 'Preview window did not return a console buffer.',
-            windowId: wid,
-            logs: [...consoleLogs()],
-          };
-        }
-        // Evaluations run from Dev Tools rather than inside the preview, so the
-        // preview's own console buffer does not contain their input/result audit.
-        // Include the local audit entries in both the panel and this state response.
-        const evaluations = consoleLogs().filter((entry) => entry.source === 'evaluation');
-        const logs = [...entries, ...evaluations]
-          .sort((a, b) => a.timestamp - b.timestamp)
-          .slice(-200);
-        return { connected: true, windowId: wid, logs };
-      } catch (err) {
-        return {
-          connected: false,
-          reason: `Preview console unreachable: ${errMsg(err)}`,
-          windowId: wid,
-          logs: [...consoleLogs()],
-        };
-      }
-    },
+      'Console output from the preview app, with Dev Tools audit entries (previewEval ' +
+      'inputs and results, fault-rule changes; `source: "evaluation"`) collapsed to one ' +
+      'line each. `connected: false` means the preview buffer could not be read — an empty ' +
+      '`logs` then says nothing about whether the app logged anything. The previewConsole ' +
+      'command filters by level and source.',
+    get: async () => await readPreviewConsole(),
   },
 };
