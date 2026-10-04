@@ -10,7 +10,7 @@ import {
   grep,
   findReferences,
   readFileContent,
-  readImageFile,
+  readMediaFile,
   readModelSummary,
   listProjectFiles,
   resolveProjectPath,
@@ -146,7 +146,7 @@ export const fileCommands = {
             // mojibake, and handing back base64 would be a wall of characters that
             // says nothing — an image block is the only form that can be read.
             if (isImagePath(fp)) {
-              const image = await readImageFile(fp);
+              const image = await readMediaFile(fp);
               if (image) return { blocks: imageBlocks(fp, [image]) };
               // Unreadable as bytes — fall through to the text path, which reports it.
             }

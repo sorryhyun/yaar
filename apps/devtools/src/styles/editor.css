@@ -123,8 +123,8 @@
   will-change: transform;
 }
 
-/* Image files render as a picture instead of the textarea — see openFile(). */
-.editor-image {
+/* Media and other binary files render instead of the textarea — see openFile(). */
+.editor-media {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -132,6 +132,19 @@
   align-items: center;
   justify-content: center;
   padding: var(--yaar-sp-4);
+}
+
+.editor-media audio {
+  width: min(100%, 480px);
+}
+
+.editor-media video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Checkerboard behind a picture, so transparency reads as transparency. */
+.editor-image {
   background:
     linear-gradient(45deg, var(--yaar-bg-surface) 25%, transparent 25%) 0 0 / 16px 16px,
     linear-gradient(-45deg, var(--yaar-bg-surface) 25%, transparent 25%) 0 8px / 16px 16px,

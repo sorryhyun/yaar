@@ -105,3 +105,6 @@ export interface Workspace {
   tabs: string[];
   activeId: string | null;
 }
+
+/** A file the editor plays or pictures instead of showing as text. */
+export type MediaKind = 'image' | 'audio' | 'video';

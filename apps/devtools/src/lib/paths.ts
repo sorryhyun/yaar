@@ -1,4 +1,5 @@
 export {};
+import type { MediaKind } from '../core/types';
 
 // Pure path helpers and file-kind predicates. No signals, no I/O, no
 // @bundled/yaar — unit-testable as-is.
@@ -84,7 +85,7 @@ export function isGeneratedPath(path: string): boolean {
 // A fast path, not the authority: `copyFile` sniffs the bytes of anything not listed,
 // because a missing extension here once meant a UTF-8 round-trip that corrupted it.
 const BINARY_EXT =
-  /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|flac|ogg|opus|m4a|aac|webm|glb|bin|dat)$/i;
+  /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|flac|ogg|opus|m4a|aac|webm|mp4|glb|bin|dat)$/i;
 
 // Raster images the editor renders as a picture. SVG is deliberately absent: it is
 // text the user may want to edit, and it highlights fine as markup.
@@ -93,6 +94,15 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i;
 /** Whether this path is a raster image — rendered, never decoded as text. */
 export function isImagePath(path: string): boolean {
   return IMAGE_EXT.test(path);
+}
+
+/** How the editor presents this file, or null when it has no player — text, or other binary. */
+export function mediaKind(path: string): MediaKind | null {
+  if (IMAGE_EXT.test(path)) return 'image';
+  if (/\.(mp3|wav|flac|ogg|opus|m4a|aac)$/i.test(path)) return 'audio';
+  // A <video> element plays an audio-only .webm too, so the container decides, not the track.
+  if (/\.(webm|mp4)$/i.test(path)) return 'video';
+  return null;
 }
 
 /** Whether this path is a glTF model — read as the server's structural summary. */

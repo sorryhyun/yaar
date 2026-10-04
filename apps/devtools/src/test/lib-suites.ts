@@ -6,6 +6,7 @@ import {
   relativizeProjectPaths,
   isImagePath,
   isBinaryPath,
+  mediaKind,
   isGeneratedPath,
   normalizeProjectPath,
   nearbyPaths,
@@ -99,6 +100,18 @@ const paths = suite('paths', {
     eq(isBinaryPath('a/b.svg'), false);
     for (const ext of ['flac', 'ogg', 'opus', 'm4a', 'aac', 'webm', 'dat'])
       eq(isBinaryPath(`a/b.${ext}`), true, `.${ext} is audio/data, not text`);
+  },
+
+  'media files open in a player, other binaries and text in none'() {
+    eq(mediaKind('a/b.png'), 'image');
+    eq(mediaKind('a/b.WAV'), 'audio');
+    eq(mediaKind('a/b.m4a'), 'audio');
+    eq(mediaKind('a/b.webm'), 'video');
+    eq(mediaKind('a/b.svg'), null);
+    eq(mediaKind('a/b.woff2'), null);
+    // Every playable file is binary too, so none of them ever reaches the textarea.
+    for (const ext of ['png', 'mp3', 'wav', 'flac', 'ogg', 'opus', 'm4a', 'aac', 'webm', 'mp4'])
+      eq(isBinaryPath(`a/b.${ext}`), true, `.${ext}`);
   },
 
   'generated output is recognised wherever it sits in the tree'() {

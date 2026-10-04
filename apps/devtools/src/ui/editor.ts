@@ -1,10 +1,10 @@
 export {};
-import { createSignal, createEffect, on, onCleanup, Show } from '@bundled/solid-js';
+import { createSignal, createEffect, on, onCleanup, Show, Switch, Match } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
 import { createPersistedSignal, errMsg, escapeHtml } from '@bundled/yaar';
-import { openFilePath, openFileContent, openFileImage, setStatusText } from '../core';
+import { openFilePath, openFileContent, openFilePreview, setStatusText } from '../core';
 import { writeFile } from '../services';
 import { pendingReveal, setPendingReveal } from './panel-state';
 import {
@@ -164,6 +164,12 @@ function syncScroll(e: Event) {
   setEditorScrollTop(ta.scrollTop);
 }
 
+/** The open file's data URL, when the preview is one that has bytes to show. */
+function mediaSrc(): string {
+  const preview = openFilePreview();
+  return preview && 'src' in preview ? preview.src : '';
+}
+
 export function Editor() {
   // Teardown: write out any pending edit, then guarantee no timer outlives the
   // component. flush() already clears the pending call; cancel() is defensive.
@@ -191,7 +197,7 @@ export function Editor() {
           <${Show} when=${isDirty}>
             <span class="y-dot y-dot-accent"></span>
           <//>
-          <${Show} when=${() => !openFileImage()}>
+          <${Show} when=${() => !openFilePreview()}>
             <button
               class="editor-toggle editor-wrap-toggle y-btn y-btn-ghost y-btn-sm"
               type="button"
@@ -216,10 +222,27 @@ export function Editor() {
             </button>
           <//>
         </div>
-        <${Show} when=${() => openFileImage()} fallback=${TextEditor}>
-          <div class="editor-image">
-            <img src=${() => openFileImage() ?? ''} alt=${() => openFilePath() ?? ''} />
-          </div>
+        <${Show} when=${openFilePreview} fallback=${TextEditor}>
+          <${Switch}>
+            <${Match} when=${() => openFilePreview()?.kind === 'image'}>
+              <div class="editor-media editor-image">
+                <img src=${mediaSrc} alt=${() => openFilePath() ?? ''} />
+              </div>
+            <//>
+            <${Match} when=${() => openFilePreview()?.kind === 'audio'}>
+              <div class="editor-media">
+                <audio controls preload="metadata" src=${mediaSrc}></audio>
+              </div>
+            <//>
+            <${Match} when=${() => openFilePreview()?.kind === 'video'}>
+              <div class="editor-media">
+                <video controls preload="metadata" src=${mediaSrc}></video>
+              </div>
+            <//>
+            <${Match} when=${() => openFilePreview()?.kind === 'binary'}>
+              <div class="editor-media y-text-sm y-text-muted">Binary file — not shown as text</div>
+            <//>
+          <//>
         <//>
       <//>
     </div>

@@ -4,7 +4,7 @@ import {
   activeProject,
   openFilePath,
   setOpenFileContent,
-  setOpenFileImage,
+  setOpenFilePreview,
   setOpenFilePath,
   onRemoteFileChanges,
   fileChanges,
@@ -121,7 +121,7 @@ onRemoteFileChanges((next, prev) => {
       batch(() => {
         setOpenFilePath(null);
         setOpenFileContent(null);
-        setOpenFileImage(null);
+        setOpenFilePreview(null);
       });
     } else {
       setOpenFileContent(change.after);

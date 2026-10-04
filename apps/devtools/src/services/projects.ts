@@ -11,7 +11,7 @@ import {
   setFiles,
   setOpenFilePath,
   setOpenFileContent,
-  setOpenFileImage,
+  setOpenFilePreview,
   setDiagnostics,
   setBundleStatus,
   setTypecheckState,
@@ -537,7 +537,7 @@ function clearActiveProjectState({ record = true }: { record?: boolean } = {}): 
     setFiles([]);
     setOpenFilePath(null);
     setOpenFileContent(null);
-    setOpenFileImage(null);
+    setOpenFilePreview(null);
     if (record) {
       setSharedOpenFile(null);
       setDiagnostics([]);

@@ -10,7 +10,7 @@ import {
   openFilePath,
   setOpenFilePath,
   setOpenFileContent,
-  setOpenFileImage,
+  setOpenFilePreview,
   setStatusText,
   setTypecheckState,
   setSharedOpenFile,
@@ -20,6 +20,7 @@ import {
   projectPath,
   isImagePath,
   isBinaryPath,
+  mediaKind,
   isGeneratedPath,
   relativizeProjectPaths,
   normalizeProjectPath,
@@ -283,7 +284,9 @@ function touchProjectModified(projectId: string, entries: FileEntry[]): void {
   if (newest !== active.lastModified) setActiveProject({ ...active, lastModified: newest });
 }
 
-const IMAGE_MIME: Record<string, string> = {
+// The fallback when storage answers octet-stream — it once did for every audio type
+// but .mp3, and a data URL typed that way is one no <audio> element will play.
+const MEDIA_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -292,14 +295,23 @@ const IMAGE_MIME: Record<string, string> = {
   avif: 'image/avif',
   bmp: 'image/bmp',
   ico: 'image/x-icon',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+  ogg: 'audio/ogg',
+  opus: 'audio/ogg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  webm: 'video/webm',
+  mp4: 'video/mp4',
 };
 
 /**
- * An image file's raw base64 plus its MIME type, or null if it could not be read as
+ * A media file's raw base64 plus its MIME type, or null if it could not be read as
  * bytes. Shared by the editor (which builds a data URL) and the `readFile` command
  * (which returns an image content block), so both agree on how an image is decoded.
  */
-export async function readImageFile(
+export async function readMediaFile(
   path: string,
 ): Promise<{ data: string; mimeType: string } | null> {
   const proj = activeProject();
@@ -311,7 +323,7 @@ export async function readImageFile(
     const mime =
       mimeType && mimeType !== 'application/octet-stream'
         ? mimeType
-        : (IMAGE_MIME[ext] ?? 'application/octet-stream');
+        : (MEDIA_MIME[ext] ?? 'application/octet-stream');
     return { data, mimeType: mime };
   } catch {
     return null;
@@ -329,31 +341,40 @@ export async function openFile(path: string, { share = true } = {}): Promise<voi
   const proj = activeProject();
   if (!proj) return;
   if (share) setSharedOpenFile({ projectId: proj.id, path });
-  if (isImagePath(path)) {
-    // Reading an image as text yields a wall of base64 (or mojibake). Read the bytes
-    // and hand the editor a data URL instead.
-    const image = await readImageFile(path);
-    if (image) {
+  const kind = mediaKind(path);
+  if (kind) {
+    // Reading media as text yields a wall of base64 (or mojibake). Read the bytes and
+    // hand the editor a data URL to picture or play instead.
+    const media = await readMediaFile(path);
+    if (media) {
       batch(() => {
         setOpenFilePath(path);
         setOpenFileContent(null);
-        setOpenFileImage(`data:${image.mimeType};base64,${image.data}`);
+        setOpenFilePreview({ kind, src: `data:${media.mimeType};base64,${media.data}` });
       });
       return;
     }
     // Unreadable as bytes — fall through to the text path, which reports the failure.
+  } else if (isBinaryPath(path)) {
+    // Nothing to show, and the textarea would save its decode back over the bytes.
+    batch(() => {
+      setOpenFilePath(path);
+      setOpenFileContent(null);
+      setOpenFilePreview({ kind: 'binary' });
+    });
+    return;
   }
   try {
     const content = await appStorage.read(projectPath(proj.id, path));
     batch(() => {
       setOpenFilePath(path);
-      setOpenFileImage(null);
+      setOpenFilePreview(null);
       setOpenFileContent(typeof content === 'string' ? content : JSON.stringify(content));
     });
   } catch {
     batch(() => {
       setOpenFilePath(path);
-      setOpenFileImage(null);
+      setOpenFilePreview(null);
       setOpenFileContent(`// Could not read ${path}`);
     });
   }
@@ -607,7 +628,7 @@ export async function deleteFile(path: string): Promise<void> {
     batch(() => {
       setOpenFilePath(null);
       setOpenFileContent(null);
-      setOpenFileImage(null);
+      setOpenFilePreview(null);
       setSharedOpenFile(null);
     });
   }

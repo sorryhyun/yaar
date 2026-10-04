@@ -10,6 +10,7 @@ import type {
   FileChange,
   SharedOpenFile,
   Workspace,
+  MediaKind,
 } from './types';
 
 // Shared reactive state for the IDE.
@@ -25,10 +26,13 @@ export const [files, setFiles] = createSignal<FileEntry[]>([]);
 export const [openFilePath, setOpenFilePath] = createSignal<string | null>(null);
 export const [openFileContent, setOpenFileContent] = createSignal<string | null>(null);
 /**
- * Data URL for the open file when it is an image. Non-null means the editor shows
- * a picture instead of the textarea — an image's bytes are not editable source.
+ * What the editor shows in place of the textarea when the open file is not text: the
+ * file itself for media it can play or picture (a data URL), or a notice for any other
+ * binary. Non-null means no textarea — decoded bytes in an editor that saves on input
+ * are one keystroke from overwriting the file with mojibake.
  */
-export const [openFileImage, setOpenFileImage] = createSignal<string | null>(null);
+export type FilePreview = { kind: MediaKind; src: string } | { kind: 'binary' };
+export const [openFilePreview, setOpenFilePreview] = createSignal<FilePreview | null>(null);
 
 // The `createSharedSignal`s in this file are held by the server per window and
 // followed by every copy of it (see `fileChanges` for why copies exist). What a

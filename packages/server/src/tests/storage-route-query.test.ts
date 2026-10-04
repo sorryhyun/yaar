@@ -94,3 +94,19 @@ describe('POST /api/storage/{path}?append=true', () => {
     expect(await exists(`${SCRATCH}/rec/clip.webm`)).toBe(true);
   });
 });
+
+// #158: a stored .wav went out as application/octet-stream, and an iframe window
+// pointed at it showed nothing — a top-level load only plays what it is told is media.
+describe('GET /api/storage/{path} media Content-Type', () => {
+  it.each([
+    ['clip.wav', 'audio/wav'],
+    ['clip.ogg', 'audio/ogg'],
+    ['clip.flac', 'audio/flac'],
+    ['clip.m4a', 'audio/mp4'],
+    ['clip.webm', 'video/webm'],
+  ])('serves %s as %s', async (name, type) => {
+    await call('POST', `/api/storage/${SCRATCH}/media/${name}`, 'bytes');
+    const res = await call('GET', `/api/storage/${SCRATCH}/media/${name}`);
+    expect(res?.headers.get('content-type')).toBe(type);
+  });
+});
