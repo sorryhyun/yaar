@@ -23,7 +23,11 @@ A path with neither prefix is still yours: `storage:read` on `file.json` reads t
 directly as `command(command: "storage:read", params: { path: "{that path}" })` — or as
 `query(stateKey: "storage/{that path}")`.
 
-You cannot reach another app's storage with either spelling, ever.
+Neither `app/` nor `shared/` — nor a bare relative path — ever names another app's tree. Another
+app's storage is named only by URI: `yaar://apps/{thatAppId}/storage/{path}`. It answers
+only when your app.json `permissions` cover it, which only a bundled app can hold; a refusal
+names the permission that is missing. When you are fixing another app and need its data, try
+that URI before rebuilding the data by hand.
 
 Results also report what a path resolved to, as `yaar://apps/{yourAppId}/storage/{path}`. That
 URI reads back too — pass it anywhere a path goes and it names the same file, so you can copy

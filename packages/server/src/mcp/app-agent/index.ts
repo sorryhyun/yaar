@@ -489,7 +489,10 @@ export function registerAppAgentTools(server: McpServer): void {
         error:
           `app "${ownAppId}" is not permitted to control "${targetAppId}". ` +
           (allowed.length ? `Permitted apps: ${allowed.join(', ')}. ` : '') +
-          `Add "${targetAppId}" to "controls" in ${ownAppId}'s app.json.`,
+          `Add "${targetAppId}" to "controls" in ${ownAppId}'s app.json. ` +
+          `To read its stored data rather than drive its window, name ` +
+          `"yaar://apps/${targetAppId}/storage/{path}" with no appId — that is gated by ` +
+          `"permissions", not "controls".`,
       };
     }
     // Resolve a live window for the target on the caller's own monitor, opening one if
@@ -624,7 +627,11 @@ export function registerAppAgentTools(server: McpServer): void {
       // Intercept storage reads — a relative path is app-scoped, so only your own app.
       if (stateKey?.startsWith('storage/') || stateKey === 'storage') {
         if (args.appId)
-          return error("storage is app-scoped; you cannot read another app's storage.");
+          return error(
+            `"storage/…" is your own app's tree only, so it takes no appId. Another app's ` +
+              `storage is "yaar://apps/${args.appId}/storage/{path}" (drop appId); it answers ` +
+              `only when your app.json "permissions" cover it.`,
+          );
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
         // No permission check on this branch, and none to add: a relative path is confined
