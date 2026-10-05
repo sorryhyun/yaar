@@ -23,8 +23,6 @@ from a different side. Four findings were reached independently by two or three 
 
 | # | Bottleneck | Severity | Reviewers who found it |
 |---|---|---|---|
-| 1 | A follow-up message from the same tab waits for the whole turn | High | orchestration, session/state |
-| 2 | Every window content update and close burns a dead 500ms | High | session/state |
 | 3 | Only monitor agents are prewarmed; every other tier starts cold | High | orchestration, providers |
 | 4 | The system prompt is volatile, which kills stream reuse and prompt caching | High | prompts, providers |
 | 5 | Agent limits refuse instead of wait, and reclaim destroys agent memory | High | orchestration, providers |
@@ -36,12 +34,12 @@ from a different side. Four findings were reached independently by two or three 
 
 ### Recommended order
 
-**Phase 1: small, confirmed, compounding (days).** Items 1–4. Detach the WebSocket lane from the
-turn, drop the 500ms wait, prewarm every tier, freeze the system prompt per agent lifetime. These
-fix most of "YAAR feels slow and ignores me while it works" with no architectural change.
+**Phase 1: small, confirmed, compounding (days).** Items 3–4. Prewarm every tier, freeze the
+system prompt per agent lifetime. These fix much of "YAAR feels slow" with no architectural
+change.
 
 **Phase 2: the two structural refactors (weeks).** A per-agent mailbox replacing the ~8
-overlapping concurrency mechanisms (items 1, 6), and one resource scheduler with tiered budgets,
+overlapping concurrency mechanisms (item 6), and one resource scheduler with tiered budgets,
 LRU eviction and thread-id persistence replacing the limiter + monitor budget (item 5).
 
 **Phase 3: new layers (weeks).** Agent memory + durable tasks (7), a live turn surface and a
@@ -59,17 +57,6 @@ because every change above touches behavior that nothing currently tests.
 policies, `providers/warm-pool.ts`.
 
 ### Bottlenecks
-
-**O1. [verified] Same-tab follow-ups cannot steer the running turn (High).**
-`websocket/server.ts:300-318` orders frames per (connection, monitor) lane. `USER_MESSAGE` is
-not a control event, so `routeOne` awaits `routeMessage`, which awaits the whole turn *and* the
-queue drain (`agents/monitor-task-processor.ts:120-123`, `:228-231`). The comment at
-`server.ts:283` says so. The steer → ephemeral → queue logic at `monitor-task-processor.ts:163-196`
-is only reachable from another tab or from relays. Same for the session agent's steer
-(`session-task-processor.ts:69-80`). `COMPONENT_ACTION`/`WINDOW_MESSAGE` on an app window share
-the monitor lane, so an app agent cannot start while the monitor agent is thinking.
-*Fix:* `handleTask` acks and enqueues only; the drain runs detached. Lanes then order
-*acceptance*, not turns.
 
 **O2. One serial monitor conversation is the coordination hub, and agent traffic interrupts it (High).**
 Relays and hook responses to a busy monitor queue and then `interrupt()` the running turn
@@ -139,7 +126,7 @@ reporting), but concurrency control is spread across ~8 mechanisms (WS lanes, Mo
 flag, AppSlot.turn + queue, AgentSession.turnInFlight, budget semaphore, global limiter,
 SpawnReservations, inflight counter) with three definitions of "busy". Adding an agent kind
 touches `allAgents`, the roster union, `getRoleForAgent`, `buildAgentTree`, stats, and a new
-processor. Refactor before growing: **per-agent actor/mailbox** (fixes O1, O2, O6, O7) and **one
+processor. Refactor before growing: **per-agent actor/mailbox** (fixes O2, O6, O7) and **one
 resource scheduler** with tiers, LRU eviction and thread persistence (fixes O3, O4).
 
 ---
@@ -380,17 +367,6 @@ retry after a tool error or failed iframe load; how to verify a result.
 `session/`, `websocket/`, `reload/`, `logging/`, `@yaar/shared` actions and events.
 
 ### Bottlenecks
-
-**W1. [verified] Every content update and close waits a dead 500ms (High).**
-`features/window/update.ts:76-80` and `manage.ts:27-31` call `emitActionChecked(..., 500)`
-(`helpers.ts:137`). The frontend pushes feedback only for a *locked* window
-(`frontend/src/store/slices/windowsSlice.ts:86` reject, `:384-391` success), so an unlocked
-window never acks and the agent waits out the full timeout per append. Ten appends = 5s dead.
-The server already checks the lock before emitting (`requireWindowUnlocked`), so the client veto
-is redundant.
-*Fix:* fire-and-forget after the server lock check, or ack every requested action.
-
-**W2. [verified] Same-tab second message waits for the whole turn (High).** See O1.
 
 **W3. Agents depend on a browser being attached (High, durability).**
 `scheduleEviction` default 60s (`session/session-hub.ts:63`, called from
