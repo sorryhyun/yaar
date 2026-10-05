@@ -10,7 +10,7 @@ import {
   formatWindowRef,
   requireWindowExists,
   requireWindowUnlocked,
-  emitActionChecked,
+  emitWindowAction,
 } from './helpers.js';
 import { namesInlinableUri, inlineUriContent } from './inline-content.js';
 
@@ -73,12 +73,9 @@ export async function handleUpdate(
     renderer: payload.renderer as string | undefined,
   };
 
-  const err = await emitActionChecked(
-    osAction,
-    500,
-    `Window "${windowId}" is locked by another agent.`,
-  );
-  if (err) return err;
+  // Not awaited: the lock, the only reason the frontend would refuse this, was checked
+  // above (see emitWindowAction).
+  emitWindowAction(osAction, agentId);
 
   return ok(`Updated window "${formatWindowRef(windowId)}" (${opType})`);
 }

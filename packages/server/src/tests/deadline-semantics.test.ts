@@ -23,7 +23,9 @@ import { LiveSession } from '../session/live-session.js';
 import { getBroadcastCenter } from '../session/broadcast-center.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import type { SessionId, YaarWebSocket } from '../session/types.js';
-import { emitActionChecked } from '../features/window/helpers.js';
+import { handleUpdate } from '../features/window/update.js';
+import { handleManage } from '../features/window/manage.js';
+import { WindowStateRegistry } from '../session/window-state.js';
 import { askUser } from '../features/user/prompts.js';
 import { MAX_COMMAND_TIMEOUT_MS } from '../features/window/app-protocol.js';
 import {
@@ -95,22 +97,42 @@ describe('F-15 — a timeout is never observable as a success', () => {
     expect(outcome).toEqual({ ok: false, reason: 'timeout' });
   });
 
-  it('still lets a veto-only action through when nobody vetoes it', async () => {
-    // The one place silence legitimately means success: the frontend answers window.close
-    // and window.updateContent *only* to refuse them (the window is locked by another
-    // agent). No answer means no objection — and that has to keep working, or every close
-    // and every update starts failing.
-    const result = await runWithAgentContext(
-      { agentId: 'monitor:0', sessionId: 'sess-veto' as SessionId, monitorId: '0' },
-      () =>
-        emitActionChecked(
-          { type: 'window.close', windowId: '0/some-window' } as OSAction,
-          10,
-          'should not be reported',
-        ),
+  it('a window update or close does not wait on the frontend', async () => {
+    // The frontend answers window.close and window.updateContent *only* to refuse them, on
+    // a lock the server has already checked — so the verbs must not wait for a veto. They
+    // once did, and every append to an unlocked window cost a dead 500ms.
+    const reg = new WindowStateRegistry();
+    reg.handleAction(
+      {
+        type: 'window.create',
+        windowId: 'w',
+        title: 'w',
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        content: { renderer: 'markdown', data: '' },
+      } as OSAction,
+      '0',
     );
+    const emitted: { action: OSAction; requestId?: string }[] = [];
+    const record = (e: { action: OSAction; requestId?: string }) => emitted.push(e);
+    actionEmitter.on('action', record);
 
-    expect(result).toBeNull();
+    try {
+      const started = performance.now();
+      const results = await runWithAgentContext(
+        { agentId: 'monitor:0', sessionId: 'sess-veto' as SessionId, monitorId: '0' },
+        async () => [
+          await handleUpdate(reg, 'w', { operation: 'append', content: 'hi' }),
+          await handleManage(reg, 'w', 'close'),
+        ],
+      );
+
+      expect(results.map((r) => r.isError ?? false)).toEqual([false, false]);
+      expect(performance.now() - started).toBeLessThan(100);
+      expect(emitted.map((e) => e.action.type)).toEqual(['window.updateContent', 'window.close']);
+      expect(emitted.every((e) => e.requestId === undefined)).toBe(true);
+    } finally {
+      actionEmitter.off('action', record);
+    }
   });
 
   it('an expired prompt is not reported to the agent as the user declining', async () => {

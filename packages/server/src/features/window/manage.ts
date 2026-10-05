@@ -7,7 +7,7 @@ import { ok, error, type VerbResult } from '../../lib/verb-result.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getAgentId } from '../../agents/agent-context.js';
-import { formatWindowRef, requireWindowExists, emitActionChecked } from './helpers.js';
+import { formatWindowRef, requireWindowExists, emitWindowAction } from './helpers.js';
 
 /** Handle window management actions (close, reload, lock, unlock). */
 export async function handleManage(
@@ -24,12 +24,7 @@ export async function handleManage(
   switch (action) {
     case 'close': {
       if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
-      const closeErr = await emitActionChecked(
-        { type: 'window.close', windowId } satisfies OSAction,
-        500,
-        `Failed to close window "${windowId}": ${windowId}`,
-      );
-      if (closeErr) return closeErr;
+      emitWindowAction({ type: 'window.close', windowId } satisfies OSAction, agentId);
       return ok(`Closed window "${formatWindowRef(windowId)}"`);
     }
 

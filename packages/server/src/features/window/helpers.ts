@@ -8,7 +8,7 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { storageUriForPath } from '../../http/access.js';
 import { parseContentPath } from '../../lib/yaar-uri-server.js';
-import type { WindowVariant } from '@yaar/shared';
+import type { OSAction, WindowVariant } from '@yaar/shared';
 
 /**
  * Name the `yaar://` URI of an iframe's own document, when storage is what serves it.
@@ -120,26 +120,14 @@ export function getAppMetaOverrides(
 }
 
 /**
- * Emit an action the frontend only answers in order to *refuse* it, and return an error
- * result if it does.
+ * Emit a window action without waiting for the frontend, tagged with the calling agent.
  *
- * This is a veto, not an acknowledgement: closing or updating a window succeeds locally
- * the moment the action is applied, and the frontend pushes feedback only when it will
- * not apply it — the window is locked by another agent. So silence within the deadline
- * genuinely means "no objection", and that is the one place in this codebase where a
- * timeout may be read as success.
- *
- * It is spelled out here because it is indistinguishable, at the call site, from the bug
- * this slice removes: `emitActionWithFeedback` used to answer both "no veto" and "the
- * iframe never rendered" with the same `null`, and `window.create` read that null as a
- * window it had successfully put on the screen.
+ * For actions the frontend only ever answered to *refuse* — a window locked by another
+ * agent. The caller checks the lock against the server's registry first, which is where
+ * locks live, so waiting out a veto that cannot come only cost a dead timeout per call.
+ * The agent id still rides along because the frontend's own lock check reads it: a pool
+ * agent's is rewritten to its role on delivery, but an iframe caller's is not.
  */
-export async function emitActionChecked(
-  osAction: Parameters<typeof actionEmitter.emitActionWithFeedback>[0],
-  timeout: number,
-  errorMsg: string,
-): Promise<VerbResult | null> {
-  const outcome = await actionEmitter.emitActionWithFeedback(osAction, timeout);
-  if (outcome.ok && !outcome.value.success) return error(errorMsg);
-  return null;
+export function emitWindowAction(osAction: OSAction, agentId: string | undefined): void {
+  actionEmitter.emitAction(agentId ? ({ ...osAction, agentId } as OSAction) : osAction);
 }
