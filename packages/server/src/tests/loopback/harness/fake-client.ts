@@ -15,6 +15,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { ClientEvent, ServerEvent } from '@yaar/shared';
 import type { WsData } from '../../../websocket/server.js';
+import { getSessionHub } from '../../../session/session-hub.js';
 
 /** The handler trio returned by `createWsHandlers`, as this file uses it. */
 export interface WsHandlers {
@@ -133,13 +134,35 @@ export class FakeClient {
    */
   async deliver(event: ClientEvent): Promise<void> {
     await this.handlers.message(this.ws, JSON.stringify(event));
+    await this.taskOf(event);
   }
 
-  /** Fire a frame without waiting for the server to finish routing it. */
+  /**
+   * Fire a frame without waiting for the server to finish routing it. The promise settles
+   * once the frame is routed *and* the task it started (a turn, a queue drain) has run.
+   */
   deliverAsync(event: ClientEvent): Promise<void> {
+    return Promise.resolve(this.handlers.message(this.ws, JSON.stringify(event))).then(() =>
+      this.taskOf(event),
+    );
+  }
+
+  /**
+   * Fire a frame and settle once the server has *accepted* it — routed it, and handed any
+   * task to the pool — without waiting for that task. What the socket itself waits for.
+   */
+  deliverAccepted(event: ClientEvent): Promise<void> {
     return Promise.resolve(this.handlers.message(this.ws, JSON.stringify(event))).then(
       () => undefined,
     );
+  }
+
+  /** The task a frame started, if it started one. See `ClientEventController.taskSettled`. */
+  private async taskOf(event: ClientEvent): Promise<void> {
+    const messageId =
+      (event as { messageId?: string }).messageId ?? (event as { actionId?: string }).actionId;
+    if (!messageId || !this.data.sessionId) return;
+    await getSessionHub().get(this.data.sessionId)?.taskSettled(messageId);
   }
 
   // ── Connection lifecycle ─────────────────────────────────────────────

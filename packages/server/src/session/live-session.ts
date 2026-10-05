@@ -199,6 +199,7 @@ export class LiveSession {
   private sessionLogger: SessionLogger | null = null;
 
   /** The client frames this session answers. See `client-event-controller.ts`. */
+  private readonly controller: ClientEventController;
   private readonly router: ClientEventRouter;
 
   /** Provider seam, handed to the ContextPool when it is created. */
@@ -302,29 +303,28 @@ export class LiveSession {
       this.appWindows.forgetReady(wid);
     });
 
-    this.router = new ClientEventRouter(
-      new ClientEventController({
-        sessionId,
-        windowState: this.windowState,
-        surfaces: this.surfaces,
-        reloadCache: this.reloadCache,
-        monitors: this.monitorRegistry,
-        appWindows: this.appWindows,
-        snapshots: this.snapshots,
-        getPool: () => this.pool,
-        getSessionLogger: () => this.getSessionLogger(),
-        broadcast: (event) => this.broadcast(event),
-        sendTo: (connectionId, event) => this.sendTo(connectionId, event),
-        connectionCount: () => this.connections.size,
-        broadcastExcept: (except, event) => {
-          for (const id of this.connections.keys()) if (id !== except) this.sendTo(id, event);
-        },
-        claimMessageId: (messageId) => this.claimMessageId(messageId),
-        resetSession: (connectionId, monitorId) => this.handleReset(connectionId, monitorId),
-        closeBrowserForWindow: (windowId) => this.closeBrowserForWindow(windowId),
-        closeUnboundBrowsers: () => this.closeUnboundBrowsers(),
-      }).routes(),
-    );
+    this.controller = new ClientEventController({
+      sessionId,
+      windowState: this.windowState,
+      surfaces: this.surfaces,
+      reloadCache: this.reloadCache,
+      monitors: this.monitorRegistry,
+      appWindows: this.appWindows,
+      snapshots: this.snapshots,
+      getPool: () => this.pool,
+      getSessionLogger: () => this.getSessionLogger(),
+      broadcast: (event) => this.broadcast(event),
+      sendTo: (connectionId, event) => this.sendTo(connectionId, event),
+      connectionCount: () => this.connections.size,
+      broadcastExcept: (except, event) => {
+        for (const id of this.connections.keys()) if (id !== except) this.sendTo(id, event);
+      },
+      claimMessageId: (messageId) => this.claimMessageId(messageId),
+      resetSession: (connectionId, monitorId) => this.handleReset(connectionId, monitorId),
+      closeBrowserForWindow: (windowId) => this.closeBrowserForWindow(windowId),
+      closeUnboundBrowsers: () => this.closeUnboundBrowsers(),
+    });
+    this.router = new ClientEventRouter(this.controller.routes());
 
     // Everything this session hears from the process-global emitter: actions (window state
     // tracking + budget recording), app protocol requests, forwarded session-scoped events,
@@ -810,6 +810,11 @@ export class LiveSession {
     }
 
     await this.router.dispatch(event, connectionId);
+  }
+
+  /** See {@link ClientEventController.taskSettled}. */
+  taskSettled(messageId: string): Promise<void> | undefined {
+    return this.controller.taskSettled(messageId);
   }
 
   /** See {@link MonitorRegistry.list}. */

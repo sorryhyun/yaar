@@ -109,6 +109,11 @@ export interface WsData {
    * So the unit of ordering is what the frame contends for, not the socket it arrived on:
    * see {@link laneOf}. Frames in one lane keep their arrival order exactly as before;
    * frames in different lanes no longer wait on each other.
+   *
+   * And within a lane, a frame is done once it is *accepted*: a task frame hands its work
+   * to the pool and returns without waiting for the turn (`ClientEventController.startTask`).
+   * Held for the turn, a second message from the same tab could not steer the one it
+   * followed. Lanes order acceptance; `ContextPool` orders turns.
    */
   lanes?: Map<string, Promise<void>>;
   /** Latest snapshot barrier, also inherited by lanes first used after it arrived. */
@@ -279,8 +284,8 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // waiting for it (ANSWER_EVENT_TYPES in @yaar/shared).
       //
       // A control frame *may* overtake, because it has no ordering relationship with what
-      // it passes and what it passes can be a whole streaming turn — a `USER_MESSAGE`
-      // processed inline holds this queue until the model stops (CONTROL_EVENT_TYPES).
+      // it passes and what it passes can be slow — routing a `USER_MESSAGE` can first have
+      // to create its monitor agent (CONTROL_EVENT_TYPES).
       //
       // An app interaction overtakes only when it addresses an active app turn. That lets
       // `sendInteraction()` reach AppTaskProcessor in time to steer. When idle it keeps

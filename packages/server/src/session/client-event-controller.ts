@@ -102,6 +102,8 @@ export interface ClientEventDeps {
 export class ClientEventController {
   /** Capture answers held back while a better tab may still answer. */
   private readonly heldCaptures = new Map<string, HeldCapture>();
+  /** Tasks handed to the pool and not yet settled, by message id. See {@link startTask}. */
+  private readonly tasks = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: ClientEventDeps) {}
 
@@ -118,9 +120,12 @@ export class ClientEventController {
       [ClientEventType.RESYNC]: (_event, connectionId) => this.sendSnapshot(connectionId),
       [ClientEventType.USER_MESSAGE]: (event, connectionId) =>
         this.handleUserMessage(event, connectionId),
-      [ClientEventType.WINDOW_MESSAGE]: (event) => this.handleWindowMessage(event),
-      [ClientEventType.APP_INTERACTION]: (event) => this.handleAppInteraction(event),
-      [ClientEventType.COMPONENT_ACTION]: (event) => this.handleComponentAction(event),
+      [ClientEventType.WINDOW_MESSAGE]: (event, connectionId) =>
+        this.handleWindowMessage(event, connectionId),
+      [ClientEventType.APP_INTERACTION]: (event, connectionId) =>
+        this.handleAppInteraction(event, connectionId),
+      [ClientEventType.COMPONENT_ACTION]: (event, connectionId) =>
+        this.handleComponentAction(event, connectionId),
       [ClientEventType.INTERRUPT]: () => this.deps.getPool()?.interruptAll(),
       [ClientEventType.RESET]: (event, connectionId) => this.handleReset(event, connectionId),
       [ClientEventType.INTERRUPT_AGENT]: (event) =>
@@ -227,6 +232,52 @@ export class ClientEventController {
     } as ServerEvent);
   }
 
+  /**
+   * Hand a task to the pool without waiting for the turn it starts.
+   *
+   * The socket runs one frame at a time per (connection, monitor) lane, so awaiting a task
+   * here held that lane for a whole turn *and* the queue drain behind it: a second message
+   * from the same tab could not steer, and a click in an app window could not start its
+   * app agent while the monitor agent was thinking. The pool takes a task synchronously —
+   * it claims its agent, queues, or steers before its first await — so the lane only has
+   * to order *acceptance*.
+   *
+   * A failure can now land after the frame has been answered, so it is reported here the
+   * way `routeOne` reports one: to the connection, naming the message it killed.
+   */
+  private startTask(
+    connectionId: ConnectionId,
+    messageId: string,
+    monitorId: string | undefined,
+    work: Promise<void> | undefined,
+  ): Promise<void> {
+    const settled = (work ?? Promise.resolve())
+      .catch((err: unknown) => {
+        log.error('task failed', { messageId, monitorId, err });
+        this.deps.sendTo(connectionId, {
+          type: ServerEventType.ERROR,
+          error: err instanceof Error ? err.message : 'Failed to process message',
+          messageId,
+          ...(monitorId ? { monitorId } : {}),
+        });
+      })
+      .finally(() => {
+        if (this.tasks.get(messageId) === settled) this.tasks.delete(messageId);
+      });
+    this.tasks.set(messageId, settled);
+    return settled;
+  }
+
+  /**
+   * Resolves when the task a frame started has run to the end — its turn, or wherever the
+   * pool put it (a queue drain, a steer, a refusal). Undefined once it has, or if the frame
+   * started none. The socket no longer waits for this; a caller that means "after the
+   * turn" (the loopback harness) asks here.
+   */
+  taskSettled(messageId: string): Promise<void> | undefined {
+    return this.tasks.get(messageId);
+  }
+
   private async handleUserMessage(
     event: ClientEventOf<typeof ClientEventType.USER_MESSAGE>,
     connectionId: ConnectionId,
@@ -264,14 +315,19 @@ export class ClientEventController {
     // "Act as me" target (CLI-panel toggle): route to the session agent — the
     // user's deputy, the one principal that can drive the real browser.
     if (event.target === 'session') {
-      await this.deps.getPool()?.handleSessionTask({
-        requestedType: 'session',
-        kind: 'user',
-        messageId: event.messageId,
-        content: event.content,
-        interactions: event.interactions,
+      void this.startTask(
+        connectionId,
+        event.messageId,
         monitorId,
-      });
+        this.deps.getPool()?.handleSessionTask({
+          requestedType: 'session',
+          kind: 'user',
+          messageId: event.messageId,
+          content: event.content,
+          interactions: event.interactions,
+          monitorId,
+        }),
+      );
       return;
     }
     // The monitor exists (checked above); its agent is created on first use.
@@ -288,44 +344,62 @@ export class ClientEventController {
     // `LiveSession` nulls `this.pool` — so a task landing on a torn-down pool passes the
     // guard and queues against disposed state. Reading fresh is what makes the null the
     // one that stops it.
-    await this.deps.getPool()?.handleTask({
-      requestedType: 'monitor',
-      kind: 'user',
-      messageId: event.messageId,
-      content: event.content,
-      interactions: event.interactions,
+    void this.startTask(
+      connectionId,
+      event.messageId,
       monitorId,
-    });
+      this.deps.getPool()?.handleTask({
+        requestedType: 'monitor',
+        kind: 'user',
+        messageId: event.messageId,
+        content: event.content,
+        interactions: event.interactions,
+        monitorId,
+      }),
+    );
   }
 
-  private async handleWindowMessage(
+  private handleWindowMessage(
     event: ClientEventOf<typeof ClientEventType.WINDOW_MESSAGE>,
-  ): Promise<void> {
-    await this.deps.getPool()?.handleTask({
-      requestedType: 'app',
-      kind: 'user',
-      messageId: event.messageId,
-      windowId: event.windowId,
-      content: event.content,
-    });
+    connectionId: ConnectionId,
+  ): void {
+    void this.startTask(
+      connectionId,
+      event.messageId,
+      undefined,
+      this.deps.getPool()?.handleTask({
+        requestedType: 'app',
+        kind: 'user',
+        messageId: event.messageId,
+        windowId: event.windowId,
+        content: event.content,
+      }),
+    );
   }
 
   /** App interactions use the normal app task path: invoke when idle, steer when active. */
-  private async handleAppInteraction(
+  private handleAppInteraction(
     event: ClientEventOf<typeof ClientEventType.APP_INTERACTION>,
-  ): Promise<void> {
-    await this.deps.getPool()?.handleTask({
-      requestedType: 'app',
-      kind: 'user',
-      messageId: event.messageId,
-      windowId: event.windowId,
-      content: event.content,
-    });
+    connectionId: ConnectionId,
+  ): void {
+    void this.startTask(
+      connectionId,
+      event.messageId,
+      undefined,
+      this.deps.getPool()?.handleTask({
+        requestedType: 'app',
+        kind: 'user',
+        messageId: event.messageId,
+        windowId: event.windowId,
+        content: event.content,
+      }),
+    );
   }
 
-  private async handleComponentAction(
+  private handleComponentAction(
     event: ClientEventOf<typeof ClientEventType.COMPONENT_ACTION>,
-  ): Promise<void> {
+    connectionId: ConnectionId,
+  ): void {
     const windowContext = event.windowTitle
       ? `in window "${event.windowTitle}"`
       : `in window ${event.windowId}`;
@@ -340,19 +414,28 @@ export class ClientEventController {
       content += `\n\nForm data (${event.formId}):\n${JSON.stringify(event.formData, null, 2)}`;
     }
 
-    await this.deps.getPool()?.handleTask({
-      requestedType: 'app',
-      kind: 'user',
-      messageId: event.actionId ?? genId('component'),
-      windowId: event.windowId,
-      content,
-      actionId: event.actionId,
-    });
-    this.deps.getPool()?.notifyWindowSubscribers(
-      event.windowId,
-      'interaction',
-      `User clicked "${event.action}" ${windowContext}`,
-      undefined, // no source agent — this is a user interaction
+    const messageId = event.actionId ?? genId('component');
+    // Subscribers still hear of the click once its task has run, as they did when this
+    // awaited it — only the lane no longer waits too.
+    void this.startTask(
+      connectionId,
+      messageId,
+      undefined,
+      this.deps.getPool()?.handleTask({
+        requestedType: 'app',
+        kind: 'user',
+        messageId,
+        windowId: event.windowId,
+        content,
+        actionId: event.actionId,
+      }),
+    ).then(() =>
+      this.deps.getPool()?.notifyWindowSubscribers(
+        event.windowId,
+        'interaction',
+        `User clicked "${event.action}" ${windowContext}`,
+        undefined, // no source agent — this is a user interaction
+      ),
     );
   }
 

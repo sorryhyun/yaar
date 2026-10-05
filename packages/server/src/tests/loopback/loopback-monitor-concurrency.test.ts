@@ -16,9 +16,9 @@
  *   - two monitors run at once (this is the bug);
  *   - two messages for the *same* monitor still queue behind each other, since
  *     `ContextPool` decides to steer, enqueue or reject by asking whether that agent is
- *     busy right now;
- *   - `RESYNC` still sees everything sent before it, on every lane — it is a barrier
- *     across all of them rather than a member of one.
+ *     busy right now — a lane orders acceptance, and the pool orders turns;
+ *   - `RESYNC` still sees everything sent before it, on every lane, accepted — it is a
+ *     barrier across all of them rather than a member of one.
  *
  * `loopback-ordering.test.ts` holds the same guarantee from the answer-frame side.
  */
@@ -107,7 +107,7 @@ describe('S10 — one monitor thinking does not block the others', () => {
     expect(monitors).toContain('1');
   });
 
-  it('still queues a second message for the same monitor behind the first', async () => {
+  it('queues a second message for the same monitor behind the first, and runs it next', async () => {
     const h = await boot();
     harness = h;
 
@@ -121,21 +121,30 @@ describe('S10 — one monitor thinking does not block the others', () => {
     });
     await expectSettlesWithin(entered.promise, 1000, 'the turn reaching its tool');
 
-    const second = h.client.deliverAsync({
-      type: ClientEventType.USER_MESSAGE,
-      messageId: 'm2',
-      monitorId: '0',
-      content: 'the follow-up',
-    });
+    // The lane no longer waits for the turn, so the follow-up is *read* at once — and,
+    // since this provider cannot steer, queued behind the turn rather than handed to a
+    // context-less ephemeral agent.
+    await expectSettlesWithin(
+      h.client.deliverAccepted({
+        type: ClientEventType.USER_MESSAGE,
+        messageId: 'm2',
+        monitorId: '0',
+        content: 'the follow-up',
+      }),
+      1000,
+      'the follow-up being accepted',
+    );
+    const queued = h.client.framesOf(ServerEventType.MESSAGE_QUEUED);
+    expect(queued.map((f) => f.messageId)).toEqual(['m2']);
+    expect(h.registry.turns).toHaveLength(1);
 
-    // One lane per monitor, so this one is genuinely behind the turn in front of it.
-    await expectStillPending(second, "the same monitor's second message");
-
+    // The first message's task covers its turn and the drain behind it.
     gate.resolve();
-    await expectSettlesWithin(Promise.all([first, second]), 2000, 'both messages');
+    await expectSettlesWithin(first, 2000, 'both messages');
+    expect(h.registry.turns.map((t) => t.prompt.includes('the follow-up'))).toEqual([false, true]);
   });
 
-  it('holds RESYNC until every lane has been heard, not just its own', async () => {
+  it('holds RESYNC until every lane has accepted what it was sent, not until the turns end', async () => {
     const h = await boot();
     harness = h;
     await addSecondMonitor(h);
@@ -151,14 +160,23 @@ describe('S10 — one monitor thinking does not block the others', () => {
     await expectSettlesWithin(entered.promise, 1000, 'monitor 1 reaching its tool');
 
     // RESYNC is on no lane and every lane: its contract is "you have now heard everything
-    // I sent before this", and the frame it must not overtake is running elsewhere.
+    // I sent before this". Heard — accepted — not finished: the turn's output keeps
+    // streaming after the snapshot, as it would to any client.
     const snapshot = h.client.waitForFrame(ServerEventType.SNAPSHOT);
-    const resync = h.client.deliverAsync({ type: ClientEventType.RESYNC });
-    await expectStillPending(snapshot, 'the SNAPSHOT');
+    await expectSettlesWithin(
+      h.client.deliverAsync({ type: ClientEventType.RESYNC }),
+      1000,
+      'the RESYNC',
+    );
+    await expectSettlesWithin(snapshot, 1000, 'the SNAPSHOT');
+    const order = h.client.sent.map((f) => f.type);
+    expect(order.indexOf(ServerEventType.MESSAGE_ACCEPTED)).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf(ServerEventType.MESSAGE_ACCEPTED)).toBeLessThan(
+      order.indexOf(ServerEventType.SNAPSHOT),
+    );
+    await expectStillPending(slow, 'the held turn');
 
     gate.resolve();
     await expectSettlesWithin(slow, 2000, 'the held turn');
-    await expectSettlesWithin(resync, 2000, 'the RESYNC');
-    await expectSettlesWithin(snapshot, 2000, 'the SNAPSHOT');
   });
 });

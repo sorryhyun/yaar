@@ -160,6 +160,27 @@ export class MonitorTaskProcessor {
       return;
     }
 
+    // Claimed but not streaming yet: the turn is still being set up (a budget slot, the
+    // prompt) or wrapped up, and there is nothing to steer. An ephemeral would answer
+    // without the very context a follow-up is about, so queue it — the turn's own drain
+    // runs it next. Reachable from the same tab now that a lane stops waiting for the turn.
+    const monitorAgent = this.ctx.agentPool.getMonitorAgent(monitorId);
+    if (monitorAgent && !monitorAgent.session.isRunning()) {
+      await this.enqueueOrReject(
+        this.ctx.getOrCreateMonitorQueue(monitorId),
+        task,
+        monitorId,
+        'Please wait for current operations to complete.',
+        (position) =>
+          log.info('monitor turn not streaming yet — task queued behind it', {
+            monitorId,
+            messageId: task.messageId,
+            position,
+          }),
+      );
+      return;
+    }
+
     // Non-relay: try to steer the active turn (Codex mid-turn injection)
     const steered = await this.ctx.agentPool.steerMonitorAgent(monitorId, task.content);
     if (steered) {
@@ -178,11 +199,16 @@ export class MonitorTaskProcessor {
       return;
     }
 
-    // Steer not supported or failed → try ephemeral
-    const ephemeral = await this.ctx.agentPool.createEphemeral();
-    if (ephemeral) {
-      await this.processEphemeralTask(ephemeral, task);
-      return;
+    // Steer not supported or failed → try ephemeral, but not for the user. Their follow-up
+    // is about the turn they are watching, and an ephemeral answers it cold, without that
+    // context, and out of order with the messages around it. It queues instead and runs
+    // next, on the monitor agent.
+    if (task.kind !== 'user') {
+      const ephemeral = await this.ctx.agentPool.createEphemeral();
+      if (ephemeral) {
+        await this.processEphemeralTask(ephemeral, task);
+        return;
+      }
     }
 
     // No agents available → queue
@@ -227,7 +253,18 @@ export class MonitorTaskProcessor {
    */
   async processMonitorTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = monitorOf(task);
-    await this.withBudgetSlot(monitorId, () => this.runMonitorTurn(agent, task, monitorId));
+    // Claim the agent before the first await. `runAgentTurn` sets the role too, but only
+    // after the budget slot is granted — and callers no longer wait for the turn, so a
+    // second task can arrive in that gap. Unclaimed, it would read the agent as idle and
+    // start a second turn on it. The role is what `isMonitorAgentBusy` reads.
+    const claim = monitorTurnRole(monitorId, task.messageId);
+    agent.currentRole = claim;
+    try {
+      await this.withBudgetSlot(monitorId, () => this.runMonitorTurn(agent, task, monitorId));
+    } finally {
+      // Normally already cleared by `runAgentTurn`; not when the slot was never granted.
+      if (agent.currentRole === claim) agent.currentRole = null;
+    }
     await this.processMonitorQueue(monitorId);
   }
 

@@ -32,6 +32,16 @@ export class SessionTaskProcessor {
   }
 
   /**
+   * The turn this processor has taken and not finished, claimed before the first await.
+   *
+   * Callers no longer wait for a turn before handing over the next message, so two can
+   * arrive while the agent is still being created or its turn is being set up, when
+   * neither can be steered. The second waits behind the first rather than starting a
+   * turn of its own on the same agent.
+   */
+  private turn: Promise<void> | null = null;
+
+  /**
    * Run one session-agent turn.
    *
    * Caller (`ContextPool.handleSessionTask`) has already rejected the task if the
@@ -48,6 +58,43 @@ export class SessionTaskProcessor {
       );
     }
 
+    // If the deputy is mid-turn, steer it rather than queueing a run behind it.
+    const running = this.ctx.agentPool.getSessionAgent();
+    if (this.turn && running?.session.isRunning()) {
+      const steered = await running.session.steer(task.content);
+      if (steered) {
+        // Pin as a turn would: the steered message is about the user's monitor now.
+        this.ctx.agentPool.setSessionAgentMonitor(monitorId);
+        this.ctx.contextAssembly.appendUserMessage(
+          this.ctx.contextTape,
+          task.content,
+          monitorSource(monitorId),
+        );
+        await this.ctx.sendEvent({
+          type: ServerEventType.MESSAGE_ACCEPTED,
+          messageId: task.messageId,
+          agentId: running.currentRole ?? sessionRole(task.messageId),
+        });
+        return;
+      }
+    }
+
+    const previous = this.turn;
+    let settle!: () => void;
+    const mine = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    this.turn = mine;
+    try {
+      await previous;
+      await this.runTurn(task, monitorId);
+    } finally {
+      settle();
+      if (this.turn === mine) this.turn = null;
+    }
+  }
+
+  private async runTurn(task: Task, monitorId: string): Promise<void> {
     const agent = await this.getOrCreateAgent();
     if (!agent) {
       await this.ctx.sendEvent({
@@ -64,20 +111,6 @@ export class SessionTaskProcessor {
 
     const source = monitorSource(monitorId);
     const role = sessionRole(task.messageId);
-
-    // If the deputy is mid-turn, steer it rather than spawning a parallel run.
-    if (agent.session.isRunning()) {
-      const steered = await agent.session.steer(task.content);
-      if (steered) {
-        this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
-        await this.ctx.sendEvent({
-          type: ServerEventType.MESSAGE_ACCEPTED,
-          messageId: task.messageId,
-          agentId: agent.currentRole ?? role,
-        });
-        return;
-      }
-    }
 
     const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
     const prompt = openWindowsContext + reloadPrefix + task.content;

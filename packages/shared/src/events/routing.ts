@@ -107,8 +107,10 @@ export function isAnswerEvent(type: string): boolean {
  * not because something is blocked on them, but because they have no ordering
  * relationship with the frames in front of them and the frames in front of them can
  * take a very long time. `routeOne` awaits `routeMessage`, and a `USER_MESSAGE` that
- * finds its monitor agent idle is processed *inline* — so that frame holds the head of
- * the queue for the entire streaming turn. Everything behind it waits out the turn.
+ * finds its monitor agent idle was once processed *inline* — so that frame held the head
+ * of the queue for the entire streaming turn, and everything behind it waited it out. A
+ * task frame now returns once accepted, but accepting one can still mean creating an
+ * agent, which is no wait an interrupt should sit behind.
  *
  * That made the `+` monitor button feel dead for seconds at a time: adding a monitor is
  * a synchronous push onto `LiveSession.monitors`, but it was queued behind a model that

@@ -10,13 +10,14 @@
  *
  * So this file asserts the queue from both sides:
  *
- *   - an *ordinary* frame may not overtake a turn in flight, however long that turn takes;
+ *   - an *ordinary* frame may not overtake the frames ahead of it — a frame is done once it
+ *     is accepted, so nothing waits behind the turn a message starts;
  *   - an *answer* frame must, even when ordinary frames are queued ahead of it;
  *   - and the ordinary frames keep their mutual order across the overtaking.
  *
  * The gate is what makes these questions askable at all. A turn parked inside a tool step
- * holds the head of the queue open for as long as the test likes, so "did this frame wait?"
- * is a fact the test controls rather than a race it hopes to win.
+ * stays in flight for as long as the test likes, so "did this frame wait?" is a fact the
+ * test controls rather than a race it hopes to win.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
 import { ClientEventType, ServerEventType, type OSAction, type WindowContent } from '@yaar/shared';
@@ -48,58 +49,53 @@ function snapshotHasWindow(actions: OSAction[], rawId: string, monitorId = '0'):
 }
 
 describe('S3 — an ordinary frame still waits its turn', () => {
-  it('RESYNC does not overtake a running turn, and the snapshot it gets reflects that turn', async () => {
+  it('RESYNC waits for the message before it to be accepted, not for the turn it started', async () => {
     const h = await boot();
     harness = h;
 
     const entered = deferred<void>();
     const gate = deferred<void>();
 
-    // A turn that parks where the test wants it, then does something a snapshot can see.
+    // A turn that parks where the test wants it.
     h.registry.onTurn(() => [
       {
         kind: 'tool',
         name: 'held',
-        run: async (ctx) => {
+        run: async () => {
           entered.resolve();
           await gate.promise;
-          ctx.windowState.handleAction(
-            {
-              type: 'window.create',
-              windowId: 'made-by-the-turn',
-              title: 'Made by the turn',
-              bounds: { x: 0, y: 0, w: 400, h: 300 },
-              content: iframeContent('memo'),
-            } as OSAction,
-            '0',
-          );
           return 'done';
         },
       },
     ]);
 
+    // Sent back to back, so the RESYNC is read while the message ahead of it is still
+    // being routed — the order the queue exists to keep.
     const turn = h.client.deliverAsync({
       type: ClientEventType.USER_MESSAGE,
       messageId: 'm1',
       monitorId: '0',
-      content: 'open a window, slowly',
+      content: 'something slow',
     });
-    await expectSettlesWithin(entered.promise, 1000, 'the turn reaching its tool');
-
     const snapshot = h.client.waitForFrame(ServerEventType.SNAPSHOT);
     const resync = h.client.deliverAsync({ type: ClientEventType.RESYNC });
 
-    // RESYNC is not an answer — nothing is waiting for it, so it has no business jumping
-    // the queue. If it did, the client would be told the desktop's state as of *before* the
-    // window it is about to be given, and would render a desktop missing it.
-    await expectStillPending(snapshot, 'the SNAPSHOT');
+    // RESYNC means "you have heard everything I sent before this". The message was heard
+    // — accepted — before the snapshot went out...
+    await expectSettlesWithin(entered.promise, 1000, 'the turn reaching its tool');
+    await expectSettlesWithin(resync, 1000, 'the RESYNC');
+    await expectSettlesWithin(snapshot, 1000, 'the SNAPSHOT');
+    const order = h.client.sent.map((f) => f.type);
+    expect(order.indexOf(ServerEventType.MESSAGE_ACCEPTED)).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf(ServerEventType.MESSAGE_ACCEPTED)).toBeLessThan(
+      order.indexOf(ServerEventType.SNAPSHOT),
+    );
 
+    // ...but the turn it started does not hold the queue: whatever it does from here on
+    // streams to the client after the snapshot, as it would to any client.
+    await expectStillPending(turn, 'the held turn');
     gate.resolve();
     await expectSettlesWithin(turn, 1000, 'the held turn');
-    await expectSettlesWithin(resync, 1000, 'the RESYNC');
-
-    const snap = await expectSettlesWithin(snapshot, 1000, 'the SNAPSHOT');
-    expect(snapshotHasWindow(snap.actions, 'made-by-the-turn')).toBe(true);
   });
 
   it('a USER_INTERACTION followed by RESYNC is answered with a snapshot containing that window', async () => {
@@ -166,10 +162,10 @@ describe('S3 — an answer frame overtakes, and the frames it passed keep their 
       content: 'ping the app',
     });
 
-    // The turn is parked on the app, holding the head of the queue.
+    // The turn is parked on the app, and cannot end without its answer.
     const request = await expectSettlesWithin(asked, 1000, 'the APP_PROTOCOL_REQUEST');
 
-    // Two ordinary frames pile up behind it...
+    // Two ordinary frames go out behind it (accepted, and queued behind the turn)...
     const second = h.client.deliverAsync({
       type: ClientEventType.USER_MESSAGE,
       messageId: 'm2',
@@ -184,10 +180,9 @@ describe('S3 — an answer frame overtakes, and the frames it passed keep their 
     });
     await expectStillPending(first, 'the app-command turn');
 
-    // ...and the answer arrives last of the three, yet must be read first: it is what the
-    // frame at the head of the queue is waiting for. This is the whole bypass, under the
-    // most adversarial arrangement — two frames deep, behind a turn that cannot end
-    // without it.
+    // ...and the answer arrives last of the three, yet must be read at once: it is what the
+    // turn in front of them is waiting for. The bypass, two frames deep, behind a turn that
+    // cannot end without it.
     await h.client.deliver({
       type: ClientEventType.APP_PROTOCOL_RESPONSE,
       requestId: request.requestId,
