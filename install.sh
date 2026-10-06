@@ -92,6 +92,14 @@ install_termux() {
   if [ -d "$yaar_dir/.git" ]; then
     echo "Updating ${yaar_dir} to ${version}..."
     git -C "$yaar_dir" fetch -q --depth 1 origin "$version"
+    # Android's Bun rewrites bun.lock on every `bun install` (here and in start-termux.sh),
+    # and checkout refuses to run over a modified file. The lockfile is regenerated below,
+    # so its change is dropped; any other local edit is stashed, not lost.
+    git -C "$yaar_dir" checkout -q -- bun.lock 2> /dev/null || true
+    if [ -n "$(git -C "$yaar_dir" status --porcelain --untracked-files=no)" ]; then
+      git -C "$yaar_dir" stash push -q -m "yaar installer: local changes before ${version}"
+      echo "⚠  Local changes in ${yaar_dir} were stashed. Get them back: git -C ${yaar_dir} stash pop" >&2
+    fi
     git -C "$yaar_dir" checkout -q FETCH_HEAD
   elif [ -e "$yaar_dir" ]; then
     echo "${yaar_dir} exists and is not a git checkout — set YAAR_DIR to install elsewhere." >&2
