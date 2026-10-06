@@ -10,7 +10,7 @@
 
 import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
-import { DownloadCapture, type CapturedDownload } from './downloads.js';
+import { DownloadCapture, type CapturedDownload, type DownloadHub } from './downloads.js';
 import { NetworkLog, type NetworkLogQuery, type NetworkLogResult } from './network-log.js';
 import type {
   BrowserAnnotatedElement,
@@ -291,26 +291,36 @@ export class BrowserSession extends EventEmitter {
   /**
    * What Chrome downloaded in this tab. Per tab and not per socket for the same reason
    * the network log is: a crash-restart reattaches a new socket to the same tab, and a
-   * download captured before it is still this tab's.
+   * download captured before it is still this tab's. The directory and the download
+   * behavior are not the tab's — they are the provider's {@link DownloadHub}'s.
    */
-  private readonly downloads = new DownloadCapture((d) => this.emit('download', d));
+  private readonly downloads: DownloadCapture;
 
-  private constructor(id: string, cdp: CDPClient, mobile: boolean, adopted: boolean) {
+  private constructor(
+    id: string,
+    cdp: CDPClient,
+    mobile: boolean,
+    adopted: boolean,
+    downloadHub: DownloadHub | null,
+  ) {
     super();
     this.id = id;
     this.cdp = cdp;
     this.mobile = mobile;
     this.adopted = adopted;
+    this.downloads = new DownloadCapture(downloadHub, (d) => this.emit('download', d));
   }
 
+  /** `downloadHub` is the provider's; without one this tab captures no downloads. */
   static async create(
     id: string,
     debuggerUrl: string,
     options?: BrowserSessionOptions,
+    downloadHub: DownloadHub | null = null,
   ): Promise<BrowserSession> {
     const mobile = options?.mobile ?? false;
     const cdp = await CDPClient.connect(debuggerUrl);
-    const session = new BrowserSession(id, cdp, mobile, options?.adopt === true);
+    const session = new BrowserSession(id, cdp, mobile, options?.adopt === true, downloadHub);
     session.pinned = options?.pinned === true;
     await session.initTarget(cdp);
     return session;
@@ -345,6 +355,7 @@ export class BrowserSession extends EventEmitter {
       ).frame;
       if (!frame || frame.parentId) return;
       mainFrameId = frame.id;
+      if (frame.id) this.downloads.noteMainFrame(frame.id);
       this.blockStats = { blocked: 0, requests: 0 };
       // The address has to come from the tab, not from whoever caused the move: a
       // human clicking through the live screencast is forwarded as raw input, so no
@@ -380,10 +391,9 @@ export class BrowserSession extends EventEmitter {
       }
       this.networkLog.onLoadingFailed(params);
     });
-    // Downloads land in this session's own directory rather than in whatever
-    // Chrome's profile calls "Downloads". Best-effort: a Chrome that refuses the
-    // command leaves `downloads.available` false and every other action working.
-    await this.downloads.attach(cdp);
+    // Which downloads are this tab's. Where they land was set once for the whole
+    // Chrome by the provider's DownloadHub, never from a tab's socket.
+    this.downloads.attach(cdp);
     // A fresh target has none of the previous one's shield state.
     this.initScriptId = null;
     await this.pushShield(cdp);
@@ -1580,7 +1590,7 @@ export class BrowserSession extends EventEmitter {
 
   // ── Downloads ───────────────────────────────────────────────────────────────
 
-  /** Whether Chrome accepted download capture on this tab's connection. */
+  /** Whether this tab's downloads are being captured right now. */
   get downloadsAvailable(): boolean {
     return this.downloads.available;
   }
@@ -1625,7 +1635,7 @@ export class BrowserSession extends EventEmitter {
   ): Promise<CapturedDownload> {
     this.touch();
     if (!this.downloads.available) {
-      throw new Error('This Chrome refused download capture, so downloads cannot be saved.');
+      throw new Error('Downloads are not captured in this browser, so they cannot be saved.');
     }
     // Read the clock before the click, not after: `waitForNext` uses it to tell the
     // download we just asked for from one that finished while we were asking.
@@ -1941,7 +1951,7 @@ export class BrowserSession extends EventEmitter {
     this.closed = true;
     this.cdp.close();
     // Unclaimed captures go with the tab: they only ever existed as a staging area
-    // for a caller that never asked, and the directory is this session's alone.
+    // for a caller that never asked.
     await this.downloads.dispose();
     this.emit('closed');
     this.removeAllListeners();

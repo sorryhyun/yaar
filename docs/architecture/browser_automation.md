@@ -35,6 +35,7 @@ All paths are relative to `packages/server/src/` unless noted.
 │   BrowserProvider ── CdpBrowserProvider ─┬─ HeadlessServerBrowser (pool.ts)  │
 │                                          └─ LocalUserBrowser                 │
 │   BrowserSession (one tab) ── DownloadCapture, NetworkLog, page-scripts      │
+│   DownloadHub (one per Chrome: the download dir + guid → tab routing)        │
 │   BrowserSessionStore (records on disk)   chrome.ts / pid-file.ts (process)  │
 │   CDPClient (JSON-RPC over `ws`)                                             │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -325,22 +326,32 @@ supply only five things:
 
 ## Downloads
 
-Downloads are the **tab's**, captured on the server. `DownloadCapture` (`downloads.ts`) points
-`Browser.setDownloadBehavior` at a per-session temp dir (`yaar-browser-dl-*`). It falls back to
-`Page.setDownloadBehavior`, and if Chrome refuses both, it sets `downloadsAvailable = false` and
-does not throw. This has two consequences a re-fetch through `yaar://http` could not match:
+Downloads are the **tab's**, captured on the server. This has two consequences a re-fetch through
+`yaar://http` could not match:
 
 - the transfer carries the tab's cookies, headers and TLS session
 - the bytes never pass through CDP or an app, so size is limited by disk space rather than a proxy
   cap
 
-**The capture directory is the source of truth, not the CDP event.** With `behavior: 'allow'`,
-Chrome chooses the filename from `Content-Disposition`, not the download GUID. Also, whether
-browser-domain events arrive on a page socket is an implementation detail, not something the
-protocol guarantees. So completion is detected from the filesystem: a file that is no longer named
-`*.crdownload` has finished. The code uses `fs.watch` plus a sweep. `downloadWillBegin` events only
-add the source URL when they arrive. Unclaimed captures are kept (up to 20) until claimed, and are
-deleted with the directory when the session closes, including when the idle sweep closes it.
+**The download behavior is Chrome's, not a tab's.** Chrome keeps one per browser context, and every
+YAAR tab shares the default one. Pointing it at a per-tab directory from each tab's socket (the
+previous design) failed two ways, both measured: the tab that attached *last* received every
+download, and any tab's socket detaching (an idle sweep, a close) reset Chrome to its default, so
+the next download went to `~/Downloads`. So `DownloadHub` (`downloads.ts`, one per provider) sets
+`Browser.setDownloadBehavior` exactly once per Chrome, on the provider's browser-level socket, with
+`behavior: 'allowAndName'` into one directory: `storage/.browser/downloads/` (emptied at first use;
+a scratch `yaar-browser-dl-<pid>-*` dir under `YAAR_BROWSER_EPHEMERAL=1`). It is armed only on a
+Chrome YAAR owns; on the user's own Chrome (`LocalUserBrowser`) it would take their personal
+downloads, so downloads are unavailable there.
+
+**Attribution is by guid.** Each file is named by its download guid. The downloading tab's own
+socket announces the guid in `Page.downloadWillBegin` (for any of its frames), which assigns it to
+that tab's `DownloadCapture`; the tab's main frame id is the fallback. The browser socket's
+`Browser.downloadWillBegin` supplies the URL and Chrome's derived name, and
+`Browser.downloadProgress` with `state: 'completed'` is the completion signal. A download no tab can
+be found for is deleted. Unclaimed captures are kept (up to 20 per tab) until claimed, and are
+deleted when the tab closes, including when the idle sweep closes it. If Chrome refuses the
+behavior, `downloadsAvailable` is false and nothing throws.
 
 Two ways to start a download (the `download` action in `features/browser/actions.ts`):
 

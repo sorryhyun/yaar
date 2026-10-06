@@ -5,7 +5,7 @@
  * `<a download>`, a `Content-Disposition: attachment` navigation — is Chrome's to perform,
  * and for a long time this project assumed that made it unreachable. It does not:
  * `Browser.setDownloadBehavior` names a directory for those files, so the bytes land on
- * the server's own disk under a name Chrome derived from the response.
+ * the server's own disk.
  *
  * Two things follow that a re-fetch through `yaar://http` could never have:
  *
@@ -16,34 +16,45 @@
  *   learns where. Nothing is base64-encoded, chunked, or held in an iframe's heap, so
  *   size is bounded by the disk rather than by a proxy's response cap.
  *
- * ## The directory is the source of truth, not the CDP event
+ * ## One directory per Chrome, set once, from the browser socket
  *
- * `Browser.downloadWillBegin` / `downloadProgress` are listened for, but nothing depends
- * on them, for two measured reasons:
+ * The download behavior is not a property of a tab. Chrome keeps one per browser context,
+ * and every YAAR tab shares the default context (that is how they share the persisted
+ * profile's cookies). This module used to have each tab point it at that tab's own
+ * directory from the tab's own socket, which measured as two failures:
  *
- * - **`behavior: 'allow'` means Chrome picks the name.** The file is
- *   `2609.02367v1.pdf`, not the download's guid — only `allowAndName` uses the guid.
- *   Keying the record off the guid looked for a file that never exists, and the first
- *   version of this module timed out on downloads that had in fact completed perfectly.
- *   Chrome's name is also the *better* name: it comes from the response's
- *   `Content-Disposition`, which is more than the URL knows.
- * - **These are browser-domain events on a page-domain socket.** They are enabled from
- *   the session's page connection, and whether Chrome delivers them back on it is a
- *   detail of its handler routing rather than a promise of the protocol.
+ * - **The last tab to connect took every download.** A tab attached after the one the
+ *   user was downloading in — a reader app's cookie tab, a revive, a popup — moved the
+ *   directory, so the file landed where nobody was watching for it and was deleted with
+ *   that other tab.
+ * - **Any tab disconnecting reset it.** Chrome restores the default behavior when the
+ *   socket that set it detaches, so after an idle sweep the next download went to the
+ *   machine's `~/Downloads` and was captured by no one.
  *
- * What Chrome does promise is the file: an in-progress download is `name.crdownload` and
- * is *renamed* to `name` when it completes. So a non-`.crdownload` file appearing in the
- * directory is a completed download, and `fs.watch` turns that into an event with no
- * polling. The CDP events, when they do arrive, only enrich a record with the source URL
- * — which the filesystem cannot know.
+ * So {@link DownloadHub} sets it exactly once, on the provider's browser-level socket —
+ * the one that lives as long as Chrome does — and owns the one directory it names.
  *
- * Files stay in the capture directory until something claims one with {@link
- * DownloadCapture.take}. A completed download nobody claimed is dropped with the
- * directory when the session ends.
+ * ## Attribution by guid
+ *
+ * With every tab writing into one directory, a file says nothing about whose it is. The
+ * behavior is `allowAndName`, so Chrome names each file by its download guid, and the
+ * events carry that guid end to end:
+ *
+ * - `Page.downloadWillBegin` arrives on the *downloading tab's own* socket — for a
+ *   download from any of its frames — and is what assigns the guid to a
+ *   {@link DownloadCapture}. The tab's main frame id (which is its target id) is the
+ *   fallback when that event is missed.
+ * - `Browser.downloadWillBegin` on the browser socket brings the URL and the name Chrome
+ *   derived (from `Content-Disposition`, a `download` attribute, or the URL).
+ * - `Browser.downloadProgress` with `state: 'completed'` is the completion signal. On the
+ *   browser socket these events are what `eventsEnabled` promises, unlike the page-socket
+ *   routing the previous design could not rely on.
+ *
+ * Files stay in the directory until something claims one with {@link
+ * DownloadCapture.take}. A completed download nobody claimed is deleted when its tab
+ * ends, and one no tab can be found for is deleted at once.
  */
-import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
-import { watch, type FSWatcher } from 'node:fs';
-import { instanceTempPrefix } from './pid-file.js';
+import { rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CDPClient } from './cdp.js';
 import { createLogger } from '../../observability/log.js';
@@ -52,14 +63,11 @@ const log = createLogger('browser');
 
 /** A download Chrome finished writing, still sitting in the capture directory. */
 export interface CapturedDownload {
-  /**
-   * How this download is claimed. The file's name inside the capture directory, which
-   * Chrome guarantees unique there — a second `paper.pdf` becomes `paper (1).pdf`.
-   */
+  /** How this download is claimed: Chrome's download guid, which is also the file's name. */
   id: string;
-  /** Where the bytes came from, when a `downloadWillBegin` event named it. Else `''`. */
+  /** Where the bytes came from, when `downloadWillBegin` named it. Else `''`. */
   url: string;
-  /** The name Chrome chose, from `Content-Disposition` or the URL. Same as {@link id}. */
+  /** The name Chrome derived, from `Content-Disposition`, a `download` attribute or the URL. */
   suggestedFilename: string;
   bytes: number;
   /** Absolute path of the captured file. Valid until {@link DownloadCapture.take}. */
@@ -71,12 +79,12 @@ export interface CapturedDownload {
 /** How many finished-but-unclaimed downloads are remembered per session. */
 const MAX_KEPT = 20;
 
-/** Chrome's in-progress suffix. A file wearing it is not finished. */
-const PARTIAL_SUFFIX = '.crdownload';
-
-/** Size-stability sampling, for the rare download written without a partial file. */
-const SETTLE_INTERVAL_MS = 150;
-const SETTLE_ATTEMPTS = 60;
+/**
+ * How long a completed download waits for its tab to claim it before being treated as
+ * nobody's. The tab's `Page.downloadWillBegin` precedes the transfer, so in practice it is
+ * already there; this only covers the two sockets' messages crossing.
+ */
+const OWNER_GRACE_MS = 250;
 
 interface Waiter {
   resolve: (d: CapturedDownload) => void;
@@ -84,196 +92,222 @@ interface Waiter {
   since: number;
 }
 
-export class DownloadCapture {
-  private dir: string | null = null;
-  private armed = false;
-  private watcher: FSWatcher | null = null;
-  /**
-   * Which *file* each name last became a record for, as `ino:mtimeMs`, so the several
-   * watch events one completion produces cost one record.
-   *
-   * Keyed by file, not by name: a claim deletes the capture, and Chrome then gives the
-   * next download of the same paper the same name. A name-only set filed that second
-   * download as already seen — the PDF viewer's download arrow went silent, and
-   * `download { url }` waited out its timeout with the bytes on disk.
-   */
-  private seen = new Map<string, string>();
-  /**
-   * Names being considered right now → whether another event arrived meanwhile. Checked
-   * synchronously, so concurrent events for one name run one look, plus one re-look if
-   * something changed during it.
-   */
-  private pending = new Map<string, boolean>();
-  /** `downloadWillBegin` metadata, keyed by the name Chrome said it would use. */
-  private announced = new Map<string, string>();
-  private finished: CapturedDownload[] = [];
-  private waiters: Waiter[] = [];
+interface Begun {
+  url: string;
+  suggestedFilename: string;
+  frameId: string;
+}
 
-  private readonly settleIntervalMs: number;
-  private readonly sweepIntervalMs: number | undefined;
-  private sweepTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * The one download directory of one Chrome, and the router from its downloads to the
+ * tabs they came from. One per provider; see the module header for why not one per tab.
+ */
+export class DownloadHub {
+  private dir: Promise<string> | null = null;
+  /** The browser socket the behavior is set on. Null until armed, and after it closes. */
+  private client: CDPClient | null = null;
+  private readonly captures = new Set<DownloadCapture>();
+  /** guid → the tab whose socket announced it. */
+  private readonly owners = new Map<string, DownloadCapture>();
+  /** guid → what the browser socket said about it when it began. */
+  private readonly begun = new Map<string, Begun>();
 
   /**
-   * `timing` exists for tests. The settle interval is paid once per completed file, and
-   * `fs.watch` latency is the machine's: under a full test run macOS delivered events late
-   * enough that waits hit their deadlines. A periodic sweep makes detection independent of
-   * the watcher, and production keeps relying on the watcher plus `waitForNext`'s own sweep.
+   * `makeDir` is asked once, lazily, for the directory to hand Chrome. It is the
+   * provider's to decide (a persisted state dir, or a scratch one for an ephemeral
+   * profile) and its to empty: captures live in memory, so a file an earlier run left
+   * there is nobody's to claim.
    */
   constructor(
-    private readonly onComplete: (d: CapturedDownload) => void,
-    timing: { settleIntervalMs?: number; sweepIntervalMs?: number } = {},
-  ) {
-    this.settleIntervalMs = timing.settleIntervalMs ?? SETTLE_INTERVAL_MS;
-    this.sweepIntervalMs = timing.sweepIntervalMs;
-  }
+    private readonly makeDir: () => Promise<string>,
+    private readonly ownerGraceMs = OWNER_GRACE_MS,
+  ) {}
 
-  /** Whether Chrome accepted the download-behavior command on this socket. */
+  /** Whether Chrome accepted the download behavior on the live browser socket. */
   get available(): boolean {
-    return this.armed;
+    return this.client !== null;
   }
 
   /**
-   * Point a freshly-connected CDP socket's downloads at this session's directory.
+   * Point this Chrome's downloads at the hub's directory, from its browser-level socket.
    *
-   * Called from `initTarget`, so it runs for a new tab and again after a crash-restart
-   * reattaches to a new target — the behavior is a property of the *connection*, and a
-   * reattached session that skipped this would silently stop capturing.
-   *
-   * `Browser.setDownloadBehavior` is a browser-domain command, but Chrome accepts it on a
-   * page connection; the deprecated `Page.` form is tried after it. A refusal is
-   * recorded, not thrown: every other thing a browser session does still works without
-   * downloads, and `available` is what the action layer reports.
+   * Called for every new browser socket — a relaunched Chrome is a new one and starts
+   * from its own default behavior. A refusal is recorded, not thrown: every other thing a
+   * browser session does still works without downloads, and `available` is what the
+   * action layer reports.
    */
-  async attach(cdp: CDPClient): Promise<void> {
-    const dir = await this.ensureDir();
-
-    // Enrichment only — see the module header. A record is built from the file.
-    const onWillBegin = (params: unknown) => {
-      const p = params as { url?: string; suggestedFilename?: string };
-      if (p?.suggestedFilename && p.url) this.announced.set(p.suggestedFilename, p.url);
-    };
-    cdp.on('Browser.downloadWillBegin', onWillBegin);
-    cdp.on('Page.downloadWillBegin', onWillBegin);
-
+  async arm(client: CDPClient): Promise<void> {
+    let dir: string;
     try {
-      await cdp.send('Browser.setDownloadBehavior', {
-        behavior: 'allow',
+      dir = await this.ensureDir();
+    } catch (err) {
+      log.warn('downloads unavailable — no capture directory', { err });
+      return;
+    }
+    client.on('Browser.downloadWillBegin', (params) => this.onWillBegin(params));
+    client.on('Browser.downloadProgress', (params) => this.onProgress(params));
+    try {
+      await client.send('Browser.setDownloadBehavior', {
+        behavior: 'allowAndName',
         downloadPath: dir,
         eventsEnabled: true,
       });
-      this.armed = true;
-    } catch {
-      try {
-        await cdp.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: dir });
-        this.armed = true;
-      } catch (err) {
-        this.armed = false;
-        log.warn('downloads unavailable — Chrome refused setDownloadBehavior', { err });
-        return;
-      }
+      this.client = client;
+    } catch (err) {
+      log.warn('downloads unavailable — Chrome refused setDownloadBehavior', { err });
     }
-    this.startWatching(dir);
   }
 
-  private async ensureDir(): Promise<string> {
-    if (!this.dir) this.dir = await mkdtemp(instanceTempPrefix('downloads'));
+  /** The browser socket went away; downloads are not captured until the next {@link arm}. */
+  disarm(client: CDPClient): void {
+    if (this.client === client) this.client = null;
+  }
+
+  register(capture: DownloadCapture): void {
+    this.captures.add(capture);
+  }
+
+  unregister(capture: DownloadCapture): void {
+    this.captures.delete(capture);
+    for (const [guid, owner] of this.owners) if (owner === capture) this.owners.delete(guid);
+  }
+
+  /** A tab's own socket said this download is its. */
+  claim(guid: string, capture: DownloadCapture): void {
+    if (this.captures.has(capture)) this.owners.set(guid, capture);
+  }
+
+  private ensureDir(): Promise<string> {
+    if (!this.dir) {
+      this.dir = this.makeDir();
+      // A failed attempt is not cached: the next arm gets a fresh one.
+      this.dir.catch(() => {
+        this.dir = null;
+      });
+    }
     return this.dir;
   }
 
-  /**
-   * Watch the capture directory for completed downloads.
-   *
-   * One watcher for the life of the session, not one per connection: a reattach hands us
-   * a new socket but the same directory, and a second watcher would report every file
-   * twice. The initial `sweep` covers whatever landed before the watcher was installed.
-   */
-  private startWatching(dir: string): void {
-    if (this.watcher) return;
-    try {
-      this.watcher = watch(dir, (_event, name) => {
-        if (typeof name === 'string') void this.notice(name);
-      });
-      this.watcher.on('error', () => {
-        // A watcher that dies leaves `waitForNext`'s own sweep as the fallback.
-        this.watcher = null;
-      });
-    } catch {
-      this.watcher = null;
-    }
-    if (this.sweepIntervalMs !== undefined && !this.sweepTimer) {
-      this.sweepTimer = setInterval(() => void this.sweep(), this.sweepIntervalMs);
-    }
-    void this.sweep();
+  private onWillBegin(params: unknown): void {
+    const p = params as {
+      guid?: string;
+      url?: string;
+      suggestedFilename?: string;
+      frameId?: string;
+    };
+    if (!p?.guid) return;
+    this.begun.set(p.guid, {
+      url: p.url ?? '',
+      suggestedFilename: p.suggestedFilename ?? '',
+      frameId: p.frameId ?? '',
+    });
   }
 
-  /** Turn whatever is already in the directory into records. */
-  private async sweep(): Promise<void> {
-    if (!this.dir) return;
-    let names: string[];
-    try {
-      names = await readdir(this.dir);
-    } catch {
+  private onProgress(params: unknown): void {
+    const p = params as { guid?: string; state?: string; filePath?: string };
+    if (!p?.guid) return;
+    if (p.state === 'completed') void this.complete(p.guid, p.filePath);
+    else if (p.state === 'canceled') void this.discard(p.guid, p.filePath);
+  }
+
+  private ownerOf(guid: string): DownloadCapture | undefined {
+    const owner = this.owners.get(guid);
+    if (owner) return owner;
+    const frameId = this.begun.get(guid)?.frameId;
+    if (!frameId) return undefined;
+    for (const capture of this.captures) if (capture.ownsFrame(frameId)) return capture;
+    return undefined;
+  }
+
+  private async complete(guid: string, filePath?: string): Promise<void> {
+    const file = filePath || join(await this.ensureDir(), guid);
+    let owner = this.ownerOf(guid);
+    if (!owner) {
+      await Bun.sleep(this.ownerGraceMs);
+      owner = this.ownerOf(guid);
+    }
+    const begun = this.begun.get(guid);
+    this.begun.delete(guid);
+    this.owners.delete(guid);
+
+    if (!owner) {
+      log.warn('download from no tab YAAR is attached to — discarded', {
+        url: begun?.url,
+        suggestedFilename: begun?.suggestedFilename,
+      });
+      await rm(file, { force: true }).catch(() => {});
       return;
     }
-    for (const name of names) await this.notice(name);
-  }
 
-  /**
-   * Consider one directory entry.
-   *
-   * A `.crdownload` is Chrome still writing; the rename to the final name is the
-   * completion signal and arrives as its own watch event. The size-stability loop after
-   * it is insurance for the case where a file appears under its final name from the
-   * start — cheap, because in the common case the very first sample is already stable.
-   */
-  private async notice(name: string): Promise<void> {
-    if (!this.dir || !name || name.endsWith(PARTIAL_SUFFIX)) return;
-    if (this.pending.has(name)) {
-      this.pending.set(name, true);
+    let bytes: number;
+    try {
+      bytes = (await stat(file)).size;
+    } catch {
+      log.warn('completed download is not on disk', { guid, file });
       return;
     }
-    this.pending.set(name, false);
-    try {
-      await this.consider(this.dir, name);
-    } finally {
-      const again = this.pending.get(name);
-      this.pending.delete(name);
-      if (again) void this.notice(name);
-    }
-  }
-
-  private async consider(dir: string, name: string): Promise<void> {
-    const file = join(dir, name);
-    let bytes = -1;
-    let key = '';
-    for (let i = 0; i < SETTLE_ATTEMPTS; i++) {
-      let st: Awaited<ReturnType<typeof stat>>;
-      try {
-        st = await stat(file);
-      } catch {
-        // Gone — a temp file Chrome renamed away, or a capture its claimer removed.
-        return;
-      }
-      key = `${st.ino}:${st.mtimeMs}`;
-      // The file a record was already made of: another event for the same completion.
-      if (this.seen.get(name) === key) return;
-      if (st.size > 0 && st.size === bytes) break;
-      bytes = st.size;
-      await Bun.sleep(this.settleIntervalMs);
-    }
-    if (bytes <= 0) return;
-    this.seen.set(name, key);
-
-    const entry: CapturedDownload = {
-      id: name,
-      url: this.announced.get(name) ?? '',
-      suggestedFilename: name,
+    owner.record({
+      id: guid,
+      url: begun?.url ?? '',
+      suggestedFilename: begun?.suggestedFilename || guid,
       bytes,
       file,
       at: Date.now(),
-    };
-    this.announced.delete(name);
-    this.record(entry);
+    });
+  }
+
+  private async discard(guid: string, filePath?: string): Promise<void> {
+    this.begun.delete(guid);
+    this.owners.delete(guid);
+    const file = filePath || join(await this.ensureDir(), guid);
+    await rm(file, { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * One tab's downloads: the ones the {@link DownloadHub} routed to it that nobody has
+ * claimed yet, and whoever is waiting for the next one.
+ */
+export class DownloadCapture {
+  /** The tab's main frame, which is its target id — the hub's fallback for attribution. */
+  private mainFrameId: string | null = null;
+  private finished: CapturedDownload[] = [];
+  private waiters: Waiter[] = [];
+  private disposed = false;
+
+  constructor(
+    private readonly hub: DownloadHub | null,
+    private readonly onComplete: (d: CapturedDownload) => void,
+  ) {
+    hub?.register(this);
+  }
+
+  /** Whether downloads are being captured in this tab's browser right now. */
+  get available(): boolean {
+    return !this.disposed && (this.hub?.available ?? false);
+  }
+
+  /**
+   * Listen on a freshly-connected socket of this tab for the downloads it starts.
+   *
+   * Called from `initTarget`, so it runs for a new tab and again after a crash-restart
+   * reattaches to a new target. It sets no behavior — that is the hub's, once per
+   * Chrome. Needs `Page.enable`, which `initTarget` has already sent.
+   */
+  attach(cdp: CDPClient): void {
+    cdp.on('Page.downloadWillBegin', (params: unknown) => {
+      const guid = (params as { guid?: string })?.guid;
+      if (guid) this.hub?.claim(guid, this);
+    });
+  }
+
+  /** The tab's top frame navigated; the session reports it from its own listener. */
+  noteMainFrame(frameId: string): void {
+    this.mainFrameId = frameId;
+  }
+
+  ownsFrame(frameId: string): boolean {
+    return frameId === this.mainFrameId;
   }
 
   /**
@@ -286,11 +320,12 @@ export class DownloadCapture {
    *
    * Only downloads nobody asked for reach `onComplete`, which is exactly the set the
    * announcement exists for: the ones Chrome performed on the page's initiative.
-   *
-   * An evicted file stays in `seen`: a watch event arriving before its removal lands
-   * finds the same file and is dropped, rather than filing the download twice.
    */
-  private record(entry: CapturedDownload): void {
+  record(entry: CapturedDownload): void {
+    if (this.disposed) {
+      void rm(entry.file, { force: true }).catch(() => {});
+      return;
+    }
     const waiter = this.waiters.find((w) => entry.at >= w.since);
     if (waiter) {
       this.waiters = this.waiters.filter((w) => w !== waiter);
@@ -329,9 +364,6 @@ export class DownloadCapture {
    * The timestamp is what makes this usable after a click: a download already sitting in
    * the list is not the one the caller just asked for, and resolving with it would hand
    * back the previous file.
-   *
-   * A sweep runs alongside the wait, so a lost watcher — or a platform where `fs.watch`
-   * reports nothing for a rename — degrades to a poll instead of to a timeout.
    */
   waitForNext(since: number, timeoutMs: number): Promise<CapturedDownload> {
     // Spliced out, not read: a waiter *claims* the download, so it must not also stay
@@ -340,22 +372,14 @@ export class DownloadCapture {
     if (readyAt !== -1) return Promise.resolve(this.finished.splice(readyAt, 1)[0]);
 
     return new Promise((resolve, reject) => {
-      let done = false;
       const waiter: Waiter = {
         since,
         resolve: (d) => {
-          done = true;
-          clearInterval(poll);
           clearTimeout(timer);
           resolve(d);
         },
       };
-      const poll = setInterval(() => {
-        if (!done) void this.sweep();
-      }, 1000);
       const timer = setTimeout(() => {
-        done = true;
-        clearInterval(poll);
         this.waiters = this.waiters.filter((w) => w !== waiter);
         reject(new Error('Timed out waiting for the download to finish.'));
       }, timeoutMs);
@@ -363,18 +387,12 @@ export class DownloadCapture {
     });
   }
 
-  /** Drop the capture directory and everything unclaimed in it. */
+  /** Stop receiving downloads and delete everything unclaimed. */
   async dispose(): Promise<void> {
-    const dir = this.dir;
-    this.dir = null;
-    this.watcher?.close();
-    this.watcher = null;
-    if (this.sweepTimer) clearInterval(this.sweepTimer);
-    this.sweepTimer = null;
+    this.disposed = true;
+    this.hub?.unregister(this);
+    const files = this.finished.map((d) => d.file);
     this.finished = [];
-    this.seen.clear();
-    this.pending.clear();
-    this.announced.clear();
-    if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+    await Promise.all(files.map((f) => rm(f, { force: true }).catch(() => {})));
   }
 }

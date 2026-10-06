@@ -17,6 +17,8 @@
  * to the user's already-running one.
  */
 
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { BrowserSession, type BrowserSessionOptions, type ShieldProfile } from './session.js';
 import type {
   BrowserProvider,
@@ -27,7 +29,13 @@ import type {
 } from './types.js';
 import { CDPClient, fetchBrowserWsUrl } from './cdp.js';
 import { BrowserSessionStore } from './session-store.js';
-import { getBrowserIdleMinutes } from '../../config.js';
+import { DownloadHub } from './downloads.js';
+import { instanceTempPrefix } from './pid-file.js';
+import {
+  getBrowserIdleMinutes,
+  getBrowserStateDir,
+  isEphemeralBrowserProfile,
+} from '../../config.js';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('browser');
@@ -119,6 +127,13 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   protected pendingPinned = 0;
   protected cleanupTimer: ReturnType<typeof setInterval> | null = null;
   protected browserCdp: CDPClient | null = null;
+  /**
+   * Where this Chrome's downloads land, and which tab each one is. One per Chrome rather
+   * than per tab: Chrome has one download behavior for every tab YAAR opens (see
+   * `downloads.ts`). Armed only on a Chrome YAAR owns — on the user's own Chrome it would
+   * take their personal downloads away from them for as long as YAAR is attached.
+   */
+  protected readonly downloadHub = new DownloadHub(downloadDir);
   /** The shield every tracked session carries; see {@link setShield}. */
   protected shield: ShieldProfile = { initScript: '', blockedUrls: [] };
   private tabListeners = new Set<(event: BrowserTabEvent) => void>();
@@ -556,11 +571,14 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       // provider's own hint that Chrome went away — the only one on Windows, where the
       // process we spawned may be a launcher that exited long ago.
       client.onClose((expected) => {
+        this.downloadHub.disarm(client);
         if (expected || this.browserCdp !== client) return;
         this.browserCdp = null;
         this.discoveryPromise = null;
         this.browserSocketLost();
       });
+      // Before any tab exists on this socket's Chrome, so the first download is captured.
+      if (this.ownsChrome) await this.downloadHub.arm(client);
       await this.browserCdp.send('Target.setDiscoverTargets', { discover: true });
 
       this.browserCdp.on('Target.targetCreated', (params: unknown) => {
@@ -624,9 +642,12 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         // exists: sending it to its own URL again replays a one-time OAuth callback,
         // wipes an `about:blank` popup the opener is writing into, and the emulation
         // overrides would stretch a 500×600 window to desktop metrics.
-        const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, {
-          adopt: true,
-        });
+        const session = await BrowserSession.create(
+          browserId,
+          target.webSocketDebuggerUrl,
+          { adopt: true },
+          this.downloadHub,
+        );
         if (this.records.get(browserId) !== rec) {
           // The target died, or the endpoint went, while we were attaching.
           await session.close().catch(() => {});
@@ -746,9 +767,12 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const rec = this.claim(browserId, t.id);
       this.pendingSessions++;
       try {
-        const session = await BrowserSession.create(browserId, t.webSocketDebuggerUrl, {
-          adopt: true,
-        });
+        const session = await BrowserSession.create(
+          browserId,
+          t.webSocketDebuggerUrl,
+          { adopt: true },
+          this.downloadHub,
+        );
         if (this.records.get(browserId) !== rec) {
           // The tab closed, or the endpoint went, while we were attaching.
           await session.close().catch(() => {});
@@ -890,7 +914,12 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       if (this.ownsChrome) this.startCleanup();
 
       const target = await this.openTarget(port);
-      const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, options);
+      const session = await BrowserSession.create(
+        browserId,
+        target.webSocketDebuggerUrl,
+        options,
+        this.downloadHub,
+      );
       // Updated in place, not replaced: a revive waiting on this id holds the record.
       const rec = this.recordFor(browserId);
       rec.ephemeral = false;
@@ -1015,4 +1044,21 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
     return out;
   }
+}
+
+/**
+ * The directory {@link DownloadHub} hands Chrome, emptied on first use.
+ *
+ * Beside the persisted profile by default. A file an earlier run left there is nobody's
+ * to claim — which tab a download belongs to is known only in memory — so it is cleared
+ * rather than kept. An ephemeral profile gets a scratch dir keyed by this server's PID
+ * instead: two YAARs sharing a checkout is exactly when the profile is ephemeral, and
+ * `cleanupStaleChrome` reaps that dir once this server is gone.
+ */
+async function downloadDir(): Promise<string> {
+  if (isEphemeralBrowserProfile()) return mkdtemp(instanceTempPrefix('downloads'));
+  const dir = join(getBrowserStateDir(), 'downloads');
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  return dir;
 }
