@@ -129,6 +129,7 @@ export async function listAppConfigs(): Promise<Record<string, unknown>> {
     'hooks.json',
     'settings.json',
     'shortcuts.json',
+    'dismissed-app-shortcuts.json',
     'permissions.json',
     'mounts.json',
     'curl_allowed_domains.yaml',

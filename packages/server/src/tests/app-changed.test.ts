@@ -17,7 +17,13 @@ import { runWithAgentContext } from '../agents/agent-context.js';
 import { notifyAppChanged } from '../features/apps/changed.js';
 import { readManifest } from '../features/apps/manifest.js';
 import { USER_APPS_DIR } from '../features/apps/roots.js';
-import { readShortcuts, removeAppShortcut } from '../storage/shortcuts.js';
+import {
+  forgetAppShortcutDismissal,
+  readShortcuts,
+  removeAppShortcut,
+  removeShortcut,
+  syncAppShortcuts,
+} from '../storage/shortcuts.js';
 import type { SessionId } from '../session/types.js';
 
 const SESSION = 'app-changed-session' as SessionId;
@@ -72,11 +78,13 @@ async function notifyAs(retire: boolean) {
 beforeEach(async () => {
   rmSync(appDir, { recursive: true, force: true });
   await removeAppShortcut(APP_ID);
+  await forgetAppShortcutDismissal(APP_ID);
 });
 
 afterEach(async () => {
   rmSync(appDir, { recursive: true, force: true });
   await removeAppShortcut(APP_ID);
+  await forgetAppShortcutDismissal(APP_ID);
   await getSessionHub().remove(SESSION);
   await getSessionHub().remove(OTHER);
 });
@@ -120,6 +128,34 @@ describe('an app whose files changed', () => {
       'desktop.refreshApps',
     ]);
     expect((await readShortcuts()).some((s) => s.id === `app-${APP_ID}`)).toBe(false);
+  });
+
+  it('does not bring back a shortcut the user deleted, on update or on startup', async () => {
+    writeApp({ name: 'Changed Fixture' });
+    await notifyAs(false);
+    expect(await removeShortcut(`app-${APP_ID}`)).toBe(true);
+
+    const updated = await notifyAs(false);
+    expect(updated.desktop.map((a) => a.type)).toEqual(['desktop.refreshApps']);
+    expect((await readShortcuts()).some((s) => s.id === `app-${APP_ID}`)).toBe(false);
+
+    await syncAppShortcuts([{ id: APP_ID, name: 'Changed Fixture' }]);
+    expect((await readShortcuts()).some((s) => s.id === `app-${APP_ID}`)).toBe(false);
+  });
+
+  it('gives a reinstalled app its shortcut again after an uninstall', async () => {
+    writeApp({ name: 'Changed Fixture' });
+    await notifyAs(false);
+    await removeShortcut(`app-${APP_ID}`);
+
+    rmSync(appDir, { recursive: true, force: true });
+    await notifyAs(false);
+    writeApp({ name: 'Changed Fixture' });
+    const reinstalled = await notifyAs(false);
+    expect(reinstalled.desktop.map((a) => a.type)).toEqual([
+      'desktop.createShortcut',
+      'desktop.refreshApps',
+    ]);
   });
 
   it('closes running windows only when asked to retire them', async () => {

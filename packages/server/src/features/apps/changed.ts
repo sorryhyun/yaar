@@ -14,7 +14,11 @@ import { ServerEventType, type OSAction } from '@yaar/shared';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { getSessionId } from '../../agents/agent-context.js';
-import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
+import {
+  ensureAppShortcut,
+  forgetAppShortcutDismissal,
+  removeAppShortcut,
+} from '../../storage/shortcuts.js';
 import { APP_ROOTS } from './roots.js';
 import { invalidateManifest } from './manifest.js';
 import { invalidateAppsCache, listApps } from './discovery.js';
@@ -62,7 +66,9 @@ export interface AppChangedOptions {
  *    agent docs. The agent itself (and its conversation) is kept.
  * 3. Optionally retire running windows — see {@link AppChangedOptions.retire}.
  * 4. Bring the app's desktop shortcut in line with the manifest: created if the app
- *    wants one and has none, removed if the app is gone or no longer wants one.
+ *    wants one and has none (unless the user deleted it), removed if the app is gone or
+ *    no longer wants one. An uninstall forgets the user's deletion, so a reinstall is a
+ *    first install again.
  * 5. `desktop.refreshApps`, last, so the frontend's refetch sees the shortcut change.
  */
 export async function notifyAppChanged(
@@ -79,9 +85,12 @@ export async function notifyAppChanged(
   const app = (await listApps()).find((a) => a.id === appId);
   if (app && app.createShortcut !== false) {
     const { shortcut, created } = await ensureAppShortcut(app);
-    if (created) emitDesktopAction({ type: 'desktop.createShortcut', shortcut });
-  } else if (await removeAppShortcut(appId)) {
-    emitDesktopAction({ type: 'desktop.removeShortcut', shortcutId: `app-${appId}` });
+    if (created && shortcut) emitDesktopAction({ type: 'desktop.createShortcut', shortcut });
+  } else {
+    if (await removeAppShortcut(appId)) {
+      emitDesktopAction({ type: 'desktop.removeShortcut', shortcutId: `app-${appId}` });
+    }
+    if (!app) await forgetAppShortcutDismissal(appId);
   }
 
   emitDesktopAction({ type: 'desktop.refreshApps' });
