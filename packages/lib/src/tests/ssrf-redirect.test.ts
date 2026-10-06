@@ -83,6 +83,26 @@ describe('safeFetch redirects', () => {
     expect(hops[2].headers.get('cookie')).toBe('sso=1');
   });
 
+  it("hands back the chain's cookies, never the caller's own", async () => {
+    // A caller with a jar stores every Set-Cookie it sees. Echoing its own Cookie header
+    // back put a copy of each value there, and that copy outranked the fresh value the
+    // caller sent next time: a per-request anti-bot key reached the upstream stale.
+    mockTransport({ 'https://a.example/write': () => new Response('ok') });
+    const direct = await safeFetch('https://a.example/write', {
+      headers: { Cookie: 'sid=abc; key=1' },
+    });
+    expect(direct.headers.getSetCookie()).toEqual([]);
+
+    mockTransport({
+      'https://a.example/start': () => redirect(302, 'https://a.example/end', ['hop=2; Path=/']),
+      'https://a.example/end': () => new Response('ok'),
+    });
+    const chained = await safeFetch('https://a.example/start', {
+      headers: { Cookie: 'sid=abc' },
+    });
+    expect(chained.headers.getSetCookie()).toEqual(['hop=2; path=/']);
+  });
+
   it('refuses a Set-Cookie for a domain the responding host is not in', async () => {
     const hops = mockTransport({
       'https://evil.example/a': () =>

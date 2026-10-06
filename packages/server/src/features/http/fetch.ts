@@ -8,7 +8,7 @@
 import { validateUrl, safeFetch } from '@yaar/lib/ssrf';
 import { getEnvInt } from '../../config.js';
 import { ensureDomainAllowed } from './domain-gate.js';
-import { getCookieHeader, captureResponseCookies } from './cookie-jar.js';
+import { getCookieHeader, captureResponseCookies, mergeCookieHeaders } from './cookie-jar.js';
 
 export const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -170,7 +170,7 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
       if (cookieValue) {
         // Merge with any existing Cookie header from the app
         const existing = fetchHeaders['cookie'] || fetchHeaders['Cookie'] || '';
-        fetchHeaders['Cookie'] = existing ? `${existing}; ${cookieValue}` : cookieValue;
+        fetchHeaders['Cookie'] = mergeCookieHeaders(existing, cookieValue);
         delete fetchHeaders['cookie']; // normalize to capitalized key
       }
     }
