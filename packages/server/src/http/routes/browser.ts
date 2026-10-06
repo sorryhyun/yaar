@@ -15,7 +15,11 @@ import { getHeadlessBrowser, type BrowserSessionUpdate } from '../../lib/browser
 import { enforceBrowserGuards, isYaarOriginUrl } from '../../features/browser/guards.js';
 import { getSessionId, runWithAgentContext } from '../../agents/agent-context.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { isMutatingAction, runBrowserAction } from '../../features/browser/actions.js';
+import {
+  isMutatingAction,
+  runBrowserAction,
+  sessionForAction,
+} from '../../features/browser/actions.js';
 import type { EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -311,7 +315,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const browserId = (body.browserId as string) ?? '0';
 
     // Phase 3 consent + self-target guards (no-ops for sandboxed headless tabs).
-    const guardedSession = pool.getSession(browserId);
+    const guardedSession = await sessionForAction(pool, action, browserId);
     // The caller's own token, not "whichever session is first in the hub". `getDefault()`
     // is right only while there is one session, and consent prompts raised against the
     // wrong desktop are asked of the wrong person.

@@ -253,13 +253,18 @@ In the code's words, sessions "behave like processes rather than request handler
   desktop and ML host tabs.
 
 **Revive** (`reviveSession`) opens a fresh tab under the same id, restores `mobile` and `windowId`,
-and re-navigates to the recorded http(s) URL. Concurrent callers join one attempt. Four places
+and re-navigates to the recorded http(s) URL. Concurrent callers join one attempt. Five places
 treat a browserId as a promise to keep and revive rather than returning 404:
 
 - the Browser app's SSE stream (`/api/browser/{id}/events`)
 - the screencast socket
 - `invoke('yaar://system/browsers/{id}', {action: 'revive'})`
 - the companion watchdog
+- any browser action addressed at an existing tab (`sessionForAction` in
+  `features/browser/actions.ts`, ahead of the guards on both `/api/browser` and
+  `yaar://session/browser`). An app holding an id from before an idle sweep would otherwise read a
+  good tab as gone. `create`, `open`, `list_tabs`, `close_tab` and the provider-wide settings do not
+  revive.
 
 **Crash-restart** (`restartCrashed`) handles the case where the tab dies without being asked to.
 The provider opens a new target and calls `session.reattach(url, currentUrl)`. The *same*

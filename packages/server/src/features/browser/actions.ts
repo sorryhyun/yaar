@@ -7,7 +7,7 @@
  * and so around the guards that read it.
  */
 
-import type { BrowserProvider } from '../../lib/browser/index.js';
+import type { BrowserProvider, BrowserSession } from '../../lib/browser/index.js';
 import { ok, okJson, okWithImages, error, type VerbResult } from '../../lib/verb-result.js';
 import { getActiveSessionId } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
@@ -951,6 +951,43 @@ export async function runBrowserAction(
 }
 
 /**
+ * Actions that do not address an existing tab: they make one, list them, or change the
+ * whole browser. A suspended id is no reason for these to bring a tab back — and
+ * `close_tab` reviving a page only to close it would replay its URL on the way out.
+ */
+const DOES_NOT_ADDRESS_A_TAB = new Set<string>([
+  'create',
+  'open',
+  'list_tabs',
+  'close_tab',
+  'set_request_blocking',
+  'set_init_script',
+]);
+
+/**
+ * The live session an action addresses, revived if all that is left of it is a record.
+ *
+ * An idle sweep or a server restart leaves a tab suspended — its id, page and cookies
+ * still on file, no socket behind it. The caller still holds that id (an app iframe
+ * that opened it an hour ago, before the sweep), and refusing with "No browser with
+ * ID" made every such caller read a perfectly good tab as gone: an app reading its
+ * cookie jar through a swept tab decided the user was logged out. The window and the
+ * screencast already revive for the same reason (`http/routes/browser.ts`); actions
+ * are the third door.
+ *
+ * Called before the guards, so they see the session the action will actually run on.
+ */
+export async function sessionForAction(
+  pool: BrowserProvider,
+  action: string,
+  browserId: string,
+): Promise<BrowserSession | undefined> {
+  const live = pool.getSession(browserId);
+  if (live || !isBrowserAction(action) || DOES_NOT_ADDRESS_A_TAB.has(action)) return live;
+  return (await pool.reviveSession(browserId)) ?? undefined;
+}
+
+/**
  * Apply the Phase-3 consent + self-target guards and the "driving" indicator,
  * then run the action against `pool`. Returns a `VerbResult` (guard denials
  * surface as `isError`). Shared by `yaar://session/browser`; the HTTP route
@@ -967,7 +1004,7 @@ export async function runGuardedBrowserAction(
   allowSelfTarget?: boolean,
 ): Promise<VerbResult> {
   const browserId = (body.browserId as string) ?? '0';
-  const session = pool.getSession(browserId);
+  const session = await sessionForAction(pool, action, browserId);
   const guard = await enforceBrowserGuards({
     provider: pool,
     action,

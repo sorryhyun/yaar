@@ -58,7 +58,7 @@ function storePath(): string {
 
 export class BrowserSessionStore {
   private records = new Map<string, BrowserSessionRecord>();
-  private loaded = false;
+  private loading: Promise<void> | null = null;
   private readonly writer: DebouncedJsonFile = createDebouncedJsonFile(
     storePath(),
     () => this.list(),
@@ -67,13 +67,20 @@ export class BrowserSessionStore {
   );
 
   /**
-   * Read the file once. Safe to call on every access — the second call is free,
-   * and a failed load still marks the store loaded so a broken file is not
-   * re-read on every navigation.
+   * Read the file once. Safe to call on every access — every call after the first
+   * waits on that same read, and a failed load still counts as loaded so a broken
+   * file is not re-read on every navigation.
+   *
+   * The read is shared rather than flagged: a flag set before the read finished let a
+   * concurrent caller (a revive right behind a new tab's first write) see an empty
+   * store and report a recorded session as nothing to revive.
    */
-  async load(): Promise<void> {
-    if (this.loaded) return;
-    this.loaded = true;
+  load(): Promise<void> {
+    this.loading ??= this.read();
+    return this.loading;
+  }
+
+  private async read(): Promise<void> {
     try {
       const raw = await readFile(storePath(), 'utf-8');
       const parsed: unknown = JSON.parse(raw);
@@ -83,6 +90,8 @@ export class BrowserSessionStore {
         const rec = asRecord(entry);
         if (!rec) continue;
         if (now - rec.updatedAt > RECORD_TTL_MS) continue;
+        // A session that changed while the file was being read is newer than the file.
+        if (this.records.has(rec.id)) continue;
         this.records.set(rec.id, rec);
       }
     } catch {
