@@ -93,6 +93,30 @@ export function getCookieHeader(jarKey: string, url: string): string | undefined
 }
 
 /**
+ * Join the caller's own `Cookie` header with the jar's, the caller's value winning
+ * for any name both carry.
+ *
+ * An app that sets a cookie explicitly (a session borrowed from a browser, a
+ * per-request anti-bot key) means that value. The jar's copy of the same name is
+ * older by construction, and appending it after the caller's handed the upstream
+ * two values — `safeFetch` keeps the later one, so the stale copy won.
+ */
+export function mergeCookieHeaders(callerCookie: string, jarCookie: string): string {
+  if (!callerCookie) return jarCookie;
+  const callerNames = new Set(
+    callerCookie
+      .split(';')
+      .map((pair) => pair.split('=')[0].trim())
+      .filter(Boolean),
+  );
+  const fromJar = jarCookie
+    .split(';')
+    .map((pair) => pair.trim())
+    .filter((pair) => pair && !callerNames.has(pair.split('=')[0].trim()));
+  return fromJar.length > 0 ? `${callerCookie}; ${fromJar.join('; ')}` : callerCookie;
+}
+
+/**
  * Clear all cookies for a jar key.
  */
 export function clearJar(jarKey: string): void {

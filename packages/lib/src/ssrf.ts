@@ -96,6 +96,11 @@ interface ChainCookie {
   /** Sent to `domain` only, not its subdomains — the cookie named no `Domain`. */
   hostOnly: boolean;
   path: string;
+  /**
+   * Set by a redirect hop's `Set-Cookie`, as opposed to seeded from the caller's own
+   * `Cookie` header. Only these are news to the caller, so only these are echoed back.
+   */
+  fromHop: boolean;
 }
 
 function cookieDomainMatches(host: string, cookie: ChainCookie): boolean {
@@ -130,6 +135,7 @@ function parseChainCookie(header: string, url: URL): ChainCookie | null {
     domain: host,
     hostOnly: true,
     path: defaultCookiePath(url.pathname),
+    fromHop: true,
   };
   for (const attr of attrs) {
     const at = attr.indexOf('=');
@@ -208,6 +214,7 @@ export async function safeFetch(
       domain: currentUrl.hostname.toLowerCase(),
       hostOnly: true,
       path: '/',
+      fromHop: false,
     });
   }
 
@@ -233,11 +240,14 @@ export async function safeFetch(
     });
 
     if (!REDIRECT_STATUSES.has(response.status)) {
-      // Merge accumulated Set-Cookie headers from redirect hops into final response
-      if (cookieJar.length > 0) {
+      // Merge Set-Cookie headers from redirect hops into the final response, so callers
+      // see what the chain was handed. Never the caller's own cookies: echoed back, they
+      // land in a caller's jar as if the upstream had set them, and on its next request
+      // that stale copy outranks the fresh value the caller sends.
+      const hopCookies = cookieJar.filter((c) => c.fromHop);
+      if (hopCookies.length > 0) {
         const mergedHeaders = new Headers(response.headers);
-        // Append redirect-hop cookies as Set-Cookie headers so callers see them
-        for (const c of cookieJar) {
+        for (const c of hopCookies) {
           mergedHeaders.append('Set-Cookie', `${c.name}=${c.value}; path=/`);
         }
         return new Response(response.body, {
