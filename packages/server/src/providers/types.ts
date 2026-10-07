@@ -49,6 +49,11 @@ export interface TokenUsage {
 export interface EscapeGuardRecord {
   stage: 'tripwire' | 'repair';
   toolName: string;
+  /**
+   * What the call was aimed at — its `uri` or `file_path` (`tripwire` only, and
+   * only when that key was written before the escapes started).
+   */
+  target?: string;
   /** The text that triggered it, truncated. Raw JSON for `tripwire`. */
   sample: string;
   /** Dotted paths whose literal escape runs were decoded (`repair` only). */

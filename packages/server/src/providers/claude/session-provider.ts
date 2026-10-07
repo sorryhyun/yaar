@@ -589,7 +589,10 @@ export class ClaudeSessionProvider implements AITransport {
           if (tripped) {
             escapeRetries++;
             awaitingEscapeRetry = true;
-            log.warn('escaped-text tripwire; restarting turn', { tool: tripped.toolName });
+            log.warn('escaped-text tripwire; restarting turn', {
+              tool: tripped.toolName,
+              target: tripped.target,
+            });
             // Before the interrupt: this notice carries the only record that
             // the cancelled call ever happened, and the turn is about to be
             // torn down. See `EscapeGuardRecord`.
@@ -599,7 +602,7 @@ export class ClaudeSessionProvider implements AITransport {
               // correction queued; the turn either ends on its own or the outer
               // abort path takes it. Nothing useful to do here.
             });
-            this.send(session, escapeCorrection(tripped.toolName));
+            this.send(session, escapeCorrection(tripped));
             continue;
           }
         }

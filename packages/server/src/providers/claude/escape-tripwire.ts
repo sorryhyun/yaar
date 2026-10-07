@@ -47,6 +47,21 @@ const TAIL = 256;
 const THRESHOLD = 3;
 
 /**
+ * How much of each block's raw JSON to keep from the *start*, for naming the
+ * call. The tail above slides past the opening keys long before a document
+ * trips, and the opening keys are where the target usually sits.
+ */
+const HEAD = 512;
+
+/**
+ * The argument that says what a watched call was aimed at. A tool name alone
+ * does not: nearly every monitor call is `mcp__verbs__invoke`, so a correction
+ * naming only the tool reads as cancelling whichever invoke the model remembers
+ * last — in practice a message it had already sent, which it then sent again.
+ */
+const TARGET_KEY = /"(?:uri|file_path|notebook_path)"\s*:\s*"([^"\\]{1,200})"/;
+
+/**
  * Whether a raw-JSON fragment carries a run of escapes that are mostly text.
  *
  * The non-ASCII test is what keeps genuine source code out of it: an agent
@@ -76,6 +91,7 @@ const WATCHED_TOOLS = /^(Write|Edit|NotebookEdit|mcp__verbs__(invoke|read))$/;
 /** One turn's worth of per-content-block state. Not reusable across turns. */
 export class EscapeTripwire {
   private tails = new Map<number, string>();
+  private heads = new Map<number, string>();
   private names = new Map<number, string>();
 
   /**
@@ -101,13 +117,13 @@ export class EscapeTripwire {
       if (block?.type === 'tool_use' && block.name && WATCHED_TOOLS.test(block.name)) {
         this.names.set(index, block.name);
         this.tails.set(index, '');
+        this.heads.set(index, '');
       }
       return null;
     }
 
     if (e.type === 'content_block_stop') {
-      this.tails.delete(index);
-      this.names.delete(index);
+      this.forget(index);
       return null;
     }
 
@@ -115,22 +131,34 @@ export class EscapeTripwire {
 
     const prev = this.tails.get(index);
     if (prev === undefined) return null; // not a watched tool_use block
-    const buffer = (prev + (e.delta.partial_json ?? '')).slice(-TAIL);
+    const fragment = e.delta.partial_json ?? '';
+    const buffer = (prev + fragment).slice(-TAIL);
     this.tails.set(index, buffer);
+    const head = this.heads.get(index) ?? '';
+    if (head.length < HEAD) this.heads.set(index, (head + fragment).slice(0, HEAD));
 
     if (!isEscapedText(buffer)) return null;
     const toolName = this.names.get(index) ?? 'unknown';
-    this.tails.delete(index);
-    this.names.delete(index);
+    const target = TARGET_KEY.exec(this.heads.get(index) ?? '')?.[1];
+    this.forget(index);
     // `buffer`, not the delta: the tail is what the detector actually matched,
     // and a single delta is often a fragment too short to read as evidence.
-    return { stage: 'tripwire', toolName, sample: escapeSample(buffer) };
+    const record: EscapeGuardRecord = { stage: 'tripwire', toolName, sample: escapeSample(buffer) };
+    if (target) record.target = target;
+    return record;
   }
 
   /** Drop all block state — call between turns on a reused stream. */
   reset(): void {
     this.tails.clear();
+    this.heads.clear();
     this.names.clear();
+  }
+
+  private forget(index: number): void {
+    this.tails.delete(index);
+    this.heads.delete(index);
+    this.names.delete(index);
   }
 }
 
@@ -143,9 +171,12 @@ export class EscapeTripwire {
  * persists the record; see `EscapeGuardRecord`.
  */
 export function escapeGuardNotice(record: EscapeGuardRecord): StreamMessage {
+  const call = record.target
+    ? `${record.toolName} call on ${record.target}`
+    : `${record.toolName} call`;
   const text =
     record.stage === 'tripwire'
-      ? `Cancelled a ${record.toolName} call whose arguments were being written as \\uXXXX escape sequences; retrying.`
+      ? `Cancelled a ${call} whose arguments were being written as \\uXXXX escape sequences; retrying.`
       : `Repaired escape sequences in a ${record.toolName} call before running it.`;
   return {
     type: 'notice',
@@ -156,12 +187,24 @@ export function escapeGuardNotice(record: EscapeGuardRecord): StreamMessage {
   };
 }
 
-/** The correction pushed to the model after a trip. */
-export function escapeCorrection(toolName: string): string {
+/**
+ * The correction pushed to the model after a trip.
+ *
+ * It names the cancelled call by its target and says outright that nothing
+ * else was undone: the model sees an interrupt land after calls that already
+ * returned results, and without both it guesses which call died — and redoes
+ * one that had succeeded.
+ */
+export function escapeCorrection(record: Pick<EscapeGuardRecord, 'toolName' | 'target'>): string {
+  const call = record.target
+    ? `\`${record.toolName}\` call on \`${record.target}\``
+    : `\`${record.toolName}\` call`;
   return (
-    `Your \`${toolName}\` call was cancelled: its arguments were being written as ` +
-    `\\uXXXX escape sequences instead of characters. Retry the call writing the text ` +
-    `natively (안녕, not \\uc548\\ub155). If a parameter takes JSON as a string, escape ` +
-    `it once for that string (\\\\n inside it, not \\n).`
+    `Your ${call} was cancelled before it ran: its arguments were being written as ` +
+    `\\uXXXX escape sequences instead of characters. Only that call was cancelled — ` +
+    `every call that already returned a result this turn ran normally, so do not repeat ` +
+    `those. Retry just the cancelled call, writing the text natively ` +
+    `(안녕, not \\uc548\\ub155). If a parameter takes JSON as a string, escape it once ` +
+    `for that string (\\\\n inside it, not \\n).`
   );
 }
