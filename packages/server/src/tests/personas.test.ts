@@ -150,9 +150,9 @@ describe('persona profile', () => {
       appId: 'chitchats',
       subId: 'bob',
       systemPrompt: 'You are Bob.',
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
     });
-    expect(profile.model).toBe('claude-haiku-4-5');
+    expect(profile.model).toBe('claude-haiku-5-5');
   });
 
   it('places the persona in the unprivileged app tier via its role prefix', () => {

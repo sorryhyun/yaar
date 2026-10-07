@@ -12,7 +12,7 @@ import { isFableMode } from '../../config/env.js';
 
 /** Map short agentType names to full model identifiers. */
 export const AGENT_TYPE_MODELS: Record<string, string> = {
-  haiku: 'claude-haiku-4-5-20251001',
+  haiku: 'claude-haiku-5-5',
   sonnet: 'claude-sonnet-5',
   opus: 'claude-opus-5-5',
 };

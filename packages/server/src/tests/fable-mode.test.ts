@@ -20,8 +20,8 @@ describe('fable mode off', () => {
     expect(resolveAgentModel()).toBe(AGENT_TYPE_MODELS.sonnet);
     expect(resolveAgentModel('haiku')).toBe(AGENT_TYPE_MODELS.haiku);
     expect(buildSubAgentProfile(spec).model).toBeUndefined();
-    expect(buildSubAgentProfile({ ...spec, model: 'claude-haiku-4-5' }).model).toBe(
-      'claude-haiku-4-5',
+    expect(buildSubAgentProfile({ ...spec, model: 'claude-haiku-5-5' }).model).toBe(
+      'claude-haiku-5-5',
     );
   });
 });
@@ -38,7 +38,7 @@ describe('fable mode on (FABLE=1)', () => {
     expect(resolveAgentModel()).toBe(AGENT_TYPE_MODELS.opus);
     expect(resolveAgentModel('haiku')).toBe(AGENT_TYPE_MODELS.opus);
     expect(buildSubAgentProfile(spec).model).toBe(AGENT_TYPE_MODELS.opus);
-    expect(buildSubAgentProfile({ ...spec, model: 'claude-haiku-4-5' }).model).toBe(
+    expect(buildSubAgentProfile({ ...spec, model: 'claude-haiku-5-5' }).model).toBe(
       AGENT_TYPE_MODELS.opus,
     );
   });

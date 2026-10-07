@@ -36,7 +36,7 @@ describe('app agent model selection', () => {
   });
 
   it('maps haiku to Luna rather than dropping it — Codex has no smaller tier', () => {
-    expect(claudeModelToCodex('claude-haiku-4-5-20251001')).toBe('gpt-6-luna');
+    expect(claudeModelToCodex('claude-haiku-5-5')).toBe('gpt-6-luna');
     expect(claudeModelToCodex('haiku')).toBe('gpt-6-luna');
   });
 });

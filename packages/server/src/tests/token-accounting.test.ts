@@ -247,7 +247,7 @@ describe('context window', () => {
     const msg = {
       ...(result(raw(10, 47, 15232, 3313)) as object),
       modelUsage: {
-        'claude-haiku-4-5': { contextWindow: 200_000 },
+        'claude-haiku-5-5': { contextWindow: 200_000 },
         'claude-opus-5-5': { contextWindow: 1_000_000 },
       },
     } as unknown as SDKMessage;
