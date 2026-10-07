@@ -393,20 +393,37 @@ export function format(value: unknown): string {
   }
 }
 
-/** Structural equality: plain objects, arrays, Map, Set, Date, RegExp, typed arrays. */
-export function equals(a: unknown, b: unknown, seen = new Map<object, object>()): boolean {
+/**
+ * Structural equality: plain objects, arrays, Map, Set, Date, RegExp, typed arrays.
+ *
+ * As in bun:test, `toEqual` compares content, not type: a null-prototype object (a
+ * regex's `match.groups`) equals the plain object a worker's structured clone turns
+ * it into, and `undefined`-valued keys count as absent. `strict` (`toStrictEqual`)
+ * checks both.
+ */
+export function equals(
+  a: unknown,
+  b: unknown,
+  strict = false,
+  seen = new Map<object, object>(),
+): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
-  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
   if (seen.get(a) === b) return true;
   seen.set(a, b);
+  const eq = (x: unknown, y: unknown) => equals(x, y, strict, seen);
 
+  for (const Kind of [Date, RegExp, Map, Set] as const) {
+    if (a instanceof Kind !== b instanceof Kind) return false;
+  }
   if (a instanceof Date) return a.getTime() === (b as Date).getTime();
   if (a instanceof RegExp) return String(a) === String(b);
   if (a instanceof Map) {
     const bm = b as Map<unknown, unknown>;
     if (a.size !== bm.size) return false;
-    for (const [k, v] of a) if (!bm.has(k) || !equals(v, bm.get(k), seen)) return false;
+    for (const [k, v] of a) if (!bm.has(k) || !eq(v, bm.get(k))) return false;
     return true;
   }
   if (a instanceof Set) {
@@ -414,12 +431,13 @@ export function equals(a: unknown, b: unknown, seen = new Map<object, object>())
     if (a.size !== bs.size) return false;
     outer: for (const v of a) {
       if (bs.has(v)) continue;
-      for (const w of bs) if (equals(v, w, seen)) continue outer;
+      for (const w of bs) if (eq(v, w)) continue outer;
       return false;
     }
     return true;
   }
-  if (ArrayBuffer.isView(a)) {
+  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) {
+    if (!ArrayBuffer.isView(a) || !ArrayBuffer.isView(b)) return false;
     const av = a as unknown as ArrayLike<unknown>;
     const bv = b as unknown as ArrayLike<unknown>;
     if (av.length !== bv.length) return false;
@@ -429,20 +447,17 @@ export function equals(a: unknown, b: unknown, seen = new Map<object, object>())
   if (Array.isArray(a)) {
     const ba = b as unknown[];
     if (a.length !== ba.length) return false;
-    for (let i = 0; i < a.length; i++) if (!equals(a[i], ba[i], seen)) return false;
+    for (let i = 0; i < a.length; i++) if (!eq(a[i], ba[i])) return false;
     return true;
   }
-  // `undefined`-valued keys count as absent, as in bun:test's toEqual.
   const keys = (o: object) =>
-    Object.keys(o).filter((k) => (o as Record<string, unknown>)[k] !== undefined);
+    Object.keys(o).filter((k) => strict || (o as Record<string, unknown>)[k] !== undefined);
   const ak = keys(a);
   const bk = keys(b);
   if (ak.length !== bk.length) return false;
   for (const k of ak) {
     if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
-    if (!equals((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], seen)) {
-      return false;
-    }
+    if (!eq((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
   }
   return true;
 }
@@ -470,7 +485,12 @@ type Check = (actual: unknown, ...args: unknown[]) => { pass: boolean; message: 
 const MATCHERS: Record<string, Check> = {
   toBe: (a, e) => ({ pass: Object.is(a, e), message: `${format(a)} to be ${format(e)}` }),
   toEqual: (a, e) => ({ pass: equals(a, e), message: `${format(a)} to equal ${format(e)}` }),
-  toStrictEqual: (a, e) => ({ pass: equals(a, e), message: `${format(a)} to equal ${format(e)}` }),
+  toStrictEqual: (a, e) => ({
+    pass: equals(a, e, true),
+    message:
+      `${format(a)} to strictly equal ${format(e)}` +
+      (format(a) === format(e) ? ' (same content: a prototype or an undefined key differs)' : ''),
+  }),
   toMatchObject: (a, e) => ({
     pass: matchesObject(a, e),
     message: `${format(a)} to match object ${format(e)}`,

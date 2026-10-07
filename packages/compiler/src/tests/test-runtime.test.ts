@@ -113,6 +113,20 @@ describe('expect', () => {
     T.expect({ a: 1, b: { c: 2, d: 3 } }).toMatchObject({ b: { c: 2 } });
   });
 
+  test('toEqual compares content, not prototype; toStrictEqual compares both', () => {
+    // What a worker hands back: structured clone gives `groups` a plain prototype.
+    const groups = 'ab'.match(/(?<w>a)/)!.groups!;
+    T.expect(Object.getPrototypeOf(groups)).toBeNull();
+    T.expect({ named: groups }).toEqual({ named: structuredClone({ ...groups }) });
+    fails(() => T.expect(groups).toStrictEqual({ w: 'a' }));
+    expect(() => T.expect(groups).toStrictEqual({ w: 'a' })).toThrow(
+      'a prototype or an undefined key differs',
+    );
+    fails(() => T.expect({ a: undefined }).toStrictEqual({}));
+    fails(() => T.expect([1]).toEqual({ 0: 1 }));
+    fails(() => T.expect(new Date(1)).toEqual({}));
+  });
+
   test('not, and the message names what was expected', () => {
     T.expect(1).not.toBe(2);
     expect(() => T.expect(1).not.toBe(1)).toThrow('Expected not 1 to be 1');
