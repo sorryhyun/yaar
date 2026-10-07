@@ -4,7 +4,7 @@
 //
 // Loose so a field added by a newer build does not fail an older build's read. The field is
 // still dropped on the next write, because `reviveLayout` returns an explicit
-// `{ panelWidth, viewMode }`.
+// `{ panelWidth, viewMode, sortKey, sortDir }`.
 //
 // `panelWidth` is not clamped here; see `reviveLayout` in layout.ts.
 //
@@ -16,4 +16,6 @@ export const LayoutPrefsSchema = z.looseObject({
   // `z.number()` rejects NaN and ±Infinity; a non-finite width would poison every later clamp.
   panelWidth: z.optional(z.number()),
   viewMode: z.optional(z.enum(['list', 'grid'])),
+  sortKey: z.optional(z.enum(['name', 'modified', 'size'])),
+  sortDir: z.optional(z.enum(['asc', 'desc'])),
 });

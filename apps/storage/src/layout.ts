@@ -11,13 +11,28 @@ export const MIN_PANEL_WIDTH = 300;
 export const MAX_PANEL_RATIO = 0.7;
 
 export type ViewMode = 'list' | 'grid';
+export type SortKey = 'name' | 'modified' | 'size';
+export type SortDir = 'asc' | 'desc';
+export const SORT_KEYS: readonly SortKey[] = ['name', 'modified', 'size'];
+
+export interface SortPrefs {
+  key: SortKey;
+  dir: SortDir;
+}
 
 interface LayoutPrefs {
   panelWidth: number;
   viewMode: ViewMode;
+  sortKey: SortKey;
+  sortDir: SortDir;
 }
 
-const DEFAULT_PREFS: LayoutPrefs = { panelWidth: DEFAULT_PANEL_WIDTH, viewMode: 'list' };
+const DEFAULT_PREFS: LayoutPrefs = {
+  panelWidth: DEFAULT_PANEL_WIDTH,
+  viewMode: 'list',
+  sortKey: 'name',
+  sortDir: 'asc',
+};
 
 // The window width is a signal so the clamp below is reactive: a resize re-runs
 // every reader of panelWidth() without writing anything back to storage.
@@ -48,6 +63,8 @@ function reviveLayout(raw: unknown): LayoutPrefs {
   return {
     panelWidth: parsed.panelWidth ?? DEFAULT_PANEL_WIDTH,
     viewMode: parsed.viewMode ?? 'list',
+    sortKey: parsed.sortKey ?? DEFAULT_PREFS.sortKey,
+    sortDir: parsed.sortDir ?? DEFAULT_PREFS.sortDir,
   };
 }
 
@@ -79,6 +96,37 @@ const [, setSharedViewMode] = createSharedSignal<ViewMode>('view-mode', DEFAULT_
 export function setViewMode(mode: ViewMode) {
   setLayout({ ...layout(), viewMode: mode });
   setSharedViewMode(mode);
+}
+
+export const sortPrefs = (): SortPrefs => ({ key: layout().sortKey, dir: layout().sortDir });
+
+export function isSortKey(v: unknown): v is SortKey {
+  return SORT_KEYS.includes(v as SortKey);
+}
+
+export function isSortDir(v: unknown): v is SortDir {
+  return v === 'asc' || v === 'desc';
+}
+
+/**
+ * Sort order is a content choice like viewMode, mirrored to other copies the same way.
+ * The remote value is checked before it is adopted: a malformed one would otherwise be
+ * persisted and fail every later load's schema check.
+ */
+const [, setSharedSort] = createSharedSignal<SortPrefs>(
+  'sort',
+  { key: DEFAULT_PREFS.sortKey, dir: DEFAULT_PREFS.sortDir },
+  {
+    onRemote: (sort) => {
+      if (!isSortKey(sort?.key) || !isSortDir(sort?.dir)) return;
+      setLayout((prev) => ({ ...prev, sortKey: sort.key, sortDir: sort.dir }));
+    },
+  },
+);
+
+export function setSort(sort: SortPrefs) {
+  setLayout({ ...layout(), sortKey: sort.key, sortDir: sort.dir });
+  setSharedSort(sort);
 }
 
 export function resetPanelWidth() {

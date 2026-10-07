@@ -4,17 +4,47 @@ import html from '@bundled/solid-js/html';
 import { storage, windows, showConfirm } from '@bundled/yaar';
 import type { StorageEntry } from './types';
 import { state, setState } from './state';
-import { basename, formatSize, getFileIcon, isImage } from './helpers';
+import {
+  basename,
+  formatModified,
+  formatSize,
+  formatTimestamp,
+  getFileIcon,
+  isImage,
+} from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { navigate, selectFile } from './navigation';
+import { closeNav, navDrawer } from './navOverlay';
 
 // One entry, two renderings: the list row and the grid tile share every
 // interaction, so a behaviour added here reaches both views.
 
+// "5 min ago" goes stale while the listing sits open; a minute tick keeps every
+// relative label honest without re-fetching the directory.
+const [now, setNow] = createSignal(Date.now());
+setInterval(() => setNow(Date.now()), 60_000);
+
+/**
+ * Opening a file closes the drawer, which on a narrow window covers the whole preview.
+ * The wide-window overlay is left to its hover fold: it covers only the left edge, a
+ * pinned one is an explicit "keep this open", and folding it on the first click would
+ * pull the row out from under the second click of a double-click (open by agent).
+ * Only user gestures close it; an agent's `select-file` lands in one arbitrary copy,
+ * and the panel is per-viewport chrome (see `set-layout`).
+ */
+function dismissDrawer() {
+  if (navDrawer()) closeNav();
+}
+
+function openFile(entry: StorageEntry) {
+  dismissDrawer();
+  void selectFile(entry);
+}
+
 function activate(e: MouseEvent, entry: StorageEntry) {
   if ((e.target as HTMLElement).closest('.file-actions')) return;
   if (entry.isDirectory) navigate(entry.path);
-  else selectFile(entry);
+  else openFile(entry);
 }
 
 function openByAgent(e: MouseEvent, entry: StorageEntry) {
@@ -41,6 +71,7 @@ function EntryActions(entry: StorageEntry) {
       <${Show} when=${() => !entry.isDirectory}>
         <button title="Open in a window" onClick=${(e: MouseEvent) => {
           e.stopPropagation();
+          dismissDrawer();
           windows.openUrl(storage.url(entry.path), { title: name });
         }}>⇗</button>
       <//>
@@ -66,6 +97,8 @@ export function FileRow(entry: StorageEntry) {
     >
       <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
       <span class=${`file-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
+      <span class="file-date" title=${formatTimestamp(entry.modifiedAt)}>${() =>
+        formatModified(entry.modifiedAt, now())}</span>
       <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
       ${EntryActions(entry)}
     </div>
@@ -79,7 +112,10 @@ export function FileTile(entry: StorageEntry) {
   // back to the type icon instead of the browser's broken-image glyph.
   const [thumbFailed, setThumbFailed] = createSignal(false);
   const wantsThumb = !entry.isDirectory && isImage(name);
-  const tooltip = entry.isDirectory ? name : `${name}\n${formatSize(entry.size)}`;
+  const modified = formatTimestamp(entry.modifiedAt);
+  const tooltip = [name, entry.isDirectory ? '' : formatSize(entry.size), modified]
+    .filter(Boolean)
+    .join('\n');
   return html`
     <div
       class=${entryClass('file-tile', entry)}
@@ -107,6 +143,7 @@ export function FileTile(entry: StorageEntry) {
         <//>
       </div>
       <span class=${`file-tile-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
+      <span class="file-tile-meta">${() => formatModified(entry.modifiedAt, now())}</span>
       ${EntryActions(entry)}
     </div>
   `;

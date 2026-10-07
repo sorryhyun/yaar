@@ -6,6 +6,7 @@ import { state, setState, elPreviewBody } from './state';
 import {
   basename,
   formatSize,
+  formatTimestamp,
   isImage,
   isMarkdown,
   isPdf,
@@ -76,11 +77,9 @@ async function loadDirectory(path: string) {
   setState('statusText', 'Loading...');
   try {
     await refreshMountAliases();
-    const fetched = (await storage.list(path)) as unknown as StorageEntry[];
-    fetched.sort((a, b) => {
-      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-      return basename(a.path).localeCompare(basename(b.path));
-    });
+    // Unsorted on purpose: display order is derived from the sort preference (sort.ts),
+    // so changing it re-orders without a re-fetch.
+    const fetched = (await storage.list(path)) as StorageEntry[];
     setState('entries', fetched);
     const dirs = fetched.filter((e) => e.isDirectory).length;
     const files = fetched.length - dirs;
@@ -119,10 +118,14 @@ async function applySelection(entry: StorageEntry) {
   setState('selectedFile', entry.path);
   setState('previewContent', null);
   setState('previewTitleText', name);
-  setState('previewMetaText', formatSize(entry.size));
+  const modified = formatTimestamp(entry.modifiedAt);
+  setState(
+    'previewMetaText',
+    [formatSize(entry.size), modified && `Modified ${modified}`].filter(Boolean).join(' · '),
+  );
   setState('showPreview', true);
-  // The preview renders behind the overlay; the nav panel stays until the cursor
-  // leaves it (onMouseLeave → scheduleNavClose), not on file selection.
+  // The preview renders behind the overlay. A narrow window's drawer is closed by the
+  // click that opened the file (entries.ts); a wide one stays until the cursor leaves it.
 
   elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 

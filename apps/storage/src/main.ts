@@ -22,12 +22,18 @@ import {
   maxPanelWidth,
   viewMode,
   setViewMode,
+  sortPrefs,
+  setSort,
+  isSortKey,
+  isSortDir,
   MIN_PANEL_WIDTH,
   DEFAULT_PANEL_WIDTH,
 } from './layout';
+import { sortedEntries } from './sort';
 import {
   navOpen,
   navPinned,
+  navDrawer,
   openNav,
   closeNav,
   scheduleNavClose,
@@ -130,10 +136,10 @@ const App = () => {
     <button
       class=${() =>
         'y-nav-hamburger' +
-        (navPinned() ? ' y-nav-hamburger-pinned' : '') +
+        (navPinned() && !navDrawer() ? ' y-nav-hamburger-pinned' : '') +
         (navOpen() ? ' y-nav-hamburger-hidden' : '')}
-      onClick=${() => toggleNavPin()}
-      title="Files (click to pin open)"
+      onClick=${() => (navDrawer() ? openNav() : toggleNavPin())}
+      title=${() => (navDrawer() ? 'Files' : 'Files (click to pin open)')}
     >☰</button>
 
     <div
@@ -144,11 +150,46 @@ const App = () => {
     >
       <div class="y-nav-header">
         <span class="y-nav-title">FILES <span class="y-nav-count">${() => state.entries.length}</span></span>
-        <button
-          class=${() => 'y-nav-pin' + (navPinned() ? ' y-nav-pin-active' : '')}
-          onClick=${() => toggleNavPin()}
-          title=${() => (navPinned() ? 'Unpin panel' : 'Pin panel open')}
-        >📌</button>
+        <div class="nav-header-actions">
+          <div class="y-tgroup sort-control" role="group" aria-label="Sort">
+            <select
+              class="toolbar-select sort-select"
+              title="Sort by"
+              aria-label="Sort by"
+              value=${() => sortPrefs().key}
+              onChange=${(e: Event) => {
+                const key = (e.target as HTMLSelectElement).value;
+                if (isSortKey(key)) setSort({ ...sortPrefs(), key });
+              }}
+            >
+              <option value="name">Name</option>
+              <option value="modified">Modified</option>
+              <option value="size">Size</option>
+            </select>
+            <button
+              class="y-tbtn sort-dir"
+              onClick=${() => {
+                const sort = sortPrefs();
+                setSort({ ...sort, dir: sort.dir === 'asc' ? 'desc' : 'asc' });
+              }}
+              title=${() =>
+                sortPrefs().dir === 'asc'
+                  ? 'Ascending (click for descending)'
+                  : 'Descending (click for ascending)'}
+              aria-label=${() => (sortPrefs().dir === 'asc' ? 'Sort ascending' : 'Sort descending')}
+            >${() => (sortPrefs().dir === 'asc' ? '↑' : '↓')}</button>
+          </div>
+          <${Show}
+            when=${navDrawer}
+            fallback=${html`<button
+              class=${() => 'y-nav-pin' + (navPinned() ? ' y-nav-pin-active' : '')}
+              onClick=${() => toggleNavPin()}
+              title=${() => (navPinned() ? 'Unpin panel' : 'Pin panel open')}
+            >📌</button>`}
+          >
+            <button class="y-nav-close" onClick=${() => closeNav()} title="Close" aria-label="Close files">✕</button>
+          <//>
+        </div>
       </div>
 
       <div class="nav-panel-controls">
@@ -213,7 +254,7 @@ const App = () => {
           if (state.entries.length === 0)
             return html`<div class="y-empty empty">This folder is empty</div>`;
           const render = viewMode() === 'grid' ? FileTile : FileRow;
-          return html`<${For} each=${() => state.entries}>${render}<//>`;
+          return html`<${For} each=${() => sortedEntries()}>${render}<//>`;
         }}
       </div>
 
@@ -273,13 +314,15 @@ export default defineApp({
       get: () => state.currentPath,
     },
     'directory-listing': {
-      description: 'Files and folders in the current directory',
+      description:
+        'Files and folders in the current directory, in display order (see sort). modifiedAt is an ISO timestamp.',
       get: () =>
-        state.entries.map((e) => ({
+        sortedEntries().map((e) => ({
           path: e.path,
           name: basename(e.path),
           isDirectory: e.isDirectory,
           size: e.size,
+          modifiedAt: e.modifiedAt,
         })),
     },
     'selected-file': {
@@ -299,12 +342,18 @@ export default defineApp({
         'How the directory listing renders: "list" (rows) or "grid" (icon tiles). Persisted.',
       get: () => viewMode(),
     },
+    sort: {
+      description:
+        'Listing order: key is "name", "modified" or "size", dir "asc" or "desc". Folders always list before files. Persisted.',
+      get: () => sortPrefs(),
+    },
     layout: {
       description:
-        'Current layout state. The file preview always fills the whole window as the background; the directory listing lives in a left hover-open overlay panel. navOpen is whether the panel is currently visible, navPinned whether it is pinned open, panelWidth its width in px.',
+        'Current layout state. The file preview always fills the whole window as the background; the directory listing lives in a left hover-open overlay panel. navOpen is whether the panel is currently visible, navPinned whether it is pinned open, panelWidth its width in px. drawer is true on a narrow window, where the panel is a full-width drawer that ignores the pin and closes when the user opens a file.',
       get: () => ({
         navOpen: navOpen(),
         navPinned: navPinned(),
+        drawer: navDrawer(),
         panelWidth: panelWidth(),
         minPanelWidth: MIN_PANEL_WIDTH,
         maxPanelWidth: maxPanelWidth(),
@@ -411,6 +460,26 @@ export default defineApp({
           return { success: false, error: 'mode must be "list" or "grid"' };
         setViewMode(mode);
         return { success: true, viewMode: mode };
+      },
+    },
+    setSort: {
+      description:
+        'Order the directory listing by "name", "modified" or "size"; dir defaults to the current one. Folders stay first. The choice is persisted.',
+      params: {
+        type: 'object',
+        properties: {
+          key: { type: 'string', enum: ['name', 'modified', 'size'] },
+          dir: { type: 'string', enum: ['asc', 'desc'] },
+        },
+        required: ['key'],
+      },
+      run: (params) => {
+        if (!isSortKey(params.key))
+          return { success: false, error: 'key must be "name", "modified" or "size"' };
+        if (params.dir !== undefined && !isSortDir(params.dir))
+          return { success: false, error: 'dir must be "asc" or "desc"' };
+        setSort({ key: params.key, dir: params.dir ?? sortPrefs().dir });
+        return { success: true, sort: sortPrefs() };
       },
     },
     refresh: {
