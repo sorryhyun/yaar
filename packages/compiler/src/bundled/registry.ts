@@ -38,6 +38,9 @@ export const BUNDLED_SHIMS: Record<string, string> = {
   mediabunny: toForwardSlash(join(SHIMS_DIR, 'mediabunny.ts')),
   mermaid: toForwardSlash(join(SHIMS_DIR, 'mermaid.ts')),
   'pixi.js': toForwardSlash(join(SHIMS_DIR, 'pixi.ts')),
+  // The test API for `src/**/*.test.ts` — importable only from a test build
+  // (`compileTests`), so test code cannot ship in a deployed app.
+  test: toForwardSlash(join(SHIMS_DIR, 'test.ts')),
   'three/addons': toForwardSlash(join(SHIMS_DIR, 'three-addons.ts')),
   uuid: toForwardSlash(join(SHIMS_DIR, 'uuid.ts')),
   zod: toForwardSlash(join(SHIMS_DIR, 'zod.ts')),
@@ -138,6 +141,9 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   mermaid: 'mermaid',
   prismjs: 'prismjs',
   zod: 'zod/mini',
+  // First consumer: Dev Tools' `runTests`, through `compileTests`. Refused by the
+  // app build (`plugins.ts`), so it is test-only rather than a gated SDK.
+  test: 'test',
   yaar: 'yaar',
   'yaar-dev': 'yaar-dev',
   'yaar-web': 'yaar-web',

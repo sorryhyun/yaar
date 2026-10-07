@@ -134,7 +134,13 @@ read that before guessing a signature.
 | `@bundled/diff`, `@bundled/diff2html` | Text diffing and rendered diffs |
 | `@bundled/zod` | Zod **Mini**: validation at trust boundaries and `params` schemas |
 | `@bundled/dompurify` | Present for `sanitizeHtml`; never import it directly |
+| `@bundled/test` | `describe`/`test`/`expect` for `src/**/*.test.ts`, run by Dev Tools `runTests`. The app build refuses it, so tests never ship |
 | `@bundled/yaar` | The SDK itself: verbs, storage, `defineApp`, helpers. Always available |
+
+A Web Worker is an import, not a library: `import MatchWorker from './match.worker.ts?worker'`
+bundles that file on its own and inlines it, and `new MatchWorker()` starts it as a module worker.
+The worker may import other app modules and `@bundled/*` libraries, but not the YAAR SDK (it
+lives on `window`); post a message to the page for anything that needs it.
 
 ### Gated SDKs
 

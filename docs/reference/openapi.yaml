@@ -192,6 +192,16 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/dev/compile-tests:
+    post:
+      summary: "Build a project's test files into a test page"
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
   /api/dev/deploy:
     post:
       summary: Deploy a project

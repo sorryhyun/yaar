@@ -51,6 +51,9 @@ import {
   analyzeAudio,
   compareReports,
   kWeightingFilters,
+  testWindowIdFor,
+  parseTestReport,
+  trimTestError,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -1061,6 +1064,43 @@ const audioAnalysis = suite('audio-analysis', {
   },
 });
 
+const testReport = suite('test-report', {
+  'the test window is answerable by app_eval and distinct from the preview'() {
+    const id = testWindowIdFor('42');
+    ok(id.startsWith('devtools-preview-'), 'app_eval gate prefix');
+    ok(id !== previewWindowIdFor('42'), 'never the preview window');
+  },
+  'a report arrives as an object, JSON text, or JSON-quoted JSON text'() {
+    const report = { pass: true, total: 1, passed: 1, failed: 0, skipped: 0, durationMs: 3 };
+    eq(parseTestReport(report)?.passed, 1);
+    eq(parseTestReport(JSON.stringify(report))?.pass, true);
+    eq(parseTestReport(JSON.stringify(JSON.stringify(report)))?.total, 1);
+    eq(parseTestReport(JSON.stringify(report))?.failures, []);
+  },
+  'anything that is not a report is null, never a pass'() {
+    eq(parseTestReport(undefined), null);
+    eq(parseTestReport('undefined'), null);
+    eq(parseTestReport({ pass: true }), null);
+    eq(parseTestReport('{"pass":"yes","total":1,"passed":1,"failed":0,"skipped":0}'), null);
+  },
+  'a stack keeps the message and the project frames, not the runner'() {
+    const page = 'http://localhost:8000/api/storage/apps/devtools/projects/9/dist/test.html';
+    const error = [
+      'AssertionError: Expected 4 to be 5',
+      `    at assert (${page}:900:13)`,
+      `    at out.<computed> [as toBe] (${page}:903:98)`,
+      `    at <anonymous> (${page}:120:40)`,
+      `    at async withTimeout (${page}:700:5)`,
+      `    at async __run (${page}:760:9)`,
+      `    at async Object.run (${page}:812:24)`,
+    ].join('\n');
+    eq(
+      trimTestError(error),
+      ['AssertionError: Expected 4 to be 5', '    at <anonymous> (test.html:120:40)'].join('\n'),
+    );
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -1077,4 +1117,5 @@ export const libSuites: Suite[] = [
   formatWithin,
   previewShape,
   audioAnalysis,
+  testReport,
 ];

@@ -15,6 +15,7 @@ import {
 } from '../providers/claude/escape-repair.js';
 import {
   EscapeTripwire,
+  escapeCorrection,
   escapeGuardNotice,
   isEscapedText,
 } from '../providers/claude/escape-tripwire.js';
@@ -288,6 +289,42 @@ describe('escape guard records', () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].sample).toContain('chars)');
     expect(seen[0].sample.length).toBeLessThan(ESCAPE_SAMPLE_LIMIT + 40);
+  });
+
+  test('a trip names the call by the uri written before the escapes', () => {
+    // The monitor's notification and its devtools message are both
+    // `mcp__verbs__invoke`; only the uri tells the model which one died.
+    const wire = new EscapeTripwire();
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
+    wire.observe(delta(0, '{"uri": "yaar://user/notifications", "payload": {"title": "'));
+    const record = wire.observe(delta(0, HANGUL_3));
+    expect(record?.target).toBe('yaar://user/notifications');
+  });
+
+  test('a trip names a Write by its file_path, even once the tail has slid past it', () => {
+    const wire = new EscapeTripwire();
+    wire.observe(startBlock(0, 'Write'));
+    wire.observe(delta(0, `{"file_path": "/tmp/a.md", "content": "${'x'.repeat(600)}`));
+    const record = wire.observe(delta(0, HANGUL_3));
+    expect(record?.target).toBe('/tmp/a.md');
+  });
+
+  test('a trip whose target is not written yet carries none', () => {
+    const wire = new EscapeTripwire();
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
+    const record = wire.observe(delta(0, `{"payload": {"title": "${HANGUL_3}`));
+    expect(record).not.toBeNull();
+    expect(record!.target).toBeUndefined();
+  });
+
+  test('the correction names the target and leaves earlier calls standing', () => {
+    const text = escapeCorrection({
+      toolName: 'mcp__verbs__invoke',
+      target: 'yaar://user/notifications',
+    });
+    expect(text).toContain('yaar://user/notifications');
+    expect(text).toContain('do not repeat');
+    expect(escapeCorrection({ toolName: 'Write' })).toContain('`Write` call was cancelled');
   });
 
   test('the notice is non-terminal and carries the record for the logger', () => {

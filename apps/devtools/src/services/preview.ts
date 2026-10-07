@@ -273,7 +273,11 @@ function logPreviewEvaluation(kind: 'input' | 'result' | 'error', content: unkno
  * A user-authored `previewEval` still gets the audit — that is the record of what
  * an agent asked the preview, and it belongs in the panel.
  */
-async function evaluateRaw(wid: string, expression: string, timeoutMs?: number): Promise<unknown> {
+export async function evaluateRaw(
+  wid: string,
+  expression: string,
+  timeoutMs?: number,
+): Promise<unknown> {
   return await invoke<unknown>(`yaar://windows/${wid}`, {
     action: 'app_eval',
     expression,
