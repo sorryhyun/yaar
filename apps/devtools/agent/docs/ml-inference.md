@@ -39,7 +39,7 @@ one sidecar at a few MB of graph each. Probe sizes with a 1-byte Range GET
 
 ### A worker's console reaches nobody
 
-`console.*` inside a Worker is invisible to `consoleLogs`, the page, and every capture.
+`console.*` inside a Worker is invisible to `previewConsole`, the page, and every capture.
 Have the worker `postMessage` a `{ type: 'log' }` and re-emit it with `console.info` on
 the page side. And report *which model build ran* from a value the worker derived at
 init, never from one echoed back from the request — an echo reports the requested

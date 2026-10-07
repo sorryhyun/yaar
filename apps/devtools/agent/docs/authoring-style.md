@@ -66,8 +66,8 @@ not for re-derived plumbing (buttons, toolbars, toasts — the chrome already ha
 ### State and command naming
 
 The two protocol namespaces must be tellable apart from the name alone: **nouns read, verbs
-run**. `consoleLogs` is a state key; `clearConsole` is a command. An agent that calls
-`command("consoleLogs")` gets "Unknown command" and reads it as a broken app.
+run**. `compileState` is a state key; `compile` is a command. An agent that calls
+`command("compileState")` gets "Unknown command" and reads it as a broken app.
 
 ### Before deploying
 

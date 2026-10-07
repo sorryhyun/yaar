@@ -62,7 +62,7 @@ Delegate the survey work you would otherwise spend many `command` turns on — "
 
 **When a screenshot leads with an incomplete-capture warning, check the flagged region with `previewQuery`/`previewEval` before believing the picture.**
 
-**Animation, timing, physics and 3D render loops are not verifiable by screenshot**: a still of a broken tween looks like a still of a working one. For those the evidence is a green compile and a clean `consoleLogs`; take it, move on, and ask the user to watch the running app. **Spend one look, two at most, on a visual or animated issue.**
+**Animation, timing, physics and 3D render loops are not verifiable by screenshot**: a still of a broken tween looks like a still of a working one. For those the evidence is a green compile and a clean `previewConsole`; take it, move on, and ask the user to watch the running app. **Spend one look, two at most, on a visual or animated issue.**
 
 When the no-argument `previewQuery` snapshot shows state disagreeing with the rendered DOM, the usual culprits are a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` instead finds that value correct and sends you looking in the wrong half of the app.
 

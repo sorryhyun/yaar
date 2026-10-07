@@ -240,7 +240,7 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
   // Protocol manifest from app.json is appended when the app declares one
   if (protocol) {
     // The two lists are separate namespaces, and a name from one is invalid in the
-    // other — `command("consoleLogs")` on a state key fails with "Unknown command",
+    // other — `command("compileState")` on a state key fails with "Unknown command",
     // which reads as a broken app rather than the wrong verb. Name the verb in each
     // heading so the distinction is visible where the names are read.
     if (protocol.state && Object.keys(protocol.state).length > 0) {

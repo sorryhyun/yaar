@@ -297,9 +297,13 @@ export const previewCommands = {
   }),
   previewConsole: defineAppCommand({
     description:
-      'The consoleLogs read, filtered: { connected, logs, filtered? } — `filtered` counting ' +
-      'the entries the filters dropped. Audit entries (previewEval inputs and results, ' +
-      'fault-rule changes) stay collapsed to one line unless `full`.',
+      'Console output from the preview app: { connected, logs, filtered? } — `filtered` ' +
+      'counting the entries the filters dropped. `connected: false` means the preview ' +
+      'buffer could not be read, and an empty `logs` then says nothing about whether the ' +
+      'app logged anything. Dev Tools audit entries (previewEval inputs and results, ' +
+      'fault-rule changes; `source: "evaluation"`) stay collapsed to one line each unless ' +
+      '`full`. With no arguments this is the whole recent console; `previewQuery` also ' +
+      'carries its tail.',
     params: {
       type: 'object',
       properties: {

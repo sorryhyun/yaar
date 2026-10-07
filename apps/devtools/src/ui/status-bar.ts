@@ -10,7 +10,7 @@ import { showBottomTab } from './panel-state';
  *
  * The dot tracks the *bundler* — the user reads type errors in the diagnostics
  * panel beside it, so folding them in here would only make one light stand for two
- * things. `compileStatus` in the protocol does combine them, because an agent has
+ * things. `compileState` in the protocol does combine them, because an agent has
  * no panel to look at.
  */
 const DOT_CLASS: Record<ReturnType<typeof bundleStatus>, string> = {

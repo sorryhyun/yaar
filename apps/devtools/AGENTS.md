@@ -67,10 +67,10 @@ file into the iframe. Both storage directions use it — import (`yaar://storage
 export (as `to`, via `exportToStorage`). A copy *within* the project has no storage URI on either
 side, so it cannot; that is why it reads, rewrites and renames.
 
-## compileStatus is three-valued
+## compileState is three-valued
 
 `resolveCompileStatus` in `lib/compile-status.ts` is the single reducer, shared by the
-`compileStatus` state key and the `compile` command's `status` so the two cannot drift.
+`compileState` state key's `status` and the `compile` command's `status` so the two cannot drift.
 
 Bun strips types and builds through type errors, so the bundler's verdict alone only means "it
 bundled". `unknown` is the load-bearing typecheck value and the default after **every** write — not
@@ -80,7 +80,7 @@ third value and keep it surfacing as `"unchecked"`; the `compile-status` suite p
 
 ## Failing states report *which* failure
 
-`consoleLogs` and `permissions` return a structured reason on failure, never an empty result: "no
+`previewConsole` and `permissions` return a structured reason on failure, never an empty result: "no
 preview open", "preview unreachable" and "the app logged nothing" must not collapse into the same
 empty array. Keep this in any new state getter that can fail.
 

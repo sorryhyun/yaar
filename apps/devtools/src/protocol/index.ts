@@ -24,7 +24,7 @@ import {
   workerCap,
   summarizeProposal,
 } from '../services/worker';
-import { previewWindowIsOpen, readPreviewConsole } from '../services';
+import { previewWindowIsOpen } from '../services';
 import { resolveCompileStatus } from '../lib';
 
 export { projectCommands } from './projects';
@@ -105,54 +105,45 @@ export const devtoolsState = {
       };
     },
   },
-  diagnostics: {
+  compileState: {
     description:
-      'Type errors and warnings from the last typecheck, one entry per diagnostic with ' +
-      '{ file, line, message, severity } — paths are project-relative. This is the ' +
-      'ONLY place type errors appear; `compileErrors` is the bundler and never repeats them.',
-    get: () => [...diagnostics()],
-  },
-  compileStatus: {
-    description:
-      'Whether the active project is currently clean. "success" requires BOTH halves: the ' +
-      'bundler built AND typecheck ran against the code as it now stands and found no ' +
-      'errors. "unchecked" means it bundled but no typecheck covers the current bytes ' +
-      '(after a `skipTypecheck` compile, or after any write since the last one) — that is ' +
-      'not a pass. "error" means one half failed: read `compileErrors` for the bundler and ' +
-      '`diagnostics` for typecheck. Values: idle | compiling | success | unchecked | error.',
+      'Whether the active project is currently clean, with the errors behind the verdict: ' +
+      '{ status, bundler, typecheck }. `status` is idle | compiling | success | unchecked | ' +
+      'error. "success" requires BOTH halves: the bundler built AND typecheck ran against ' +
+      'the code as it now stands and found no errors. "unchecked" means it bundled but no ' +
+      'typecheck covers the current bytes (after a `skipTypecheck` compile, or after any ' +
+      'write since the last one) — that is not a pass. "error" means one half failed. ' +
+      "`bundler` is the BUNDLER's errors from the last compile — unresolved imports, syntax " +
+      'Bun cannot parse, a failed plugin; empty is normal for code full of type errors, ' +
+      'because Bun strips types and builds through them. `typecheck` is the ONLY place type ' +
+      'errors appear: one entry per diagnostic from the last typecheck, { file, line, ' +
+      'message, severity }. All paths are project-relative, ready to hand back to editFile.',
     // The reducer is pure and lives in lib/compile-status.ts, shared with the `compile`
     // command so the two cannot drift apart. Its unit checks are the `compile-status`
     // suite in selfTest.
-    get: () => resolveCompileStatus(bundleStatus(), typecheckState()),
-  },
-  compileErrors: {
-    description:
-      "The BUNDLER's errors from the last compile — unresolved imports, syntax Bun " +
-      'cannot parse, a failed plugin. Empty is normal for code full of type errors: Bun ' +
-      'strips types and builds through them, so type errors live in `diagnostics` and ' +
-      'appear here never. Paths are project-relative, ready to hand back to editFile.',
-    get: () => [...compileErrors()],
-  },
-  previewUrl: {
-    description:
-      'URL of last successful compilation. A *build* fact, not a window fact: it is set ' +
-      'by compiling and survives the preview being closed, so it answers "is there ' +
-      'something to show", never "is it on screen". For the latter read `previewOpen`.',
-    get: () => previewUrl(),
+    get: () => ({
+      status: resolveCompileStatus(bundleStatus(), typecheckState()),
+      bundler: [...compileErrors()],
+      typecheck: [...diagnostics()],
+    }),
   },
   previewOpen: {
     description:
-      'Whether a preview window is open right now, and whether what it shows is current. ' +
+      'Whether a preview window is open right now, whether what it shows is current, and ' +
+      'the URL of the last successful compile: { open, stale, url }. ' +
       '`manifest`, `previewQuery`, `previewCommand`, `previewEval` and `previewScreenshot` ' +
       'all require an open preview and fail after the fact without one — read this instead ' +
       'of guessing, and instead of calling `preview` defensively, which remounts the iframe ' +
       'and resets all in-app state. `stale: true` means a compile ran with ' +
-      '`refreshPreview: false`, so the window is rendering the *previous* build.',
+      '`refreshPreview: false`, so the window is rendering the *previous* build. `url` is ' +
+      'a *build* fact, not a window fact: it is set by compiling and survives the preview ' +
+      'being closed, so it answers "is there something to show" (null: nothing compiled ' +
+      'yet), never "is it on screen" — that is `open`.',
     // Asked of the server, not of our own signal: the user, a project delete or a deploy
     // can close the window without telling us.
     get: async () => {
       const open = await previewWindowIsOpen();
-      return { open, stale: open && previewIsStale() };
+      return { open, stale: open && previewIsStale(), url: previewUrl() };
     },
   },
   bundledLibraries: {
@@ -200,8 +191,8 @@ export const devtoolsState = {
   worker: {
     description:
       'The worker sub-agents (see workerTask): overall `status` (offline | spawning | idle | ' +
-      'running | error — running if any is), `maxWorkers` (the concurrency cap, see ' +
-      'workerConfig), `workers` ({ worker, status, taskId } per worker within the cap), and ' +
+      'running | error — running if any is), `maxWorkers` (the concurrency cap, 1-3; ' +
+      'change it with workerConfig), `workers` ({ worker, status, taskId } per worker within the cap), and ' +
       'the tail of the shared transcript — tasks, tool calls, interim reports, answers, ' +
       'errors, newest last, each tagged with its `worker`. `activeTasks` lists every task in ' +
       'flight ({ taskId, worker, task, elapsedMs, reports }), empty when none — its `reports` are the ' +
@@ -252,14 +243,5 @@ export const devtoolsState = {
           .map((e) => ({ kind: e.kind, worker: e.worker, text: clip(e.text) })),
       };
     },
-  },
-  consoleLogs: {
-    description:
-      'Console output from the preview app, with Dev Tools audit entries (previewEval ' +
-      'inputs and results, fault-rule changes; `source: "evaluation"`) collapsed to one ' +
-      'line each. `connected: false` means the preview buffer could not be read — an empty ' +
-      '`logs` then says nothing about whether the app logged anything. The previewConsole ' +
-      'command filters by level and source.',
-    get: async () => await readPreviewConsole(),
   },
 };

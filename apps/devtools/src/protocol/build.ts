@@ -1,12 +1,5 @@
 import { wait, defineAppCommand } from '@bundled/yaar';
-import {
-  diagnostics,
-  bundleStatus,
-  compileErrors,
-  previewUrl,
-  previewWindowId,
-  staticProtocol,
-} from '../core';
+import { diagnostics, bundleStatus, compileErrors, previewWindowId, staticProtocol } from '../core';
 import { resolveCompileStatus } from '../lib';
 import {
   compile,
@@ -29,7 +22,9 @@ export const buildCommands = {
     description:
       'Type check and compile the active project; refreshes the preview window if one is ' +
       'open. `built` reflects the bundle, `status` reflects type checking too — they can ' +
-      'differ, and the `compileStatus` state key reports the same combined verdict. ' +
+      'differ, and the `compileState` state key reports the same combined verdict. ' +
+      "Failures come back as `bundler` (the bundler's errors, only when it did not build) " +
+      'and `typecheck` (type diagnostics), the same split `compileState` uses. ' +
       'Refreshing the preview remounts the iframe, so in-app state resets to a cold start; ' +
       'pass `refreshPreview: false` to keep that state and leave the window on the old ' +
       'build. Slow: pass timeoutMs (e.g. 60000).',
@@ -41,7 +36,7 @@ export const buildCommands = {
           description:
             'Build without type checking first. Faster, but ships blind — and typecheck is ' +
             'the only half that reads import paths, because Bun tree-shakes an unused bad ' +
-            'import away and reports a clean build. Leaves `compileStatus` at "unchecked".',
+            'import away and reports a clean build. Leaves `compileState.status` at "unchecked".',
         },
         refreshPreview: {
           type: 'boolean',
@@ -71,7 +66,7 @@ export const buildCommands = {
       // same line.
       //
       // `skipTypecheck` gets its own status rather than `success`, matching the
-      // `compileStatus` state key.
+      // `compileState` state key.
       const status = resolveCompileStatus(
         built ? 'success' : 'error',
         skip ? 'unknown' : typeErrors === 0 ? 'clean' : 'errors',
@@ -117,13 +112,12 @@ export const buildCommands = {
       return {
         status,
         built,
-        previewUrl: previewUrl(),
         ...(previewRefreshed ? { previewRefreshed } : {}),
         ...(previewStale ? { previewStale } : {}),
         ...(previewRefreshed && previewFaultsNote() ? { previewFaults: previewFaultsNote() } : {}),
         ...(typeErrors > 0 ? { typeErrors } : {}),
-        ...(!built && errors.length > 0 ? { errors } : {}),
-        ...(diags.length > 0 ? { diagnostics: diags } : {}),
+        ...(!built && errors.length > 0 ? { bundler: errors } : {}),
+        ...(diags.length > 0 ? { typecheck: diags } : {}),
         ...(manifestDrift
           ? {
               manifestDrift,

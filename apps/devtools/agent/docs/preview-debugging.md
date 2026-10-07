@@ -14,7 +14,7 @@ concluding a permission is missing, because the same call made by the session ag
 reach the file. It is a confinement rule, not a bug in the app under test; mind it when
 checking whether a permission is still needed.
 
-**Resource failures surface in `consoleLogs`** (`[resource] failed to load <img>: ...`) —
+**Resource failures surface in `previewConsole`** (`[resource] failed to load <img>: ...`) —
 that is how you catch a broken asset, which produces no `console.log` and does not fail the
 build.
 
