@@ -116,7 +116,7 @@ export async function typecheck(): Promise<void> {
   } catch (err) {
     // A typecheck that never ran leaves the previous verdict standing, which would
     // let a stale `clean` outlive the code it described. It is unknown, and
-    // `compileStatus` reports that rather than guessing either way.
+    // `compileState` reports that rather than guessing either way.
     setTypecheckState('unknown');
     setStatusText(`Typecheck error: ${errMsg(err)}`);
   }

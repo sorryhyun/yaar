@@ -196,7 +196,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   };
 
   // State and commands are separate lookups, so a name used against the wrong one
-  // fails with a bare "Unknown command: consoleLogs" that says nothing about where
+  // fails with a bare "Unknown command: compileState" that says nothing about where
   // the name actually lives. An agent reading that concludes the app is broken, or
   // guesses another name. Point at the right verb instead, and otherwise list what
   // this app does register so the next call can be right.

@@ -61,7 +61,7 @@ export function onRemoteOpenFile(fn: (next: SharedOpenFile | null) => void): voi
 export const [diagnostics, setDiagnostics] = createSharedSignal<Diagnostic[]>('diagnostics', []);
 /**
  * The **bundler's** verdict on the last build. Bun builds straight through type
- * errors, so this says "it bundled", never "it is correct"; `compileStatus` combines
+ * errors, so this says "it bundled", never "it is correct"; `compileState` combines
  * it with `typecheckState`. Nothing should read this signal alone and call the
  * project clean.
  */

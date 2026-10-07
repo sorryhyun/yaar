@@ -78,7 +78,7 @@ and that newline is the blank separator line between sections.** So a part start
 its section banner and ends at its last non-blank line — add a stray blank line at
 either end and every line number in a kernel stack trace shifts. When you change the
 boundaries, prove it: keep a copy of the old source, `console.log(NEW === OLD)` from
-the preview, and read it back from devtools' `consoleLogs`.
+the preview, and read it back from devtools' `previewConsole`.
 
 - It is `String.raw` so backslashes survive (regexes work). That means **no backticks and no
   `$` followed by `{` anywhere in the kernel body** — either one ends or interpolates the

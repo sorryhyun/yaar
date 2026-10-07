@@ -32,7 +32,6 @@ import {
   workerProposals,
   workerCap,
   setWorkerCap,
-  workerSlots,
   pendingOnPath,
   parseEditSpecs,
   noteWorkerRead,
@@ -128,8 +127,9 @@ function typeErrorCount(): { count: number; reliable: boolean } {
 export const workerCommands = {
   workerConfig: defineAppCommand({
     description:
-      'Read or set how many workers may run tasks at the same time (1-3, default 2), persisted across reloads. Returns { maxWorkers, workers } with each ' +
-      "worker's status and running taskId. Lowering the cap stops nothing already running; " +
+      'Set how many workers may run tasks at the same time (1-3, default 2), persisted ' +
+      "across reloads. Returns { maxWorkers, ceiling }. To read the cap and each worker's " +
+      'status, query the `worker` state key. Lowering the cap stops nothing already running; ' +
       'it only refuses new tasks beyond it. Workers are read-only, so parallel ones never ' +
       'clobber files — their proposed edits are applied one at a time by acceptEditRequest.',
     params: {
@@ -137,28 +137,19 @@ export const workerCommands = {
       properties: {
         maxWorkers: {
           type: 'number',
-          description: 'New cap, 1-3. Omit to read the current settings.',
+          description: 'New cap, 1-3.',
         },
       },
+      required: ['maxWorkers'],
     },
     replay: 'never',
     run: async (p) => {
-      if (p.maxWorkers != null) {
-        const n = Number(p.maxWorkers);
-        if (!Number.isFinite(n)) throw new AppCommandError('maxWorkers must be a number.');
-        await setWorkerCap(n);
+      const n = Number(p.maxWorkers);
+      if (p.maxWorkers == null || !Number.isFinite(n)) {
+        throw new AppCommandError('maxWorkers must be a number.');
       }
-      const cap = workerCap();
-      return {
-        maxWorkers: cap,
-        ceiling: MAX_WORKERS,
-        workers: workerSlots.map((s, i) => ({
-          worker: s.id,
-          status: s.status(),
-          enabled: i < cap,
-          taskId: s.activeTask()?.id ?? null,
-        })),
-      };
+      await setWorkerCap(n);
+      return { maxWorkers: workerCap(), ceiling: MAX_WORKERS };
     },
   }),
   workerTask: defineAppCommand({

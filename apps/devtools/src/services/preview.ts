@@ -451,7 +451,7 @@ export async function previewEvaluate(
 // One read that puts side by side the three things a stale-render bug lives
 // between: what the app *declares* (protocol state), what it *renders* (the
 // DOM's text), and what it *said* (the console tail). Each was already reachable
-// on its own — a single-key query, an eval, consoleLogs — and that is the point.
+// on its own — a single-key query, an eval, previewConsole — and that is the point.
 // The failure this catches is not "the value was unreadable" but "nobody thought
 // to compare them": protocol state reading 42 under a DOM still showing 41 is a
 // derived value that was never wrapped in a thunk, and neither half alone says so.

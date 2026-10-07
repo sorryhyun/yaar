@@ -552,12 +552,12 @@ export async function openProject(
       // on switch so the manifest command never reports another project's protocol.
       setStaticProtocol(null);
       // Same reasoning for the type-check verdict: it was reached about the project
-      // being switched away from. `diagnostics` is left standing until the next
-      // typecheck writes it, but `compileStatus` no longer reads it as current.
+      // being switched away from. `compileState.typecheck` is left standing until the
+      // next typecheck writes it, but `compileState.status` no longer reads it as current.
       setTypecheckState('unknown');
       // The preview binding is project-scoped in the same way. Both the window id and
       // the build URL describe the project being switched *away from*; left set,
-      // `previewOpen` reports `open: true, stale: false` while
+      // `previewOpen` reports `open: true, stale: false` with the other project's `url` while
       // previewQuery/previewCommand/previewEval silently answer about a different app.
       // Unbind rather than close: the window belongs to the other project, and
       // openPreview already closes by id before it re-creates, so switching back cannot

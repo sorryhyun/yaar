@@ -6,8 +6,9 @@ audience: agent
 
 ## Delegating to the Worker
 
-`workerTask`, `workerWait`, `workerInterrupt`, `workerConfig` and the `worker` state key
-document their own mechanics; this is the judgment.
+`workerTask`, `workerWait`, `workerInterrupt`, `workerConfig` (sets the cap) and the `worker`
+state key (reads it, with each worker's status) document their own mechanics; this is the
+judgment.
 
 - **Start it before the work you can do without it, not after.** A `workerTask` immediately
   followed by `workerWait` spends the whole survey waiting; find what you can do meanwhile
@@ -21,7 +22,7 @@ document their own mechanics; this is the judgment.
   one build, not one per proposal. A near-miss is accepted with your corrected `edits`, not
   rejected and retyped.
 - **Fan out independent questions, not one question in pieces.** Several workers run at once
-  (the cap is `workerConfig`), so a review that splits cleanly by file or concern is two or
+  (the cap is `worker.maxWorkers`, set with `workerConfig`), so a review that splits cleanly by file or concern is two or
   three tasks started back to back, each collected by its taskId. A follow-up that needs what
   one worker learned goes back to that `worker`.
 - **Parallel proposals to one file are yours to order.** Workers never write, so they cannot

@@ -48,7 +48,7 @@ without bound). One shared cap is wrong for at least two of them.
 
 - market-apps: a failed installed-list read must **not** reconcile — an empty list would
   clear every installed card on a transient hiccup.
-- devtools: `consoleLogs` and `permissions` return a structured reason ("no preview
+- devtools: `previewConsole` and `permissions` return a structured reason ("no preview
   open", "preview unreachable") rather than `[]`, which would read as "the app logged
   nothing".
 - mcp-manager's port sweep swallows every error as "nothing here", so a systemic fault
@@ -59,7 +59,7 @@ A state key that can fail returns *which* failure, never the empty value.
 
 ### A verdict from before the last write is `unknown`
 
-devtools' `compileStatus` is three-valued. After **every** write the typecheck verdict
+devtools' `compileState.status` is three-valued. After **every** write the typecheck verdict
 resets to `unknown`, surfaced as `"unchecked"` — reporting the old `clean` once waved six
 live type errors through as success. Any cached verdict (validation, sync state, "saved")
 invalidated by an edit goes to unknown, not to its last value.

@@ -30,7 +30,7 @@
     "yaar://skills/"
   ],
   "run": "dist/index.html",
-  "version": "1.5.18",
+  "version": "1.5.19",
   "author": "YAAR",
   "kind": "system",
   "appId": "devtools"
