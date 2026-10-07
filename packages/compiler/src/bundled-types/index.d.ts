@@ -1059,10 +1059,15 @@ interface YaarStorageEntry {
 }
 
 interface YaarStorage {
+  /**
+   * Write a whole file, replacing any previous one. Up to the server's storage write limit
+   * (1 GB by default); over it the promise rejects with an error naming both sizes, and
+   * the existing file is left untouched. Something that grows past that arrives by `append`.
+   */
   save(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<{ ok: boolean }>;
   /**
    * Add bytes to the end of a file, creating it if absent. `size` is the file's length
-   * after this append. Each call is one request under the 50MB upload cap, so a file
+   * after this append. Each call is one request under the 50MB per-request cap, so a file
    * that outgrows it (a recording) arrives as many appends — await each before the next,
    * or two in flight land in whichever order the requests arrive.
    */

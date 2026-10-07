@@ -18,7 +18,13 @@ import {
   wantsAppOriginSocket,
   startTunnel,
 } from './lifecycle.js';
-import { IS_REMOTE, getPort, setPort, TRANSPORT_IDLE_TIMEOUT_S } from './config.js';
+import {
+  IS_REMOTE,
+  getPort,
+  setPort,
+  getMaxStorageWriteSize,
+  TRANSPORT_IDLE_TIMEOUT_S,
+} from './config.js';
 import { loadLocalTlsCert, setLocalTlsEndpoint, LOCAL_TLS_PORT_OFFSET } from './http/local-tls.js';
 import { watchLauncher } from './launcher-watchdog.js';
 
@@ -42,6 +48,10 @@ function serveFromFirstFreePort(
         // The outer bound on every server-side deadline (see MAX_REQUEST_DEADLINE_MS).
         // Bun's default of 10s is far too short for MCP tool calls and SSE streams.
         idleTimeout: TRANSPORT_IDLE_TIMEOUT_S,
+        // Bun refuses bodies over 128 MB before `fetch` runs, with a bare 413. A storage
+        // write may be larger (it streams to disk), and every other route caps its own
+        // body with readBodyWithLimit, so the socket only needs to stay out of the way.
+        maxRequestBodySize: getMaxStorageWriteSize(),
         fetch,
         websocket,
         // TLS lets a browser negotiate h2 (ALPN); HTTP/1.1 clients and WebSocket

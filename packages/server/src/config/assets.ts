@@ -6,7 +6,7 @@
 
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
-import { CONFIG_MODULE_DIR, IS_BUNDLED_EXE, PROJECT_ROOT } from './env.js';
+import { CONFIG_MODULE_DIR, getEnvInt, IS_BUNDLED_EXE, PROJECT_ROOT } from './env.js';
 import { getFrontendDist } from './paths.js';
 
 export const MIME_TYPES: Record<string, string> = {
@@ -49,6 +49,19 @@ export const MIME_TYPES: Record<string, string> = {
 };
 
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
+
+/**
+ * Ceiling for one `POST /api/storage/{path}` write, in bytes (`YAAR_MAX_STORAGE_WRITE_MB`,
+ * default 1024).
+ *
+ * Separate from {@link MAX_UPLOAD_SIZE} because a write streams to disk instead of being
+ * buffered, so memory is not what bounds it — the routes that parse their body still are.
+ * An app rendering a video to storage produces one file that has to land in one request,
+ * and 50 MB is about a minute of 1080p. Read per call so a test can lower it.
+ */
+export function getMaxStorageWriteSize(): number {
+  return getEnvInt('YAAR_MAX_STORAGE_WRITE_MB', 1024) * 1024 * 1024;
+}
 
 /**
  * Resolve a frontend asset's *URL* path to a path `Bun.file()` can read.

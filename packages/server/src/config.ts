@@ -58,6 +58,7 @@ export {
 export {
   MIME_TYPES,
   MAX_UPLOAD_SIZE,
+  getMaxStorageWriteSize,
   getFrontendAsset,
   getMlRuntimeDir,
   getMlRuntimeArtifact,

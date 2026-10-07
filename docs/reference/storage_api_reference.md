@@ -242,7 +242,10 @@ Body: <raw file content>
 
 Creates parent directories if needed. Binary-safe (supports any file type).
 
-**Maximum body size:** 50 MB. Returns HTTP 413 if exceeded.
+**Maximum body size:** 1 GB (`YAAR_MAX_STORAGE_WRITE_MB`). The body streams to a sibling
+`.part-*` file and is renamed into place once complete, so a write that fails or runs over the
+limit leaves the destination as it was. Over the limit is an HTTP 413 whose error names the size,
+the limit, and the ways past it.
 
 **Response:** `{ "ok": true, "path": "notes/memo.txt" }`
 
@@ -254,7 +257,7 @@ Body: <bytes to add>
 ```
 
 Adds the body to the end of the file, creating it (and its parents) if absent. Each request is
-capped at 50 MB like a write; the file itself is not, so a producer whose output outgrows the cap
+capped at 50 MB (`MAX_UPLOAD_SIZE`); the file itself is not, so a producer whose output outgrows the cap
 (a camera recording) sends it as many appends. Bytes land at the destination as they arrive — an
 interrupted producer leaves what it sent. Requests are applied in arrival order, so a caller keeps
 its appends sequential. Any value of `append` other than `true` is a 400. Same permission as a
@@ -460,7 +463,11 @@ Unknown extensions fall back to `application/octet-stream`.
 
 ## Upload Size Limit
 
-`MAX_UPLOAD_SIZE` (50 MB) caps every request body the server reads, not just storage writes. It is applied via `readBodyWithLimit()` in the `/api/storage`, `/api/verb`, `/api/bridge`, `/api/proxy`, `/api/browser`, and `/api/dev` routes. Exceeding it returns HTTP 413.
+`MAX_UPLOAD_SIZE` (50 MB) caps every request body the server buffers: storage appends and the
+`/api/verb`, `/api/bridge`, `/api/proxy`, `/api/browser`, and `/api/dev` routes, via
+`readBodyWithLimit()`. A plain storage write is the exception — it streams to disk, so its ceiling
+is the separate `YAAR_MAX_STORAGE_WRITE_MB` (default 1024), which also sets the sockets'
+`maxRequestBodySize`. Exceeding either returns HTTP 413.
 
 ---
 
@@ -614,7 +621,8 @@ Stored at `config/{appId}.json`. Managed via verb tools: `read('yaar://config/ap
 
 | Limit | Value |
 |-------|-------|
-| Max upload size (REST) | 50 MB |
+| Max storage write (`POST /api/storage/{path}`) | 1 GB (`YAAR_MAX_STORAGE_WRITE_MB`) |
+| Max buffered request body (appends, other REST routes) | 50 MB |
 | Max PDF rasterize pages (`pdfPages` per request) | 20 at scale 1.5, uncropped; scaled down by pixel area (`pdfScale`² × `pdfCrop` area) |
 | Max glTF/GLB size for a model summary | 256 MB |
 | PDF render scale | 1.5× |

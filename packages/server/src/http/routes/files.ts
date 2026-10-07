@@ -11,7 +11,7 @@ import {
   PopplerNotInstalledError,
   renderPdfPage,
 } from '../../features/pdf.js';
-import { MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
+import { MIME_TYPES, MAX_UPLOAD_SIZE, getMaxStorageWriteSize } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { appHtmlCsp } from '../csp.js';
@@ -85,7 +85,7 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 ];
 import {
   storageAppend,
-  storageWrite,
+  storageWriteStream,
   storageDelete,
   storageList,
 } from '../../storage/storage-manager.js';
@@ -338,18 +338,18 @@ async function handleStorage(
       if (append !== null && append !== 'true') {
         return errorResponse(`append must be 'true' when present, got '${append}'`, 400);
       }
+      if (append !== 'true') return await writeBodyToStorage(req, filePath);
       const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-      if (append === 'true') {
-        const result = await storageAppend(filePath, buf);
-        if (!result.success) return errorResponse(result.error ?? 'Append failed');
-        return jsonResponse({ ok: true, path: result.path, size: result.bytes });
-      }
-      const result = await storageWrite(filePath, buf);
-      if (!result.success) return errorResponse(result.error ?? 'Write failed');
-      return jsonResponse({ ok: true, path: result.path });
+      const result = await storageAppend(filePath, buf);
+      if (!result.success) return errorResponse(result.error ?? 'Append failed');
+      return jsonResponse({ ok: true, path: result.path, size: result.bytes });
     } catch (err) {
       if (err instanceof BodyTooLargeError) {
-        return errorResponse(`Request body too large (max ${MAX_UPLOAD_SIZE} bytes)`, 413);
+        return errorResponse(
+          `Append too large (max ${MAX_UPLOAD_SIZE} bytes per request). Nothing was ` +
+            `written; split it into smaller appends.`,
+          413,
+        );
       }
       return errorResponse('Write failed');
     }
@@ -363,6 +363,71 @@ async function handleStorage(
   }
 
   return null;
+}
+
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * The 413 for a write over the ceiling — said so the caller can act on it.
+ *
+ * An app that spent minutes rendering a video only learns of the limit here, so the
+ * message names the size, the limit, that nothing was written (the destination is
+ * untouched, not half-replaced), and the two ways past it.
+ */
+function storageWriteTooLarge(size: number, exact: boolean, limit: number): Response {
+  const sized = exact ? formatMegabytes(size) : `over ${formatMegabytes(size)}`;
+  return errorResponse(
+    `File too large: ${sized} exceeds the ${formatMegabytes(limit)} storage write limit ` +
+      `(${limit} bytes). Nothing was written. Send it as a series of ?append=true ` +
+      `requests (storage.append), or raise YAAR_MAX_STORAGE_WRITE_MB on the server.`,
+    413,
+  );
+}
+
+/**
+ * Stream a write's body to disk rather than buffering it.
+ *
+ * `storageWriteStream` lands the bytes in a sibling partial file and renames it into
+ * place on commit, so a request that dies or runs over the limit halfway leaves the
+ * destination as it was — the all-or-nothing outcome of the old buffered write, without
+ * holding a whole video in memory to get it.
+ */
+async function writeBodyToStorage(req: Request, filePath: string): Promise<Response> {
+  const limit = getMaxStorageWriteSize();
+  const declared = parseInt(req.headers.get('content-length') ?? '', 10);
+  if (Number.isFinite(declared) && declared > limit) {
+    return storageWriteTooLarge(declared, true, limit);
+  }
+
+  const opened = await storageWriteStream(filePath);
+  if (!opened.success) return errorResponse(opened.error);
+  const { stream } = opened;
+
+  let total = 0;
+  const reader = req.body?.getReader();
+  try {
+    for (;;) {
+      if (!reader) break;
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > limit) {
+        await reader.cancel();
+        await stream.abort();
+        return storageWriteTooLarge(limit, false, limit);
+      }
+      await stream.write(value);
+    }
+  } catch {
+    await stream.abort();
+    return errorResponse('Write failed');
+  }
+
+  const result = await stream.commit();
+  if (!result.success) return errorResponse(result.error ?? 'Write failed');
+  return jsonResponse({ ok: true, path: result.path });
 }
 
 /** Serve a static file with gzip and CSP for HTML. */

@@ -63,6 +63,13 @@ import {
   type SharedWindowHelp,
 } from './external-help.js';
 import { answerOnce } from './external-result.js';
+import { readBodyWithLimit, BodyTooLargeError } from '../http/body-limit.js';
+
+/**
+ * Bun's own default request-body ceiling, which was this endpoint's only bound until the
+ * sockets raised theirs for large storage writes (`maxRequestBodySize` in main.ts).
+ */
+const MAX_MCP_BODY_BYTES = 128 * 1024 * 1024;
 
 const log = createLogger('MCP');
 
@@ -444,8 +451,14 @@ async function serveStateless(
 
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = JSON.parse((await readBodyWithLimit(req, MAX_MCP_BODY_BYTES)).toString('utf-8'));
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      return Response.json(
+        { jsonrpc: '2.0', error: { code: -32000, message: err.message }, id: null },
+        { status: 413 },
+      );
+    }
     return Response.json(
       {
         jsonrpc: '2.0',

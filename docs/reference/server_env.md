@@ -265,6 +265,7 @@ code, tunnel). See [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
 | Variable | Default | Meaning |
 |---|---|---|
 | `YAAR_MAX_DOWNLOAD_MB` | `512` | Ceiling for a `yaar://http` body streamed to disk via `saveTo` |
+| `YAAR_MAX_STORAGE_WRITE_MB` | `1024` | Ceiling for one `POST /api/storage/{path}` write (streamed to disk; appends stay at 50 MB per request) |
 | `YAAR_FREEDPI` | on | Route outbound TLS through a local fragmenting proxy to get past SNI-matching DPI (`0` disables) |
 
 ### `YAAR_FREEDPI` — on by default (`=0` disables)
