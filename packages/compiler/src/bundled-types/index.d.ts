@@ -202,6 +202,20 @@ declare module '*.htm' {
   export default text;
 }
 
+// Web Workers — `import MatchWorker from './match.worker.ts?worker'`. The file is an
+// ordinary module, bundled on its own and inlined (an app is one HTML file, so a
+// worker cannot be a sibling .js). Each call starts one module worker:
+// `const w = new MatchWorker(); w.postMessage(job); w.onmessage = (e) => ...`.
+// Inside the worker use `self.onmessage` / `self.postMessage`; `@bundled/yaar` is
+// refused there — the SDK lives on `window`, so post to the page and call it there.
+declare module '*?worker' {
+  const WorkerFactory: {
+    new (options?: { name?: string }): Worker;
+    (options?: { name?: string }): Worker;
+  };
+  export default WorkerFactory;
+}
+
 // ── Utilities ───────────────────────────────────────────────────────────────
 
 declare module '@bundled/uuid' {
@@ -531,6 +545,66 @@ declare module '@bundled/prismjs' {
 declare module '@bundled/dompurify' {
   export * from 'dompurify';
   export { default } from 'dompurify';
+}
+
+// ── Testing ─────────────────────────────────────────────────────────────────
+
+declare module '@bundled/test' {
+  // Tests for `src/**/*.test.ts` only — the app build refuses this import, so test
+  // code never ships. Dev Tools `runTests` builds the test files into their own page
+  // and runs it in the preview: DOM, `@bundled/yaar` and app storage are real.
+  // A subset of bun:test. Tests run sequentially; a test may be async.
+  export function describe(name: string, fn: () => void): void;
+  export namespace describe {
+    function skip(name: string, fn: () => void): void;
+    function only(name: string, fn: () => void): void;
+  }
+  /** Register a test. `timeoutMs` (default 5000) cannot stop a synchronous infinite loop. */
+  export function test(name: string, fn: () => unknown, timeoutMs?: number): void;
+  export namespace test {
+    function skip(name: string, fn: () => unknown, timeoutMs?: number): void;
+    function only(name: string, fn: () => unknown, timeoutMs?: number): void;
+    function todo(name: string): void;
+  }
+  export const it: typeof test;
+  /** Runs before each test in this describe (and nested ones); file-level outside any. */
+  export function beforeEach(fn: () => unknown): void;
+  export function afterEach(fn: () => unknown): void;
+
+  export interface Matchers<R = void> {
+    toBe(expected: unknown): R;
+    /** Structural equality; keys whose value is `undefined` count as absent. */
+    toEqual(expected: unknown): R;
+    toStrictEqual(expected: unknown): R;
+    /** Every key in `expected` matches, recursively; extra keys are fine. */
+    toMatchObject(expected: object): R;
+    toBeTruthy(): R;
+    toBeFalsy(): R;
+    toBeNull(): R;
+    toBeUndefined(): R;
+    toBeDefined(): R;
+    toBeNaN(): R;
+    toBeInstanceOf(cls: abstract new (...args: never[]) => unknown): R;
+    toBeGreaterThan(n: number | bigint): R;
+    toBeGreaterThanOrEqual(n: number | bigint): R;
+    toBeLessThan(n: number | bigint): R;
+    toBeLessThanOrEqual(n: number | bigint): R;
+    toBeCloseTo(n: number, digits?: number): R;
+    /** Substring of a string, or an element (by `===`) of an array / iterable. */
+    toContain(item: unknown): R;
+    toContainEqual(item: unknown): R;
+    toHaveLength(n: number): R;
+    toHaveProperty(path: string | string[], value?: unknown): R;
+    toMatch(pattern: string | RegExp): R;
+    /** On a function: it throws (message substring, RegExp, Error class). On `rejects`: the reason matches. */
+    toThrow(expected?: string | RegExp | Error | (new (...args: never[]) => unknown)): R;
+  }
+  export interface Expectation extends Matchers {
+    not: Matchers;
+    resolves: Matchers<Promise<void>> & { not: Matchers<Promise<void>> };
+    rejects: Matchers<Promise<void>> & { not: Matchers<Promise<void>> };
+  }
+  export function expect(actual: unknown): Expectation;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────────
@@ -1385,6 +1459,17 @@ interface YaarDevCompileResult {
   error?: string;
 }
 
+interface YaarDevCompileTestsResult {
+  success: boolean;
+  /** Where the built test page is served — load it in a preview window. */
+  testUrl?: string;
+  /** Test files found, relative to `src/`, in run order. */
+  files?: string[];
+  errors?: string[];
+  /** Set on transport/auth failures (4xx/5xx) instead of the result fields. */
+  error?: string;
+}
+
 interface YaarDevTypecheckResult {
   success: boolean;
   diagnostics: string[];
@@ -1592,6 +1677,7 @@ interface YaarDevRestoreResult {
 
 interface YaarDev {
   compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
+  compileTests(path: string, opts?: { title?: string }): Promise<YaarDevCompileTestsResult>;
   typecheck(path: string): Promise<YaarDevTypecheckResult>;
   findReferences(path: string, query: YaarDevReferencesQuery): Promise<YaarDevReferencesResult>;
   format(path: string, source: string): Promise<YaarDevFormatResult>;
@@ -2746,6 +2832,15 @@ declare module '@bundled/yaar' {
 
 declare module '@bundled/yaar-dev' {
   export function compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
+  /**
+   * Build `src/**\/*.test.ts` (tests written against `@bundled/test`) into
+   * `dist/test.html`, beside — never in place of — the app's `dist/index.html`.
+   * The page exposes `window.__yaar_tests__.run({ filter?, verbose? })`.
+   */
+  export function compileTests(
+    path: string,
+    opts?: { title?: string },
+  ): Promise<YaarDevCompileTestsResult>;
   export function typecheck(path: string): Promise<YaarDevTypecheckResult>;
   /**
    * References and callers of a symbol in the project at `path`, from the TypeScript

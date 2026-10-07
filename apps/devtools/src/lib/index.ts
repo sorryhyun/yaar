@@ -16,3 +16,4 @@ export * from './source-scan';
 export * from './model-summary';
 export * from './preview-shape';
 export * from './audio-analysis';
+export * from './test-report';

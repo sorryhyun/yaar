@@ -14,7 +14,14 @@ import {
   cssFilePlugin,
   assetDataUrlPlugin,
   solidHtmlSourcePlugin,
+  type BuildRole,
 } from '../bundled/plugins.js';
+import {
+  failedBuild,
+  inlineWorkers,
+  workerImportPlugin,
+  type WorkerTable,
+} from './worker-plugin.js';
 import { toForwardSlash } from '../bundled/registry.js';
 import { ortVersionDefine } from '../bundled/ort-version.js';
 import type { ThreeRenderer } from '../bundled/three-renderer.js';
@@ -37,6 +44,12 @@ export interface AppBuildOptions {
    * which bundles a generated entry — every read goes to disk as before.
    */
   sources?: AppSourceCache;
+  /**
+   * What is being built — see `BuildRole`. A `?worker` import is bundled with
+   * these same options under `'worker'`, so a worker resolves `@bundled/*` exactly
+   * as the app around it does.
+   */
+  role?: BuildRole;
 }
 
 /** Bundle an app entry point. Resolves on failure too — inspect `.success`. */
@@ -44,7 +57,20 @@ export async function buildAppBundle(
   entryPoint: string,
   options: AppBuildOptions,
 ): Promise<Bun.BuildOutput> {
-  return Bun.build({
+  return buildWithWorkers(entryPoint, options, []);
+}
+
+/**
+ * `chain` is the workers being built around this one, outermost first — a worker
+ * that (transitively) imports itself would otherwise recurse until the stack ran out.
+ */
+async function buildWithWorkers(
+  entryPoint: string,
+  options: AppBuildOptions,
+  chain: string[],
+): Promise<Bun.BuildOutput> {
+  const workers: WorkerTable = new Map();
+  const result = await Bun.build({
     entrypoints: [toForwardSlash(entryPoint)],
     minify: options.minify,
     format: 'esm',
@@ -54,11 +80,21 @@ export async function buildAppBundle(
     throw: false,
     define: ortVersionDefine(),
     plugins: [
-      bundledLibraryPluginBun(options.bundles, options.three),
+      workerImportPlugin(workers),
+      bundledLibraryPluginBun(options.bundles, options.three, options.role),
       cssFilePlugin(),
       assetDataUrlPlugin(),
       solidHtmlSourcePlugin(options.sources),
     ],
+  });
+  return inlineWorkers(result, workers, (workerEntry) => {
+    const next = [...chain, toForwardSlash(entryPoint)];
+    if (next.includes(workerEntry)) {
+      return Promise.resolve(
+        failedBuild(`Worker import cycle: ${[...next, workerEntry].join(' -> ')}`),
+      );
+    }
+    return buildWithWorkers(workerEntry, { ...options, role: 'worker' }, next);
   });
 }
 

@@ -3,9 +3,13 @@ export {
   getSandboxDir,
   getSandboxPath,
   compileTypeScript,
+  compileTests,
+  listTestFiles,
+  TEST_OUTPUT_FILE,
   generateHtmlWrapper,
   type CompileOptions,
   type CompileResult,
+  type CompileTestsResult,
 } from './compile.js';
 export { typecheckSandbox, type TypecheckOptions, type TypecheckResult } from './typecheck.js';
 export {

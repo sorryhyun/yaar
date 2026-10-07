@@ -33,6 +33,13 @@ import {
   type ThreeRenderer,
 } from './three-renderer.js';
 
+/**
+ * What a build produces. `app` is the shipped bundle; `test` the `compileTests`
+ * page, the only build that may import `@bundled/test`; `worker` a `?worker`
+ * module, which may not import the window-bound YAAR SDK.
+ */
+export type BuildRole = 'app' | 'test' | 'worker';
+
 const DEBUG_BUNDLED_LIBRARIES = process.env.YAAR_DEBUG_BUNDLED_LIBS === '1';
 
 function debugBundledLibrary(message: string): void {
@@ -106,6 +113,7 @@ function resolveNpmBrowserPath(npmName: string, label: string): string | null {
 export function bundledLibraryPluginBun(
   allowedBundles?: string[],
   threeRenderer: ThreeRenderer = 'webgl',
+  role: BuildRole = 'app',
 ): Bun.BunPlugin {
   // Log bundled libs state once at plugin creation time
   const embeddedLibsSnapshot = getEmbeddedLibs();
@@ -133,6 +141,19 @@ export function bundledLibraryPluginBun(
           (THREE_WEBGPU_LIBS as readonly string[]).includes(requested)
         ) {
           throw new Error(threeWebGPUNotEnabledMessage(requested));
+        }
+        if (requested === 'test' && role !== 'test') {
+          throw new Error(
+            '"@bundled/test" is only importable from src/**/*.test.ts files, which ' +
+              'Dev Tools runTests builds separately. Do not import a test file from app code.',
+          );
+        }
+        if (role === 'worker' && (requested === 'yaar' || requested.startsWith('yaar-'))) {
+          throw new Error(
+            `"@bundled/${requested}" cannot be imported inside a ?worker module: the YAAR SDK ` +
+              'lives on window, which a worker does not have. Post a message to the page ' +
+              'and call the SDK there.',
+          );
         }
         // In a WebGPU app, `@bundled/three` *is* the WebGPU build.
         const libName = requested === 'three' ? threeEntryFor(threeRenderer) : requested;

@@ -16,6 +16,7 @@ src/
 ├── store.ts       # Signals and shared state
 ├── types.ts       # Type definitions
 ├── helpers.ts     # Pure utility functions
+├── helpers.test.ts # Unit tests, run by runTests — the unit-testing topic
 ├── test/          # previewScript regression suite — the regression-testing topic
 └── sprite.png     # Static assets — imported, not fetched
 ```

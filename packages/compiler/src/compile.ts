@@ -5,7 +5,7 @@
  * Uses Bun.build() and Bun.Transpiler for compilation.
  */
 
-import { mkdir, stat } from 'fs/promises';
+import { mkdir, rm, stat } from 'fs/promises';
 import { join } from 'path';
 import { buildAppBundle, formatBuildLogs, siblingAssetError } from './build/build-app.js';
 import { AppSourceCache } from './build/source-cache.js';
@@ -30,6 +30,7 @@ import {
 } from './guards/design-token-guard.js';
 import { scanClasses, formatClassFindings } from './guards/design-class-guard.js';
 import { APP_MOUNT_ID } from './guards/mount-guard.js';
+import type { BuildRole } from './bundled/plugins.js';
 
 /**
  * Get the sandbox directory path.
@@ -198,9 +199,10 @@ async function compileWithBun(
   minify: boolean,
   bundles: string[] | undefined,
   three: ThreeRenderer,
-  sources: AppSourceCache,
+  sources: AppSourceCache | undefined,
+  role: BuildRole = 'app',
 ): Promise<string> {
-  const result = await buildAppBundle(entryPoint, { minify, bundles, three, sources });
+  const result = await buildAppBundle(entryPoint, { minify, bundles, three, sources, role });
 
   if (!result.success) {
     const errors = formatBuildLogs(result.logs, {
@@ -399,5 +401,153 @@ export async function compileTypeScript(
       success: false,
       errors,
     };
+  }
+}
+
+// ── Tests ───────────────────────────────────────────────────────
+
+/** What makes a source file a test: `src/**\/*.test.ts` (or `.tsx`). */
+export const TEST_FILE_GLOB = '**/*.test.{ts,tsx}';
+
+/** The test page, beside `dist/index.html` — never the file deploy ships. */
+export const TEST_OUTPUT_FILE = 'test.html';
+
+/** Scratch directory for the generated entry, removed after every build. */
+const TEST_ENTRY_DIR = '.yaar-test';
+
+export interface CompileTestsResult {
+  success: boolean;
+  outputPath?: string;
+  /** Test files found, relative to `src/`, in the order they run. */
+  files: string[];
+  errors?: string[];
+}
+
+/** The test files under `src/`, relative to it, sorted so runs are reproducible. */
+export async function listTestFiles(sandboxPath: string): Promise<string[]> {
+  const srcDir = join(sandboxPath, 'src');
+  const files: string[] = [];
+  try {
+    for await (const file of new Bun.Glob(TEST_FILE_GLOB).scan({ cwd: srcDir })) {
+      if (!file.split(/[\\/]/).includes('node_modules')) files.push(toPosix(file));
+    }
+  } catch {
+    return [];
+  }
+  return files.sort();
+}
+
+function toPosix(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+/**
+ * The generated test entry: load each test file in order, recording which file
+ * registered which test, and expose `window.__yaar_tests__` for the runner.
+ *
+ * Each file is a dynamic `import()` so one that throws while loading is reported
+ * against its name instead of taking every other file down with it — Bun inlines
+ * the imports into the single bundle, so this costs no extra file.
+ */
+export function testEntrySource(files: string[], srcFromEntry: string): string {
+  const rows = files
+    .map(
+      (file) =>
+        `  [${JSON.stringify(file)}, () => import(${JSON.stringify(`${srcFromEntry}/${file}`)})],`,
+    )
+    .join('\n');
+  return `import { __setFile, __loadError, __run, __summarize } from '@bundled/test';
+
+const FILES: Array<[string, () => Promise<unknown>]> = [
+${rows}
+];
+
+const loaded = (async () => {
+  for (const [file, load] of FILES) {
+    __setFile(file);
+    try {
+      await load();
+    } catch (err) {
+      __loadError(file, err);
+    }
+  }
+})();
+
+(window as unknown as Record<string, unknown>).__yaar_tests__ = {
+  files: FILES.map(([file]) => file),
+  ready: loaded,
+  run: async (options: { filter?: string; verbose?: boolean } = {}) => {
+    await loaded;
+    return __summarize(await __run(options), options);
+  },
+};
+`;
+}
+
+/**
+ * Build the project's `src/**\/*.test.ts` files into `dist/test.html`.
+ *
+ * The same pipeline as the app — same plugins, same SDK scripts, same `bundles`
+ * gate — with a generated entry in place of `src/main.ts`, so a test exercises
+ * the code exactly as the app would run it. Unminified, because a failure's
+ * stack is the point. Nothing here touches `dist/index.html` or the build
+ * manifest: deploy ships only those, and a test build is never part of either.
+ */
+export async function compileTests(
+  sandboxPath: string,
+  options: CompileOptions = {},
+): Promise<CompileTestsResult> {
+  const files = await listTestFiles(sandboxPath);
+  if (files.length === 0) {
+    return {
+      success: false,
+      files,
+      errors: [
+        'No test files found. Add src/**/*.test.ts files that import ' +
+          "{ describe, test, expect } from '@bundled/test'.",
+      ],
+    };
+  }
+
+  const appJson = await readAppJson(sandboxPath);
+  const name = options.title ?? (typeof appJson.name === 'string' ? appJson.name : 'App');
+  const bundles =
+    options.bundles ??
+    (Array.isArray(appJson.bundles)
+      ? appJson.bundles.filter((b): b is string => typeof b === 'string')
+      : undefined);
+  const distDir = join(sandboxPath, 'dist');
+  const entryDir = join(distDir, TEST_ENTRY_DIR);
+  const entryPoint = join(entryDir, 'entry.ts');
+  const outputPath = join(distDir, TEST_OUTPUT_FILE);
+
+  try {
+    await mkdir(entryDir, { recursive: true });
+    await Bun.write(entryPoint, testEntrySource(files, '../../src'));
+    const jsCode = await compileWithBun(
+      entryPoint,
+      false,
+      bundles,
+      readThreeRenderer(sandboxPath),
+      undefined,
+      'test',
+    );
+    const html = generateHtmlWrapper(
+      jsCode,
+      `${name} (tests)`,
+      getSdkScripts(true),
+      undefined,
+      linkConfigOf(appJson),
+    );
+    await Bun.write(outputPath, html);
+    return { success: true, outputPath, files };
+  } catch (err) {
+    const errors =
+      err instanceof AggregateError && err.errors?.length
+        ? err.errors.map((e: unknown) => (e instanceof Error ? e.message : String(e)))
+        : [err instanceof Error ? err.message : String(err)];
+    return { success: false, files, errors };
+  } finally {
+    await rm(entryDir, { recursive: true, force: true }).catch(() => {});
   }
 }

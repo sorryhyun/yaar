@@ -6,8 +6,8 @@ audience: agent
 
 ## Regression testing with `previewScript`
 
-There is no unit-test runner for apps. `previewScript` runs a recorded sequence of protocol
-commands against the preview and diffs the results against a baseline **mechanically**, so the
+Unit tests for functions are `runTests` (the `unit-testing` topic). `previewScript` is for
+behaviour across commands: it runs a recorded sequence of protocol commands against the preview and diffs the results against a baseline **mechanically**, so the
 comparison lands in the tool result and the next agent re-runs it with one call.
 
 **The baseline is only an oracle when it was captured on a build you trust.** For a refactor

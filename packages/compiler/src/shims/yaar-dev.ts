@@ -47,6 +47,20 @@ export function compile(path: string, opts?: { title?: string }) {
 }
 
 /**
+ * Build the project's `src/**\/*.test.ts` files into `dist/test.html`, a page that
+ * exposes `window.__yaar_tests__.run()`. Load `testUrl` in a preview window and eval
+ * that to run them; the app's own `dist/index.html` is untouched.
+ */
+export function compileTests(path: string, opts?: { title?: string }) {
+  return devPost<{
+    success: boolean;
+    testUrl?: string;
+    files?: string[];
+    errors?: string[];
+  }>('compile-tests', { path, ...opts });
+}
+
+/**
  * Format source text with the host's prettier, using the repo's own style.
  *
  * Text in, text out — the server opens no file and writes none. `path` is read for

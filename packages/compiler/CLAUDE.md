@@ -16,7 +16,7 @@ bun run dev              # Watch mode
 ```
 src/
 ├── index.ts               # Barrel exports — the whole public surface, deep imports are internal
-├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
+├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs; compileTests() → dist/test.html
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
 ├── sandbox-tsconfig.ts    # sandboxCompilerOptions + sliceBundledTypes — the one TS view of a sandbox, shared by typecheck and references
 ├── references/
@@ -30,7 +30,8 @@ src/
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens()/…Brief() (generated token reference, two tiers)
 ├── sdk-scripts.ts         # The iframe SDK scripts baked into every dist/ (getSdkScripts) + computeSdkHash() over them and the tokens
 ├── build/
-│   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs + siblingAssetError
+│   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold + tests share it) + formatBuildLogs + siblingAssetError
+│   ├── worker-plugin.ts   # `?worker` imports: placeholder in pass one, worker bundled and spliced in after (Bun deadlocks on a nested build inside onLoad)
 │   ├── source-cache.ts    # AppSourceCache — one read of each source file per compile, never across two
 │   └── build-manifest.ts  # SHA-256 source/app.json/SDK hashing for staleness detection
 ├── bundled/
@@ -81,6 +82,7 @@ src/
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── yaar-media.ts      # Gated SDK: mediaUrl() streaming via /api/media-proxy + yt-dlp audio download (requires bundles: ["yaar-media"])
+    ├── test.ts            # @bundled/test — describe/test/expect runtime for src/**/*.test.ts; refused by the app build
     ├── lucide.ts          # icons as IconNode data + icon() renderer
     ├── three-addons.ts    # curated examples/jsm surface (three core stays external — one copy)
     ├── anime.ts           # v3→v4 easing name compat wrapper
@@ -191,6 +193,22 @@ Four rules, **each with the failure behind it in the file header**:
 Names are derived from the shape because the reader is a model and the name is documentation.
 Anything under ~120 bytes stays inline. **Consumers must resolve** — server-side that is
 `server/src/lib/schema-refs.ts`.
+
+## Tests and Workers
+
+**`compileTests(sandboxPath)`** builds every `src/**/*.test.ts` into `dist/test.html` — the app
+pipeline with a generated entry in place of `src/main.ts`, unminified. Each test file is a dynamic
+`import()` so one that throws at load is reported by name (Bun inlines them; still one file). The
+page exposes `window.__yaar_tests__.run({ filter?, verbose? })`, which Dev Tools' `runTests` evals
+in a preview-principal window. It never writes `dist/index.html` or the build manifest: deploy ships
+those. `@bundled/test` resolves only in this build (`BuildRole` `'test'`); the app build refuses it,
+which is what keeps test code out of a deployed app.
+
+**`import W from './x.worker.ts?worker'`** bundles the worker through the same plugins (`BuildRole`
+`'worker'`, which refuses `@bundled/yaar*` — the SDK is on `window`) and inlines it as a string; the
+default export starts a module worker from a Blob URL. Two passes because Bun deadlocks when a
+plugin awaits a nested `Bun.build` from `onLoad`: the first pass emits a placeholder token, and
+`inlineWorkers` builds each recorded worker afterwards and splices it in. Worker cycles are refused.
 
 ## Runtime-Contract Guards
 

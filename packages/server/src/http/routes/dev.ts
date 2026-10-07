@@ -4,6 +4,7 @@
  * GET  /api/dev/preview/{appId} — serve an installed app as a TOP-LEVEL page, with
  *                                 an iframe token injected (host-only, see below)
  * POST /api/dev/compile       — compile a project directory
+ * POST /api/dev/compile-tests — build a project's src/**\/*.test.ts into dist/test.html
  * POST /api/dev/typecheck     — typecheck a project directory
  * POST /api/dev/find-references — symbol references and callers in a project (TS language service)
  * POST /api/dev/deploy        — deploy a project as an installed app
@@ -31,6 +32,12 @@ import type { EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   { method: 'POST', path: '/api/dev/compile', response: 'json', description: 'Compile a project' },
+  {
+    method: 'POST',
+    path: '/api/dev/compile-tests',
+    response: 'json',
+    description: "Build a project's test files into a test page",
+  },
   {
     method: 'POST',
     path: '/api/dev/typecheck',
@@ -85,7 +92,13 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 /** App ids are directory names. Keep this to what a directory name may be. */
 const APP_ID = /^[A-Za-z0-9._-]+$/;
 
-const PATH_ACTIONS = ['compile', 'typecheck', 'find-references', 'deploy'] as const;
+const PATH_ACTIONS = [
+  'compile',
+  'compile-tests',
+  'typecheck',
+  'find-references',
+  'deploy',
+] as const;
 const GIT_ACTIONS = ['git-history', 'git-diff', 'git-restore', 'git-checkpoint'] as const;
 /** Actions over text the caller sends, addressing no project directory at all. */
 const TEXT_ACTIONS = ['format'] as const;
@@ -406,6 +419,26 @@ async function dispatchDevAction(
         protocol: result.protocol ?? null,
         // Non-fatal findings (unknown `y-*` classes); empty when clean.
         warnings: result.warnings ?? [],
+      });
+    }
+
+    case 'compile-tests': {
+      const { compileTests, TEST_OUTPUT_FILE } = await import('@yaar/compiler');
+      const result = await compileTests(absolutePath, {
+        title: typeof body.title === 'string' ? body.title : undefined,
+      });
+      if (!result.success) {
+        return jsonResponse({
+          success: false,
+          files: result.files,
+          errors: result.errors ?? ['Unknown error'],
+        });
+      }
+      return jsonResponse({
+        success: true,
+        files: result.files,
+        // Beside the app's dist/index.html, never in place of it: deploy ships that file.
+        testUrl: `/api/storage/apps/${callerAppId}/${path}/dist/${TEST_OUTPUT_FILE}`,
       });
     }
 
