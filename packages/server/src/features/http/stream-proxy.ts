@@ -8,9 +8,13 @@
  * upstream stream piped straight out, with `Range` forwarded so the browser can seek.
  *
  * Callers own the gate (which bundle reaches the door); this owns everything that must
- * hold for any caller: the SSRF check, the domain allowlist, a byte ceiling counted over
- * what actually streams, a stall timeout, and a response that cannot run as a document on
- * YAAR's origin.
+ * hold for any caller: the SSRF check, the domain allowlist, a stall timeout, and a
+ * response that cannot run as a document on YAAR's origin.
+ *
+ * There is no byte ceiling by default. `YAAR_MAX_DOWNLOAD_MB` bounds a body landing on
+ * disk; nothing here lands anywhere, and a feature-length MP4 or a model's weights are
+ * routinely past any number that would also be a sane disk cap. A caller that does want
+ * one passes `maxBytes`, counted over what actually streams.
  */
 
 import { validateUrl, safeFetch } from '@yaar/lib/ssrf';
@@ -18,7 +22,7 @@ import { errMessage } from '@yaar/lib/errors';
 import { errorResponse } from '../../http/utils.js';
 import { extractDomain } from '../config/domains.js';
 import { ensureDomainAllowed } from './domain-gate.js';
-import { MAX_DOWNLOAD_SIZE, TIMEOUT_MS } from './fetch.js';
+import { TIMEOUT_MS } from './fetch.js';
 import { isPlaylistText, looksLikePlaylist, rewritePlaylist } from './hls-playlist.js';
 
 export interface StreamProxyOptions {
@@ -28,7 +32,7 @@ export interface StreamProxyOptions {
   sessionId?: string;
   /** Extra upstream request headers, already vetted by the caller. */
   upstreamHeaders?: Record<string, string>;
-  /** Ceiling on streamed bytes per response. */
+  /** Ceiling on streamed bytes per response; unbounded when omitted. */
   maxBytes?: number;
   /** How long one upstream read (or the response headers) may take before aborting. */
   stallMs?: number;
@@ -155,7 +159,7 @@ export async function streamProxy(
   });
   if (denial) return errorResponse(denial.message, 403);
 
-  const maxBytes = options.maxBytes ?? MAX_DOWNLOAD_SIZE;
+  const maxBytes = options.maxBytes ?? Number.POSITIVE_INFINITY;
   const stallMs = options.stallMs ?? TIMEOUT_MS;
 
   const upstreamHeaders: Record<string, string> = { ...options.upstreamHeaders };

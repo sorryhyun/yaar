@@ -139,9 +139,6 @@ async function proxyWeights(req: Request, url: URL, principal: Principal): Promi
   return streamProxy(req, target, {
     purpose: (domain) => `An app wants to load model weights from "${domain}".`,
     sessionId: principal.kind === 'app' ? principal.sessionId : undefined,
-    // Multi-GB weights are the point of this route; the YAAR_MAX_DOWNLOAD_MB ceiling is
-    // sized for media, and this route never had one.
-    maxBytes: Number.POSITIVE_INFINITY,
   });
 }
 

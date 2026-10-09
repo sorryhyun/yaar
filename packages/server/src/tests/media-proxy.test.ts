@@ -4,11 +4,11 @@
  * The route fetches a caller-named URL and serves the bytes on YAAR's own origin, so
  * what matters is who reaches it (the `yaar-media` bundle, as a real app), what it will
  * forward (a validated `referer`, nothing else), and that the stream it hands back is
- * bounded — by bytes and by stalls — without mistaking a paused `<video>` for a dead
- * upstream. Every refusal asserts its reason, not just its status: a bare 403 passes
+ * bounded by stalls — and by bytes only where a caller asks — without mistaking a paused
+ * `<video>` for a dead upstream. Every refusal asserts its reason, not just its status: a bare 403 passes
  * for whichever gate happened to fire first.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, spyOn } from 'bun:test';
 import {
   handleMediaProxyRoutes,
   parseReferer,
@@ -24,7 +24,9 @@ import {
   forwardedHeaders,
   limitStream,
   safeContentType,
+  streamProxy,
 } from '../features/http/stream-proxy.js';
+import { addAllowedDomain } from '../features/config/domains.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
 
 function get(query: string, token?: string) {
@@ -221,6 +223,50 @@ describe('limitStream', () => {
     const out = limitStream(upstream, 1000, 1000, new AbortController());
     await out.cancel('seek');
     expect(cancelled).toBe(true);
+  });
+});
+
+describe('streamProxy size', () => {
+  // The #171 file: 857,048,354 bytes, past the 512MB YAAR_MAX_DOWNLOAD_MB default.
+  const MOVIE_BYTES = 857_048_354;
+
+  async function proxyMovie(maxBytes?: number): Promise<Response> {
+    await addAllowedDomain('cdn.example.com');
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+      (async () =>
+        new Response(new Uint8Array(16), {
+          status: 206,
+          headers: {
+            'content-type': 'video/mp4',
+            'content-length': String(MOVIE_BYTES),
+            'content-range': `bytes 0-${MOVIE_BYTES - 1}/${MOVIE_BYTES}`,
+          },
+        })) as unknown as typeof fetch,
+    );
+    try {
+      const req = new Request('http://localhost:8000/api/media-proxy', {
+        headers: { range: 'bytes=0-' },
+      });
+      return await streamProxy(req, 'https://cdn.example.com/movie.mp4', {
+        purpose: (d) => d,
+        maxBytes,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  }
+
+  it('streams a body past the disk-download ceiling — nothing here lands on disk', async () => {
+    const res = await proxyMovie();
+    expect(res.status).toBe(206);
+    expect(res.headers.get(DECLARED_LENGTH_HEADER)).toBe(String(MOVIE_BYTES));
+    expect((await res.arrayBuffer()).byteLength).toBe(16);
+  });
+
+  it('still refuses a declared length past a ceiling the caller set', async () => {
+    const [status, error] = await errorOf(await proxyMovie(1024));
+    expect(status).toBe(502);
+    expect(error).toContain('too large');
   });
 });
 
