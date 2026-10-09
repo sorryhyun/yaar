@@ -15,6 +15,28 @@ import {
   runPreviewScript,
   samplePreviewState,
 } from '../services';
+import { imageBlocks, imagesFromReadResult, type ReadBlock } from './read-blocks';
+
+const CAPTURE_TOO_LARGE = 'ask the command for a smaller capture';
+
+/**
+ * A command that answers with images comes back from the SDK's `invoke` as
+ * `{ data, images }`. Returned as that object it reaches the agent as JSON, base64 and
+ * all (one 1440px captureSlide was ~180k tokens of text), so the images are lifted back
+ * out into image blocks, which the app protocol passes through. `data` is what the
+ * command said beside them, and leads.
+ */
+function liftImages(label: string, result: unknown): { data: unknown; blocks: ReadBlock[] } | null {
+  const withImages = imagesFromReadResult(result);
+  if (!withImages) return null;
+  return {
+    data: (result as { data?: unknown }).data,
+    blocks: imageBlocks(label, withImages.images, CAPTURE_TOO_LARGE),
+  };
+}
+
+const asText = (value: unknown): string =>
+  typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 
 export const previewCommands = {
   preview: defineAppCommand({
@@ -383,28 +405,43 @@ export const previewCommands = {
           throw new AppCommandError('batch must be a non-empty array of { command, params }.');
         }
         const steps: { command: string; result?: unknown; error?: string }[] = [];
+        const images: ReadBlock[] = [];
+        // Steps stay one JSON block; a step's images follow it, labelled with its number.
+        const done = (value: object) =>
+          images.length > 0 ? [{ type: 'text', text: asText(value) }, ...images] : value;
         for (const step of p.batch as { command?: unknown; params?: unknown }[]) {
           const command = String(step?.command ?? '');
           try {
-            steps.push({ command, result: await send(command, step?.params) });
+            const result = await send(command, step?.params);
+            const lifted = liftImages(`step ${steps.length + 1}: ${command}`, result);
+            if (lifted) images.push(...lifted.blocks);
+            steps.push({ command, result: lifted ? lifted.data : result });
           } catch (err) {
             steps.push({ command, error: errMsg(err) });
-            return {
+            return done({
               steps,
               stopped: `Step ${steps.length} of ${p.batch.length} failed; the rest did not run.`,
-            };
+            });
           }
         }
-        return { steps };
+        return done({ steps });
       }
       if (typeof p.command !== 'string' || !p.command) {
         throw new AppCommandError('command is required (or pass `batch`).');
       }
+      let result: unknown;
       try {
-        return await send(p.command, p.params);
+        result = await send(p.command, p.params);
       } catch (err) {
         throw new AppCommandError(`Preview command failed: ${errMsg(err)}`);
       }
+      const lifted = liftImages(p.command, result);
+      if (!lifted) return result;
+      const lead =
+        lifted.data === undefined || lifted.data === ''
+          ? []
+          : [{ type: 'text', text: asText(lifted.data) }];
+      return [...lead, ...lifted.blocks];
     },
   }),
   previewScript: defineAppCommand({
