@@ -13,9 +13,13 @@
  * the one upstream header a CDN commonly insists on — `Referer` — rides as `?referer=`.
  * No other request header is forwarded, and no cookies: this is not a way around the
  * per-app cookie jar `/api/fetch` keeps.
+ *
+ * An HLS playlist comes back with every URI in it pointing at this route again (same
+ * `referer`, same tokens), so a player given one proxied `.m3u8` stays on the proxy for
+ * every variant, segment and key — see `features/http/hls-playlist.ts`.
  */
 
-import { requireBundledApp } from '../access.js';
+import { extractIframeToken, requireBundledApp } from '../access.js';
 import { errorResponse, type EndpointMeta } from '../utils.js';
 import { streamProxy } from '../../features/http/stream-proxy.js';
 
@@ -60,5 +64,27 @@ export async function handleMediaProxyRoutes(req: Request, url: URL): Promise<Re
     purpose: (domain) => `An app wants to stream media from "${domain}".`,
     sessionId: principal.sessionId,
     upstreamHeaders: referer ? { Referer: referer } : undefined,
+    playlistUri: (uri) => playlistProxyUrl(uri, referer, req, url),
   });
+}
+
+/**
+ * The proxy URL an HLS playlist names in place of `uri`, carrying what this request was
+ * let in with: the playlist's `referer` and both tokens (a media element or hls.js loading
+ * the next URI cannot add headers either). Relative, so it resolves against the
+ * playlist's own URL — whichever origin (desktop or app) that was served on.
+ */
+export function playlistProxyUrl(
+  uri: string,
+  referer: string | null,
+  req: Request,
+  url: URL,
+): string {
+  const q = new URLSearchParams({ url: uri });
+  if (referer) q.set('referer', referer);
+  const iframeToken = extractIframeToken(req, url);
+  if (iframeToken) q.set('__yaar_token', iframeToken);
+  const remoteToken = url.searchParams.get('token');
+  if (remoteToken) q.set('token', remoteToken);
+  return `media-proxy?${q}`;
 }

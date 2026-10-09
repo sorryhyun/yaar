@@ -19,6 +19,7 @@ import { errorResponse } from '../../http/utils.js';
 import { extractDomain } from '../config/domains.js';
 import { ensureDomainAllowed } from './domain-gate.js';
 import { MAX_DOWNLOAD_SIZE, TIMEOUT_MS } from './fetch.js';
+import { isPlaylistText, looksLikePlaylist, rewritePlaylist } from './hls-playlist.js';
 
 export interface StreamProxyOptions {
   /** Shown in the domain-approval dialog, e.g. `An app wants to stream media from "x".` */
@@ -31,7 +32,16 @@ export interface StreamProxyOptions {
   maxBytes?: number;
   /** How long one upstream read (or the response headers) may take before aborting. */
   stallMs?: number;
+  /**
+   * Proxy URL for an absolute URI found in an HLS playlist. When set, a playlist response
+   * is read whole and served with every URI in it rewritten through this (see
+   * `hls-playlist.ts`); without it a playlist streams through like any other body.
+   */
+  playlistUri?: (url: string) => string;
 }
+
+/** A playlist is text a person could read on a phone; anything bigger is not one. */
+const MAX_PLAYLIST_BYTES = 4 * 1024 * 1024;
 
 const FORWARDED_RESPONSE_HEADERS = ['etag', 'accept-ranges', 'content-range', 'last-modified'];
 
@@ -157,13 +167,19 @@ export async function streamProxy(
   req.signal?.addEventListener('abort', () => abort.abort(), { once: true });
 
   let upstream: Response;
+  // A playlist's relative URIs resolve against where it was finally served from.
+  let finalUrl = target;
   const headerTimer = setTimeout(() => abort.abort(), stallMs);
   try {
-    upstream = await safeFetch(target, {
-      method: req.method,
-      headers: upstreamHeaders,
-      signal: abort.signal,
-    });
+    upstream = await safeFetch(
+      target,
+      { method: req.method, headers: upstreamHeaders, signal: abort.signal },
+      {
+        beforeRedirect: (hop) => {
+          finalUrl = hop;
+        },
+      },
+    );
   } catch (err) {
     return errorResponse(`Upstream fetch failed: ${errMessage(err)}`, 502);
   } finally {
@@ -188,11 +204,47 @@ export async function streamProxy(
     return errorResponse(`Upstream response too large (max ${maxBytes} bytes)`, 502);
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': safeContentType(upstream.headers.get('content-type')),
+  const baseHeaders = {
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "sandbox; default-src 'none'",
     'Cache-Control': 'no-store',
+  };
+
+  if (
+    options.playlistUri &&
+    req.method === 'GET' &&
+    upstream.status === 200 &&
+    upstream.body &&
+    looksLikePlaylist(upstream.headers.get('content-type'), finalUrl)
+  ) {
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await new Response(
+        limitStream(upstream.body, Math.min(maxBytes, MAX_PLAYLIST_BYTES), stallMs, abort),
+      ).arrayBuffer();
+    } catch (err) {
+      return errorResponse(`Upstream playlist unreadable: ${errMessage(err)}`, 502);
+    }
+    const text = new TextDecoder().decode(bytes);
+    // A `.m3u8` path that answers with something else (an error page) is passed on as bytes.
+    if (isPlaylistText(text)) {
+      return new Response(rewritePlaylist(text, finalUrl, options.playlistUri), {
+        status: 200,
+        headers: { 'Content-Type': 'application/vnd.apple.mpegurl', ...baseHeaders },
+      });
+    }
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': safeContentType(upstream.headers.get('content-type')),
+        ...baseHeaders,
+      },
+    });
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': safeContentType(upstream.headers.get('content-type')),
+    ...baseHeaders,
     'Access-Control-Expose-Headers': `Content-Length, ${DECLARED_LENGTH_HEADER}, ETag, Accept-Ranges, Content-Range`,
     ...forwardedHeaders(upstream.headers),
   };

@@ -51,6 +51,10 @@ const URI = 'yaar://system/ytdlp';
  * carries the `yaar-media` bundle declaration). `referer` is forwarded upstream as the
  * `Referer` header, for CDNs that refuse hotlinked requests without one.
  *
+ * An HLS playlist (`.m3u8`, or an mpegurl type) comes back with every URI in it rewritten
+ * to another proxy URL carrying the same `referer` and tokens, so a native player or hls.js
+ * given `mediaUrl(playlist)` fetches every variant, segment and key through the proxy.
+ *
  * The response streams, so it carries no `Content-Length`. When the upstream declared an
  * unencoded length, it arrives as `X-Content-Length`: compare it with the bytes read to
  * tell a complete body from a truncated one. Absent means the length is unknown.

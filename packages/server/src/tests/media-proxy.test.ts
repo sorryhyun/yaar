@@ -9,7 +9,16 @@
  * for whichever gate happened to fire first.
  */
 import { describe, it, expect } from 'bun:test';
-import { handleMediaProxyRoutes, parseReferer } from '../http/routes/media-proxy.js';
+import {
+  handleMediaProxyRoutes,
+  parseReferer,
+  playlistProxyUrl,
+} from '../http/routes/media-proxy.js';
+import {
+  isPlaylistText,
+  looksLikePlaylist,
+  rewritePlaylist,
+} from '../features/http/hls-playlist.js';
 import {
   DECLARED_LENGTH_HEADER,
   forwardedHeaders,
@@ -212,5 +221,87 @@ describe('limitStream', () => {
     const out = limitStream(upstream, 1000, 1000, new AbortController());
     await out.cancel('seek');
     expect(cancelled).toBe(true);
+  });
+});
+
+describe('HLS playlists', () => {
+  const proxy = (u: string) => `P(${u})`;
+
+  it('recognizes a playlist by type or by path', () => {
+    expect(looksLikePlaylist('application/vnd.apple.mpegurl', 'https://a.com/x')).toBe(true);
+    expect(looksLikePlaylist('application/x-mpegURL; charset=utf-8', 'https://a.com/x')).toBe(true);
+    expect(looksLikePlaylist('audio/mpegurl', 'https://a.com/x')).toBe(true);
+    expect(looksLikePlaylist('text/plain', 'https://a.com/hls/index.m3u8')).toBe(true);
+    expect(looksLikePlaylist('video/mp2t', 'https://a.com/seg-1.ts')).toBe(false);
+    expect(looksLikePlaylist(null, 'https://a.com/v.mp4?x=.m3u8')).toBe(false);
+    expect(isPlaylistText('\uFEFF#EXTM3U\n')).toBe(true);
+    expect(isPlaylistText('<html>403</html>')).toBe(false);
+  });
+
+  it('rewrites URI lines against the playlist URL, relative and absolute', () => {
+    const text = [
+      '#EXTM3U',
+      '#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360',
+      '360p/index.m3u8?sig=abc',
+      '#EXT-X-STREAM-INF:BANDWIDTH=2000000',
+      '/abs/720p.m3u8',
+      '#EXT-X-STREAM-INF:BANDWIDTH=4000000',
+      'https://cdn2.example.com/1080p.m3u8',
+    ].join('\n');
+    const out = rewritePlaylist(text, 'https://cdn.example.com/v/master.m3u8', proxy).split('\n');
+    expect(out[0]).toBe('#EXTM3U');
+    expect(out[1]).toBe('#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360');
+    expect(out[2]).toBe('P(https://cdn.example.com/v/360p/index.m3u8?sig=abc)');
+    expect(out[4]).toBe('P(https://cdn.example.com/abs/720p.m3u8)');
+    expect(out[6]).toBe('P(https://cdn2.example.com/1080p.m3u8)');
+  });
+
+  it('rewrites URI attributes of tags, and leaves key systems and comments alone', () => {
+    const text = [
+      '#EXTM3U',
+      '#EXT-X-KEY:METHOD=AES-128,URI="key.bin",IV=0x1',
+      '#EXT-X-MAP:URI="init.mp4",BYTERANGE="720@0"',
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",URI="audio/en.m3u8"',
+      '#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="skd://k1"',
+      '# a comment with URI="x"',
+      '#EXTINF:4.0,',
+      'seg-1.ts',
+      '',
+    ].join('\r\n');
+    const out = rewritePlaylist(text, 'https://c.com/p/media.m3u8', proxy).split('\n');
+    expect(out[1]).toBe('#EXT-X-KEY:METHOD=AES-128,URI="P(https://c.com/p/key.bin)",IV=0x1');
+    expect(out[2]).toBe('#EXT-X-MAP:URI="P(https://c.com/p/init.mp4)",BYTERANGE="720@0"');
+    expect(out[3]).toBe(
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",URI="P(https://c.com/p/audio/en.m3u8)"',
+    );
+    expect(out[4]).toBe('#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="skd://k1"');
+    expect(out[5]).toBe('# a comment with URI="x"');
+    expect(out[7]).toBe('P(https://c.com/p/seg-1.ts)');
+  });
+
+  it('names the proxy relatively, carrying referer and both tokens', () => {
+    const reqUrl = new URL(
+      'http://localhost:8000/api/media-proxy?url=x&__yaar_token=T1&token=R1&referer=https%3A%2F%2Fsite.com%2F',
+    );
+    const req = new Request(reqUrl.href);
+    const out = playlistProxyUrl('https://c.com/a b.ts?q="1"', 'https://site.com/', req, reqUrl);
+    expect(out.startsWith('media-proxy?')).toBe(true);
+    // A URI attribute is quoted, so the proxy URL must never contain a raw quote.
+    expect(out).not.toContain('"');
+    const back = new URL(out, reqUrl);
+    expect(back.pathname).toBe('/api/media-proxy');
+    expect(back.searchParams.get('url')).toBe('https://c.com/a b.ts?q="1"');
+    expect(back.searchParams.get('referer')).toBe('https://site.com/');
+    expect(back.searchParams.get('__yaar_token')).toBe('T1');
+    expect(back.searchParams.get('token')).toBe('R1');
+  });
+
+  it('carries a header-borne iframe token into the query, where the next fetch can send it', () => {
+    const reqUrl = new URL('http://localhost:8000/api/media-proxy?url=x');
+    const req = new Request(reqUrl.href, { headers: { 'x-iframe-token': 'H1' } });
+    const back = new URL(playlistProxyUrl('https://c.com/s.ts', null, req, reqUrl), reqUrl);
+    expect(back.searchParams.get('__yaar_token')).toBe('H1');
+    expect(back.searchParams.has('referer')).toBe(false);
+    expect(back.searchParams.has('token')).toBe(false);
   });
 });
