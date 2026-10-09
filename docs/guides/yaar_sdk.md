@@ -127,6 +127,7 @@ read that before guessing a signature.
 | `@bundled/mammoth` | `.docx` → HTML |
 | `@bundled/tone` | Audio synthesis |
 | `@bundled/mediabunny` | Read/write/convert mp4, webm, mp3, wav, frame-accurate. Use it instead of `MediaRecorder` + `captureStream()`, which drops frames under load. Check `getFirstEncodableVideoCodec([...])` first |
+| `@bundled/hls.js` | HLS (`.m3u8`) playback where the browser has none (Firefox, older desktop Chrome). Prefer native when `video.canPlayType('application/vnd.apple.mpegurl')` answers; load `mediaUrl(m3u8, { referer })` from `@bundled/yaar-media`, never the raw URL, and `destroy()` the instance when the element leaves. ~0.58 MB |
 | `@bundled/lucide` | Icons: import by name, render with `icon()` |
 | `@bundled/marked` | Markdown. Render through `renderMarkdown`, not `marked.parse` (see [Rendering Untrusted HTML](#rendering-untrusted-html)) |
 | `@bundled/mermaid` | Text → diagrams via `renderMermaid(src)`, which returns token-themed, already-sanitized SVG. ~3.3 MB: import it only where diagrams are drawn |

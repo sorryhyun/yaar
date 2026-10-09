@@ -354,7 +354,7 @@ Three rules about `bundled-types/index.d.ts` itself:
   them accurate.** A bare re-export tells the agent nothing (it cannot open the upstream package),
   so the `solid-js` blocks name what lives in each entry point and which export to reach for —
   including that **Solid does not diff**, so `produce` (not an Immer-style copy) is the right
-  store-update primitive. `@bundled/mediabunny` carries the same kind of block.
+  store-update primitive. `@bundled/mediabunny` and `@bundled/hls.js` carry the same kind of block.
 - Beyond real modules it serves **pseudo-libraries** — describable but not importable.
   `design-tokens` returns `describeDesignTokens()` generated from `YAAR_DESIGN_TOKENS_CSS`. Its
   short form, `describeDesignTokensBrief()`, is what the App Authoring Contract embeds in the

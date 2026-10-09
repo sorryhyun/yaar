@@ -204,7 +204,9 @@ Notable libraries: `mermaid` — `renderMermaid()` returns token-themed, already
 3.3 MB it is by far the largest, so import it only where diagrams are drawn. Externally-sourced HTML
 goes through `sanitizeHtml` (or `renderMarkdown`) from `@bundled/yaar` — never import `dompurify`
 directly. `mediabunny` — read/write/convert mp4/webm/mp3/wav,
-frame-accurate and not real-time-bound like `MediaRecorder`. `lucide` — icons: import by name
+frame-accurate and not real-time-bound like `MediaRecorder`. `hls.js` — `.m3u8` playback where
+there is no native HLS; prefer native, and feed it `mediaUrl()` from `@bundled/yaar-media` so the
+proxy rewrites every playlist URI same-origin. `lucide` — icons: import by name
 (`Trash2`, `FolderOpen`) and render with `icon()`; never hand-copy an SVG path, and write a
 domain glyph Lucide lacks as an `IconNode` rendered by the same call. Compiler internals (shims, guards,
 protocol extraction): [`packages/compiler/CLAUDE.md`](../packages/compiler/CLAUDE.md).

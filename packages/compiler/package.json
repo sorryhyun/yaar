@@ -45,6 +45,7 @@
     "dompurify": "catalog:",
     "eslint": "catalog:",
     "globals": "catalog:",
+    "hls.js": "catalog:",
     "lodash-es": "catalog:",
     "lucide": "catalog:",
     "mammoth": "catalog:",

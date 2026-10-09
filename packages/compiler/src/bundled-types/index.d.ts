@@ -694,6 +694,52 @@ declare module '@bundled/mediabunny' {
   export * from 'mediabunny';
 }
 
+// HLS (.m3u8) playback for a <video>/<audio> element, over Media Source
+// Extensions. Only needed where the browser has no native HLS: Safari and
+// Android Chrome (and recent desktop Chrome) play an .m3u8 straight from
+// `video.src`; Firefox and older desktop Chrome do not. ~0.58 MB, so import it only in the app that plays streams.
+declare module '@bundled/hls.js' {
+  // PREFER NATIVE. Ask the element first and use hls.js only as the fallback —
+  // native playback is cheaper, and on iOS before 17.1 (no MSE) it is the only path:
+  //   const src = mediaUrl(m3u8, { referer: pageUrl });   // from @bundled/yaar-media
+  //   if (video.canPlayType('application/vnd.apple.mpegurl')) video.src = src;
+  //   else if (Hls.isSupported()) { const hls = new Hls(); hls.loadSource(src); hls.attachMedia(video); }
+  //   else showToast('This browser cannot play HLS');
+  //
+  // THE SOURCE IS ALWAYS `mediaUrl(m3u8, { referer })`, never the raw remote URL.
+  // A playlist fetched through /api/media-proxy comes back with every URI inside
+  // it (variants, segments, keys) rewritten to another same-origin proxy URL, so
+  // every request hls.js makes is same-origin and carries the CDN's Referer. A raw
+  // cross-origin playlist fails on CORS, and a rewritten-by-hand one misses keys.
+  //
+  //   Hls.isSupported()       true when MSE (or iOS ManagedMediaSource) can play it
+  //   new Hls(config?)        config is optional; the defaults are right for VOD and
+  //                           live. Useful knobs: { startLevel, maxBufferLength (s),
+  //                           lowLatencyMode, capLevelToPlayerSize, debug }
+  //   hls.loadSource(url)     the master or media playlist
+  //   hls.attachMedia(video)  binds to the element (either order works)
+  //   hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => { data.levels; video.play() })
+  //   hls.on(Hls.Events.ERROR, (_e, data) => {
+  //     if (!data.fatal) return;            // non-fatal errors are retried internally
+  //     if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+  //     else { hls.destroy(); showError(data.details); }   // NETWORK_ERROR etc.
+  //   })
+  //   hls.levels / hls.currentLevel   quality ladder; -1 is automatic (ABR)
+  //   hls.destroy()           REQUIRED when the element leaves (onCleanup, window
+  //                           close, source change). It detaches the MediaSource
+  //                           and stops the segment loader; a dropped instance keeps
+  //                           fetching segments in the background.
+  //
+  //   ErrorTypes: NETWORK_ERROR | MEDIA_ERROR | MUX_ERROR | KEY_SYSTEM_ERROR | OTHER_ERROR
+  //   ErrorDetails: the specific cause (MANIFEST_LOAD_ERROR, FRAG_LOAD_ERROR, ...)
+  //
+  // Transmuxing runs on the main thread: this ESM build ships no inline worker, so
+  // `enableWorker` is inert unless `workerPath` names a worker script — and a
+  // single-file app has none to name. Fine for playback; don't bother setting it.
+  export * from 'hls.js';
+  export { default } from 'hls.js';
+}
+
 // ── YAAR SDK ────────────────────────────────────────────────────────────────
 
 // -- App Protocol --

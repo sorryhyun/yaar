@@ -134,6 +134,12 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   dompurify: 'dompurify',
   'matter-js': 'matter-js',
   tone: 'tone',
+  // HLS (.m3u8) playback over MSE, for browsers with no native HLS (older desktop Chrome
+  // and Firefox; Safari and Android Chrome play it natively). First consumer:
+  // user-apps/reader-browser, which feeds it a `mediaUrl()` playlist from
+  // `@bundled/yaar-media` so every segment fetch stays same-origin. No shim: the
+  // ESM entry (`dist/hls.mjs`) is one flat pre-built module, not a barrel.
+  'hls.js': 'hls.js',
   'pixi.js': 'pixi.js',
   mammoth: 'mammoth',
   marked: 'marked',
