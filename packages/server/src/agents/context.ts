@@ -93,8 +93,12 @@ export interface GetMessagesOptions {
 /**
  * Maximum number of monitor messages before pruning.
  * Window messages are pruned on window close, so only monitor messages accumulate unbounded.
+ *
+ * Exported because a restart carries the tape forward through the session log
+ * (`selectCarryOverEntries`), and carrying more than the tape will hold is how a chain of
+ * restarts grew every log by the whole of the last one.
  */
-const MAX_MONITOR_MESSAGES = 200;
+export const MAX_MONITOR_MESSAGES = 200;
 
 /**
  * ContextTape manages the hierarchical conversation history.
@@ -210,9 +214,13 @@ export class ContextTape {
   /**
    * Restore messages from a previous session.
    * Preserves original ordering, timestamps, and branch identity.
+   *
+   * Bounded like {@link append}: a log from an older build can hand back far more
+   * monitor messages than a live tape ever holds.
    */
   restore(messages: ContextMessage[]): void {
     this.messages = [...messages, ...this.messages];
+    this.pruneIfNeeded();
   }
 
   /**

@@ -15,7 +15,8 @@ import { findRestorableSession, selectCarryOverEntries } from '../logging/restor
 import { createSession, SessionLogger } from '../logging/session-logger.js';
 import { getWindowRestoreActions } from '../logging/window-restore.js';
 import { getContextRestoreMessages } from '../logging/context-restore.js';
-import type { SessionMetadata } from '../logging/types.js';
+import type { ParsedMessage, SessionMetadata } from '../logging/types.js';
+import { MAX_MONITOR_MESSAGES } from '../agents/context.js';
 
 let root: string;
 
@@ -216,6 +217,41 @@ describe('carry-over into the next launch', () => {
     // Exactly the shape `pruneEmptySessions()` deletes: nothing in the log itself.
     expect(await Bun.file(join(root, sessionId, 'messages.jsonl')).text()).toBe('');
     expect(await findRestorableSession(root).then((r) => r?.session.sessionId)).toBe('first');
+  });
+
+  it('carries no more monitor turns than the context tape holds', async () => {
+    const turns = Array.from({ length: MAX_MONITOR_MESSAGES + 50 }, (_, i) =>
+      userMessage(`turn ${i}`),
+    );
+    const carried = selectCarryOverEntries(turns as ParsedMessage[], []);
+
+    expect(carried).toHaveLength(MAX_MONITOR_MESSAGES);
+    // The newest ones — the oldest are what the tape would already have pruned.
+    expect(carried[0].content).toBe('turn 50');
+    expect(carried.at(-1)?.content).toBe(`turn ${MAX_MONITOR_MESSAGES + 49}`);
+  });
+
+  it('carries a window branch only while its window is open', async () => {
+    const branch = (windowId: string, content: string) => ({
+      ...userMessage(content),
+      agentId: 'app-notes-m0-msg-1',
+      source: `yaar://windows/${windowId}`,
+    });
+    const messages = [
+      userMessage('monitor turn'),
+      branch('0/notes', 'open branch'),
+      branch('0/scratch', 'closed branch'),
+      // Older logs spelled a window id bare; it is monitor 0's.
+      branch('notes', 'bare open branch'),
+    ] as ParsedMessage[];
+    const open = getWindowRestoreActions([windowCreate('0/notes', 'Notes') as ParsedMessage]);
+
+    const turns = selectCarryOverEntries(messages, open).filter((m) => m.type !== 'action');
+    expect(turns.map((m) => m.content)).toEqual([
+      'monitor turn',
+      'open branch',
+      'bare open branch',
+    ]);
   });
 
   it('a monitor reset drops the carried thread id', async () => {

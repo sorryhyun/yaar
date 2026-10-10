@@ -10,6 +10,8 @@ import type { OSAction } from '@yaar/shared';
 import { listSessions, readSessionMessages, parseSessionMessages } from './session-reader.js';
 import type { ParsedMessage, SessionInfo } from './types.js';
 import { isSubAgentRole } from '../agents/profiles/sub-agent.js';
+import { MAX_MONITOR_MESSAGES, extractWindowId } from '../agents/context.js';
+import { scopedWindowId } from './window-restore.js';
 
 export interface RestoreSource {
   session: SessionInfo;
@@ -66,7 +68,8 @@ export async function findRestorableSession(dir?: string): Promise<RestoreSource
  * So the log is seeded with exactly what the restore reads back:
  *
  *   - **Context messages** — the user/assistant turns, verbatim (agent, source and
- *     original timestamp intact), minus sub-agent turns that no restore uses.
+ *     original timestamp intact), minus sub-agent turns that no restore uses — and only
+ *     as many as the context tape would be holding (see below).
  *   - **The open windows** — as the `window.create` snapshot `getWindowRestoreActions()`
  *     already reduced them to, not the full action history, so a chain of restarts
  *     carries the desktop forward without re-copying every move and resize.
@@ -74,6 +77,18 @@ export async function findRestorableSession(dir?: string): Promise<RestoreSource
  * Tool calls, results and thinking are not carried: they feed nothing but the CLI
  * panel's history, and copying them on every restart would grow each log by the whole
  * of the last one.
+ *
+ * The context messages are bounded the way the live `ContextTape` bounds them, for the
+ * same reason. Every carried turn is carried again by the next restart, so copying the
+ * whole log made each one hold every turn back to the first launch in the chain — a
+ * thousand-odd turns, most of them ones no tape had held for days:
+ *
+ *   - **Monitor turns** — the last `MAX_MONITOR_MESSAGES`, the tape's own cap.
+ *   - **Window branches** — only for the windows still open. The tape drops a branch when
+ *     its window closes; the log keeps it, and carrying it on revived it.
+ *
+ * `lifecycle.ts` restores the tape from these same entries, so what a relaunch remembers
+ * and what its log says it remembers cannot drift apart.
  */
 export function selectCarryOverEntries(
   messages: ParsedMessage[],
@@ -82,10 +97,28 @@ export function selectCarryOverEntries(
 ): ParsedMessage[] {
   const entries: ParsedMessage[] = [];
 
-  for (const msg of messages) {
-    if (msg.type !== 'user' && msg.type !== 'assistant') continue;
-    if (typeof msg.content !== 'string' || isSubAgentRole(msg.agentId)) continue;
-    entries.push({ ...msg, restored: true });
+  const openWindows = new Set<string>();
+  for (const action of windowActions) {
+    if (action.type === 'window.create') openWindows.add(scopedWindowId(action.windowId));
+  }
+
+  // A turn with no source is a monitor turn — the same default `getContextRestoreMessages` uses.
+  const windowOf = (msg: ParsedMessage) =>
+    typeof msg.source === 'string' ? extractWindowId(msg.source) : null;
+  const context = messages.filter(
+    (msg) =>
+      (msg.type === 'user' || msg.type === 'assistant') &&
+      typeof msg.content === 'string' &&
+      !isSubAgentRole(msg.agentId),
+  );
+  const monitorTurns = context.filter((msg) => windowOf(msg) === null);
+  const keptMonitorTurns = new Set(monitorTurns.slice(-MAX_MONITOR_MESSAGES));
+
+  for (const msg of context) {
+    const windowId = windowOf(msg);
+    const keep =
+      windowId === null ? keptMonitorTurns.has(msg) : openWindows.has(scopedWindowId(windowId));
+    if (keep) entries.push({ ...msg, restored: true });
   }
 
   // After the messages, stamped now: the snapshot is the desktop as this launch found it.

@@ -78,26 +78,29 @@ function agentEntries(agents: unknown): [string | null, Record<string, unknown>]
   });
 }
 
-/** agentId → monitor, from the `windowId` prefix of each meta agent. */
+/** agentId → monitor, from each meta agent's `monitorId` (newer logs) or `windowId` prefix. */
 export function metaWindowMonitors(meta: unknown): Map<string, string> {
   const out = new Map<string, string>();
   for (const [id, a] of agentEntries(asRecord(meta)?.agents)) {
-    const mon = fromWindowId(a.windowId);
+    const mon = fromLabel(a.monitorId) ?? fromWindowId(a.windowId);
     if (id && mon) out.set(id, mon);
   }
   return out;
 }
 
 /**
- * One turn's monitor, in a fixed order: `source` → `monitor-N` agent id → `-mN-` in the
- * agent id → parentAgentId (same two rules) → meta windowId of its agent → null.
+ * One turn's monitor, in a fixed order: the row's own `monitorId` → `source` → `monitor-N`
+ * agent id → `-mN-` in the agent id → parentAgentId (same two rules) → the row's
+ * `windowId` prefix → meta monitor of its agent → null.
  */
 export function resolveMonitor(m: ParsedMessage, windows: Map<string, string>): string | null {
   return (
+    fromLabel(m.monitorId) ??
     fromSource(m.source) ??
     fromMonitorAgent(m.agentId) ??
     fromAppAgent(m.agentId) ??
     fromAgentId(m.parentAgentId) ??
+    fromWindowId(m.windowId) ??
     (m.agentId ? windows.get(m.agentId) : undefined) ??
     (m.parentAgentId ? windows.get(m.parentAgentId) : undefined) ??
     null
@@ -147,7 +150,12 @@ export function monitorsFromMeta(meta: unknown): string[] {
   if (Array.isArray(threads)) threads.forEach((t) => add(fromLabel(t)));
   else Object.keys(asRecord(threads) ?? {}).forEach((k) => add(fromLabel(k)));
   for (const [id, a] of agentEntries(r.agents)) {
-    add(fromAgentId(id) ?? fromWindowId(a.windowId) ?? fromAgentId(a.parentAgentId));
+    add(
+      fromLabel(a.monitorId) ??
+        fromAgentId(id) ??
+        fromWindowId(a.windowId) ??
+        fromAgentId(a.parentAgentId),
+    );
   }
   return sortMonitors([...set]);
 }

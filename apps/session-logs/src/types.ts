@@ -53,6 +53,12 @@ export interface ParsedMessage {
   interaction?: string;
   isError?: boolean;
   durationMs?: number;
+  /**
+   * Written by the server on agent-less rows (iframe verb calls, user interactions): the
+   * window the row came from and the monitor it happened on. Absent in older logs.
+   */
+  windowId?: string;
+  monitorId?: string;
   /** Prior-thread history copied in when a thread was resumed — not this session's work. */
   restored?: boolean;
   /** Monitor id ('0', '1', …) or 'unknown'; set by `annotateMonitors` at load. */

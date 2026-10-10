@@ -33,7 +33,7 @@ function extractAppIdFromPath(path: string): string | null {
  * in an old log — but that window is unclosable today, and the first session written by
  * the fixed writer records its monitor.
  */
-function scopedWindowId(windowId: string): string {
+export function scopedWindowId(windowId: string): string {
   return windowId.includes('/') ? windowId : `${DEFAULT_MONITOR_ID}/${windowId}`;
 }
 

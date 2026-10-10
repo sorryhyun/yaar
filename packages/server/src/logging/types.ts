@@ -7,6 +7,11 @@ export interface AgentInfo {
   agentId: string;
   parentAgentId: string | null;
   windowId?: string;
+  /**
+   * The monitor this agent works on — so a reader can group agents by desktop without
+   * parsing it back out of `agentId`. Absent in logs from older builds.
+   */
+  monitorId?: string;
   createdAt: string;
 }
 
@@ -78,6 +83,13 @@ export interface ParsedMessage {
   toolUseId?: string;
   interactionSource?: string;
   interaction?: string;
+  /**
+   * Who an agent-less entry came from: the window an iframe verb call was made from, or
+   * the window a user interaction touched — and the monitor either happened on. Agent
+   * entries carry neither; their agent's `AgentInfo` does.
+   */
+  windowId?: string;
+  monitorId?: string;
   // Written on result entries by `logToolResult` / `logVerbResult`. Declared here
   // because they were already being logged and read back untyped.
   isError?: boolean;

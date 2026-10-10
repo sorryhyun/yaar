@@ -526,11 +526,6 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const verbLog = () =>
     wantsVerbLog ? (getSessionHub().get(tokenEntry!.sessionId!)?.getSessionLogger() ?? null) : null;
   const verbLabel = `iframe:${tokenEntry?.appId ?? 'unknown'}`;
-  verbLog()?.logToolUse(
-    verbLabel,
-    { verb, uri: resolvedUri, ...compactVerbPayload(body.payload) },
-    undefined,
-  );
 
   // Dispatch to ResourceRegistry — run within agent context so that handlers
   // (e.g. installApp) can resolve the session via getSessionId() for permission dialogs.
@@ -550,6 +545,14 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     (sessionId && callerWindowId
       ? getSessionHub().get(sessionId)?.windowState.getMonitorForWindow(callerWindowId)
       : undefined);
+  // The same pair goes on both log entries: an iframe call has no agent to attribute it
+  // to, and the app id in `verbLabel` is ambiguous for an app open on two monitors.
+  const verbCaller = { windowId: callerWindowId, monitorId };
+  verbLog()?.logVerbCall(
+    verbLabel,
+    { verb, uri: resolvedUri, ...compactVerbPayload(body.payload) },
+    verbCaller,
+  );
   // For `read`, the payload IS the read options — `window.yaar.read(uri, { missingOk: true })`
   // and the `lines` / `pattern` filters an MCP caller has always had. This door dropped the
   // 4th argument entirely before, so an app could name a read option but never send one, and
@@ -590,17 +593,22 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     const startedAt = Date.now();
     const result = await dispatch();
     const envelope = toEnvelope(result);
-    verbLog()?.logVerbResult(verbLabel, envelope, {
-      durationMs: Date.now() - startedAt,
-      // `notFound` still logs as an error — the app asked for something and did not get it —
-      // but carries the category that keeps it out of the session's failure tally. Absence is
-      // a routine answer, and counting it made a clean first launch read as dozens of errors.
-      // Apps compiled before `missingOk` existed still send a plain read, so this half of the
-      // fix is what makes their logs honest without a recompile.
-      ...(result.isError
-        ? { isError: true, ...(result.notFound ? { errorCategory: NOT_FOUND_CATEGORY } : {}) }
-        : {}),
-    });
+    verbLog()?.logVerbResult(
+      verbLabel,
+      envelope,
+      {
+        durationMs: Date.now() - startedAt,
+        // `notFound` still logs as an error — the app asked for something and did not get it —
+        // but carries the category that keeps it out of the session's failure tally. Absence is
+        // a routine answer, and counting it made a clean first launch read as dozens of errors.
+        // Apps compiled before `missingOk` existed still send a plain read, so this half of the
+        // fix is what makes their logs honest without a recompile.
+        ...(result.isError
+          ? { isError: true, ...(result.notFound ? { errorCategory: NOT_FOUND_CATEGORY } : {}) }
+          : {}),
+      },
+      verbCaller,
+    );
     return envelope;
   };
 

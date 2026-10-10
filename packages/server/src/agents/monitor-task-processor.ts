@@ -269,6 +269,13 @@ export class MonitorTaskProcessor {
   }
 
   private async runMonitorTurn(agent: PooledAgent, task: Task, monitorId: string): Promise<void> {
+    // The monitor's stable role, not this turn's: it is what an app agent on this monitor
+    // names as its parent, and a log whose `agents` lacked it had app agents parented to
+    // nothing. `monitor-0` is seeded by `createSession()`; this covers every other monitor
+    // (and is a no-op once registered).
+    await this.ctx
+      .getSessionLogger()
+      ?.registerAgent(monitorRole(monitorId), null, undefined, monitorId);
     if (task.external) {
       await this.runRemoteTurn(agent, task, monitorId, task.external);
       return;

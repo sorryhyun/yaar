@@ -132,6 +132,7 @@ export async function createSession(
       'monitor-0': {
         agentId: 'monitor-0',
         parentAgentId: null,
+        monitorId: '0',
         createdAt: now,
       },
     },
@@ -146,6 +147,20 @@ export async function createSession(
   await Bun.write(join(directory, 'agents', 'default.jsonl'), '');
 
   return { sessionId, directory, metadata };
+}
+
+/** Where an iframe verb call came from — see {@link SessionLogger.logVerbCall}. */
+export interface VerbCaller {
+  windowId?: string;
+  monitorId?: string;
+}
+
+/** `caller` minus the fields it does not have, so an absent one is not logged as `null`. */
+function callerFields(caller: VerbCaller | undefined): VerbCaller {
+  return {
+    ...(caller?.windowId ? { windowId: caller.windowId } : {}),
+    ...(caller?.monitorId ? { monitorId: caller.monitorId } : {}),
+  };
 }
 
 /**
@@ -237,6 +252,7 @@ export class SessionLogger {
     agentId: string,
     parentAgentId: string | null,
     windowId?: string,
+    monitorId?: string,
   ): Promise<void> {
     if (this.sessionInfo.metadata.agents[agentId]) {
       return; // Already registered
@@ -246,6 +262,7 @@ export class SessionLogger {
       agentId,
       parentAgentId,
       windowId,
+      monitorId,
       createdAt: new Date().toISOString(),
     };
 
@@ -480,6 +497,21 @@ export class SessionLogger {
   }
 
   /**
+   * Record an iframe verb call, before it is dispatched.
+   *
+   * An iframe has no agent, so the entry's `agentId` is null and the `caller` is the only
+   * thing tying it to a desktop: the `toolName` names the app, and the same app is often
+   * open on more than one monitor at once.
+   */
+  logVerbCall(toolName: string, toolInput: unknown, caller?: VerbCaller): void {
+    this.appendEntry('tool_use', undefined, {
+      toolName,
+      toolInput: reviveJson(toolInput),
+      ...callerFields(caller),
+    });
+  }
+
+  /**
    * Record what an iframe verb call returned.
    *
    * The counterpart to the `logToolUse` that `POST /api/verb` writes before dispatch.
@@ -495,6 +527,7 @@ export class SessionLogger {
     toolName: string,
     result: unknown,
     meta?: { isError?: boolean; errorCategory?: string; durationMs?: number },
+    caller?: VerbCaller,
   ): void {
     // `not_found` is an error the log keeps and the tally skips. An app reading an
     // optional config file it has not written yet is the single most common failure a
@@ -511,6 +544,7 @@ export class SessionLogger {
       toolName,
       ...this.resolveContent(serialized),
       ...meta,
+      ...callerFields(caller),
     });
   }
 
@@ -538,6 +572,8 @@ export class SessionLogger {
       interaction: compact,
       source: 'user',
       windowId: interaction.windowId,
+      // Stamped by `ClientEventController` before the interaction is logged or applied.
+      monitorId: interaction.monitorId,
     });
   }
 

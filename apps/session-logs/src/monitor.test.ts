@@ -48,6 +48,18 @@ describe('resolveMonitor', () => {
     expect(resolveMonitor(msg({ agentId: 'x', parentAgentId: 'monitor-4' }), windows)).toBe('4');
     expect(resolveMonitor(msg({ agentId: 'devtools-agent' }), windows)).toBe('2');
   });
+  test("an agent-less row's own monitorId, then its windowId", () => {
+    const verb = { type: 'tool_use' as const, toolName: 'iframe:devtools' };
+    expect(resolveMonitor(msg({ ...verb, monitorId: '1', windowId: '0/x' }), windows)).toBe('1');
+    expect(resolveMonitor(msg({ ...verb, windowId: '3/devtools' }), windows)).toBe('3');
+  });
+  test("meta monitorId over the agent's window", () => {
+    const w = metaWindowMonitors({
+      agents: { a: { agentId: 'a', windowId: '0/devtools', monitorId: '5' } },
+    });
+    expect(resolveMonitor(msg({ agentId: 'a' }), w)).toBe('5');
+    expect(monitorsFromMeta({ agents: { 'monitor-1': { monitorId: '1' } } })).toEqual(['1']);
+  });
   test('nothing to go on', () => {
     expect(resolveMonitor(msg({ agentId: 'mystery' }), windows)).toBe(null);
   });

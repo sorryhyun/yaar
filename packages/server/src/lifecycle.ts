@@ -212,7 +212,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
         options.restoreActions = restoreActions;
         log.info('restored windows', { count: restoreActions.length, from: lastSession.sessionId });
       }
-      const contextMessages = getContextRestoreMessages(messages);
+      // The tape is restored from what this launch's log is seeded with — bounded the way a
+      // live tape is — not from the whole of the last log; see selectCarryOverEntries().
+      const carried = selectCarryOverEntries(messages, restoreActions);
+      const contextMessages = getContextRestoreMessages(carried);
       if (contextMessages.length > 0) {
         options.contextMessages = contextMessages;
         log.info('restored context messages', {
@@ -232,11 +235,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
           from: lastSession.sessionId,
         });
       }
-      carryOver = [
-        lastSession.sessionId,
-        selectCarryOverEntries(messages, options.restoreActions),
-        lastSession.metadata?.threadIds,
-      ];
+      carryOver = [lastSession.sessionId, carried, lastSession.metadata?.threadIds];
     }
   } catch (err) {
     log.error('failed to restore previous session', { err });
