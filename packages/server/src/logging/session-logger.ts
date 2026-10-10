@@ -562,8 +562,22 @@ export class SessionLogger {
     });
   }
 
-  logAction(action: OSAction, agentId?: string): void {
-    this.appendEntry('action', agentId, { action });
+  /**
+   * `monitorId` is what places an agent-less action — a window the user opened from the
+   * dock has no agent to attribute it to, and a reader would otherwise file it nowhere.
+   */
+  logAction(action: OSAction, agentId?: string, monitorId?: string): void {
+    this.appendEntry('action', agentId, { action, ...(monitorId ? { monitorId } : {}) });
+  }
+
+  /** Record the session's monitor list — what the next launch reopens. */
+  logMonitors(monitorIds: string[]): void {
+    const prev = this.sessionInfo.metadata.monitors;
+    if (prev && prev.length === monitorIds.length && prev.every((id, i) => id === monitorIds[i])) {
+      return;
+    }
+    this.sessionInfo.metadata.monitors = [...monitorIds];
+    this.scheduleMetadataSave();
   }
 
   logInteraction(interaction: UserInteraction): void {

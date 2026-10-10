@@ -49,6 +49,7 @@ mock.module('../logging/session-logger.js', () => {
     logUserMessage = mock(() => {});
     logAgentMessage = mock(() => {});
     logAction = mock(() => {});
+    logMonitors = mock(() => {});
     logThreadId = mock(() => {});
     clearThreadId = mock(() => {});
     clearThreadIds = mock(() => {});

@@ -6,7 +6,7 @@
  * relaunch its windows.
  */
 
-import type { OSAction } from '@yaar/shared';
+import { DEFAULT_MONITOR_ID, type OSAction } from '@yaar/shared';
 import { listSessions, readSessionMessages, parseSessionMessages } from './session-reader.js';
 import type { ParsedMessage, SessionInfo } from './types.js';
 import { isSubAgentRole } from '../agents/profiles/sub-agent.js';
@@ -134,4 +134,33 @@ export function selectCarryOverEntries(
   }
 
   return entries;
+}
+
+/**
+ * The monitors a launch reopens: the ones the restored session had when it stopped.
+ *
+ * `MonitorRegistry` starts with monitor 0 alone, so a session shut down with three desktops
+ * came back with one — the windows restored onto monitors 1 and 2 had no desktop to render
+ * on, and their context and provider threads waited for a monitor nobody could reach.
+ *
+ * The list in the metadata is authoritative: it is what the registry held, so a monitor the
+ * user removed stays removed. A log from before that list was written falls back to the
+ * monitors that still have a window open — the one sign in it that a desktop was in use
+ * at shutdown rather than at some point in the chain. Monitor 0 is not listed; the
+ * registry always has it.
+ */
+export function restoredMonitorIds(session: SessionInfo, windowActions: OSAction[]): string[] {
+  const ids = new Set<string>();
+  const recorded = session.metadata?.monitors;
+  if (Array.isArray(recorded)) {
+    for (const id of recorded) ids.add(String(id));
+  } else {
+    for (const action of windowActions) {
+      if (action.type !== 'window.create') continue;
+      const scoped = scopedWindowId(action.windowId);
+      ids.add(scoped.slice(0, scoped.indexOf('/')));
+    }
+  }
+  ids.delete(DEFAULT_MONITOR_ID);
+  return [...ids].filter((id) => /^\d+$/.test(id)).sort((a, b) => Number(a) - Number(b));
 }

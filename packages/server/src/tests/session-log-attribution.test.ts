@@ -81,4 +81,32 @@ describe('session log attribution', () => {
     const [entry] = parseSessionMessages(await Bun.file(join(dir, 'messages.jsonl')).text());
     expect(entry).toMatchObject({ type: 'interaction', windowId: '1/market-apps', monitorId: '1' });
   });
+
+  it('stamps an agent-less window.create with the monitor it opened on', async () => {
+    const { logger, dir } = await makeLogger();
+    const action = {
+      type: 'window.create',
+      windowId: '2/session-logs',
+      title: 'Session Logs',
+      bounds: { x: 0, y: 0, w: 800, h: 600 },
+      content: { renderer: 'iframe', data: 'yaar://apps/session-logs/dist/index.html' },
+    } as const;
+    logger.logAction(action, undefined, '2');
+    logger.logAction(action);
+    await logger.dispose();
+
+    const [stamped, bare] = parseSessionMessages(
+      await Bun.file(join(dir, 'messages.jsonl')).text(),
+    );
+    expect(stamped).toMatchObject({ type: 'action', agentId: null, monitorId: '2' });
+    expect('monitorId' in bare).toBe(false);
+  });
+
+  it('records the monitor list in the metadata', async () => {
+    const { logger, dir } = await makeLogger();
+    logger.logMonitors(['0', '1', '2']);
+    await logger.dispose();
+
+    expect((await readMetadata(dir)).monitors).toEqual(['0', '1', '2']);
+  });
 });

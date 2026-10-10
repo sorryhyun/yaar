@@ -88,6 +88,7 @@ function createLoggerDouble(): SessionLogger {
     logToolUse: noop,
     logToolResult: noop,
     logAction: noop,
+    logMonitors: noop,
     logInteraction: noop,
     logThreadId: noop,
     clearThreadId: noop,

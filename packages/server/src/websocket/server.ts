@@ -43,6 +43,8 @@ const log = createLogger('WebSocket');
 
 export interface WebSocketServerOptions {
   restoreActions: OSAction[];
+  /** Monitors besides 0 to reopen — see `restoredMonitorIds()`. */
+  restoreMonitors?: string[];
   contextMessages: ContextMessage[];
   savedThreadIds?: Record<string, string>;
   cliEntries?: CliRestoreEntry[];
@@ -188,6 +190,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       const hub = getSessionHub();
       const sessionOptions: LiveSessionOptions = {
         restoreActions: options.restoreActions,
+        restoreMonitors: options.restoreMonitors,
         contextMessages: options.contextMessages,
         savedThreadIds: options.savedThreadIds,
         sessionLogger: bootLogger,

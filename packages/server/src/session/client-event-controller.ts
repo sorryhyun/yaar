@@ -678,7 +678,7 @@ export class ClientEventController {
       // Only a window the user *made* is worth replaying from the log — a move or a close
       // is already implied by the window's absence or its bounds at snapshot time.
       if (interaction.type === 'window.create') {
-        for (const action of applied) logger?.logAction(action);
+        for (const action of applied) logger?.logAction(action, undefined, interaction.monitorId);
       }
       // Closing a browser window closes *its* tab — and only its tab. This used to
       // close every browser session the host held, so shutting one window took the

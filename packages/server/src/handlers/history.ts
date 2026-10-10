@@ -93,6 +93,7 @@ export function registerHistoryHandlers(registry: ResourceRegistry): void {
             agentCount: Object.keys(session.metadata.agents ?? {}).length,
             agents: session.metadata.agents,
             threadIds: session.metadata.threadIds,
+            monitors: session.metadata.monitors,
             failureCount: session.metadata.failureCount,
             isCurrent: session.sessionId === currentLogId,
           });

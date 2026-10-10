@@ -63,6 +63,13 @@ describe('resolveMonitor', () => {
   test('nothing to go on', () => {
     expect(resolveMonitor(msg({ agentId: 'mystery' }), windows)).toBe(null);
   });
+  test('an agent-less window.create lands on its window id’s monitor', () => {
+    const create = msg({
+      type: 'action',
+      action: { type: 'window.create', windowId: '2/session-logs' },
+    });
+    expect(resolveMonitor(create, windows)).toBe('2');
+  });
 });
 
 describe('annotateMonitors', () => {
@@ -78,6 +85,9 @@ describe('annotateMonitors', () => {
 });
 
 describe('monitorsFromMeta', () => {
+  test('reads the recorded monitor list', () => {
+    expect(monitorsFromMeta({ monitors: ['0', '2'] })).toEqual(['0', '2']);
+  });
   test('threadIds keys plus agents, sorted', () => {
     expect(monitorsFromMeta(meta)).toEqual(['0', '1', '2']);
   });

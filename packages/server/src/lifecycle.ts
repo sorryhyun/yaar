@@ -13,6 +13,7 @@ import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
   findRestorableSession,
   selectCarryOverEntries,
+  restoredMonitorIds,
   getWindowRestoreActions,
   getContextRestoreMessages,
   getCliRestoreEntries,
@@ -211,6 +212,11 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
       if (restoreActions.length > 0) {
         options.restoreActions = restoreActions;
         log.info('restored windows', { count: restoreActions.length, from: lastSession.sessionId });
+      }
+      const monitors = restoredMonitorIds(lastSession, restoreActions);
+      if (monitors.length > 0) {
+        options.restoreMonitors = monitors;
+        log.info('restored monitors', { monitors, from: lastSession.sessionId });
       }
       // The tape is restored from what this launch's log is seeded with — bounded the way a
       // live tape is — not from the whole of the last log; see selectCarryOverEntries().

@@ -60,12 +60,37 @@ export interface MonitorRegistryDeps {
    * cap never removes monitors that already exist; it only stops new ones.
    */
   maxMonitors?(): number;
+  /**
+   * Monitor ids besides 0 the session starts with — the desktops a restart reopens
+   * (`restoredMonitorIds()`). Seeded up to the cap; ids past it are dropped, not queued.
+   */
+  restored?: string[];
+  /** The list changed — a monitor was added or removed. Receives the ids in list order. */
+  onChange?(monitorIds: string[]): void;
 }
 
 export class MonitorRegistry {
   private monitors: MonitorInfo[] = [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1' }];
 
-  constructor(private readonly deps: MonitorRegistryDeps) {}
+  constructor(private readonly deps: MonitorRegistryDeps) {
+    for (const id of deps.restored ?? []) {
+      if (this.has(id) || !/^\d+$/.test(id)) continue;
+      if (this.monitors.length >= this.maxMonitors()) {
+        log.warn('restored monitor over the cap — not reopened', {
+          sessionId: deps.sessionId,
+          monitorId: id,
+          maxMonitors: this.maxMonitors(),
+        });
+        continue;
+      }
+      this.monitors.push({ id, label: `Monitor ${Number(id) + 1}` });
+    }
+  }
+
+  /** The monitor ids, in list order. */
+  ids(): string[] {
+    return this.monitors.map((m) => m.id);
+  }
 
   /** The session's monitors. Authoritative — the client renders this, it does not mint it. */
   list(): MonitorInfo[] {
@@ -128,6 +153,7 @@ export class MonitorRegistry {
       this.deps.sendTo(connectionId, this.event());
       return;
     }
+    this.deps.onChange?.(this.ids());
     // Everyone gets the new list; only the tab that asked is told to go there.
     this.deps.broadcast(this.event());
     this.deps.sendTo(connectionId, this.event(monitor.id));
@@ -195,6 +221,7 @@ export class MonitorRegistry {
     if (!this.has(monitorId)) return;
 
     this.monitors = this.monitors.filter((m) => m.id !== monitorId);
+    this.deps.onChange?.(this.ids());
     this.deps.unsubscribeMonitor(monitorId);
     // The ids are the lowest free integers, so this one comes back — and inherited the
     // dead monitor's viewport, which is what sizes the windows created on it.

@@ -91,7 +91,11 @@ export function metaWindowMonitors(meta: unknown): Map<string, string> {
 /**
  * One turn's monitor, in a fixed order: the row's own `monitorId` → `source` → `monitor-N`
  * agent id → `-mN-` in the agent id → parentAgentId (same two rules) → the row's
- * `windowId` prefix → meta monitor of its agent → null.
+ * `windowId` prefix → its action's `windowId` prefix → meta monitor of its agent → null.
+ *
+ * The action rule is for agent-less `window.create` rows — a window opened from the dock,
+ * or a restart's snapshot of the open windows — which older logs wrote with nothing else
+ * that names a monitor.
  */
 export function resolveMonitor(m: ParsedMessage, windows: Map<string, string>): string | null {
   return (
@@ -101,6 +105,7 @@ export function resolveMonitor(m: ParsedMessage, windows: Map<string, string>): 
     fromAppAgent(m.agentId) ??
     fromAgentId(m.parentAgentId) ??
     fromWindowId(m.windowId) ??
+    fromWindowId(m.action?.windowId) ??
     (m.agentId ? windows.get(m.agentId) : undefined) ??
     (m.parentAgentId ? windows.get(m.parentAgentId) : undefined) ??
     null
@@ -134,11 +139,12 @@ export function annotateMonitors(messages: ParsedMessage[], meta: unknown): Pars
 /** Does this meta object carry anything the badge can be computed from? */
 export function hasMonitorMeta(meta: unknown): boolean {
   const r = asRecord(meta);
-  return !!r && (r.threadIds != null || r.agents != null);
+  return !!r && (r.threadIds != null || r.agents != null || r.monitors != null);
 }
 
 /**
- * The monitors a session ran, from meta alone: `threadIds` keys plus `agents`. Cheap —
+ * The monitors a session ran, from meta alone: `monitors` (newer logs), `threadIds` keys
+ * and `agents`. Cheap —
  * no messages — which is what lets every session-list row carry one.
  */
 export function monitorsFromMeta(meta: unknown): string[] {
@@ -146,6 +152,7 @@ export function monitorsFromMeta(meta: unknown): string[] {
   if (!r) return [];
   const set = new Set<string>();
   const add = (v: string | null) => v && set.add(v);
+  if (Array.isArray(r.monitors)) r.monitors.forEach((v) => add(fromLabel(v)));
   const threads = r.threadIds;
   if (Array.isArray(threads)) threads.forEach((t) => add(fromLabel(t)));
   else Object.keys(asRecord(threads) ?? {}).forEach((k) => add(fromLabel(k)));

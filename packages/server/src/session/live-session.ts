@@ -79,6 +79,8 @@ import { createLogger, type Logger } from '../observability/log.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
+  /** Monitors besides 0 the session starts with — the ones the restored session had. */
+  restoreMonitors?: string[];
   contextMessages?: ContextMessage[];
   savedThreadIds?: Record<string, string>;
   /**
@@ -256,7 +258,12 @@ export class LiveSession {
       clearLayout: (monitorId) => this.layoutContext.clearMonitor(monitorId),
       removeMonitorAgent: (monitorId) => this.pool?.removeMonitorAgent(monitorId),
       maxMonitors: effectiveMaxMonitors,
+      restored: options.restoreMonitors,
+      onChange: (ids) => this.sessionLogger?.logMonitors(ids),
     });
+    // Recorded up front, not on the first change: a launch that restored three monitors
+    // and never touched the list must still hand all three to the launch after it.
+    this.sessionLogger?.logMonitors(this.monitorRegistry.ids());
 
     this.snapshots = new SessionSnapshotService({
       sessionId,
@@ -466,7 +473,7 @@ export class LiveSession {
       monitorId,
     });
     // The getter, not the field: a pool that minted its own logger leaves the field null.
-    this.getSessionLogger()?.logAction(action, role);
+    this.getSessionLogger()?.logAction(action, role, monitorId);
   }
 
   addConnection(connectionId: ConnectionId, ws: YaarWebSocket): void {
@@ -543,6 +550,7 @@ export class LiveSession {
     }
     const sessionInfo = await createSession(providerName);
     this.sessionLogger = new SessionLogger(sessionInfo);
+    this.sessionLogger.logMonitors(this.monitorRegistry.ids());
     return sessionInfo.sessionId;
   }
 

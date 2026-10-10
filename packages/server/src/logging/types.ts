@@ -35,6 +35,12 @@ export interface SessionMetadata {
    * `SessionLogger.carryOver()`.
    */
   restoredFrom?: string;
+  /**
+   * The session's monitor ids, as `MonitorRegistry` last held them. A restart reopens these
+   * desktops, so a session shut down with three monitors comes back with three — see
+   * `restoredMonitorIds()`. Absent in logs from older builds.
+   */
+  monitors?: string[];
 }
 
 export interface SessionInfo {
