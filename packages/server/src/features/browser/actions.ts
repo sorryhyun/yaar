@@ -178,18 +178,9 @@ async function handleOpen(
 
   const mobile = p.mobile === true;
 
-  // Reuse existing session if one exists with this browserId
-  const existing = pool.getSession(browserId);
-  let session: typeof existing & {};
-  let bid: string;
-  if (existing) {
-    session = existing;
-    bid = browserId;
-  } else {
-    const created = await pool.createSession(browserId, { mobile });
-    session = created.session;
-    bid = created.browserId;
-  }
+  // Reuse the session this browserId names — including one a revive or another
+  // creation is bringing up right now, so this navigation is the last the tab sees.
+  const { session, browserId: bid, created } = await pool.openSession(browserId, { mobile });
 
   const windowId = `browser-${bid}`;
   session.windowId = windowId;
@@ -197,7 +188,7 @@ async function handleOpen(
     url,
     p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
   );
-  if (p.visible !== false && !existing) {
+  if (p.visible !== false && created) {
     await openBrowserWindow(
       bid,
       session.mobile,

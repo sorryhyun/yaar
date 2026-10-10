@@ -408,6 +408,71 @@ describe('HeadlessServerBrowser', () => {
     expect(await pool.reviveSession('scratch')).toBeNull();
   });
 
+  describe('one tab per id while it is coming up', () => {
+    const OLD_URL = 'https://example.com/last-time';
+    const NEW_URL = 'https://example.com/the-link';
+    const navigatedTo = () =>
+      (mockCdpSend.mock.calls as unknown as [string, { url?: string }?][])
+        .filter(([method]) => method === 'Page.navigate')
+        .map(([, params]) => params?.url);
+    const tabsOpened = () => fetchedUrls().filter((u) => u.includes('/json/new')).length;
+
+    /** A session for `id` that was on OLD_URL, then idle-swept: a record, no socket. */
+    async function sweptSession(id: string) {
+      const { session } = await pool.createSession(id);
+      session.currentUrl = OLD_URL;
+      session.emit('updated', { url: OLD_URL, title: 'Old', version: 1 });
+      await settleStore();
+      session.lastActivity = Date.now() - 60 * 60 * 1000;
+      await internals(pool).cleanupIdle();
+      expect(pool.getSession(id)).toBeUndefined();
+      mockCdpSend.mockClear();
+      mockFetch.mockClear();
+    }
+
+    it('open during a revive keeps the revive from replaying the old page', async () => {
+      await sweptSession('0');
+
+      // The Browser window's live view revives the id the moment it mounts, and the
+      // `?url=` launch opens it right behind.
+      const revive = pool.reviveSession('0');
+      const opened = await pool.openSession('0');
+      await opened.session.navigate(NEW_URL);
+      const revived = await revive;
+
+      expect(revived).toBe(opened.session);
+      expect(opened.created).toBe(false);
+      expect(tabsOpened()).toBe(1);
+      expect(navigatedTo()).toEqual([NEW_URL]);
+    });
+
+    it('a revive during an open joins its tab instead of opening another', async () => {
+      await sweptSession('0');
+
+      const opening = pool.openSession('0');
+      const revived = await pool.reviveSession('0');
+      const opened = await opening;
+
+      expect(opened.created).toBe(true);
+      expect(revived).toBe(opened.session);
+      expect(tabsOpened()).toBe(1);
+      expect(navigatedTo()).not.toContain(OLD_URL);
+    });
+
+    it('two concurrent creations of one id share a tab', async () => {
+      const [a, b] = await Promise.all([pool.createSession('x'), pool.createSession('x')]);
+      expect(a.session).toBe(b.session);
+      expect(pool.getSession('x')).toBe(a.session);
+      expect(tabsOpened()).toBe(1);
+    });
+
+    it('a revive with nobody opening still replays the recorded page', async () => {
+      await sweptSession('inbox');
+      await pool.reviveSession('inbox');
+      expect(navigatedTo()).toEqual([OLD_URL]);
+    });
+  });
+
   it('reattaches a crashed session in place, keeping its listeners', async () => {
     const { session } = await pool.createSession('news');
     session.currentUrl = 'https://example.com/news';

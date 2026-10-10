@@ -48,6 +48,7 @@ function stubPool(bid: string) {
     pool: {
       getSession: () => undefined,
       createSession: () => Promise.resolve({ session, browserId: bid }),
+      openSession: () => Promise.resolve({ session, browserId: bid, created: true }),
     },
     session,
   };

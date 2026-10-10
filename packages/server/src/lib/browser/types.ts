@@ -117,6 +117,15 @@ export interface BrowserProvider {
    * Returns null when there is nothing to revive.
    */
   reviveSession(browserId: string): Promise<BrowserSession | null>;
+  /**
+   * The session `browserId` names, for a caller about to navigate it somewhere new:
+   * live, or joined from a creation/revive in flight (a revive is told not to replay
+   * its recorded page), or created. `created` is true only for a fresh tab.
+   */
+  openSession(
+    browserId: string,
+    options?: BrowserSessionOptions,
+  ): Promise<{ session: BrowserSession; browserId: string; created: boolean }>;
   /** All open sessions, keyed by browserId. */
   getAllSessions(): Map<string, BrowserSession>;
   /** Close and remove one session. */

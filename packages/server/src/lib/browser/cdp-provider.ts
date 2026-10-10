@@ -100,6 +100,19 @@ interface BrowserRecord {
   restarts: number;
   /** A {@link CdpBrowserProvider.reviveSession} in flight, so concurrent callers join it. */
   reviving?: Promise<BrowserSession | null>;
+  /**
+   * Set by {@link CdpBrowserProvider.openSession} while that revive is in flight: the
+   * caller is about to navigate somewhere new, so the revive must not replay the
+   * recorded URL — a replay that lands after the caller's navigation puts the old
+   * page back on screen.
+   */
+  skipReplay?: boolean;
+  /**
+   * A {@link CdpBrowserProvider.createSession} for this id in flight. One id, one tab:
+   * a second caller joins it rather than opening a second tab the record then
+   * forgets.
+   */
+  creating?: Promise<{ session: BrowserSession; browserId: string }>;
   /** A crash-restart in flight, so an endpoint loss does not start a second one. */
   restarting?: Promise<void>;
   /** An adopted popup not yet handed out by `consumeAdoptedTabs`. */
@@ -222,7 +235,9 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   /** Remove a record that no longer holds anything — no socket, no tab, no revive. */
   private pruneIfEmpty(browserId: string): void {
     const rec = this.records.get(browserId);
-    if (rec && !rec.session && !rec.targetId && !rec.reviving) this.records.delete(browserId);
+    if (rec && !rec.session && !rec.targetId && !rec.reviving && !rec.creating) {
+      this.records.delete(browserId);
+    }
   }
 
   private recordFor(browserId: string): BrowserRecord {
@@ -500,6 +515,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       return !live.isClosed && !live.isCrashed && existing.session === live ? live : null;
     }
     if (existing?.reviving) return existing.reviving;
+    // Someone is already bringing this id up from scratch, with its own page in mind.
+    if (existing?.creating) return existing.creating.then((r) => r.session).catch(() => null);
 
     const attempt: Promise<BrowserSession | null> = (async () => {
       await this.store.load();
@@ -510,7 +527,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
       const { session } = await this.createSession(browserId, { mobile: record.mobile, pinned });
       session.windowId = record.windowId;
-      if (/^https?:/i.test(record.url)) {
+      if (/^https?:/i.test(record.url) && !this.records.get(browserId)?.skipReplay) {
         const state = await session.navigate(record.url, 'domcontentloaded').catch(() => null);
         if (state) {
           session.currentUrl = state.url;
@@ -523,6 +540,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const rec = this.records.get(browserId);
       if (rec?.reviving !== attempt) return;
       rec.reviving = undefined;
+      rec.skipReplay = undefined;
       // A revive with nothing to revive leaves an empty record; it means nothing.
       this.pruneIfEmpty(browserId);
     });
@@ -879,11 +897,23 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     this.targets.clear();
   }
 
-  /** Create a new browser tab. Auto-assigns the next browserId if omitted. */
+  /**
+   * Create a new browser tab. Auto-assigns the next browserId if omitted.
+   *
+   * Single-flight per id: a call naming an id whose creation is already in flight
+   * joins it. Two concurrent creations of one id used to open two Chrome tabs, with
+   * the record keeping whichever attached last — so a viewer could be streaming one
+   * tab while the navigation it was waiting for happened in the other.
+   */
   async createSession(
     browserId?: string,
     options?: BrowserSessionOptions,
   ): Promise<{ session: BrowserSession; browserId: string }> {
+    if (browserId !== undefined) {
+      const inFlight = this.records.get(browserId)?.creating;
+      if (inFlight) return inFlight;
+    }
+
     const pinned = options?.pinned === true;
     if (this.atCapacity(pinned)) {
       throw new Error(
@@ -906,6 +936,23 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       if (Number.isInteger(asNumber) && asNumber >= this.nextId) this.nextId = asNumber + 1;
     }
 
+    const id = browserId;
+    // Registered before the first await, so a caller arriving during it finds it.
+    const attempt = this.startSession(id, options, pinned).finally(() => {
+      const rec = this.records.get(id);
+      if (rec?.creating !== attempt) return;
+      rec.creating = undefined;
+      this.pruneIfEmpty(id);
+    });
+    this.recordFor(id).creating = attempt;
+    return attempt;
+  }
+
+  private async startSession(
+    browserId: string,
+    options: BrowserSessionOptions | undefined,
+    pinned: boolean,
+  ): Promise<{ session: BrowserSession; browserId: string }> {
     if (pinned) this.pendingPinned++;
     else this.pendingSessions++;
     try {
@@ -930,6 +977,38 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       if (pinned) this.pendingPinned--;
       else this.pendingSessions--;
     }
+  }
+
+  /**
+   * The session `browserId` names, for a caller about to navigate it somewhere new —
+   * the `open` action. Live if there is one; otherwise whatever is already bringing
+   * the id up, joined; otherwise a fresh tab. `created` is true only for the last.
+   *
+   * A revive in flight is told not to replay its recorded page and then waited out,
+   * so the caller's navigation is the last one the tab sees. Without that, a Browser
+   * window launched on a link (`?url=`) raced its own live view: the view's revive
+   * reloaded the page the tab was on last time, and when that reload finished after
+   * the link's navigation, the old page stayed on screen.
+   */
+  async openSession(
+    browserId: string,
+    options?: BrowserSessionOptions,
+  ): Promise<{ session: BrowserSession; browserId: string; created: boolean }> {
+    const rec = this.records.get(browserId);
+    if (rec?.reviving) {
+      rec.skipReplay = true;
+      const revived = await rec.reviving.catch(() => null);
+      if (revived && !revived.isClosed) return { session: revived, browserId, created: false };
+    }
+    const live = this.records.get(browserId)?.session;
+    if (live && !live.isClosed) return { session: live, browserId, created: false };
+
+    const inFlight = this.records.get(browserId)?.creating;
+    if (inFlight) {
+      const joined = await inFlight.catch(() => null);
+      if (joined && !joined.session.isClosed) return { ...joined, created: false };
+    }
+    return { ...(await this.createSession(browserId, options)), created: true };
   }
 
   getSession(browserId: string): BrowserSession | undefined {
