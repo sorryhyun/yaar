@@ -4,6 +4,9 @@ export interface SessionSummary {
   provider: string;
   lastActivity: string;
   agentCount: number;
+  /** Session meta, when the list read carries it — the monitor badge reads both. */
+  threadIds?: unknown;
+  agents?: unknown;
 }
 
 export interface SessionDetail {
@@ -50,4 +53,8 @@ export interface ParsedMessage {
   interaction?: string;
   isError?: boolean;
   durationMs?: number;
+  /** Prior-thread history copied in when a thread was resumed — not this session's work. */
+  restored?: boolean;
+  /** Monitor id ('0', '1', …) or 'unknown'; set by `annotateMonitors` at load. */
+  monitor?: string;
 }

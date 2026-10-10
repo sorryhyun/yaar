@@ -1,7 +1,10 @@
 import html from '@bundled/solid-js/html';
-import { For } from '@bundled/solid-js';
+import { createMemo, For } from '@bundled/solid-js';
 import type { ParsedMessage } from './types';
-import { state } from './store';
+import { state, setState } from './store';
+import { selectMonitor } from './api';
+import { countByMonitor, inScope } from './select';
+import { monitorLabel } from './monitor';
 import { formatTime } from './utils';
 import {
   toolSummary,
@@ -211,7 +214,60 @@ export const MessageCard = (m: ParsedMessage) => {
  * can disagree: a render throw in the list leaves the badge's memo committed and
  * the list's aborted.
  */
-const turns = (): ParsedMessage[] => (Array.isArray(state.messages) ? state.messages : []);
+const turns = createMemo((): ParsedMessage[] => {
+  if (!Array.isArray(state.messages)) return [];
+  const monitor = state.selectedMonitor === 'all' ? null : state.selectedMonitor;
+  const restored = state.showRestored;
+  return state.messages.filter((m) => m && inScope(m, monitor, restored));
+});
+
+// The body branch reads this, not `turns()`, so switching tabs reconciles the existing
+// <For> instead of rebuilding every row.
+const hasTurns = createMemo(() => turns().length > 0);
+
+const monitorCounts = createMemo(() => countByMonitor(state.messages, state.showRestored));
+
+const restoredCount = createMemo(() =>
+  Array.isArray(state.messages) ? state.messages.filter((m) => m?.restored).length : 0,
+);
+
+const MonitorTab = (id: string, label: string, count: () => number) => html`
+  <button
+    class=${() => `y-tab monitor-tab${state.selectedMonitor === id ? ' active' : ''}`}
+    aria-selected=${() => state.selectedMonitor === id}
+    onClick=${() => selectMonitor(id)}
+  >
+    ${label} <span class="monitor-tab-count y-font-mono">${count}</span>
+  </button>
+`;
+
+/** All / Monitor 0 / Monitor 1 … — only the monitors the visible turns name. */
+const MonitorBar = () => html`
+  <div class="monitor-bar">
+    <div class="y-tabs monitor-tabs" role="tablist">
+      ${MonitorTab('all', 'All', () => monitorCounts().reduce((n, c) => n + c.turns, 0))}
+      <${For} each=${monitorCounts}>
+        ${(c: { monitor: string; turns: number }) =>
+          MonitorTab(c.monitor, monitorLabel(c.monitor), () => c.turns)}
+      </${For}>
+    </div>
+    ${() =>
+      restoredCount() > 0
+        ? html`<label
+            class="restored-toggle"
+            title="Prior-thread history copied into this session when a thread was resumed"
+          >
+            <input
+              type="checkbox"
+              checked=${() => state.showRestored}
+              onChange=${(e: Event) =>
+                setState('showRestored', (e.target as HTMLInputElement).checked)}
+            />
+            Show restored history (${restoredCount})
+          </label>`
+        : null}
+  </div>
+`;
 
 /**
  * Render one turn, never throwing.
@@ -242,9 +298,15 @@ export const TranscriptSection = () => html`
           ? html`<span class="msg-count y-font-mono">${turns().length} turns</span>`
           : null}
     </div>
+    ${() => (state.messages?.length ? MonitorBar() : null)}
     <div class="transcript-body y-scroll">
       ${() => {
-        if (turns().length) {
+        if (state.messages?.length && !hasTurns()) {
+          return html`<div class="transcript-note">
+            No turns in this view${state.showRestored ? '' : ' — restored history is hidden'}.
+          </div>`;
+        }
+        if (hasTurns()) {
           return html`
             <${For} each=${turns}>
               ${(m: ParsedMessage) => SafeMessageCard(m)}

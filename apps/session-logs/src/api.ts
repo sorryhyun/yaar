@@ -6,8 +6,16 @@ import {
   onRemoteSessions,
   setSharedSelectedSession,
   onRemoteSelectedSession,
+  setSharedSelectedMonitor,
 } from './store';
 import type { SessionSummary, SessionDetail, ParsedMessage } from './types';
+import {
+  annotateMonitors,
+  hasMonitorMeta,
+  monitorsFromMeta,
+  sortMonitors,
+  UNKNOWN,
+} from './monitor';
 
 export async function loadSessions(): Promise<void> {
   setState('loadError', null);
@@ -53,6 +61,7 @@ onRemoteSessions((next) => {
  */
 export async function loadDetail(sessionId: string): Promise<void> {
   setState('selectedId', sessionId);
+  setState('selectedMonitor', 'all');
   setState('detail', null);
   setState('transcript', null);
   setState('messages', null);
@@ -62,6 +71,7 @@ export async function loadDetail(sessionId: string): Promise<void> {
     const d = await read<SessionDetail>(`yaar://history/${sessionId}`);
     if (!d.sessionId) (d as Record<string, unknown>).sessionId = sessionId;
     setState('detail', d);
+    if (hasMonitorMeta(d)) setState('monitorBadges', sessionId, monitorsFromMeta(d));
   } catch (e) {
     console.error('Failed to load detail', e);
     const s = state.sessions.find((s) => s.sessionId === sessionId);
@@ -198,6 +208,7 @@ function toMessage(raw: unknown): ParsedMessage {
     contentRef: asBlobRef(e.contentRef),
     isError: typeof e.isError === 'boolean' ? e.isError : undefined,
     durationMs: typeof e.durationMs === 'number' ? e.durationMs : undefined,
+    restored: e.restored === true ? true : undefined,
   };
 }
 
@@ -244,15 +255,70 @@ export function normalizeMessages(data: unknown): ParsedMessage[] {
   return raw.map(toMessage);
 }
 
+/**
+ * Parse, stamp each turn's monitor, and install a session's messages.
+ *
+ * The badge is widened with the monitors the messages name, because meta `agents` can
+ * omit a monitor that only `threadIds` and the turns record.
+ */
+export function applyMessages(sessionId: string, data: unknown): void {
+  const messages = annotateMonitors(normalizeMessages(data), state.detail);
+  if (state.selectedId !== sessionId) return;
+  const seen = new Set(state.monitorBadges[sessionId] ?? monitorsFromMeta(state.detail));
+  for (const m of messages) if (m.monitor && m.monitor !== UNKNOWN) seen.add(m.monitor);
+  setState('monitorBadges', sessionId, sortMonitors([...seen]));
+  setState('messages', messages);
+  // An empty result after a successful read is said out loud, so the raw markdown
+  // fallback does not read as a rendering bug.
+  setState('messagesError', messages.length ? null : 'No structured turns in this session.');
+}
+
+/** Open a monitor tab ('all' or a stamped id) and share it with other copies. */
+export function selectMonitor(monitor: string): void {
+  setState('selectedMonitor', monitor);
+  if (state.selectedId) setSharedSelectedMonitor({ sessionId: state.selectedId, monitor });
+}
+
+// Badges for rows whose list summary carries no meta: one detail read each, only for
+// rows that scroll into view, a few at a time.
+const BADGE_CONCURRENCY = 3;
+const badgeQueue: string[] = [];
+const badgeRequested = new Set<string>();
+let badgeActive = 0;
+
+function pumpBadges(): void {
+  while (badgeActive < BADGE_CONCURRENCY && badgeQueue.length) {
+    const id = badgeQueue.shift()!;
+    badgeActive++;
+    read<SessionDetail>(`yaar://history/${id}`)
+      .then((d) => {
+        if (!state.monitorBadges[id]) setState('monitorBadges', id, monitorsFromMeta(d));
+      })
+      .catch(() => setState('monitorBadges', id, []))
+      .finally(() => {
+        badgeActive--;
+        pumpBadges();
+      });
+  }
+}
+
+/** Make sure a session-list row will get its monitor badge. Idempotent. */
+export function requestMonitorBadge(s: SessionSummary): void {
+  const id = s.sessionId;
+  if (state.monitorBadges[id] || badgeRequested.has(id)) return;
+  badgeRequested.add(id);
+  if (hasMonitorMeta(s)) {
+    setState('monitorBadges', id, monitorsFromMeta(s));
+    return;
+  }
+  badgeQueue.push(id);
+  pumpBadges();
+}
+
 export async function loadMessages(sessionId: string): Promise<void> {
   try {
     const data = await read<unknown>(`yaar://history/${sessionId}/messages`);
-    const messages = normalizeMessages(data);
-    if (state.selectedId !== sessionId) return;
-    setState('messages', messages);
-    // An empty result after a successful read is said out loud, so the raw markdown
-    // fallback does not read as a rendering bug.
-    setState('messagesError', messages.length ? null : 'No structured turns in this session.');
+    applyMessages(sessionId, data);
   } catch (e) {
     const msg = errMsg(e);
     console.error('Failed to load messages', msg);

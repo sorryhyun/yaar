@@ -17,14 +17,28 @@ Hand off to the monitor agent for actions outside your scope (opening other apps
 A session is an event log, often thousands of turns. Read the shape first, then the
 turns that matter.
 
-1. `query('messages')` — the **index**. Totals, a histogram by type, the agents and tools
-   that appear, error and blob counts. This is orientation; it contains no turns.
-2. `command('readTurns', { … })` — the turns, a page at a time. Filter by `types`,
-   `agentId`, `toolName`, `search`, `errorsOnly`, `blobsOnly`; page with `offset` /
-   `limit` (default 40, max 200). A negative `offset` counts back from the end.
+1. `query('messages')` — the **index**. Totals, a histogram by type, `byMonitor` (turns,
+   errors and agents per monitor), the agents and tools that appear, error and blob
+   counts. This is orientation; it contains no turns.
+2. `command('readTurns', { … })` — the turns, a page at a time. Filter by `monitor`,
+   `types`, `agentId`, `toolName`, `search`, `errorsOnly`, `blobsOnly`; page with
+   `offset` / `limit` (default 40, max 200). A negative `offset` counts back from the end.
 3. Every turn carries its `index` in the full log. To see a hit in context, ask again
-   with no filter: `readTurns({ offset: index - 3, limit: 7 })`.
+   with no filter: `readTurns({ offset: index - 3, limit: 7, includeRestored: true })`.
 4. `nextOffset` in the response is the next page, or `null` when the set is exhausted.
+
+**Monitors.** One session can run several monitors (`yaar://monitors/0`, `/1`, …), each
+with its own conversation. Every turn carries a `monitor` (`"0"`, `"1"`, or `"unknown"`),
+resolved from `source`, then the agent id (`monitor-N…`, or `-mN-` for an app agent it
+spawned), then `parentAgentId`, then the agent's window. Analyze one monitor at a time with
+`readTurns({ monitor: 1 })`. `query('selectedMonitor')` is the tab the user is looking at;
+`command('selectMonitor', { monitor })` switches it (`"all"` for every monitor).
+
+**Restored turns.** When a thread is resumed, its earlier history is copied into the new
+session and flagged `restored: true` — it can be the first thousand turns and date back
+weeks. It is not this session's work, so `readTurns` skips it and the index leaves it out
+of its counts (`restored.count` says how many) unless the user ticked "Show restored
+history". Pass `includeRestored: true` when you do want it.
 
 **Blobs.** Any result over 2KB was offloaded when the log was written, so the turn carries
 `blob: { sha256, bytes, mimeType?, preview? }` instead of `content`. The preview is usually
@@ -46,6 +60,8 @@ index: number (position in the full log — the address to re-read by)
 type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'verb_result' | 'action' | 'thinking' | 'interaction'
 timestamp: ISO string
 agentId: string (omitted when absent)
+monitor: string ("0", "1", … or "unknown" — the monitor this turn belongs to)
+restored: true (only on history copied in from a resumed thread)
 source: string (e.g. "yaar://monitors/0", "yaar://windows/my-app")
 content: string (for user/assistant/tool_result — clipped to maxChars, default 600)
 blob: { sha256, bytes, mimeType?, preview? } (instead of content, when the result was offloaded)
@@ -68,6 +84,7 @@ truncated: true (only when maxChars clipped this turn — raise it or read the b
 - Redundant or unnecessary tool calls (same tool, same input, repeated)
 
 ### 2. Agent Workflow
+- How work split across monitors (`byMonitor`), and which app agents each one spawned
 - How many agents were created (`agentId` values) and their parent relationships
 - Which agents handled which tasks (group messages by `agentId`)
 - Context switching — messages jumping between different `source` URIs
@@ -105,7 +122,7 @@ Based on analysis, suggest improvements in:
 3. Query `messages` for the index — totals, type/agent/tool histograms, error and blob counts
 4. Decide what to read from that index, then `command('readTurns', …)` with the narrowest
    filter that answers the question (`errorsOnly` for failures, `toolName` for one tool,
-   `types: ['tool_use']` for call patterns)
+   `types: ['tool_use']` for call patterns, `monitor` for one monitor's conversation)
 5. Analyze across the dimensions above
 6. Present findings with specific examples, counts, and recommendations
 7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. Use this rather than `storage:write`.

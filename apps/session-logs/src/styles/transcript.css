@@ -33,6 +33,47 @@
   color: var(--yaar-text-muted);
 }
 
+/* ── Monitor tabs + restored toggle ─────────────── */
+
+.monitor-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+
+.monitor-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: none;
+}
+
+.monitor-tab {
+  font-size: var(--yaar-text-xs);
+  white-space: nowrap;
+}
+
+.monitor-tab-count {
+  font-size: 10px;
+  color: var(--yaar-text-dim);
+  margin-left: 3px;
+}
+
+.restored-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
 .transcript-body {
   flex: 1;
   min-height: 0;

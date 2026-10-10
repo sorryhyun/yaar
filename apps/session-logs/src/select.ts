@@ -17,6 +17,7 @@
  */
 
 import type { ParsedMessage } from './types';
+import { sortMonitors } from './monitor';
 
 /** Coerce anything to a string before string methods touch it. See summarize.ts's `str`. */
 function str(v: unknown): string {
@@ -50,6 +51,42 @@ export interface TurnFilter {
   errorsOnly?: boolean;
   /** Only entries whose result was offloaded to the blob store. */
   blobsOnly?: boolean;
+  /** Monitor id as stamped by `annotateMonitors` ('0', 'unknown'); absent keeps all. */
+  monitor?: string | null;
+  /** Keep prior-thread history copied in on resume. Off by default. */
+  includeRestored?: boolean;
+}
+
+/**
+ * The monitor/restored half of a filter, shared with the transcript pane so the UI and
+ * `readTurns` cannot disagree about which turns a tab holds.
+ */
+export function inScope(
+  m: ParsedMessage,
+  monitor: string | null | undefined,
+  includeRestored: boolean,
+): boolean {
+  if (!includeRestored && m.restored) return false;
+  if (monitor && m.monitor !== monitor) return false;
+  return true;
+}
+
+/** Turns per monitor, sorted by monitor id, honouring the restored toggle. */
+export function countByMonitor(
+  messages: readonly ParsedMessage[] | null,
+  includeRestored: boolean,
+): { monitor: string; turns: number }[] {
+  if (!Array.isArray(messages)) return [];
+  const counts = new Map<string, number>();
+  for (const m of messages) {
+    if (!m || !inScope(m, null, includeRestored)) continue;
+    const k = m.monitor ?? 'unknown';
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return sortMonitors([...counts.keys()]).map((monitor) => ({
+    monitor,
+    turns: counts.get(monitor) ?? 0,
+  }));
 }
 
 /** One entry paired with its position in the unfiltered array — the address to re-read by. */
@@ -104,6 +141,7 @@ export function selectTurns(
   for (let index = 0; index < messages.length; index++) {
     const msg = messages[index];
     if (!msg) continue;
+    if (!inScope(msg, filter.monitor, filter.includeRestored === true)) continue;
     if (types && !types.has(str(msg.type))) continue;
     if (agentId && msg.agentId !== agentId) continue;
     if (tool && !str(msg.toolName).toLowerCase().includes(tool)) continue;
@@ -128,6 +166,8 @@ export function compactTurn(entry: IndexedTurn, maxChars = 600): Record<string, 
   const out: Record<string, unknown> = { index, type: msg.type, timestamp: msg.timestamp };
 
   if (msg.agentId) out.agentId = msg.agentId;
+  if (msg.monitor) out.monitor = msg.monitor;
+  if (msg.restored) out.restored = true;
   if (msg.source) out.source = msg.source;
   if (msg.toolName) out.toolName = msg.toolName;
   if (msg.toolUseId) out.toolUseId = msg.toolUseId;
@@ -178,45 +218,84 @@ function topEntries(counts: Map<string, number>, limit: number): { name: string;
  * What is in this session, without any of it.
  *
  * This is what the `messages` state key answers: orientation, with retrieval left
- * to `readTurns`.
+ * to `readTurns`. Restored turns (prior-thread history copied in on resume) are left out
+ * of every count unless `includeRestored`, and only their number is reported.
  */
-export function indexSession(messages: readonly ParsedMessage[] | null): Record<string, unknown> {
+export function indexSession(
+  messages: readonly ParsedMessage[] | null,
+  opts: { includeRestored?: boolean } = {},
+): Record<string, unknown> {
   if (!Array.isArray(messages))
     return { total: 0, note: 'No session loaded — call selectSession.' };
 
+  const includeRestored = opts.includeRestored === true;
   const byType = new Map<string, number>();
   const byAgent = new Map<string, number>();
   const byTool = new Map<string, number>();
+  const monitors = new Map<
+    string,
+    { turns: number; errors: number; agents: Map<string, number> }
+  >();
   let errors = 0;
   let blobCount = 0;
   let blobBytes = 0;
+  let restored = 0;
+  let counted = 0;
+  let from = '';
+  let to = '';
 
   for (const m of messages) {
     if (!m) continue;
+    if (m.restored) restored++;
+    if (!inScope(m, null, includeRestored)) continue;
+    counted++;
     byType.set(str(m.type), (byType.get(str(m.type)) ?? 0) + 1);
     if (m.agentId) byAgent.set(m.agentId, (byAgent.get(m.agentId) ?? 0) + 1);
     if (m.toolName) byTool.set(m.toolName, (byTool.get(m.toolName) ?? 0) + 1);
-    if (isFailure(m)) errors++;
+    const failed = isFailure(m);
+    if (failed) errors++;
     if (m.contentRef) {
       blobCount++;
       blobBytes += m.contentRef.bytes;
     }
+    const key = m.monitor ?? 'unknown';
+    let mon = monitors.get(key);
+    if (!mon) monitors.set(key, (mon = { turns: 0, errors: 0, agents: new Map() }));
+    mon.turns++;
+    if (failed) mon.errors++;
+    if (m.agentId) mon.agents.set(m.agentId, (mon.agents.get(m.agentId) ?? 0) + 1);
+    const ts = str(m.timestamp);
+    if (ts) {
+      if (!from) from = ts;
+      to = ts;
+    }
   }
 
-  const stamps = messages.map((m) => str(m?.timestamp)).filter(Boolean);
-
   return {
-    total: messages.length,
-    span: stamps.length ? { from: stamps[0], to: stamps[stamps.length - 1] } : null,
+    total: counted,
+    logLength: messages.length,
+    restored: { count: restored, included: includeRestored },
+    span: from ? { from, to } : null,
     byType: Object.fromEntries(byType),
+    // App agents carry their monitor in the id (`-mN-`), so each monitor's `agents`
+    // lists the app agents it spawned alongside its own.
+    byMonitor: sortMonitors([...monitors.keys()]).map((monitor) => {
+      const v = monitors.get(monitor)!;
+      return { monitor, turns: v.turns, errors: v.errors, agents: topEntries(v.agents, 8) };
+    }),
     errors,
     blobs: { count: blobCount, bytes: blobBytes },
     agents: topEntries(byAgent, 12),
     tools: topEntries(byTool, 20),
     note:
       'An index, not the turns. Read turns with readTurns({ offset, limit, types, agentId, ' +
-      'toolName, search, errorsOnly }) — each result carries its `index`, so readTurns({ ' +
-      'offset: index - 3, limit: 7 }) reads it in context. A turn with a `blob` carries the ' +
-      'bytes only as a sha256; fetch them with readBlob({ sha256 }).',
+      'toolName, search, errorsOnly, monitor, includeRestored }) — each result carries its ' +
+      '`index` in the full log, so readTurns({ offset: index - 3, limit: 7, includeRestored: ' +
+      'true }) reads it in context. A turn with a `blob` carries the bytes only as a sha256; ' +
+      'fetch them with readBlob({ sha256 }).' +
+      (restored && !includeRestored
+        ? ` ${restored} restored turns (history copied from a resumed thread) are left out of ` +
+          'these counts; readTurns({ includeRestored: true }) reaches them.'
+        : ''),
   };
 }

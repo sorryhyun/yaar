@@ -132,6 +132,17 @@
   flex: 1;
 }
 
+.monitor-badge {
+  font-size: 9px;
+  color: var(--yaar-accent);
+  background: var(--yaar-wash-accent);
+  border: 1px solid var(--yaar-wash-accent-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .agent-count {
   font-size: 10px;
   color: var(--yaar-text-muted);

@@ -15,6 +15,12 @@ export const [state, setState] = createStore({
   search: '',
   totalCount: 0,
   loadError: null as string | null,
+  /** 'all', or a monitor id as stamped on the turns ('0', 'unknown'). Reset per session. */
+  selectedMonitor: 'all',
+  /** Show prior-thread history copied in on resume. Off by default. */
+  showRestored: false,
+  /** sessionId → monitor ids, for the session-list badge. Filled lazily per row. */
+  monitorBadges: {} as Record<string, string[]>,
 });
 
 const remoteSessionsListeners: ((next: SharedSessionList) => void)[] = [];
@@ -60,3 +66,17 @@ export const [sharedSelectedSession, setSharedSelectedSession] = createSharedSig
 export function onRemoteSelectedSession(fn: (sessionId: string) => void): void {
   remoteSelectedSessionListeners.push(fn);
 }
+
+/**
+ * Which monitor tab is open, shared like the session pointer. Carries its session id
+ * because a follower resets the tab when it loads a session: a value for any other
+ * session is stale and ignored.
+ */
+export const [sharedSelectedMonitor, setSharedSelectedMonitor] = createSharedSignal<{
+  sessionId: string;
+  monitor: string;
+} | null>('selected-monitor', null, {
+  onRemote: (v) => {
+    if (v && v.sessionId === state.selectedId) setState('selectedMonitor', v.monitor);
+  },
+});

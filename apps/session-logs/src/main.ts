@@ -4,11 +4,12 @@ import { appStorage, defineApp, read } from '@bundled/yaar';
 import './styles/index';
 
 import { state, setState } from './store';
-import { loadSessions, selectSession, readBlob } from './api';
+import { loadSessions, selectSession, readBlob, selectMonitor, applyMessages } from './api';
 import { getDateKey, formatDateLabel, providerLabel, toPlain } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
 import { narrow, sidebarVisible, toggleSidebar, closeDrawer, watchViewport } from './ui';
-import { selectTurns, compactTurn, indexSession } from './select';
+import { selectTurns, compactTurn, indexSession, countByMonitor } from './select';
+import { normalizeMonitor, sortMonitors } from './monitor';
 import type { SessionSummary } from './types';
 
 /** Default and ceiling for one `readTurns` page. */
@@ -232,9 +233,27 @@ export default defineApp({
     // getter takes no arguments. Retrieval is `readTurns`.
     messages: {
       description:
-        'Index of the selected session: total, type/agent/tool histograms, error and blob ' +
-        'counts. Not the turns themselves — read those with readTurns.',
-      get: () => (state.messages ? indexSession(state.messages) : null),
+        'Index of the selected session: total, type/agent/tool histograms, `byMonitor` (turns, ' +
+        'errors and agents per monitor — app agents sit under the monitor that spawned them), ' +
+        'error and blob counts. Restored turns (history copied in from a resumed thread) are ' +
+        'excluded unless the UI toggle shows them; `restored.count` says how many. Not the ' +
+        'turns themselves — read those with readTurns.',
+      get: () =>
+        state.messages
+          ? indexSession(state.messages, { includeRestored: state.showRestored })
+          : null,
+    },
+    selectedMonitor: {
+      description:
+        'The monitor tab open in the UI — { selected: "all" | monitor id, available: monitor ' +
+        'ids in the loaded session } — or null with no session. Change it with selectMonitor.',
+      get: () =>
+        state.selectedId
+          ? {
+              selected: state.selectedMonitor,
+              available: countByMonitor(state.messages, true).map((c) => c.monitor),
+            }
+          : null,
     },
   },
   commands: {
@@ -253,6 +272,35 @@ export default defineApp({
         return { success: true, sessionId };
       },
     },
+    selectMonitor: {
+      description:
+        'Show one monitor\'s turns in the UI (its app agents included), or "all". Fails with ' +
+        'no session selected, or for a monitor the session does not have.',
+      params: {
+        type: 'object',
+        properties: {
+          monitor: {
+            type: ['number', 'string'],
+            description: 'Monitor id (0, "1", "monitor-1"), "unknown", or "all".',
+          },
+        },
+        required: ['monitor'],
+      },
+      run: async (params) => {
+        requireSelected();
+        const id = normalizeMonitor(params.monitor) ?? 'all';
+        if (id !== 'all' && state.messages) {
+          const available = countByMonitor(state.messages, true).map((c) => c.monitor);
+          if (!available.includes(id)) {
+            throw new Error(
+              `No monitor "${id}" in this session. Available: all, ${sortMonitors(available).join(', ')}.`,
+            );
+          }
+        }
+        selectMonitor(id);
+        return { success: true, selected: id };
+      },
+    },
     refresh: {
       description: 'Reload the session list from disk',
       params: { type: 'object', properties: {} },
@@ -267,10 +315,12 @@ export default defineApp({
     // where "how much" can be said at all.
     readTurns: {
       description:
-        "Read a page of the loaded session's turns, optionally filtered. Each result carries " +
-        'its `index` in the full log, so readTurns({ offset: index - 3, limit: 7 }) re-reads a ' +
-        'hit with its neighbours. A result too large to inline comes back as `blob` ' +
-        '({ sha256, bytes, preview }) — fetch the bytes with readBlob.',
+        "Read a page of the loaded session's turns, optionally filtered by monitor, type, " +
+        'agent, tool or text. Restored turns are skipped unless includeRestored. Each result ' +
+        'carries its `index` in the full log and its `monitor`, so readTurns({ offset: index - ' +
+        '3, limit: 7, includeRestored: true }) re-reads a hit with its neighbours. A result too ' +
+        'large to inline comes back as `blob` ({ sha256, bytes, preview }) — fetch the bytes ' +
+        'with readBlob.',
       replay: 'never',
       params: {
         type: 'object',
@@ -278,8 +328,9 @@ export default defineApp({
           offset: {
             type: 'number',
             description:
-              'Where to start within the *filtered* set (0-based). With no filter this is the ' +
-              'index in the full log. Negative counts back from the end: -20 is the last 20.',
+              'Where to start within the *filtered* set (0-based). With no filter and ' +
+              'includeRestored: true this is the index in the full log. Negative counts back ' +
+              'from the end: -20 is the last 20.',
           },
           limit: {
             type: 'number',
@@ -308,6 +359,20 @@ export default defineApp({
             type: 'boolean',
             description: 'Keep only turns whose result was offloaded.',
           },
+          monitor: {
+            type: ['number', 'string'],
+            description:
+              'Keep only one monitor\'s turns, its app agents included: 0, "1", "monitor-1", ' +
+              '"unknown". Omit (or "all") for every monitor. Ids are in the `messages` index ' +
+              'under byMonitor.',
+          },
+          includeRestored: {
+            type: 'boolean',
+            description:
+              'Include restored turns — prior-thread history copied in when a thread was ' +
+              'resumed (default false). With it and no other filter, `offset` is the index in ' +
+              'the full log.',
+          },
           maxChars: {
             type: 'number',
             description:
@@ -330,6 +395,8 @@ export default defineApp({
           search: params.search == null ? undefined : String(params.search),
           errorsOnly: params.errorsOnly === true,
           blobsOnly: params.blobsOnly === true,
+          monitor: normalizeMonitor(params.monitor),
+          includeRestored: params.includeRestored === true,
         };
         const hits = selectTurns(state.messages, filter);
         // A negative offset counts back from the end — asking for "the last 20" without
@@ -341,6 +408,10 @@ export default defineApp({
         return {
           sessionId,
           total: state.messages.length,
+          ...(filter.monitor ? { monitor: filter.monitor } : {}),
+          ...(filter.includeRestored
+            ? {}
+            : { restoredSkipped: state.messages.filter((m) => m?.restored).length }),
           matched: hits.length,
           offset,
           count: page.length,
@@ -532,5 +603,7 @@ export default defineApp({
       },
     },
   },
+  // Preview only: the preview cannot read yaar://history/, so layout checks drive these.
+  debug: { state, setState, applyMessages },
   view: Root,
 });

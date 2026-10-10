@@ -14,7 +14,29 @@ Browses `yaar://history/`. Read-only over session data; the one write is
 - `src/summarize.ts` — pure string logic for the one-line rows. Unit-testable,
   no DOM, no imports from the app.
 - `src/select.ts` — the **agent's** view of a session: filter, page, compact,
-  index. Also pure and DOM-free. Nothing in the UI reads it.
+  index. Also pure and DOM-free. The UI reads only `inScope` and `countByMonitor`
+  from it, so a monitor tab and `readTurns({ monitor })` hold the same turns.
+- `src/monitor.ts` — which monitor a turn belongs to, and the session-list badge
+  from meta. Pure; pinned by `src/monitor.test.ts` (`runTests`).
+
+## Monitors and restored turns
+
+`annotateMonitors` stamps `monitor` on every turn once, at load (`applyMessages`),
+so filters compare a string. Resolution order: `source` → `monitor-N` agent id →
+`-mN-` in the agent id → `parentAgentId` → meta `agents[*].windowId` prefix → what
+other turns of the same agent resolved to → `'unknown'`. Meta `agents` can omit a
+monitor that only `threadIds` and the turns record, so the badge for a loaded
+session is widened with the monitors its turns name.
+
+The list badge must stay cheap: it never reads messages. If the list summary
+carries `threadIds`/`agents` it is computed from those; otherwise a row that
+scrolls into view triggers one `yaar://history/{id}` read (3 at a time).
+
+`restored: true` marks prior-thread history copied in on resume — often the first
+thousand turns. It is hidden, and left out of the index, unless `showRestored`;
+`readTurns` skips it unless `includeRestored`. Because of that, a bare `offset` is
+the full-log index only with `includeRestored: true` — the docs' context-read
+recipe passes it.
 
 ## The agent reads a different session than the UI does
 
@@ -108,9 +130,10 @@ nearly every row and the URI needs the pixels. It stays in the row's `title`.
 
 The preview principal **cannot read `yaar://history/`** — Dev Tools holds no
 such permission and a preview never exceeds its host's. So the preview always
-shows "Not permitted". To check layout, add a temporary `loadFixture` command
-that `setState`s synthetic sessions/messages, verify, then delete it before
-deploying. Cover: a verb tool, a non-verb tool, a tool with no recognised
+shows "Not permitted". To check layout, drive the preview-only `__debug` hook from
+`previewEval`: `__debug.setState('sessions' | 'selectedId' | 'detail', …)` then
+`__debug.applyMessages(sessionId, { messages: […] })`, which runs the real parse
+and monitor stamping. Cover: a verb tool, a non-verb tool, a tool with no recognised
 param, a very long URI, an error result, an action and an interaction — those
 are the branches in `summarize.ts`.
 

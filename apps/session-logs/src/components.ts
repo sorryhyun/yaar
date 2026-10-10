@@ -1,8 +1,9 @@
 import html from '@bundled/solid-js/html';
+import { onCleanup } from '@bundled/solid-js';
 import { downloadBlob } from '@bundled/yaar';
 import type { SessionSummary } from './types';
 import { state } from './store';
-import { selectSession } from './api';
+import { selectSession, requestMonitorBadge } from './api';
 import { TranscriptSection } from './transcript';
 import { metaExpanded, toggleMeta, narrow, closeDrawer } from './ui';
 import {
@@ -14,9 +15,32 @@ import {
   providerCls,
 } from './utils';
 
+/** One observer for every row: a row asks for its badge the first time it is on screen. */
+// Created on first use: the build imports this module outside a browser to read the protocol.
+const onVisible = new WeakMap<Element, () => void>();
+let observer: IntersectionObserver | null = null;
+function rowObserver(): IntersectionObserver {
+  return (observer ??= new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      onVisible.get(e.target)?.();
+      observer?.unobserve(e.target);
+    }
+  }));
+}
+
 export const SessionItem = (s: SessionSummary) => {
   const isActive = () => state.selectedId === s.sessionId;
   const isCurrent = () => state.currentSessionId === s.sessionId;
+  const badge = () => {
+    const ids = state.monitorBadges[s.sessionId];
+    return ids?.length ? ids.map((id) => `M${id}`).join(' · ') : '';
+  };
+  const watch = (el: HTMLElement) => {
+    onVisible.set(el, () => requestMonitorBadge(s));
+    rowObserver().observe(el);
+    onCleanup(() => rowObserver().unobserve(el));
+  };
 
   const open = () => {
     void selectSession(s.sessionId);
@@ -30,6 +54,7 @@ export const SessionItem = (s: SessionSummary) => {
       class=${() =>
         `y-list-item session-item${isActive() ? ' active' : ''}${isCurrent() ? ' current-session' : ''}`}
       onClick=${open}
+      ref=${watch}
     >
       <div class="session-id y-font-mono">
         ${() => (isCurrent() ? '⚡ ' + s.sessionId : s.sessionId)}
@@ -37,6 +62,12 @@ export const SessionItem = (s: SessionSummary) => {
       <div class="session-meta">
         <span class=${() => providerCls(s.provider)}>${() => providerLabel(s.provider)}</span>
         <span class="session-datetime y-font-mono">${() => formatDateTime(s.createdAt)}</span>
+        ${() =>
+          badge()
+            ? html`<span class="monitor-badge y-font-mono" title="Monitors in this session"
+                >${badge}</span
+              >`
+            : null}
         <span class="agent-count">🤖 ${() => s.agentCount ?? 0}</span>
       </div>
     </div>
