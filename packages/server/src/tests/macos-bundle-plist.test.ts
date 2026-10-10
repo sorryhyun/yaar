@@ -7,7 +7,8 @@
  * URL, so it cannot share a template file with the build — it carries its own copy.
  *
  * The keys are not decoration. Without NSMicrophoneUsageDescription, WKWebView hides
- * `navigator.mediaDevices` from every frame and no app can record; the bundle id is what
+ * `navigator.mediaDevices` from every frame and no app can record; without
+ * NSCameraUsageDescription, a camera request is refused with no macOS prompt; the bundle id is what
  * macOS files the microphone grant under, so the two copies disagreeing would mean a
  * grant given to a dev build does not carry over. Only the templated values (executable
  * name, version) may differ in spelling.
@@ -40,5 +41,9 @@ describe('YAAR.app Info.plist', () => {
   it('asks for the microphone, which is what exposes mediaDevices to the window', () => {
     expect(build.get('NSMicrophoneUsageDescription')).toBeTruthy();
     expect(build.get('CFBundleIdentifier')).toBe('io.github.sorryhyun.yaar');
+  });
+
+  it('asks for the camera, without which WebKit refuses video capture before macOS is asked', () => {
+    expect(build.get('NSCameraUsageDescription')).toBeTruthy();
   });
 });

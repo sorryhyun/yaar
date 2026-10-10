@@ -350,6 +350,7 @@ if (target === 'macos' && process.platform === 'darwin') {
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSCameraUsageDescription</key><string>YAAR apps use the camera when you ask them to, for example to take a photo or record a video.</string>
   <key>NSMicrophoneUsageDescription</key><string>YAAR apps record audio when you ask them to, for example to transcribe speech.</string>
 ${iconKeys}</dict>
 </plist>

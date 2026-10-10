@@ -83,7 +83,11 @@ The window can only record audio from inside a bundle. WKWebView hides
 exist in the page, and `isSecureContext` is still true. A bare binary has no Info.plist, so
 transcribe and any other recording app fail before macOS is ever asked.
 
-The bundle also gives macOS something to file the permission under. The microphone grant is
+The camera needs its own key, `NSCameraUsageDescription`. With the microphone key alone,
+`mediaDevices` exists but a camera request is refused with `NotAllowedError` and macOS never
+shows a prompt.
+
+The bundle also gives macOS something to file the permission under. The microphone and camera grants are
 recorded against the bundle id `io.github.sorryhyun.yaar` and its signature, and the prompt
 names YAAR rather than your terminal.
 
@@ -158,7 +162,7 @@ iframe:
 | Downloads (window export, an app's `downloadBlob()`, `<a download>`, attachments) | Saved to `~/Downloads`, never overwriting a file; the Dock's Downloads stack bounces |
 | Clipboard read | Reads the macOS pasteboard directly, with no web permission prompt |
 | Links and popups | Off-machine http(s) opens in your default browser; blank, loopback and `blob:` popups (OAuth) open in a bare popup window |
-| Microphone | Allowed for `localhost` and `127.0.0.1` only. The first time, macOS asks; after that, System Settings → Privacy & Security → Microphone decides |
+| Microphone and camera | Allowed for `localhost` and `127.0.0.1` only. The first time, macOS asks; after that, System Settings → Privacy & Security → Microphone (or Camera) decides |
 | ⌘W | Closes the top YAAR window on the desktop, the same as Ctrl+W, not the native window |
 | ⌘Q, the red close button | Quit YAAR |
 
@@ -282,6 +286,7 @@ environment wins over it).
 rm -rf ~/Applications/YAAR.app ~/.local/bin/yaar
 rm -rf ~/Library/Caches/YAAR ~/Library/Caches/io.github.sorryhyun.yaar ~/Library/WebKit/io.github.sorryhyun.yaar
 tccutil reset Microphone io.github.sorryhyun.yaar
+tccutil reset Camera io.github.sorryhyun.yaar
 # and, if you mean it — everything you made in YAAR:
 rm -rf ~/Library/Application\ Support/YAAR
 ```
@@ -294,6 +299,7 @@ rm -rf ~/Library/Application\ Support/YAAR
 |---|---|
 | "Recording needs a secure page" in transcribe, on `localhost` | The window runs from a bare binary, not the bundle. `head -c 2 ~/.local/bin/yaar` should print `#!`; if not, rerun install.sh |
 | Recording refused after the first time | The microphone grant was declined. Turn YAAR on in System Settings → Privacy & Security → Microphone |
+| Camera refused with no macOS prompt | The installed YAAR.app predates its `NSCameraUsageDescription` key. Rerun install.sh |
 | Codex missing when started from the Dock | GUI apps get a minimal `PATH` (see above). Start `yaar` from a terminal |
 | A Chrome window opened instead of YAAR's own | The window did not report in within 20 s, or `YAAR_WEBVIEW=0` is set. The server's stderr in the terminal says which |
 | "YAAR is running" from install.sh | Close YAAR's window (which stops the server), then rerun |
