@@ -89,7 +89,9 @@
   "userPrompt": {
     "askedBy": "Demandé par {{monitor}}",
     "skip": "Ignorer",
-    "submit": "Soumettre"
+    "submit": "Soumettre",
+    "notice": "L'agent a une question",
+    "noticeMore": "+{{count}} de plus"
   },
   "confirmDialog": {
     "rememberChoice": "Mémoriser mon choix"

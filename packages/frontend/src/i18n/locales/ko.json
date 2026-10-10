@@ -89,7 +89,9 @@
   "userPrompt": {
     "askedBy": "{{monitor}}의 질문",
     "skip": "건너뛰기",
-    "submit": "제출"
+    "submit": "제출",
+    "notice": "에이전트에게 질문이 왔습니다",
+    "noticeMore": "외 {{count}}개"
   },
   "confirmDialog": {
     "rememberChoice": "내 선택 기억하기"

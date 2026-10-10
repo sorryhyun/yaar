@@ -89,7 +89,9 @@
   "userPrompt": {
     "askedBy": "{{monitor}} からの質問",
     "skip": "スキップ",
-    "submit": "送信"
+    "submit": "送信",
+    "notice": "エージェントから質問が届きました",
+    "noticeMore": "他 {{count}} 件"
   },
   "confirmDialog": {
     "rememberChoice": "この選択を記憶する"

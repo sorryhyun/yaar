@@ -90,7 +90,9 @@
   "userPrompt": {
     "askedBy": "Asked by {{monitor}}",
     "skip": "Skip",
-    "submit": "Submit"
+    "submit": "Submit",
+    "notice": "The agent has a question",
+    "noticeMore": "+{{count}} more"
   },
   "confirmDialog": {
     "rememberChoice": "Remember my choice"

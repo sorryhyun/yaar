@@ -4,8 +4,18 @@
  * - Options mode (ask): shows selectable options with optional freeform text.
  * - Input mode (request): shows a text input for the user to provide a response.
  * - Both can coexist in a single prompt.
+ *
+ * A prompt arrives as a notice, not a dialog: `PromptNotice` says the agent has a
+ * question, and clicking it opens the prompts. They used to open as a modal the moment
+ * they were asked, covering the desktop and blocking everything else until answered.
+ * Escape or a backdrop press puts the dialog away again without answering — Skip is the
+ * button that tells the agent no.
+ *
+ * On a desktop the notice heads `NotificationCenter`'s stack; on a phone that stack is
+ * behind the pull-down, where a question an agent is waiting on would go unseen, so the
+ * notice floats at the top instead.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectUserPrompts } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
@@ -14,6 +24,31 @@ import type { UserPromptModel } from '@/types/state';
 import { isComposingKey } from '@/lib/ime';
 import { Modal } from './Modal';
 import styles from '@/styles/overlays/UserPrompt.module.css';
+
+/** "The agent has a question" — a notification-style card that opens the prompts. */
+export function PromptNotice() {
+  const { t } = useTranslation();
+  const prompts = useDesktopStore(useShallow(selectUserPrompts)) as UserPromptModel[];
+  const open = useDesktopStore((s) => s.userPromptsOpen);
+  const setOpen = useDesktopStore((s) => s.setUserPromptsOpen);
+
+  if (open || prompts.length === 0) return null;
+  const latest = prompts[prompts.length - 1];
+
+  return (
+    <button type="button" className={styles.notice} onClick={() => setOpen(true)}>
+      <span className={styles.noticeTitle}>{t('userPrompt.notice')}</span>
+      <span className={styles.noticeBody}>
+        {latest.title}
+        {prompts.length > 1 && (
+          <span className={styles.noticeMore}>
+            {t('userPrompt.noticeMore', { count: prompts.length - 1 })}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
 
 function PromptBox({
   prompt,
@@ -162,6 +197,9 @@ function PromptBox({
 
 export function UserPrompt() {
   const prompts = useDesktopStore(useShallow(selectUserPrompts)) as UserPromptModel[];
+  const open = useDesktopStore((s) => s.userPromptsOpen);
+  const setOpen = useDesktopStore((s) => s.setUserPromptsOpen);
+  const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
   const dismissUserPrompt = useDesktopStore((s) => s.dismissUserPrompt);
   const monitors = useDesktopStore(useShallow((s) => s.monitors));
   const activeMonitorId = useDesktopStore((s) => s.activeMonitorId);
@@ -189,19 +227,34 @@ export function UserPrompt() {
 
   const handleDismiss = (prompt: UserPromptModel) => settle(prompt, { dismissed: true });
 
-  if (prompts.length === 0) return null;
+  // Once every prompt is answered, the next question arrives as a notice again rather
+  // than reopening the dialog on its own.
+  const none = prompts.length === 0;
+  useEffect(() => {
+    if (none) setOpen(false);
+  }, [none, setOpen]);
+
+  if (none) return null;
+  if (!open) {
+    return isMobile ? (
+      <div className={styles.noticeFloat}>
+        <PromptNotice />
+      </div>
+    ) : null;
+  }
 
   const labelOf = (monitorId: string) =>
     monitors.find((m) => m.id === monitorId)?.label ?? monitorId;
 
-  // Escape is the Skip button of the prompt on top — and does nothing where there is none.
   const top = prompts[prompts.length - 1];
 
+  // Escape and the backdrop put the dialog away unanswered; it goes back to the notice.
   return (
     <Modal
       className={styles.overlay}
       label={top.title}
-      onDismiss={top.allowDismiss !== false ? () => handleDismiss(top) : undefined}
+      onDismiss={() => setOpen(false)}
+      dismissOnBackdrop
     >
       {prompts.map((prompt) => (
         <PromptBox

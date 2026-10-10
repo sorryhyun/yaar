@@ -10,12 +10,14 @@
 import { useDesktopStore, selectNotifications } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAutoDismiss } from '@/hooks/useAutoDismiss';
+import { PromptNotice } from './UserPrompt';
 import styles from '@/styles/overlays/NotificationCenter.module.css';
 
 export function NotificationCenter() {
   const notifications = useDesktopStore(useShallow(selectNotifications));
   const dismissNotification = useDesktopStore((s) => s.dismissNotification);
   const isMobile = useDesktopStore((s) => s.formFactor === 'mobile');
+  const hasPrompt = useDesktopStore((s) => Object.keys(s.userPrompts).length > 0);
 
   // Notifications persist until the user dismisses them via the × button.
   // They only auto-dismiss when the sender sets an explicit positive `duration`
@@ -23,10 +25,12 @@ export function NotificationCenter() {
   // no duration, so they stay put until manually closed.
   useAutoDismiss(notifications, dismissNotification, (n) => n.duration ?? 0);
 
-  if (isMobile || notifications.length === 0) return null;
+  if (isMobile || (notifications.length === 0 && !hasPrompt)) return null;
 
   return (
     <div className={styles.container}>
+      {/* An agent's question heads the stack: it is the one notice someone is waiting on. */}
+      <PromptNotice />
       {notifications.map((notif) => (
         <div key={notif.id} className={styles.notification}>
           <div className={styles.header}>

@@ -89,7 +89,9 @@
   "userPrompt": {
     "askedBy": "Preguntado por {{monitor}}",
     "skip": "Omitir",
-    "submit": "Enviar"
+    "submit": "Enviar",
+    "notice": "El agente tiene una pregunta",
+    "noticeMore": "+{{count}} más"
   },
   "confirmDialog": {
     "rememberChoice": "Recordar mi elección"

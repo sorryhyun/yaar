@@ -8,10 +8,17 @@ import { createApplyAction } from './apply-action-factory';
 
 export interface UserPromptsSliceState {
   userPrompts: Record<string, UserPromptModel>;
+  /**
+   * Whether the prompts are open as a dialog. They arrive collapsed, as a notice the user
+   * opens when ready: an agent's question used to take the whole screen the moment it
+   * was asked, blocking everything until it was answered.
+   */
+  userPromptsOpen: boolean;
 }
 
 export interface UserPromptsSliceActions {
   dismissUserPrompt: (id: string) => void;
+  setUserPromptsOpen: (open: boolean) => void;
 }
 
 export type UserPromptsSlice = UserPromptsSliceState & UserPromptsSliceActions;
@@ -52,9 +59,15 @@ export const applyUserPromptAction = createApplyAction<
 
 export const createUserPromptsSlice: SliceCreator<UserPromptsSlice> = (set, _get) => ({
   userPrompts: {},
+  userPromptsOpen: false,
 
   dismissUserPrompt: (id) =>
     set((state) => {
       delete state.userPrompts[id];
+    }),
+
+  setUserPromptsOpen: (open) =>
+    set((state) => {
+      state.userPromptsOpen = open;
     }),
 });

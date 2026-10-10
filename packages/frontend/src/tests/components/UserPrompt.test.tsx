@@ -12,10 +12,12 @@ const sendUserPromptResponse = mock(
 // Stub the connection module — must be before importing UserPrompt
 mock.module('@/hooks/useAgentConnection', () => ({ sendUserPromptResponse }));
 
-const { UserPrompt } = await import('@/components/overlays/UserPrompt');
+const { UserPrompt, PromptNotice } = await import('@/components/overlays/UserPrompt');
 
-function seedPrompt(overrides: Record<string, unknown> = {}) {
+/** Seeds one prompt, already opened from its notice unless `open` says otherwise. */
+function seedPrompt(overrides: Record<string, unknown> = {}, open = true) {
   useDesktopStore.setState({
+    userPromptsOpen: open,
     userPrompts: {
       p1: {
         id: 'p1',
@@ -131,24 +133,73 @@ describe('UserPrompt and Escape', () => {
     cleanup();
   });
 
-  it('Escape is the Skip button', () => {
+  // Escape puts the dialog away unanswered; Skip is the button that answers "no".
+  it('Escape collapses the dialog back to its notice without answering', () => {
     seedPrompt();
     render(<UserPrompt />);
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
+    expect(sendUserPromptResponse).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(useDesktopStore.getState().userPromptsOpen).toBe(false);
+    expect(useDesktopStore.getState().userPrompts.p1).toBeTruthy();
+  });
+
+  it('Skip still tells the agent no', () => {
+    seedPrompt();
+    render(<UserPrompt />);
+
+    fireEvent.click(screen.getByText('Skip'));
+
     expect(sendUserPromptResponse).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), {
       dismissed: true,
     });
   });
+});
 
-  it('does nothing on a prompt that offers no Skip', () => {
-    seedPrompt({ allowDismiss: false });
+describe('UserPrompt notice', () => {
+  beforeEach(() => {
+    sendUserPromptResponse.mockClear();
+    useDesktopStore.setState({ userPrompts: {}, formFactor: 'desktop' } as never);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  // A question used to open as a modal over the whole desktop the moment it was asked.
+  it('arrives as a notice, not a dialog', () => {
+    seedPrompt({}, false);
+    render(
+      <>
+        <PromptNotice />
+        <UserPrompt />
+      </>,
+    );
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByText('Pick one'));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('floats the notice itself on a phone, where notifications are behind the shade', () => {
+    useDesktopStore.setState({ formFactor: 'mobile' } as never);
+    seedPrompt({}, false);
     render(<UserPrompt />);
 
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    expect(sendUserPromptResponse).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByText('Pick one'));
     expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('the next question after an answered one arrives as a notice again', () => {
+    seedPrompt();
+    render(<UserPrompt />);
+    fireEvent.click(screen.getByText('Option A'));
+    fireEvent.click(screen.getByText('Submit'));
+
+    expect(useDesktopStore.getState().userPromptsOpen).toBe(false);
   });
 });

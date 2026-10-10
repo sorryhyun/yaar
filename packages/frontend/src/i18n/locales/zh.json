@@ -89,7 +89,9 @@
   "userPrompt": {
     "askedBy": "来自 {{monitor}} 的提问",
     "skip": "跳过",
-    "submit": "提交"
+    "submit": "提交",
+    "notice": "智能体有一个问题",
+    "noticeMore": "另有 {{count}} 个"
   },
   "confirmDialog": {
     "rememberChoice": "记住我的选择"

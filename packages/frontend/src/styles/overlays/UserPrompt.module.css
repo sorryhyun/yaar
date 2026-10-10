@@ -193,3 +193,66 @@
 .submitButton:active {
   transform: scale(0.98);
 }
+
+/* The collapsed form: "the agent has a question", in the notification stack's look. */
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  animation-name: slideInRight;
+  animation-duration: var(--duration-normal);
+}
+
+.notice:hover {
+  border-color: var(--color-accent-hover);
+}
+
+.noticeTitle {
+  padding: 10px var(--space-3);
+  background: var(--color-mantle);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.noticeBody {
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-subtext-muted);
+  line-height: 1.4;
+}
+
+.noticeMore {
+  margin-left: var(--space-2);
+  color: var(--color-muted);
+}
+
+/* Phone: notifications are behind the pull-down, so the notice floats at the top. */
+.noticeFloat {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-4);
+  right: var(--space-4);
+  z-index: var(--z-toast);
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
