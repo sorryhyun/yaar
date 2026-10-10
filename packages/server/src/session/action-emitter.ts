@@ -146,12 +146,20 @@ export interface PermissionDialogRequest {
   toolName: string;
   /** Narrows the saved decision — the domain, the app id, the path. */
   context?: string;
+  /**
+   * For one dialog that answers several questions at once (the domain gate's batch):
+   * a remembered choice is saved under each of these instead of `context`.
+   */
+  contexts?: string[];
   confirmText?: string;
   cancelText?: string;
   timeoutMs?: number;
   /** Structured rows the dialog can weight individually. See `capabilityLines()`. */
   capabilities?: CapabilityLine[];
 }
+
+/** What a pending permission dialog asked about, kept so "remember my choice" can be saved. */
+type DialogMeta = PermissionOptions & { contexts?: string[] };
 
 /** What an in-flight app protocol request was, kept so a late reply can be named. */
 interface AppRequestMeta {
@@ -177,7 +185,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * that too, so a user who ticked "always allow" a moment past the deadline got asked
    * again, forever, with no sign their choice had gone anywhere.
    */
-  private dialogs = new DesktopRequest<boolean, PermissionOptions | undefined>({
+  private dialogs = new DesktopRequest<boolean, DialogMeta | undefined>({
     prefix: 'dialog',
     graceMs: LATE_ANSWER_GRACE_MS,
   });
@@ -541,7 +549,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
 
     // Save permission if user chose to remember (business logic stays here, not in the store)
     if (permissionOptions && feedback.rememberChoice) {
-      const { toolName, context } = permissionOptions;
+      const { toolName, context, contexts } = permissionOptions;
       let decision: PermissionDecision = 'ask';
 
       if (feedback.rememberChoice === 'always') {
@@ -551,7 +559,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       }
 
       if (decision !== 'ask') {
-        await savePermission(toolName, decision, context);
+        for (const c of contexts ?? [context]) await savePermission(toolName, decision, c);
       }
     }
 
@@ -860,10 +868,11 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     sessionId: string,
     request: PermissionDialogRequest,
   ): Promise<boolean> {
-    const { title, message, toolName, context, capabilities } = request;
+    const { title, message, toolName, context, contexts, capabilities } = request;
 
-    // Check for saved permission first
-    const savedDecision = await checkPermission(toolName, context);
+    // Check for saved permission first. A multi-context dialog has no single context to
+    // look up, so only a tool-wide decision answers it — its callers check each one first.
+    const savedDecision = await checkPermission(toolName, contexts ? undefined : context);
     if (savedDecision === 'allow') return true;
     if (savedDecision === 'deny') return false;
 
@@ -877,7 +886,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       sessionId,
       timeoutMs: clampDeadline(request.timeoutMs ?? deadlines.dialogMs),
       what: `permission dialog "${title}"`,
-      meta: permissionOptions,
+      meta: contexts ? { ...permissionOptions, contexts } : permissionOptions,
       onExpire: (id) => this.closeExpiredDialog(id, sessionId),
       // Emit through the event system so LiveSession.broadcast() handles delivery and
       // monitor-scoped routing — the same door 'app-protocol' events go through.
