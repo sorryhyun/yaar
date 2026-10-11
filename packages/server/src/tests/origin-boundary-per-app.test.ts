@@ -10,7 +10,7 @@
  *   - an app's SDK calls from its own origin still reach the desktop API (CORS), while
  *     the /mcp/ doors stay closed to it.
  *
- * Off by default: with the flag unset nothing here changes `loopback-alias`.
+ * On by default; `=0` turns it off, and then nothing here changes `loopback-alias`.
  */
 import { describe, it, expect, beforeAll, afterEach } from 'bun:test';
 import type { Server } from 'bun';
@@ -48,6 +48,10 @@ function on() {
   process.env[FLAG] = '1';
 }
 
+function off() {
+  process.env[FLAG] = '0';
+}
+
 function request(rawUrl: string, headers: Record<string, string> = {}, method = 'GET') {
   const req = new Request(rawUrl, { headers, method });
   return { req, url: new URL(req.url) };
@@ -68,7 +72,12 @@ describe('per-app origin boundary', () => {
   });
 
   describe('mode', () => {
-    it('is off by default: the flag unset leaves loopback-alias', () => {
+    it('is on by default: the flag unset is loopback-subdomain', () => {
+      expect(getOriginBoundary().mode).toBe('loopback-subdomain');
+    });
+
+    it('is loopback-alias with the flag at 0', () => {
+      off();
       expect(getOriginBoundary().mode).toBe('loopback-alias');
     });
 
@@ -133,6 +142,7 @@ describe('per-app origin boundary', () => {
     });
 
     it('leaves *.localhost alone without the flag', () => {
+      off();
       expect(desktopRedirectTarget(new URL(`http://notes.localhost:${PORT}/`))).toBeNull();
     });
   });
@@ -176,6 +186,7 @@ describe('per-app origin boundary', () => {
     });
 
     it('checks nothing without the flag', () => {
+      off();
       expect(fits(`http://other.localhost:${PORT}/x`)).toBe(true);
     });
 
@@ -208,6 +219,7 @@ describe('per-app origin boundary', () => {
     });
 
     it('does not answer it without the flag', async () => {
+      off();
       const res = await fetchVia(
         `http://localhost:${PORT}/api/verb`,
         { origin: `http://notes.localhost:${PORT}` },

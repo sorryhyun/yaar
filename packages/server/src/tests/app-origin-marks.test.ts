@@ -30,6 +30,7 @@ afterEach(() => {
 
 describe('appOriginMarks', () => {
   it('isolates an installed app, leaving the local app origin for the frontend to derive', () => {
+    process.env.YAAR_PER_APP_ORIGIN = '0';
     expect(appOriginMarks(USER_APP)).toEqual({ isolateOrigin: true });
   });
 
@@ -44,8 +45,7 @@ describe('appOriginMarks', () => {
     expect(appOriginMarks(USER_APP)).toEqual({});
   });
 
-  it('asks for a per-app origin under the loopback-subdomain boundary', () => {
-    process.env.YAAR_PER_APP_ORIGIN = '1';
+  it('asks for a per-app origin under the loopback-subdomain boundary (the default)', () => {
     expect(appOriginMarks(USER_APP)).toEqual({ isolateOrigin: true, perAppOrigin: true });
     expect(appOriginMarks(BUNDLED_APP)).toEqual({});
   });

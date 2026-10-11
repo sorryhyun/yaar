@@ -5,10 +5,10 @@
  * App-origin isolation needs exactly one thing from the transport — two *browser*
  * origins over the same server — and there are two ways to get it:
  *
- * - **`loopback-alias`** (local mode). The desktop is `localhost`, isolated apps are
+ * - **`loopback-alias`** (local mode, with `YAAR_PER_APP_ORIGIN=0`). The desktop is `localhost`, isolated apps are
  *   `127.0.0.1`, one socket. A request wears the app origin by carrying a browser-set
  *   `Origin` of the alias, or by landing on the alias (`url.hostname`).
- * - **`loopback-subdomain`** (local mode, opt-in: `YAAR_PER_APP_ORIGIN=1`). The same
+ * - **`loopback-subdomain`** (local mode, the default; `YAAR_PER_APP_ORIGIN=0` opts out). The same
  *   split, but each installed app gets an origin of its own, `<appId>.localhost` — a
  *   distinct *site*, so Chromium gives it its own renderer process, and no app can reach
  *   into a sibling's frame (`docs/proposals/app_site_isolation_proposal.md`). The

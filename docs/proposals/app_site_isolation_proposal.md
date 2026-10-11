@@ -1,9 +1,9 @@
 # Proposal: One Site per Installed App
 
-**Status:** in progress, behind `YAAR_PER_APP_ORIGIN=1` (off by default). Server and frontend are
-built and the acceptance test passes in Chrome (§8, phase 1). The native host checks are written
-but unverified on their platforms, and the default is not flipped. What is left is §3. Claims not
-yet run are marked **(verify)**.
+**Status:** on by default since 0.25.0 (`YAAR_PER_APP_ORIGIN=0` opts out). Server and frontend are
+built and the acceptance test passes in Chrome on Linux and macOS (§8). The native host checks are
+written but unverified on their platforms; a host that cannot resolve `*.localhost` falls back to
+the shared alias (§4). What is left is §3. Claims not yet run are marked **(verify)**.
 
 **In one line:** serve each installed (`source:'user'`) app from its own `<appId>.localhost`
 origin instead of the shared `127.0.0.1`, so that Chromium gives every app its own renderer
@@ -109,7 +109,7 @@ isolated at all today (`resolveAppSource` is not `'user'` for `preview--*`), so 
 | macOS WKWebView | `webview_extras.mm` builds; whether WebKit resolves `*.localhost` (the page probe falls back if not — `data-app-origins` on `<html>` says which) |
 | Android WebView | Java compiles (checked). On a device: the probe answers, apps load; no process isolation expected |
 | Marketplace (`MARKET_URL`, separate service) | Same DNS-label id rule, so an app that publishes there can be served here |
-| Ship | Flip the default; release note (one-time re-download of cached models, §5); `origin-boundary.ts` header names `loopback-subdomain` as the local default |
+| Ship | **Done in 0.25.0:** default flipped, `origin-boundary.ts` header names `loopback-subdomain` as the local default; release note says cached models re-download once (§5) |
 | Optional hardening | With the flag **off**, a token-less request landing on some `foo.localhost` still reads as host. Moot once the default flips, unless `=0` stays supported |
 | Fallback telemetry (§4) | The client's choice is visible (`data-app-origins`, a console warning) but not counted anywhere |
 
@@ -139,8 +139,9 @@ installed apps trust each other, since same-origin siblings can script each othe
 
 ## 5. Costs
 
-- **One renderer process per open installed app.** Each is roughly 30–80 MB **(verify: measure
-  with 5 apps open, before and after)**. Bundled apps and AI-made windows are unaffected. For the
+- **One renderer process per open installed app.** Measured 2026-10-11 on macOS (Chrome 154,
+  `phys_footprint`, 5 installed apps open): +488 MB for the whole Chrome tree against +306 MB on
+  the shared alias, i.e. about 40–45 MB per extra renderer. Bundled apps and AI-made windows are unaffected. For the
   apps people open side by side, that is the price of their not stalling each other.
 - **Per-origin data does not migrate.** IndexedDB, Cache Storage, OPFS and permission grants on
   `127.0.0.1` are not visible from `X.localhost`. The cost is largest for apps that cache models
@@ -181,7 +182,7 @@ same-origin access to the desktop. If wanted later, make it an explicit `app.jso
 |---|---|---|
 | 1. Frontend (doubles as the spike) | `appOriginFor(appId)`, exact `targetOrigin`, probe + fallback, mode on `/health` | **Done.** Measured below |
 | 2. Hosts | WebView2 / WKWebView / Android loopback checks | Code written; Android compiles; WebView2 and WKWebView not built or run (§3) |
-| 3. Ship | Flip the default; marketplace id rule; release note; docs | Remote trust model documented; the rest open (§3) |
+| 3. Ship | Flip the default; marketplace id rule; release note; docs | Default flipped and documented in 0.25.0; marketplace id rule open (§3) |
 
 **Acceptance for the whole change:** the §1 table re-run, where the busy loop in Anima stalls Music
 Maker by under 50 ms, and the §1 `frames[1].location.href` read throws `SecurityError`.
@@ -200,3 +201,13 @@ monitor and 800 ms busy loop as §1 run over CDP:
 Every app frame was an out-of-process iframe target in both runs (apps are cross-site to the
 desktop either way); only with the flag did they stop sharing one process with each other. This is
 Chromium-desktop only: the Windows release needs the same run in WebView2 (§3).
+
+Re-run 2026-10-11 on macOS (Chrome 154, headless, mock agent; the same five apps opened in one
+turn; 10 ms drift monitor in Music Maker, 800 ms busy loop, median of 5):
+
+| | Flag off (`loopback-alias`) | `YAAR_PER_APP_ORIGIN=1` |
+|---|---|---|
+| Renderer processes behind the five app frames | 1 | 5 |
+| Music Maker stall during the Anima busy loop | **791 ms** | **2 ms** (idle: 2–3 ms) |
+| Sibling `frames[i].location.href` from Music Maker | readable (all four) | `SecurityError` (all four) |
+| Turn sent → each app frame loaded | 374–1135 ms | 380–1090 ms |

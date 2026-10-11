@@ -38,7 +38,7 @@ Names and defaults. Rationale for each — read it before changing a default or 
 | `YAAR_SKIP_DOTENV` | off | Skip loading the root `.env` |
 | `YAAR_TEST_REMOTE` | off | Test-runner only — pins `REMOTE=1` for the process |
 | `YAAR_APP_ORIGIN_ISOLATION` | **on** | App iframes on a distinct browser origin (`=0` disables) |
-| `YAAR_PER_APP_ORIGIN` | off | `=1`: each installed app on its own `<appId>.localhost` origin (`loopback-subdomain`) |
+| `YAAR_PER_APP_ORIGIN` | on | each installed app on its own `<appId>.localhost` origin (`loopback-subdomain`); `=0`: all on the shared `127.0.0.1` alias |
 | `YAAR_CLIPBOARD_SECRETS` | **on** | Redact credentials out of clipboard text (`=0` disables) |
 | `YAAR_CLIPBOARD_GRANT` | **on** | Pre-grant clipboard to the desktop origin over CDP (`=0` disables) |
 | `YAAR_TERMUX_API` | on for Android if it answers | Termux:API notifications, clipboard, share sheet (`=0` disables) |

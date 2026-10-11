@@ -66,7 +66,7 @@ export function isYaarOriginUrl(url: string | undefined): boolean {
       u.hostname === '127.0.0.1' ||
       u.hostname === '0.0.0.0' ||
       u.hostname === '[::1]' ||
-      u.hostname.endsWith('.localhost'); // a per-app origin (YAAR_PER_APP_ORIGIN)
+      u.hostname.endsWith('.localhost'); // a per-app origin (loopback-subdomain)
     return isLoopbackHost && port === String(getPort());
   } catch {
     return false;

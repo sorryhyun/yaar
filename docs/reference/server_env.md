@@ -210,7 +210,7 @@ fields and the monitor/agent ids; `json` is one object per line carrying every c
 Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the
 desktop; `resolvePrincipal` then refuses a token-less request carrying the app origin.
 
-**Which origins** (`loopback-alias` locally, `loopback-subdomain` with `YAAR_PER_APP_ORIGIN=1`,
+**Which origins** (`loopback-subdomain` locally, `loopback-alias` with `YAAR_PER_APP_ORIGIN=0`,
 `proxy-port` over Tailscale Serve, `off`) is
 `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and
 why the proxy-port attribution is unforgeable. Never compare hostnames yourself.
@@ -218,7 +218,7 @@ why the proxy-port attribution is unforgeable. Never compare hostnames yourself.
 **Source:** `packages/server/src/http/origin-boundary.ts`. See also
 [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
 
-### `YAAR_PER_APP_ORIGIN` — **off by default** (`=1` enables)
+### `YAAR_PER_APP_ORIGIN` — **on by default** (`=0` disables)
 
 Local mode only, and only with `YAAR_APP_ORIGIN_ISOLATION` on: the `loopback-subdomain` boundary,
 which gives each installed app its own `<appId>.localhost` origin — its own site, so its own
@@ -231,7 +231,8 @@ load (`packages/frontend/src/lib/appOrigin.ts`) and falls back to the shared ali
 answer. `/health` names the mode in force as `originBoundary`; the client's choice is
 `data-app-origins` on `<html>`.
 
-Off until the native hosts are verified. Why and the rollout plan:
+`=0` puts every installed app back on the shared alias (`loopback-alias`). Why, the
+measurements, and what is still unverified on the native hosts:
 [`docs/proposals/app_site_isolation_proposal.md`](../proposals/app_site_isolation_proposal.md).
 
 **Source:** `packages/server/src/http/origin-boundary.ts`.

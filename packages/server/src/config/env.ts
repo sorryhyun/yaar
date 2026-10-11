@@ -346,14 +346,14 @@ export const APP_ORIGIN_ISOLATION = isAppOriginIsolationEnabled();
 
 /**
  * Serve each installed app from its own `<appId>.localhost` origin instead of the shared
- * `127.0.0.1` alias? **Default off** while the per-app origin is being built
+ * `127.0.0.1` alias? **Default on**; `=0` keeps every installed app on the shared alias
  * (`docs/proposals/app_site_isolation_proposal.md`).
  *
  * Only meaningful where the loopback boundary is: it refines `loopback-alias`, it does not
  * replace isolation. A function, like the two above, so a test can flip it.
  */
 export function isPerAppOriginRequested(): boolean {
-  return process.env.YAAR_PER_APP_ORIGIN === '1';
+  return process.env.YAAR_PER_APP_ORIGIN !== '0';
 }
 
 /**
