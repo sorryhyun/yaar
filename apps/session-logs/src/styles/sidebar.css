@@ -143,6 +143,17 @@
   white-space: nowrap;
 }
 
+/* "↺ 2/3": which conversation of its monitor a row is — a reset split them. */
+.conversation-badge {
+  font-size: 9px;
+  color: var(--yaar-text-muted);
+  border: 1px solid var(--yaar-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .agent-count {
   font-size: 10px;
   color: var(--yaar-text-muted);

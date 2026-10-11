@@ -17,7 +17,8 @@
  */
 
 import type { ParsedMessage } from './types';
-import { sortMonitors } from './monitor';
+import { UNKNOWN, sortMonitors } from './monitor';
+import { conversationMonitor, epochCounts } from './conversations';
 
 /** Coerce anything to a string before string methods touch it. See summarize.ts's `str`. */
 function str(v: unknown): string {
@@ -53,22 +54,35 @@ export interface TurnFilter {
   blobsOnly?: boolean;
   /** Monitor id as stamped by `annotateMonitors` ('0', 'unknown'); absent keeps all. */
   monitor?: string | null;
+  /** With `monitor`: only this conversation of it (its `epoch`); absent keeps all of them. */
+  conversation?: number | null;
   /** Keep prior-thread history copied in on resume. Off by default. */
   includeRestored?: boolean;
 }
 
+/** Which part of a log is in view: one monitor's conversation, all of a monitor's, or all. */
+export interface Scope {
+  monitor?: string | null;
+  conversation?: number | null;
+}
+
 /**
- * The monitor/restored half of a filter, shared with the transcript pane so the UI and
- * `readTurns` cannot disagree about which turns a tab holds.
+ * The scope/restored half of a filter, shared with the transcript pane so the UI and
+ * `readTurns` cannot disagree about which turns a row holds.
+ *
+ * A `reset` entry belongs to no conversation — it is the line between two — so it is
+ * shown only in the whole-log view. An unplaced turn counts toward monitor 0 (see
+ * `conversationMonitor`), and is still reachable on its own as `monitor: 'unknown'`.
  */
-export function inScope(
-  m: ParsedMessage,
-  monitor: string | null | undefined,
-  includeRestored: boolean,
-): boolean {
+export function inScope(m: ParsedMessage, scope: Scope, includeRestored: boolean): boolean {
   if (!includeRestored && m.restored) return false;
-  if (monitor && m.monitor !== monitor) return false;
-  return true;
+  const monitor = scope.monitor;
+  if (!monitor) return true;
+  if (m.type === 'reset') return false;
+  if (monitor === UNKNOWN ? m.monitor !== UNKNOWN : conversationMonitor(m) !== monitor) {
+    return false;
+  }
+  return scope.conversation == null || (m.epoch ?? 0) === scope.conversation;
 }
 
 /** Turns per monitor, sorted by monitor id, honouring the restored toggle. */
@@ -79,7 +93,7 @@ export function countByMonitor(
   if (!Array.isArray(messages)) return [];
   const counts = new Map<string, number>();
   for (const m of messages) {
-    if (!m || !inScope(m, null, includeRestored)) continue;
+    if (!m || m.type === 'reset' || !inScope(m, {}, includeRestored)) continue;
     const k = m.monitor ?? 'unknown';
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
@@ -141,7 +155,7 @@ export function selectTurns(
   for (let index = 0; index < messages.length; index++) {
     const msg = messages[index];
     if (!msg) continue;
-    if (!inScope(msg, filter.monitor, filter.includeRestored === true)) continue;
+    if (!inScope(msg, filter, filter.includeRestored === true)) continue;
     if (types && !types.has(str(msg.type))) continue;
     if (agentId && msg.agentId !== agentId) continue;
     if (tool && !str(msg.toolName).toLowerCase().includes(tool)) continue;
@@ -167,6 +181,8 @@ export function compactTurn(entry: IndexedTurn, maxChars = 600): Record<string, 
 
   if (msg.agentId) out.agentId = msg.agentId;
   if (msg.monitor) out.monitor = msg.monitor;
+  if (typeof msg.epoch === 'number') out.conversation = msg.epoch;
+  if (msg.monitorIds) out.monitorIds = [...msg.monitorIds];
   if (msg.restored) out.restored = true;
   if (msg.source) out.source = msg.source;
   if (msg.toolName) out.toolName = msg.toolName;
@@ -247,7 +263,7 @@ export function indexSession(
   for (const m of messages) {
     if (!m) continue;
     if (m.restored) restored++;
-    if (!inScope(m, null, includeRestored)) continue;
+    if (!inScope(m, {}, includeRestored)) continue;
     counted++;
     byType.set(str(m.type), (byType.get(str(m.type)) ?? 0) + 1);
     if (m.agentId) byAgent.set(m.agentId, (byAgent.get(m.agentId) ?? 0) + 1);
@@ -258,6 +274,7 @@ export function indexSession(
       blobCount++;
       blobBytes += m.contentRef.bytes;
     }
+    if (m.type === 'reset') continue;
     const key = m.monitor ?? 'unknown';
     let mon = monitors.get(key);
     if (!mon) monitors.set(key, (mon = { turns: 0, errors: 0, agents: new Map() }));
@@ -271,6 +288,7 @@ export function indexSession(
     }
   }
 
+  const conversations = epochCounts(messages);
   return {
     total: counted,
     logLength: messages.length,
@@ -281,7 +299,14 @@ export function indexSession(
     // lists the app agents it spawned alongside its own.
     byMonitor: sortMonitors([...monitors.keys()]).map((monitor) => {
       const v = monitors.get(monitor)!;
-      return { monitor, turns: v.turns, errors: v.errors, agents: topEntries(v.agents, 8) };
+      return {
+        monitor,
+        // Resets split a monitor into conversations; readTurns({ monitor, conversation }).
+        conversations: conversations.get(monitor) ?? 1,
+        turns: v.turns,
+        errors: v.errors,
+        agents: topEntries(v.agents, 8),
+      };
     }),
     errors,
     blobs: { count: blobCount, bytes: blobBytes },
@@ -289,7 +314,7 @@ export function indexSession(
     tools: topEntries(byTool, 20),
     note:
       'An index, not the turns. Read turns with readTurns({ offset, limit, types, agentId, ' +
-      'toolName, search, errorsOnly, monitor, includeRestored }) — each result carries its ' +
+      'toolName, search, errorsOnly, monitor, conversation, includeRestored }) — each result carries its ' +
       '`index` in the full log, so readTurns({ offset: index - 3, limit: 7, includeRestored: ' +
       'true }) reads it in context. A turn with a `blob` carries the bytes only as a sha256; ' +
       'fetch them with readBlob({ sha256 }).' +

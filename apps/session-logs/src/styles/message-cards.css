@@ -287,6 +287,14 @@
   color: var(--sl-role-interaction);
 }
 
+/* A reset: the line between two conversations of a monitor (whole-log view only). */
+.role-reset {
+  border-left-color: var(--yaar-warning);
+}
+.role-reset .log-verb {
+  color: var(--yaar-warning);
+}
+
 .role-unknown {
   border-left-color: var(--yaar-text-muted);
 }

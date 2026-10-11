@@ -2,9 +2,7 @@ import html from '@bundled/solid-js/html';
 import { createMemo, For } from '@bundled/solid-js';
 import type { ParsedMessage } from './types';
 import { state, setState } from './store';
-import { selectMonitor } from './api';
-import { countByMonitor, inScope } from './select';
-import { monitorLabel } from './monitor';
+import { inScope } from './select';
 import { formatTime } from './utils';
 import {
   toolSummary,
@@ -177,6 +175,17 @@ function rowFor(m: ParsedMessage): RowSpec | null {
         time,
         agent,
       };
+    case 'reset': {
+      // Only ever on screen in the whole-log view: a conversation row ends at one.
+      const ids = (m.monitorIds ?? []).map((id) => `M${id}`).join(', ');
+      return {
+        cls: 'role-reset',
+        verb: 'reset',
+        target: ids ? `${ids} — new conversation` : 'new conversation',
+        time,
+        agent,
+      };
+    }
     default:
       return null;
   }
@@ -190,11 +199,9 @@ const ProseCard = (m: ParsedMessage) => {
       <div class="msg-head">
         <span class="msg-role">${meta.label}</span>
         ${m.agentId ? html`<span class="msg-agent y-font-mono">${m.agentId}</span>` : null}
-        ${
-          m.timestamp
-            ? html`<span class="msg-time y-font-mono">${formatTime(m.timestamp)}</span>`
-            : null
-        }
+        ${m.timestamp
+          ? html`<span class="msg-time y-font-mono">${formatTime(m.timestamp)}</span>`
+          : null}
       </div>
       <div class="msg-body">${m.content ? ContentBlock(m.content) : null}</div>
     </div>
@@ -216,58 +223,43 @@ export const MessageCard = (m: ParsedMessage) => {
  */
 const turns = createMemo((): ParsedMessage[] => {
   if (!Array.isArray(state.messages)) return [];
-  const monitor = state.selectedMonitor === 'all' ? null : state.selectedMonitor;
+  const scope = {
+    monitor: state.selectedMonitor === 'all' ? null : state.selectedMonitor,
+    conversation: state.selectedConversation,
+  };
   const restored = state.showRestored;
-  return state.messages.filter((m) => m && inScope(m, monitor, restored));
+  return state.messages.filter((m) => m && inScope(m, scope, restored));
 });
 
-// The body branch reads this, not `turns()`, so switching tabs reconciles the existing
+// The body branch reads this, not `turns()`, so switching rows reconciles the existing
 // <For> instead of rebuilding every row.
 const hasTurns = createMemo(() => turns().length > 0);
-
-const monitorCounts = createMemo(() => countByMonitor(state.messages, state.showRestored));
 
 const restoredCount = createMemo(() =>
   Array.isArray(state.messages) ? state.messages.filter((m) => m?.restored).length : 0,
 );
 
-const MonitorTab = (id: string, label: string, count: () => number) => html`
-  <button
-    class=${() => `y-tab monitor-tab${state.selectedMonitor === id ? ' active' : ''}`}
-    aria-selected=${() => state.selectedMonitor === id}
-    onClick=${() => selectMonitor(id)}
-  >
-    ${label} <span class="monitor-tab-count y-font-mono">${count}</span>
-  </button>
-`;
-
-/** All / Monitor 0 / Monitor 1 … — only the monitors the visible turns name. */
-const MonitorBar = () => html`
-  <div class="monitor-bar">
-    <div class="y-tabs monitor-tabs" role="tablist">
-      ${MonitorTab('all', 'All', () => monitorCounts().reduce((n, c) => n + c.turns, 0))}
-      <${For} each=${monitorCounts}>
-        ${(c: { monitor: string; turns: number }) =>
-          MonitorTab(c.monitor, monitorLabel(c.monitor), () => c.turns)}
-      </${For}>
-    </div>
-    ${() =>
-      restoredCount() > 0
-        ? html`<label
-            class="restored-toggle"
-            title="Prior-thread history copied into this session when a thread was resumed"
-          >
-            <input
-              type="checkbox"
-              checked=${() => state.showRestored}
-              onChange=${(e: Event) =>
-                setState('showRestored', (e.target as HTMLInputElement).checked)}
-            />
-            Show restored history (${restoredCount})
-          </label>`
-        : null}
-  </div>
-`;
+/**
+ * The restored-history toggle. Monitors used to be tabs here; each monitor conversation
+ * is now its own row in the session list, so the scope is picked there.
+ */
+const TranscriptFilters = () =>
+  restoredCount() > 0
+    ? html`<div class="monitor-bar">
+        <label
+          class="restored-toggle"
+          title="Prior-thread history copied into this session when a thread was resumed"
+        >
+          <input
+            type="checkbox"
+            checked=${() => state.showRestored}
+            onChange=${(e: Event) =>
+              setState('showRestored', (e.target as HTMLInputElement).checked)}
+          />
+          Show restored history (${restoredCount})
+        </label>
+      </div>`
+    : null;
 
 /**
  * Render one turn, never throwing.
@@ -298,7 +290,7 @@ export const TranscriptSection = () => html`
           ? html`<span class="msg-count y-font-mono">${turns().length} turns</span>`
           : null}
     </div>
-    ${() => (state.messages?.length ? MonitorBar() : null)}
+    ${() => (state.messages?.length ? TranscriptFilters() : null)}
     <div class="transcript-body y-scroll">
       ${() => {
         if (state.messages?.length && !hasTurns()) {

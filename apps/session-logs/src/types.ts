@@ -7,6 +7,18 @@ export interface SessionSummary {
   /** Session meta, when the list read carries it — the monitor badge reads both. */
   threadIds?: unknown;
   agents?: unknown;
+  /**
+   * Every monitor the session ran, and every context reset. Together they split the log
+   * into its conversations (`conversations.ts`). Absent from older servers.
+   */
+  monitors?: string[];
+  resets?: ResetRecord[];
+}
+
+/** One context reset: when, and which monitors started a new conversation there. */
+export interface ResetRecord {
+  at: string;
+  monitorIds: string[];
 }
 
 export interface SessionDetail {
@@ -38,7 +50,8 @@ export interface ParsedMessage {
     | 'tool_use'
     | 'tool_result'
     | 'verb_result'
-    | 'interaction';
+    | 'interaction'
+    | 'reset';
   timestamp: string;
   agentId: string | null;
   parentAgentId?: string | null;
@@ -63,4 +76,8 @@ export interface ParsedMessage {
   restored?: boolean;
   /** Monitor id ('0', '1', …) or 'unknown'; set by `annotateMonitors` at load. */
   monitor?: string;
+  /** On a `reset` entry: the monitors that start a new conversation here. */
+  monitorIds?: string[];
+  /** Which of its monitor's conversations this turn is in; set by `annotateEpochs` at load. */
+  epoch?: number;
 }

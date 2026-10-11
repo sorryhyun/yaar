@@ -13,6 +13,8 @@
 import type { ParsedMessage } from './types';
 
 export const UNKNOWN = 'unknown';
+/** The monitor every desktop has — where an unplaced turn is counted. */
+export const DEFAULT_MONITOR = '0';
 
 /** `yaar://monitors/1` → '1'. */
 function fromSource(v: unknown): string | null {

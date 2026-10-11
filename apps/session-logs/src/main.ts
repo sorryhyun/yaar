@@ -6,7 +6,8 @@ import './styles/index';
 import { state, setState } from './store';
 import { loadSessions, selectSession, readBlob, selectMonitor, applyMessages } from './api';
 import { getDateKey, formatDateLabel, providerLabel, toPlain } from './utils';
-import { SessionItem, DetailEmpty, DetailView } from './components';
+import { ConversationItem, DetailEmpty, DetailView } from './components';
+import { ALL, conversationsOf, epochCounts, type Conversation } from './conversations';
 import { narrow, sidebarVisible, toggleSidebar, closeDrawer, watchViewport } from './ui';
 import { selectTurns, compactTurn, indexSession, countByMonitor } from './select';
 import { normalizeMonitor, sortMonitors } from './monitor';
@@ -20,6 +21,13 @@ const CHARS_DEFAULT = 4000;
 const CHARS_MAX = 40000;
 /** How much of the transcript the `transcript` state key answers with before pointing at the command. */
 const TRANSCRIPT_PEEK = 4000;
+
+/** A `conversation` argument → its index, or null when absent or not a number. */
+function conversationParam(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) ? n : null;
+}
 
 function clampInt(v: unknown, fallback: number, min: number, max: number): number {
   const n = Math.trunc(Number(v));
@@ -86,12 +94,19 @@ const filteredSessions = createMemo(() => {
   );
 });
 
+type Row = { c: Conversation; s: SessionSummary };
+
+/**
+ * The list is one row per monitor conversation, not per log: monitors talk independently,
+ * and a reset starts one over without a new log — see conversations.ts.
+ */
 const groupedSessions = createMemo(() => {
-  const groups: Record<string, SessionSummary[]> = {};
+  const groups: Record<string, Row[]> = {};
   for (const s of filteredSessions()) {
-    const key = getDateKey(s);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(s);
+    for (const c of conversationsOf(s)) {
+      const key = getDateKey({ ...s, createdAt: c.start });
+      (groups[key] ??= []).push({ c, s });
+    }
   }
   return Object.entries(groups)
     .sort((a, b) => b[0].localeCompare(a[0]))
@@ -99,8 +114,14 @@ const groupedSessions = createMemo(() => {
       ([date, items]) =>
         [
           date,
-          items.slice().sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
-        ] as [string, SessionSummary[]],
+          items
+            .slice()
+            .sort(
+              (a, b) =>
+                b.c.start.localeCompare(a.c.start) ||
+                a.c.monitor.localeCompare(b.c.monitor, undefined, { numeric: true }),
+            ),
+        ] as [string, Row[]],
     );
 });
 
@@ -160,11 +181,11 @@ function Root() {
               : null}
 
           <${For} each=${groupedSessions}>
-            ${([date, items]: [string, SessionSummary[]]) => html`
+            ${([date, items]: [string, Row[]]) => html`
               <div class="date-group">
                 <div class="y-label date-group-label">${formatDateLabel(date)}</div>
                 <${For} each=${() => items}>
-                  ${(s: SessionSummary) => SessionItem(s)}
+                  ${(r: Row) => ConversationItem(r.c, r.s)}
                 </${For}>
               </div>
             `}
@@ -196,7 +217,10 @@ export default defineApp({
   name: 'Session Logs',
   state: {
     sessions: {
-      description: 'List of session summaries (id, provider, date, agentCount)',
+      description:
+        'List of session summaries (id, provider, date, agentCount, monitors, resets). The UI ' +
+        'shows one row per monitor conversation: each monitor of a session, split again at ' +
+        'every reset that named it (conversation 0 before its first reset, 1 after, …).',
       // `toPlain` is not optional here: state.sessions is a store proxy and the
       // postMessage hop out of the iframe cannot clone one. See utils.toPlain.
       get: () =>
@@ -245,20 +269,26 @@ export default defineApp({
     },
     selectedMonitor: {
       description:
-        'The monitor tab open in the UI — { selected: "all" | monitor id, available: monitor ' +
-        'ids in the loaded session } — or null with no session. Change it with selectMonitor.',
+        'The conversation open in the UI — { selected: "all" | monitor id, conversation: ' +
+        'number | null (null = every conversation of that monitor), available: monitor ids in ' +
+        'the loaded session, conversations: { monitorId: count } } — or null with no ' +
+        'session. Change it with selectMonitor.',
       get: () =>
         state.selectedId
           ? {
               selected: state.selectedMonitor,
+              conversation: state.selectedConversation,
               available: countByMonitor(state.messages, true).map((c) => c.monitor),
+              conversations: Object.fromEntries(epochCounts(state.messages)),
             }
           : null,
     },
   },
   commands: {
     selectSession: {
-      description: 'Select and load a session by ID (loads transcript and messages)',
+      description:
+        'Select and load a session by ID (loads transcript and messages), showing the whole ' +
+        'log. Narrow it to one monitor conversation with selectMonitor.',
       params: {
         type: 'object',
         properties: {
@@ -274,8 +304,9 @@ export default defineApp({
     },
     selectMonitor: {
       description:
-        'Show one monitor\'s turns in the UI (its app agents included), or "all". Fails with ' +
-        'no session selected, or for a monitor the session does not have.',
+        "Show one monitor's turns in the UI (its app agents included) — one of its " +
+        'conversations, or all of them — or "all" for the whole log. Fails with no session ' +
+        'selected, or for a monitor or conversation the session does not have.',
       params: {
         type: 'object',
         properties: {
@@ -283,22 +314,35 @@ export default defineApp({
             type: ['number', 'string'],
             description: 'Monitor id (0, "1", "monitor-1"), "unknown", or "all".',
           },
+          conversation: {
+            type: 'number',
+            description:
+              'Which conversation of that monitor: 0 before its first reset, 1 after, …. ' +
+              'Omit for all of them.',
+          },
         },
         required: ['monitor'],
       },
       run: async (params) => {
         requireSelected();
-        const id = normalizeMonitor(params.monitor) ?? 'all';
-        if (id !== 'all' && state.messages) {
+        const id = normalizeMonitor(params.monitor) ?? ALL;
+        const conversation = id === ALL ? null : conversationParam(params.conversation);
+        if (id !== ALL && state.messages) {
           const available = countByMonitor(state.messages, true).map((c) => c.monitor);
           if (!available.includes(id)) {
             throw new Error(
               `No monitor "${id}" in this session. Available: all, ${sortMonitors(available).join(', ')}.`,
             );
           }
+          const count = epochCounts(state.messages).get(id) ?? 1;
+          if (conversation != null && !(conversation >= 0 && conversation < count)) {
+            throw new Error(
+              `Monitor ${id} has ${count} conversation(s) in this session: 0–${count - 1}.`,
+            );
+          }
         }
-        selectMonitor(id);
-        return { success: true, selected: id };
+        selectMonitor(id, conversation);
+        return { success: true, selected: id, conversation };
       },
     },
     refresh: {
@@ -366,6 +410,12 @@ export default defineApp({
               '"unknown". Omit (or "all") for every monitor. Ids are in the `messages` index ' +
               'under byMonitor.',
           },
+          conversation: {
+            type: 'number',
+            description:
+              'With monitor: only this conversation of it — 0 before its first reset, 1 ' +
+              'after, …. `byMonitor[].conversations` in the index says how many there are.',
+          },
           includeRestored: {
             type: 'boolean',
             description:
@@ -396,6 +446,7 @@ export default defineApp({
           errorsOnly: params.errorsOnly === true,
           blobsOnly: params.blobsOnly === true,
           monitor: normalizeMonitor(params.monitor),
+          conversation: conversationParam(params.conversation),
           includeRestored: params.includeRestored === true,
         };
         const hits = selectTurns(state.messages, filter);
@@ -409,6 +460,9 @@ export default defineApp({
           sessionId,
           total: state.messages.length,
           ...(filter.monitor ? { monitor: filter.monitor } : {}),
+          ...(filter.monitor && filter.conversation != null
+            ? { conversation: filter.conversation }
+            : {}),
           ...(filter.includeRestored
             ? {}
             : { restoredSkipped: state.messages.filter((m) => m?.restored).length }),

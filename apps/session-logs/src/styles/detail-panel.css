@@ -127,6 +127,21 @@
   flex-shrink: 0;
 }
 
+/* What the transcript is scoped to, and the way back to the whole log. Not rendered
+   in the whole-log view. */
+.scope-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--yaar-text);
+}
+
+.scope-strip .y-btn {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
 /* ── Detail grid ────────────────────────────────── */
 
 .detail-grid {

@@ -8,6 +8,7 @@ import {
 } from './monitor';
 import { indexSession, selectTurns, countByMonitor } from './select';
 import type { ParsedMessage } from './types';
+import { ALL, annotateEpochs, conversationsOf, epochCounts } from './conversations';
 
 const msg = (p: Partial<ParsedMessage>): ParsedMessage => ({
   type: 'assistant',
@@ -144,5 +145,70 @@ describe('restored + monitor filtering', () => {
       { monitor: '1', turns: 2 },
     ]);
     expect(countByMonitor(list, true)[0]).toEqual({ monitor: '0', turns: 2 });
+  });
+});
+
+describe('conversations', () => {
+  const summary = {
+    sessionId: 's1',
+    createdAt: '2026-10-11T10:00:00Z',
+    lastActivity: '2026-10-11T12:00:00Z',
+    provider: 'claude',
+    agentCount: 3,
+    monitors: ['1', '0'],
+    resets: [
+      { at: '2026-10-11T10:30:00Z', monitorIds: ['0'] },
+      { at: '2026-10-11T11:00:00Z', monitorIds: ['0', '1'] },
+    ],
+  };
+
+  test('a row per monitor per reset that named it', () => {
+    const rows = conversationsOf(summary);
+    expect(rows.map((c) => `${c.monitor}.${c.epoch}/${c.count}`)).toEqual([
+      '0.0/3',
+      '0.1/3',
+      '0.2/3',
+      '1.0/2',
+      '1.1/2',
+    ]);
+    const m0 = rows.filter((c) => c.monitor === '0');
+    expect(m0.map((c) => [c.start, c.end])).toEqual([
+      ['2026-10-11T10:00:00Z', '2026-10-11T10:30:00Z'],
+      ['2026-10-11T10:30:00Z', '2026-10-11T11:00:00Z'],
+      ['2026-10-11T11:00:00Z', '2026-10-11T12:00:00Z'],
+    ]);
+    expect(rows.filter((c) => c.latest).map((c) => c.key)).toEqual(['s1|0|2', 's1|1|1']);
+  });
+
+  test('a log with no monitor list is one whole-log row', () => {
+    const rows = conversationsOf({ ...summary, monitors: undefined, resets: undefined });
+    expect(rows.map((c) => [c.monitor, c.epoch])).toEqual([[ALL, 0]]);
+  });
+
+  test('turns land in the conversation their monitor was in, and the filter agrees', () => {
+    const messages = annotateEpochs(
+      annotateMonitors(
+        [
+          msg({ type: 'user', source: 'yaar://monitors/0', content: 'zero, first' }),
+          msg({ type: 'user', source: 'yaar://monitors/1', content: 'one, first' }),
+          msg({ type: 'reset', monitorIds: ['0'] }),
+          msg({ type: 'user', source: 'yaar://monitors/0', content: 'zero, second' }),
+          msg({ type: 'user', source: 'yaar://monitors/1', content: 'one, still first' }),
+          msg({ type: 'interaction', interaction: 'click' }),
+        ],
+        null,
+      ),
+    );
+    const contents = (monitor: string, conversation: number | null) =>
+      selectTurns(messages, { monitor, conversation }).map((t) => t.msg.content ?? t.msg.type);
+
+    expect(contents('0', 0)).toEqual(['zero, first']);
+    // An unplaced turn counts toward monitor 0.
+    expect(contents('0', 1)).toEqual(['zero, second', 'interaction']);
+    expect(contents('1', 0)).toEqual(['one, first', 'one, still first']);
+    expect(contents('1', null)).toEqual(['one, first', 'one, still first']);
+    // The reset itself is only in the whole-log view.
+    expect(selectTurns(messages, {}).some((t) => t.msg.type === 'reset')).toBe(true);
+    expect(Object.fromEntries(epochCounts(messages))).toEqual({ '0': 2, '1': 1 });
   });
 });

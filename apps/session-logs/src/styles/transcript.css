@@ -45,24 +45,6 @@
   flex-shrink: 0;
 }
 
-.monitor-tabs {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  border-bottom: none;
-}
-
-.monitor-tab {
-  font-size: var(--yaar-text-xs);
-  white-space: nowrap;
-}
-
-.monitor-tab-count {
-  font-size: 10px;
-  color: var(--yaar-text-dim);
-  margin-left: 3px;
-}
-
 .restored-toggle {
   display: inline-flex;
   align-items: center;

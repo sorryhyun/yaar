@@ -31,8 +31,16 @@ turns that matter.
 with its own conversation. Every turn carries a `monitor` (`"0"`, `"1"`, or `"unknown"`),
 resolved from `source`, then the agent id (`monitor-N…`, or `-mN-` for an app agent it
 spawned), then `parentAgentId`, then the agent's window. Analyze one monitor at a time with
-`readTurns({ monitor: 1 })`. `query('selectedMonitor')` is the tab the user is looking at;
-`command('selectMonitor', { monitor })` switches it (`"all"` for every monitor).
+`readTurns({ monitor: 1 })`.
+
+**Conversations.** A reset starts a monitor's conversation over without starting a new log:
+the log records a `reset` turn (`monitorIds` names the monitors it reset) and every turn
+after it carries the next `conversation` number for its monitor — 0 before the first reset,
+1 after it. `byMonitor[].conversations` says how many each monitor has;
+`readTurns({ monitor: 0, conversation: 1 })` reads one. The user's session list is one row
+per monitor conversation, and `query('selectedMonitor')` is the one they have open;
+`command('selectMonitor', { monitor, conversation? })` switches it (`"all"` for the whole
+log).
 
 **Restored turns.** When a thread is resumed, its earlier history is copied into the new
 session and flagged `restored: true` — it can be the first thousand turns and date back
@@ -61,6 +69,7 @@ type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'verb_result' | 'actio
 timestamp: ISO string
 agentId: string (omitted when absent)
 monitor: string ("0", "1", … or "unknown" — the monitor this turn belongs to)
+conversation: number (which of that monitor's conversations — see Conversations above)
 restored: true (only on history copied in from a resumed thread)
 source: string (e.g. "yaar://monitors/0", "yaar://windows/my-app")
 content: string (for user/assistant/tool_result — clipped to maxChars, default 600)

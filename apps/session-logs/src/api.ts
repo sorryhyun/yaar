@@ -9,6 +9,7 @@ import {
   setSharedSelectedMonitor,
 } from './store';
 import type { SessionSummary, SessionDetail, ParsedMessage } from './types';
+import { annotateEpochs, type Conversation } from './conversations';
 import {
   annotateMonitors,
   hasMonitorMeta,
@@ -62,6 +63,7 @@ onRemoteSessions((next) => {
 export async function loadDetail(sessionId: string): Promise<void> {
   setState('selectedId', sessionId);
   setState('selectedMonitor', 'all');
+  setState('selectedConversation', null);
   setState('detail', null);
   setState('transcript', null);
   setState('messages', null);
@@ -209,6 +211,7 @@ function toMessage(raw: unknown): ParsedMessage {
     isError: typeof e.isError === 'boolean' ? e.isError : undefined,
     durationMs: typeof e.durationMs === 'number' ? e.durationMs : undefined,
     restored: e.restored === true ? true : undefined,
+    monitorIds: Array.isArray(e.monitorIds) ? e.monitorIds.map(String) : undefined,
   };
 }
 
@@ -262,7 +265,7 @@ export function normalizeMessages(data: unknown): ParsedMessage[] {
  * omit a monitor that only `threadIds` and the turns record.
  */
 export function applyMessages(sessionId: string, data: unknown): void {
-  const messages = annotateMonitors(normalizeMessages(data), state.detail);
+  const messages = annotateEpochs(annotateMonitors(normalizeMessages(data), state.detail));
   if (state.selectedId !== sessionId) return;
   const seen = new Set(state.monitorBadges[sessionId] ?? monitorsFromMeta(state.detail));
   for (const m of messages) if (m.monitor && m.monitor !== UNKNOWN) seen.add(m.monitor);
@@ -273,10 +276,26 @@ export function applyMessages(sessionId: string, data: unknown): void {
   setState('messagesError', messages.length ? null : 'No structured turns in this session.');
 }
 
-/** Open a monitor tab ('all' or a stamped id) and share it with other copies. */
-export function selectMonitor(monitor: string): void {
+/**
+ * Scope the loaded session to one monitor ('all' or a stamped id) — and, optionally, to
+ * one of its conversations — and share it with other copies.
+ */
+export function selectMonitor(monitor: string, conversation: number | null = null): void {
+  const scoped = monitor === 'all' ? null : conversation;
   setState('selectedMonitor', monitor);
-  if (state.selectedId) setSharedSelectedMonitor({ sessionId: state.selectedId, monitor });
+  setState('selectedConversation', scoped);
+  if (state.selectedId) {
+    setSharedSelectedMonitor({ sessionId: state.selectedId, monitor, conversation: scoped });
+  }
+}
+
+/**
+ * Open one row of the list: its session (loaded only if another one is), scoped to its
+ * monitor's conversation. A log without a monitor list is a single row, the whole log.
+ */
+export async function selectConversation(c: Conversation): Promise<void> {
+  if (state.selectedId !== c.sessionId) await selectSession(c.sessionId);
+  selectMonitor(c.monitor, c.epoch);
 }
 
 // Badges for rows whose list summary carries no meta: one detail read each, only for

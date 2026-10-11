@@ -18,6 +18,21 @@ Browses `yaar://history/`. Read-only over session data; the one write is
   from it, so a monitor tab and `readTurns({ monitor })` hold the same turns.
 - `src/monitor.ts` — which monitor a turn belongs to, and the session-list badge
   from meta. Pure; pinned by `src/monitor.test.ts` (`runTests`).
+- `src/conversations.ts` — a log → its rows (one per monitor per reset), and each
+  turn's conversation number. Pure; pinned by the same test file.
+
+## Rows are monitor conversations, not logs
+
+A log is one server launch; a row in the list is one monitor's one conversation
+(`conversations.ts`). The server's list summary carries `monitors` and `resets`
+(`{ at, monitorIds }`), so `conversationsOf()` splits each log into a row per monitor
+per reset without reading messages. A log from an older server has no `monitors` and
+stays one whole-log row with the lazy badge below. Inside a loaded session,
+`annotateEpochs` numbers each turn's conversation by counting the `reset` entries
+before it — the same resets the row was cut at, so the row and its turns agree. An
+`unknown` turn counts toward monitor 0 for that split (the server's own restore
+default). `inScope` takes `{ monitor, conversation }` and is shared by the transcript
+and `readTurns`, as before.
 
 ## Monitors and restored turns
 
