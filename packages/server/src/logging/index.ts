@@ -15,13 +15,20 @@ export async function ensureSessionsDir(): Promise<void> {
 }
 
 // Re-exports
-export type { AgentInfo, SessionMetadata, SessionInfo, ParsedMessage } from './types.js';
+export type {
+  AgentInfo,
+  SessionMetadata,
+  SessionInfo,
+  ParsedMessage,
+  ResetRecord,
+} from './types.js';
 export { createSession, SessionLogger } from './session-logger.js';
 export { pruneEmptySessions } from './prune.js';
 export type { PruneOptions } from './prune.js';
 export {
   findRestorableSession,
   selectCarryOverEntries,
+  dropPreResetEntries,
   restoredMonitorIds,
 } from './restore-source.js';
 export type { RestoreSource } from './restore-source.js';

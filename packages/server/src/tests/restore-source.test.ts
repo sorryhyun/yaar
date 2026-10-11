@@ -11,7 +11,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, mkdir, rm, writeFile, readdir, rename } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { findRestorableSession, selectCarryOverEntries } from '../logging/restore-source.js';
+import {
+  dropPreResetEntries,
+  findRestorableSession,
+  selectCarryOverEntries,
+} from '../logging/restore-source.js';
 import { createSession, SessionLogger } from '../logging/session-logger.js';
 import { getWindowRestoreActions } from '../logging/window-restore.js';
 import { getContextRestoreMessages } from '../logging/context-restore.js';
@@ -140,7 +144,10 @@ describe('carry-over into the next launch', () => {
     if (restorable) {
       logger.carryOver(
         restorable.session.sessionId,
-        selectCarryOverEntries(restorable.messages, getWindowRestoreActions(restorable.messages)),
+        selectCarryOverEntries(
+          dropPreResetEntries(restorable.messages),
+          getWindowRestoreActions(restorable.messages),
+        ),
         restorable.session.metadata.threadIds,
       );
     }
@@ -262,5 +269,53 @@ describe('carry-over into the next launch', () => {
 
     const restorable = await findRestorableSession(root);
     expect(restorable?.session.metadata.threadIds ?? {}).toEqual({});
+  });
+
+  it('a reset is recorded where it happened, and a restart does not revive what it cleared', async () => {
+    const { logger, sessionId } = await relaunch();
+    logger.logUserMessage('monitor 1 before', 'monitor-1', 'yaar://monitors/1');
+    logger.logReset(['0']);
+    logger.logUserMessage('after the reset', 'monitor-0', 'yaar://monitors/0');
+    await logger.dispose();
+
+    const restorable = await findRestorableSession(root);
+    expect(restorable?.session.sessionId).toBe(sessionId);
+    const resets = restorable!.session.metadata.resets ?? [];
+    expect(resets.map((r) => r.monitorIds)).toEqual([['0']]);
+    const marker = restorable!.messages.findIndex((m) => m.type === 'reset');
+    expect(restorable!.messages[marker].monitorIds).toEqual(['0']);
+    expect(restorable!.messages[marker - 1].content).toBe('monitor 1 before');
+
+    // Monitor 0's carried-over turns went with its reset; monitor 1's conversation did not.
+    const conversation = dropPreResetEntries(restorable!.messages);
+    expect(getContextRestoreMessages(conversation).map((m) => m.content)).toEqual([
+      'monitor 1 before',
+      'after the reset',
+    ]);
+    // The desktop is not the conversation: the reset kept the open window.
+    expect(
+      getWindowRestoreActions(restorable!.messages).map(
+        (a) => (a as { windowId?: string }).windowId,
+      ),
+    ).toEqual(['0/notes']);
+  });
+
+  it("a reset takes the reset monitor's window branches with it", () => {
+    const branch = (windowId: string, content: string) => ({
+      ...userMessage(content),
+      agentId: 'app-notes-m1-msg-1',
+      source: `yaar://windows/${windowId}`,
+    });
+    const messages = [
+      branch('0/notes', 'monitor 0 branch'),
+      branch('1/notes', 'monitor 1 branch'),
+      { ...userMessage('reset'), type: 'reset', monitorIds: ['1'] },
+      branch('1/notes', 'monitor 1 branch, after'),
+    ] as ParsedMessage[];
+
+    expect(dropPreResetEntries(messages).map((m) => m.content)).toEqual([
+      'monitor 0 branch',
+      'monitor 1 branch, after',
+    ]);
   });
 });

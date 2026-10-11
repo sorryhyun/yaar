@@ -10,7 +10,7 @@ import { DEFAULT_MONITOR_ID, type OSAction } from '@yaar/shared';
 import { listSessions, readSessionMessages, parseSessionMessages } from './session-reader.js';
 import type { ParsedMessage, SessionInfo } from './types.js';
 import { isSubAgentRole } from '../agents/profiles/sub-agent.js';
-import { MAX_MONITOR_MESSAGES, extractWindowId } from '../agents/context.js';
+import { MAX_MONITOR_MESSAGES, extractMonitorId, extractWindowId } from '../agents/context.js';
 import { scopedWindowId } from './window-restore.js';
 
 export interface RestoreSource {
@@ -53,6 +53,55 @@ export async function findRestorableSession(dir?: string): Promise<RestoreSource
   }
 
   return null;
+}
+
+/**
+ * Which monitor's conversation a log entry is part of — for the reset cut only.
+ *
+ * Mirrors what a restore reads back: a window turn belongs to the monitor that owns the
+ * window (the scoped id's prefix), a monitor turn to its source, and a turn with neither
+ * to monitor 0 — the default `getContextRestoreMessages` applies to a sourceless turn.
+ */
+function entryMonitor(msg: ParsedMessage): string {
+  if (typeof msg.source === 'string') {
+    const windowId = extractWindowId(msg.source);
+    if (windowId !== null) {
+      const scoped = scopedWindowId(windowId);
+      return scoped.slice(0, scoped.indexOf('/'));
+    }
+    const monitorId = extractMonitorId(msg.source);
+    if (monitorId) return monitorId;
+  }
+  if (msg.monitorId) return msg.monitorId;
+  const fromAgent = /^monitor-(\d+)(?:-|$)/.exec(msg.agentId ?? '');
+  return fromAgent ? fromAgent[1] : DEFAULT_MONITOR_ID;
+}
+
+/**
+ * The log minus every entry a later reset threw away.
+ *
+ * A reset does not rotate the log (`SessionLogger.logReset()`), so the turns it cleared
+ * from the live tape are still in the file — and a restart restoring from it would put
+ * them back, along with the CLI history, which is the reset undone by a relaunch. Each
+ * `reset` entry ends the conversation of the monitors it names: their entries before it
+ * are dropped, every other monitor's are kept.
+ *
+ * Only for what a restore reads as conversation. The window snapshot is taken from the
+ * whole log — a reset keeps the desktop's windows, and the log's own close actions say
+ * which of them went.
+ */
+export function dropPreResetEntries(messages: ParsedMessage[]): ParsedMessage[] {
+  const lastReset = new Map<string, number>();
+  messages.forEach((msg, i) => {
+    if (msg.type !== 'reset') return;
+    for (const id of msg.monitorIds ?? []) lastReset.set(String(id), i);
+  });
+  if (lastReset.size === 0) return messages;
+  return messages.filter((msg, i) => {
+    if (msg.type === 'reset') return false;
+    const cut = lastReset.get(entryMonitor(msg));
+    return cut === undefined || i > cut;
+  });
 }
 
 /**

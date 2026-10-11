@@ -2,7 +2,8 @@
  * History domain handlers — read-only access to past session logs.
  *
  *   list('yaar://history/')                          → list all past sessions
- *   read('yaar://history/')                          → session summaries as JSON
+ *   read('yaar://history/')                          → session summaries as JSON (with
+ *                                                       each one's monitors and resets)
  *   read('yaar://history/{id}')                      → session metadata
  *   read('yaar://history/{id}/transcript')            → markdown transcript
  *   read('yaar://history/{id}/messages')              → structured parsed messages
@@ -20,6 +21,24 @@ import {
   parseSessionMessages,
   readSessionBlob,
 } from '../logging/session-reader.js';
+import type { SessionMetadata } from '../logging/types.js';
+
+/**
+ * Every monitor a session ran — not just the ones open when it stopped.
+ *
+ * `metadata.monitors` is the registry's *last* list, so a desktop removed mid-session is
+ * missing from it while its agents and resets are still on record. A reader splits the
+ * log into one conversation per monitor from this, so a gap here is a conversation that
+ * has no row.
+ */
+function sessionMonitors(metadata: SessionMetadata): string[] {
+  const ids = new Set<string>(metadata.monitors ?? []);
+  for (const agent of Object.values(metadata.agents ?? {})) {
+    if (agent.monitorId) ids.add(agent.monitorId);
+  }
+  for (const reset of metadata.resets ?? []) reset.monitorIds.forEach((id) => ids.add(id));
+  return [...ids].sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
+}
 
 export function registerHistoryHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://history/', {
@@ -94,6 +113,7 @@ export function registerHistoryHandlers(registry: ResourceRegistry): void {
             agents: session.metadata.agents,
             threadIds: session.metadata.threadIds,
             monitors: session.metadata.monitors,
+            resets: session.metadata.resets ?? [],
             failureCount: session.metadata.failureCount,
             isCurrent: session.sessionId === currentLogId,
           });
@@ -112,6 +132,8 @@ export function registerHistoryHandlers(registry: ResourceRegistry): void {
           provider: s.metadata.provider,
           lastActivity: s.metadata.lastActivity,
           agentCount: Object.keys(s.metadata.agents ?? {}).length,
+          monitors: sessionMonitors(s.metadata),
+          resets: s.metadata.resets ?? [],
         })),
       });
     },

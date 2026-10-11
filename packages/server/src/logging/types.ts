@@ -41,6 +41,21 @@ export interface SessionMetadata {
    * `restoredMonitorIds()`. Absent in logs from older builds.
    */
   monitors?: string[];
+  /**
+   * Every context reset this log saw, oldest first — each one also written into
+   * `messages.jsonl` as a `reset` entry at the point it happened. A reset starts the
+   * named monitors on a new conversation without starting a new log, so this is what
+   * lets a reader split one log into its conversations (see `SessionLogger.logReset()`)
+   * and what keeps a restart from reviving what a reset threw away
+   * (`dropPreResetEntries()`). Absent in logs from older builds and in logs with no reset.
+   */
+  resets?: ResetRecord[];
+}
+
+/** One context reset: when, and which monitors it started over. */
+export interface ResetRecord {
+  at: string;
+  monitorIds: string[];
 }
 
 export interface SessionInfo {
@@ -59,7 +74,8 @@ export interface ParsedMessage {
     | 'tool_result'
     | 'verb_result'
     | 'interaction'
-    | 'escape_guard';
+    | 'escape_guard'
+    | 'reset';
   timestamp: string;
   agentId: string | null;
   parentAgentId: string | null;
@@ -96,6 +112,8 @@ export interface ParsedMessage {
    */
   windowId?: string;
   monitorId?: string;
+  /** On a `reset` entry: the monitors whose conversation starts over here. */
+  monitorIds?: string[];
   // Written on result entries by `logToolResult` / `logVerbResult`. Declared here
   // because they were already being logged and read back untyped.
   isError?: boolean;

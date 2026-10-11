@@ -13,6 +13,7 @@ import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
   findRestorableSession,
   selectCarryOverEntries,
+  dropPreResetEntries,
   restoredMonitorIds,
   getWindowRestoreActions,
   getContextRestoreMessages,
@@ -218,9 +219,12 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
         options.restoreMonitors = monitors;
         log.info('restored monitors', { monitors, from: lastSession.sessionId });
       }
-      // The tape is restored from what this launch's log is seeded with — bounded the way a
-      // live tape is — not from the whole of the last log; see selectCarryOverEntries().
-      const carried = selectCarryOverEntries(messages, restoreActions);
+      // The conversation is read from what is left after its resets — the windows above
+      // are not (see dropPreResetEntries()). The tape is restored from what this launch's
+      // log is seeded with — bounded the way a live tape is — not from the whole of the
+      // last log; see selectCarryOverEntries().
+      const conversation = dropPreResetEntries(messages);
+      const carried = selectCarryOverEntries(conversation, restoreActions);
       const contextMessages = getContextRestoreMessages(carried);
       if (contextMessages.length > 0) {
         options.contextMessages = contextMessages;
@@ -229,7 +233,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
           from: lastSession.sessionId,
         });
       }
-      const cliEntries = getCliRestoreEntries(messages);
+      const cliEntries = getCliRestoreEntries(conversation);
       if (cliEntries.length > 0) {
         options.cliEntries = cliEntries;
         log.info('restored CLI entries', { count: cliEntries.length, from: lastSession.sessionId });

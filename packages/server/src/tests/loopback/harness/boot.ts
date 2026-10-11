@@ -93,6 +93,7 @@ function createLoggerDouble(): SessionLogger {
     logThreadId: noop,
     clearThreadId: noop,
     clearThreadIds: noop,
+    logReset: noop,
     updateLastActivity: asyncNoop,
     flush: asyncNoop,
     dispose: asyncNoop,

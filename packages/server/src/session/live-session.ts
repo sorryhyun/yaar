@@ -757,6 +757,7 @@ export class LiveSession {
         );
         if (this.savedThreadIds) delete this.savedThreadIds[monitorRole(monitorId)];
         this.sessionLogger?.clearThreadId(monitorRole(monitorId));
+        this.sessionLogger?.logReset([monitorId]);
         this.log.info('monitor reset before pool init', {
           monitorId,
           remainingRestored: this.restoredContext.length,
@@ -780,6 +781,7 @@ export class LiveSession {
       this.restoredContext = [];
       this.savedThreadIds = undefined;
       this.sessionLogger?.clearThreadIds();
+      this.sessionLogger?.logReset(this.monitorRegistry.ids());
       await getWarmPool().resetCodexProviders();
     }
     this.launchHooksExecuted = false;

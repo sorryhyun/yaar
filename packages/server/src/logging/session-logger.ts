@@ -613,6 +613,25 @@ export class SessionLogger {
     this.scheduleMetadataSave();
   }
 
+  /**
+   * Mark a context reset: `monitorIds` start a new conversation from this point.
+   *
+   * The log is not rotated — a reset of one desktop is not the end of the others', and
+   * the session's windows, blobs and agent files carry on — so the boundary is written
+   * where it happened: a `reset` entry in `messages.jsonl`, and the same record in the
+   * metadata so a list can show one row per conversation without reading the messages.
+   * Call it after the old agents are disposed, so an interrupted turn's tail lands on
+   * the side of the line it belongs to.
+   */
+  logReset(monitorIds: string[]): void {
+    if (monitorIds.length === 0) return;
+    const at = new Date().toISOString();
+    const ids = [...new Set(monitorIds)];
+    (this.sessionInfo.metadata.resets ??= []).push({ at, monitorIds: ids });
+    this.appendEntry('reset', undefined, { monitorIds: ids });
+    this.scheduleMetadataSave();
+  }
+
   /** Forget every thread id — the counterpart to a full reset. See clearThreadId(). */
   clearThreadIds(): void {
     if (!this.sessionInfo.metadata.threadIds) return;
