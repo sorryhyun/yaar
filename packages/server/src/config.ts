@@ -37,6 +37,7 @@ export {
   APP_ORIGIN_ISOLATION,
   isAppOriginIsolationEnabled,
   isAppOriginIsolationRequested,
+  isPerAppOriginRequested,
   DESKTOP_ORIGIN_HOST,
   APP_ORIGIN_HOST,
   MARKET_URL,

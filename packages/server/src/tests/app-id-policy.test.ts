@@ -41,6 +41,15 @@ describe('appIdRefusal', () => {
     expect(appIdRefusal('self-hosted')).toBeNull();
   });
 
+  it('holds ids to one DNS label, so each can become its own <appId>.localhost origin', () => {
+    expect(appIdRefusal('a'.repeat(63))).toBeNull();
+    expect(appIdRefusal('a'.repeat(64))).toContain('limit is 63');
+    expect(appIdRefusal('my-app-')).toContain('hyphen');
+    expect(appIdRefusal('xn--nxasmq6b')).toContain('xn--');
+    // Only the punycode marker is refused, not ids that merely contain `xn`.
+    expect(appIdRefusal('xnote')).toBeNull();
+  });
+
   it('refuses anything that is not a safe single path segment', () => {
     for (const id of ['..', '.', 'a/b', 'App', 'my_app', '-lead', '2fast', '', 'a b']) {
       expect(appIdRefusal(id)).toContain('Invalid app id');

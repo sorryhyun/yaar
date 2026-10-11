@@ -113,7 +113,12 @@ const SEALED = ["object-src 'none'", "base-uri 'none'", "form-action 'none'"];
  */
 function servingPort(req: Request): number {
   const match = req.headers.get('host')?.match(/^([a-zA-Z0-9.-]+):(\d{1,5})$/);
-  if (match && (match[1] === DESKTOP_ORIGIN_HOST || match[1] === APP_ORIGIN_HOST)) {
+  if (
+    match &&
+    (match[1] === DESKTOP_ORIGIN_HOST ||
+      match[1] === APP_ORIGIN_HOST ||
+      match[1].endsWith(`.${DESKTOP_ORIGIN_HOST}`))
+  ) {
     return Number(match[2]);
   }
   return getPort();
@@ -130,7 +135,11 @@ export function appHtmlCsp(req: Request): string {
   switch (boundary.mode) {
     case 'off':
       return policy([]);
-    case 'loopback-alias': {
+    case 'loopback-alias':
+    case 'loopback-subdomain': {
+      // A per-app origin is the document's own, so `'self'` already covers it; naming
+      // `*.localhost` here would only let one app reach for another's. The alias stays
+      // listed for clients that fell back to it.
       const port = servingPort(req);
       // The scheme of the socket this arrived on: plain HTTP on PORT, or the local TLS
       // socket (http/local-tls.ts), whose req.url is https.

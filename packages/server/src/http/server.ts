@@ -18,7 +18,9 @@ import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 import {
   desktopRedirectTarget,
   isDesktopOrigin,
+  isPerAppOrigin,
   requestCarriesAppOrigin,
+  tokenFitsAppOrigin,
   runOnAppOriginSocket,
 } from './origin-boundary.js';
 import { createLogger } from '../observability/log.js';
@@ -271,7 +273,7 @@ function createFetchHandlerInner() {
       }
     } else {
       // Local mode: whitelist localhost origins (same-origin requests won't have Origin header)
-      if (origin && localOrigins().includes(origin)) {
+      if (origin && (localOrigins().includes(origin) || isLocalPerAppOrigin(origin))) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
         corsHeaders['Access-Control-Allow-Headers'] = 'Content-Type, X-Iframe-Token, X-Yaar-Client';
@@ -320,6 +322,15 @@ function createFetchHandlerInner() {
       if (!tokenEntry) {
         return withCors(
           Response.json({ error: 'Invalid or expired iframe token' }, { status: 403 }),
+          corsHeaders,
+        );
+      }
+
+      // A per-app origin names its app, so a token is held to the app it was minted
+      // for: one app's token on another app's origin is refused (`tokenFitsAppOrigin`).
+      if (!tokenFitsAppOrigin(req, url, tokenEntry.appId)) {
+        return withCors(
+          Response.json({ error: "Token does not belong to this app's origin" }, { status: 403 }),
           corsHeaders,
         );
       }
@@ -476,6 +487,20 @@ function localOrigins(): string[] {
     if (APP_ORIGIN_ISOLATION) origins.push(`https://127.0.0.1:${tls.port}`);
   }
   return origins;
+}
+
+/**
+ * A per-app origin (`<appId>.localhost`) on one of this server's local sockets — the
+ * CORS half of {@link localOrigins}, which cannot list them. Deliberately *not* admitted
+ * to the /mcp/ doors: no app calls MCP, and the shared alias is there only as the
+ * fallback's origin.
+ */
+function isLocalPerAppOrigin(origin: string): boolean {
+  if (!isPerAppOrigin(origin)) return false;
+  const { protocol, port } = new URL(origin);
+  if (protocol === 'http:' && port === String(getPort())) return true;
+  const tls = getLocalTlsEndpoint();
+  return !!tls && protocol === 'https:' && port === String(tls.port);
 }
 
 function withCors(response: Response, corsHeaders: Record<string, string>): Response {

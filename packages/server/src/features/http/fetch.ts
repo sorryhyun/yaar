@@ -148,7 +148,13 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
           try {
             const refererHost = new URL(v).hostname;
             const targetHost = new URL(url).hostname;
-            if (refererHost === 'localhost' || refererHost === '127.0.0.1') continue;
+            if (
+              refererHost === 'localhost' ||
+              refererHost === '127.0.0.1' ||
+              refererHost.endsWith('.localhost') // a per-app origin
+            ) {
+              continue;
+            }
             // Allow if referer domain matches target or is a plausible upstream origin
             if (
               !targetHost.endsWith(refererHost) &&

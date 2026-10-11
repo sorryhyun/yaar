@@ -90,6 +90,19 @@ const RESERVED_APP_IDS = new Set(['self']);
 const RESERVED_APP_ID_PREFIXES = [PREVIEW_APP_PREFIX];
 
 /**
+ * The longest id that still fits in one DNS label.
+ *
+ * An app id is on its way to becoming a hostname: the per-app origin proposal
+ * (`docs/proposals/app_site_isolation_proposal.md`) serves each installed app from
+ * `<appId>.localhost`. A label is at most 63 octets, may not end in a hyphen, and one that
+ * starts `xn--` is read as punycode — a browser decodes it, and refuses it when it is not
+ * valid punycode. Holding ids to that now means no installed app turns out to be
+ * unservable once the origin exists.
+ */
+const MAX_APP_ID_LENGTH = 63;
+const PUNYCODE_PREFIX = 'xn--';
+
+/**
  * Why this id may not be claimed, or `null` if it may.
  *
  * The one definition of app-id policy: shape *and* reservations, so a caller cannot
@@ -100,6 +113,15 @@ const RESERVED_APP_ID_PREFIXES = [PREVIEW_APP_PREFIX];
 export function appIdRefusal(appId: string): string | null {
   if (!APP_ID_RE.test(appId)) {
     return `Invalid app id "${appId}". Use lowercase letters, digits and hyphens, starting with a letter.`;
+  }
+  if (appId.length > MAX_APP_ID_LENGTH) {
+    return `Invalid app id "${appId}". It is ${appId.length} characters; the limit is ${MAX_APP_ID_LENGTH}.`;
+  }
+  if (appId.endsWith('-')) {
+    return `Invalid app id "${appId}". It cannot end with a hyphen.`;
+  }
+  if (appId.startsWith(PUNYCODE_PREFIX)) {
+    return `Invalid app id "${appId}". Ids cannot start with "${PUNYCODE_PREFIX}" — browsers read that as an encoded domain name.`;
   }
   if (RESERVED_APP_IDS.has(appId)) {
     return `"${appId}" is a reserved app id and cannot be used.`;

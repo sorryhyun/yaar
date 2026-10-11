@@ -210,12 +210,26 @@ fields and the monitor/agent ids; `json` is one object per line carrying every c
 Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the
 desktop; `resolvePrincipal` then refuses a token-less request carrying the app origin.
 
-**Which two origins** (`loopback-alias` locally, `proxy-port` over Tailscale Serve, `off`) is
+**Which origins** (`loopback-alias` locally, `loopback-subdomain` with `YAAR_PER_APP_ORIGIN=1`,
+`proxy-port` over Tailscale Serve, `off`) is
 `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and
 why the proxy-port attribution is unforgeable. Never compare hostnames yourself.
 
 **Source:** `packages/server/src/http/origin-boundary.ts`. See also
 [`docs/guides/remote_mode.md`](../guides/remote_mode.md).
+
+### `YAAR_PER_APP_ORIGIN` — **off by default** (`=1` enables)
+
+Local mode only, and only with `YAAR_APP_ORIGIN_ISOLATION` on: the `loopback-subdomain` boundary,
+which gives each installed app its own `<appId>.localhost` origin — its own site, so its own
+renderer process in Chromium, and no reach into a sibling app's frame. A token is then held to the
+app it was minted for on both the `Origin` and the host (`tokenFitsAppOrigin`). The shared
+`127.0.0.1` alias stays an app origin for clients that cannot resolve `*.localhost`.
+
+Off while the frontend half is built. Why and the rollout plan:
+[`docs/proposals/app_site_isolation_proposal.md`](../proposals/app_site_isolation_proposal.md).
+
+**Source:** `packages/server/src/http/origin-boundary.ts`.
 
 ### `YAAR_CLIPBOARD_SECRETS` — **on by default** (`=0` disables)
 
