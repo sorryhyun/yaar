@@ -155,6 +155,14 @@ export interface WindowPresentation {
    * computes the sibling loopback alias itself.
    */
   appOrigin?: string;
+  /**
+   * Give this app an origin of its own, `<appId>.localhost`, rather than the shared
+   * `127.0.0.1` alias — so it runs in its own renderer process and no sibling app can
+   * reach into its frame (`docs/proposals/app_site_isolation_proposal.md`). Set beside
+   * `isolateOrigin` only under the `loopback-subdomain` boundary. A client that cannot
+   * resolve `*.localhost` falls back to the shared alias, which the server still accepts.
+   */
+  perAppOrigin?: boolean;
 }
 
 /**

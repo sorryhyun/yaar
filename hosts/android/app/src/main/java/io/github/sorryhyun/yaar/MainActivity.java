@@ -174,7 +174,8 @@ public final class MainActivity extends Activity {
         web = new DesktopWebView(this);
         web.setBackgroundColor(Color.BLACK);
         configure(web.getSettings());
-        // App iframes are on 127.0.0.1, a different site from the desktop's localhost.
+        // App iframes are on 127.0.0.1 or their own <appId>.localhost, a different site from
+        // the desktop's localhost.
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         web.setWebViewClient(new DesktopClient());
         web.setWebChromeClient(new DesktopChrome());
@@ -201,8 +202,10 @@ public final class MainActivity extends Activity {
     private static boolean isLoopback(Uri uri) {
         String scheme = uri.getScheme();
         String host = uri.getHost();
-        return ("http".equals(scheme) || "https".equals(scheme))
-                && ("localhost".equals(host) || "127.0.0.1".equals(host));
+        // `<appId>.localhost` is an installed app on its own origin (per-app origins).
+        return ("http".equals(scheme) || "https".equals(scheme)) && host != null
+                && ("localhost".equals(host) || "127.0.0.1".equals(host)
+                        || (host.endsWith(".localhost") && host.length() > ".localhost".length()));
     }
 
     /** Stays in a WebView: loopback, and the schemes that never leave the page. */

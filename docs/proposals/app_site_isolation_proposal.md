@@ -1,8 +1,9 @@
 # Proposal: One Site per Installed App
 
-**Status:** in progress. The server half is built behind `YAAR_PER_APP_ORIGIN=1` (off by default);
-nothing uses it until the frontend half lands. What is left is §3 and §8. Claims not yet run are
-marked **(verify)**.
+**Status:** in progress, behind `YAAR_PER_APP_ORIGIN=1` (off by default). Server and frontend are
+built and the acceptance test passes in Chrome (§8, phase 1). The native host checks are written
+but unverified on their platforms, and the default is not flipped. What is left is §3. Claims not
+yet run are marked **(verify)**.
 
 **In one line:** serve each installed (`source:'user'`) app from its own `<appId>.localhost`
 origin instead of the shared `127.0.0.1`, so that Chromium gives every app its own renderer
@@ -89,44 +90,31 @@ origins but the **same site**, so they fix the security half and not the perform
 
 ## 3. What is left
 
-The server half (the `loopback-subdomain` mode in `http/origin-boundary.ts`, token↔host binding,
-CORS, CSP, the DNS-label app-id rule) is built; its tests say what it holds. A `*.localhost` cert SAN
-turned out unnecessary: every host trusts the TLS socket by SPKI pin, not by name.
+Built: the `loopback-subdomain` mode (`http/origin-boundary.ts`, token↔host binding, CORS, CSP,
+the DNS-label app-id rule); the `perAppOrigin` window mark (`features/window/origin-marks.ts`) and
+`originBoundary` on `/health`; the frontend's once-per-load `probe.localhost` probe and
+`appOriginFor(appId)` (`frontend/src/lib/appOrigin.ts`), with the frame held back until the probe
+answers, since its `src` is its origin; posts to an isolated frame at its exact origin
+(`data-yaar-origin`, `iframe-bridge/target.ts`); the `*.localhost` loopback checks in all three
+native hosts. Their tests say what they hold. A `*.localhost` cert SAN turned out unnecessary:
+every host trusts the TLS socket by SPKI pin, not by name. `ml-host` and `live-encoder` keep the
+shared alias on purpose (server pages, not apps; said in the code). Devtools previews are not
+isolated at all today (`resolveAppSource` is not `'user'` for `preview--*`), so they need no label.
 
-### Server
+### Still open
 
-| Where | Change |
+| What | Done when |
 |---|---|
+| Windows WebView2 | `webview_extras_win.cc` builds; two installed apps open with the flag; frames are separate processes (the §1 busy-loop test) |
+| macOS WKWebView | `webview_extras.mm` builds; whether WebKit resolves `*.localhost` (the page probe falls back if not — `data-app-origins` on `<html>` says which) |
+| Android WebView | Java compiles (checked). On a device: the probe answers, apps load; no process isolation expected |
 | Marketplace (`MARKET_URL`, separate service) | Same DNS-label id rule, so an app that publishes there can be served here |
-| `/health` (or the window-create payload) | Say which mode is in force, so the frontend knows to try per-app origins at all |
-| `features/ml-host/relay.ts`, `features/live-encoder/encoder.ts` | Mint `127.0.0.1` URLs via `APP_ORIGIN_HOST`. Fine to leave there — server-side pages, not apps — but say so in the code |
-| Optional hardening | With the flag **off**, a token-less request landing on some `foo.localhost` still reads as host. Treating `*.localhost` as app side in `loopback-alias` too is stricter and costs nothing, but changes the default mode |
+| Ship | Flip the default; release note (one-time re-download of cached models, §5); `origin-boundary.ts` header names `loopback-subdomain` as the local default |
+| Optional hardening | With the flag **off**, a token-less request landing on some `foo.localhost` still reads as host. Moot once the default flips, unless `=0` stays supported |
+| Fallback telemetry (§4) | The client's choice is visible (`data-app-origins`, a console warning) but not counted anywhere |
 
-### Frontend
-
-`IframeRenderer.tsx` derives the app origin (the sibling-alias function at line ~148). It becomes
-per-app: `appOriginFor(appId)`, plus the server-supplied `appOrigin` path in
-`iframe-bridge/open-url.ts`. Previews (`preview--<project>`) need a label too: decide whether they
-get a per-app origin or stay on the alias.
-
-Smaller than first thought: inbound messages are routed by `event.source === iframe.contentWindow`
-(`lib/iframeMessageRouter.ts`), not by origin, so there is no per-check `event.origin` sweep.
-Outbound posts use `getIframeTargetOrigin` (`iframe-bridge/target.ts`), which already falls back to
-`'*'` for a cross-origin frame. With the origin known per window, that `'*'` can become the exact
-origin, so a frame that navigated away stops receiving app messages.
-
-### Hosts
-
-| Host | Change | Process isolation gained? |
-|---|---|---|
-| Launched Chrome (dev, Linux `--app`) | None: `--ignore-certificate-errors-spki-list` already trusts the key under any name | Yes |
-| Windows WebView2 | `is_loopback_host` in `webview_extras_win.cc` accepts `*.localhost`. It gates the TLS pin, auto-granted permissions and external-link routing | Yes **(verify in the shipped WebView2)** |
-| macOS WKWebView | `is_loopback_host` in `webview_extras.mm` accepts `*.localhost` | Security yes; process **(verify: WebKit site isolation)** |
-| Android WebView | Same check in `HostBridge.java` / `MainActivity.java` | Security yes; process no (WebView does not run out-of-process iframes) |
-
-The security half (no cross-app frame access, token bound to host) holds on every host, because it
-comes from origins, not processes. The performance half is Chromium-desktop only: Chrome and
-WebView2 — which covers the Windows release this started from.
+The trust model over remote (one shared app origin, so installed apps trust each other) is stated
+in `docs/guides/remote_mode.md`.
 
 ## 4. Fallback
 
@@ -189,11 +177,26 @@ same-origin access to the desktop. If wanted later, make it an explicit `app.jso
 
 ## 8. Plan
 
-| Phase | Work | Done when |
+| Phase | Work | Status |
 |---|---|---|
-| 1. Frontend (doubles as the spike) | `appOriginFor(appId)`, exact `targetOrigin`, probe + fallback, mode on `/health` | In launched Chrome with the flag: the §1 busy-loop test shows the stall gone, and the `frames[1].location.href` read throws `SecurityError`; `frontend` tests per message path |
-| 2. Hosts | WebView2 / WKWebView / Android loopback checks | The `webview_host_proposal.md` §1 checklist passes with two installed apps open; WebView2 process isolation and WKWebView resolution answered |
-| 3. Ship | Flip the default; marketplace id rule; release note (one-time re-download of cached models); docs: `remote_mode.md` trust model, `origin-boundary.ts` header | — |
+| 1. Frontend (doubles as the spike) | `appOriginFor(appId)`, exact `targetOrigin`, probe + fallback, mode on `/health` | **Done.** Measured below |
+| 2. Hosts | WebView2 / WKWebView / Android loopback checks | Code written; Android compiles; WebView2 and WKWebView not built or run (§3) |
+| 3. Ship | Flip the default; marketplace id rule; release note; docs | Remote trust model documented; the rest open (§3) |
 
 **Acceptance for the whole change:** the §1 table re-run, where the busy loop in Anima stalls Music
 Maker by under 50 ms, and the §1 `frames[1].location.href` read throws `SecurityError`.
+
+Measured 2026-10-11, headless Chrome 151 on Linux, `make claude-dev`-equivalent server, Music Maker
+and Anima (and The Singularity Reader) opened from their desktop icons, the same 10 ms drift
+monitor and 800 ms busy loop as §1 run over CDP:
+
+| | Flag off (`loopback-alias`) | `YAAR_PER_APP_ORIGIN=1` |
+|---|---|---|
+| Frames served from | `https://127.0.0.1:8443` (all three) | `https://<appId>.localhost:8443`, one each |
+| Music Maker stall during the Anima busy loop | **791 ms** | **0 ms** |
+| Sibling `frames[i].location.href` from Music Maker | readable (Anima's URL) | `SecurityError` |
+| App registers, `POST /api/verb` from the app origin | yes, 200 | yes, 200 |
+
+Every app frame was an out-of-process iframe target in both runs (apps are cross-site to the
+desktop either way); only with the flag did they stop sharing one process with each other. This is
+Chromium-desktop only: the Windows release needs the same run in WebView2 (§3).

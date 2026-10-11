@@ -31,6 +31,7 @@ import {
   APP_FRAME_ALLOW,
   EXTERNAL_FRAME_ALLOW,
 } from '@/components/window/renderers/IframeRenderer';
+import { resetAppOriginPlan } from '@/lib/appOrigin';
 
 /** happy-dom exposes `setURL` off `window.happyDOM`; it isn't in the DOM lib types. */
 function setUrl(url: string): void {
@@ -154,6 +155,87 @@ describe('IframeRenderer sandbox wiring', () => {
     expect(allow).toBe(EXTERNAL_FRAME_ALLOW);
     expect(allow.split('; ')).not.toContain('microphone');
     expect(allow.split('; ')).not.toContain('camera');
+  });
+});
+
+/**
+ * Per-app origins (`loopback-subdomain`, docs/proposals/app_site_isolation_proposal.md).
+ *
+ * The server marks the window; the frame waits for this load's `*.localhost` probe and
+ * then serves the app from its own `<appId>.localhost` — or, when the probe failed, from
+ * the shared alias, which the server still accepts. The `src` is the origin, so a frame
+ * must never start on one and move: that would be a reload.
+ */
+describe('IframeRenderer — per-app origin', () => {
+  const originalHref = window.location.href;
+  const realFetch = globalThis.fetch;
+  const realWarn = console.warn;
+  const realInfo = console.info;
+  let probeAnswers: boolean;
+
+  beforeEach(() => {
+    setUrl('https://localhost:8443/');
+    useDesktopStore.setState({ sessionId: 'sess-1', notifications: {} });
+    resetAppOriginPlan();
+    probeAnswers = true;
+    globalThis.fetch = (async () => {
+      if (!probeAnswers) throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify({ status: 'ok', originBoundary: 'loopback-subdomain' }));
+    }) as unknown as typeof fetch;
+    console.warn = () => {};
+    console.info = () => {};
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.fetch = realFetch;
+    console.warn = realWarn;
+    console.info = realInfo;
+    resetAppOriginPlan();
+    setUrl(originalHref);
+  });
+
+  async function renderPerApp() {
+    const view = render(
+      <MemoizedIframeRenderer
+        data="/api/apps/notes/index.html"
+        isolateOrigin
+        perAppOrigin
+        appId="notes"
+        iframeToken="tok-1"
+      />,
+    );
+    // Nothing is framed until the plan is known.
+    expect(view.container.querySelector('iframe')).toBeNull();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    return view.container.querySelector('iframe');
+  }
+
+  it('serves the app from its own origin once the probe answers, and pins posts to it', async () => {
+    const iframe = await renderPerApp();
+    const src = iframe?.getAttribute('src') ?? '';
+    expect(src).toStartWith('https://notes.localhost:8443/api/apps/notes/index.html');
+    expect(new URL(src).searchParams.get('__yaar_api')).toBe('https://localhost:8443');
+    expect(iframe?.getAttribute('data-yaar-origin')).toBe('https://notes.localhost:8443');
+    expect(iframe?.getAttribute('sandbox')).toBe(ISOLATED_APP_SANDBOX);
+  });
+
+  it('falls back to the shared alias when *.localhost does not answer', async () => {
+    probeAnswers = false;
+    const iframe = await renderPerApp();
+    expect(iframe?.getAttribute('src')).toStartWith('https://127.0.0.1:8443/api/apps/notes/');
+    expect(iframe?.getAttribute('data-yaar-origin')).toBe('https://127.0.0.1:8443');
+  });
+
+  it('does not wait on the probe for a window the server did not mark', () => {
+    const { container } = render(
+      <MemoizedIframeRenderer data="/api/apps/notes/index.html" isolateOrigin appId="notes" />,
+    );
+    expect(container.querySelector('iframe')?.getAttribute('src')).toStartWith(
+      'https://127.0.0.1:8443/',
+    );
   });
 });
 

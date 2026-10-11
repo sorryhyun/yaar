@@ -148,8 +148,12 @@ EXTRAS_API int webview_extras_exit_with_process(int pid) {
 static BOOL is_loopback_host(NSString *host) {
   if (!host) return NO;
   NSString *h = host.lowercaseString;
+  // `<appId>.localhost` too: under per-app origins each installed app has its own. Whether
+  // WebKit resolves it is the page's question (its `*.localhost` probe falls back to the
+  // shared 127.0.0.1 alias); here it only has to count as this server when it does.
   return [h isEqualToString:@"localhost"] || [h isEqualToString:@"127.0.0.1"] ||
-         [h isEqualToString:@"::1"] || [h isEqualToString:@"[::1]"];
+         [h isEqualToString:@"::1"] || [h isEqualToString:@"[::1]"] ||
+         ([h hasSuffix:@".localhost"] && h.length > @".localhost".length);
 }
 
 static BOOL scheme_is(NSURL *url, NSString *scheme) {

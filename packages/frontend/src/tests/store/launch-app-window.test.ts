@@ -98,6 +98,14 @@ describe('launchAppWindow', () => {
     expect(byApp.bundled.appOrigin).toBeUndefined();
   });
 
+  it("carries the mint's per-app mark onto the window", async () => {
+    tokenReply = () => jsonOk({ token: 't', isolateOrigin: true, perAppOrigin: true });
+    await launchAppWindow(NOTES);
+    const [win] = openedWindows();
+    expect(win.isolateOrigin).toBe(true);
+    expect(win.perAppOrigin).toBe(true);
+  });
+
   it('does not report the window to the agent until the caller does', async () => {
     const opened = await launchAppWindow(NOTES);
     expect(useDesktopStore.getState().pendingInteractions).toHaveLength(0);

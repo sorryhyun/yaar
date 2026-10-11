@@ -147,7 +147,7 @@ Every blocking dialog renders inside `components/overlays/Modal.tsx`, and every 
 | `table` | `{headers, rows}` | Table rendering |
 | `html` | `string` | Raw HTML |
 | `text` | `string` | Plain text |
-| `iframe` | `string \| { url, sandbox? }` | Embedded iframe (injects SDK scripts for app protocol, storage, fetch proxy, etc.). A stored PDF on a browser with no inline viewer (`navigator.pdfViewerEnabled === false` — Chrome on Android) is drawn by `PdfPagesRenderer` instead, as the server's page rasters (`lib/pdfPages.ts`, `/api/pdf/{path}/{page}`) |
+| `iframe` | `string \| { url, sandbox? }` | Embedded iframe (injects SDK scripts for app protocol, storage, fetch proxy, etc.). An installed app is served off the desktop origin: the shared `127.0.0.1` alias, or its own `<appId>.localhost` when the window is marked `perAppOrigin` and this load's `*.localhost` probe answered (`lib/appOrigin.ts`; the frame waits for the probe rather than reload onto a new origin). A stored PDF on a browser with no inline viewer (`navigator.pdfViewerEnabled === false` — Chrome on Android) is drawn by `PdfPagesRenderer` instead, as the server's page rasters (`lib/pdfPages.ts`, `/api/pdf/{path}/{page}`) |
 | `component` | `ComponentNode` | Interactive React components from JSON |
 
 ## Adding a New Content Renderer
@@ -159,7 +159,7 @@ Every blocking dialog renders inside `components/overlays/Modal.tsx`, and every 
 ## App Protocol
 
 Bidirectional agent-to-iframe communication. Frontend relays between server (WebSocket) and iframe apps (postMessage). Apps register via `export default defineApp({...})` from `@bundled/yaar`, which calls the injected script's private `__registerApp` entry. Key files: `store/iframe-bridge/app-protocol-relay.ts` (`handleAppProtocolRequest()`), `usePendingEventDrainer.ts`, `IframeRenderer.tsx` (injects the underlying SDK scripts).
-- Decomposed into `store/iframe-bridge/`: `target.ts` (shared DOM/iframe lookup + target-origin resolution — key resolution is deliberately not universal, since some callers address the DOM by raw window id and some by monitor-scoped key), `capture.ts`, `app-protocol-relay.ts`, `subscription-relay.ts`, `app-events.ts`, `open-url.ts` (where a link out of an app lands — asks `GET /api/embeddable` first, so a site that refuses framing goes to the Browser app), `notifications.ts`, `device.ts`, `drop.ts` (file drops onto a window, frame or app content), `host-download.ts` (`yaar:download` saved through the native host), `store-access.ts` (the only module importing `desktop.ts`, containing the runtime-only circular import)
+- Decomposed into `store/iframe-bridge/`: `target.ts` (shared DOM/iframe lookup + target-origin resolution — an isolated app frame is posted to at the exact origin `IframeRenderer` stamped on it as `data-yaar-origin`, never `'*'`; key resolution is deliberately not universal, since some callers address the DOM by raw window id and some by monitor-scoped key), `capture.ts`, `app-protocol-relay.ts`, `subscription-relay.ts`, `app-events.ts`, `open-url.ts` (where a link out of an app lands — asks `GET /api/embeddable` first, so a site that refuses framing goes to the Browser app), `notifications.ts`, `device.ts`, `drop.ts` (file drops onto a window, frame or app content), `host-download.ts` (`yaar:download` saved through the native host), `store-access.ts` (the only module importing `desktop.ts`, containing the runtime-only circular import)
 
 ## Testing
 

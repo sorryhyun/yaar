@@ -47,7 +47,8 @@ import java.util.function.BooleanSupplier;
  * is enough:
  * <ul>
  *   <li>the channel and the script are injected only into frames whose origin matches the
- *       desktop's (so never into the app iframes, which are on 127.0.0.1);</li>
+ *       desktop's (so never into the app iframes, which are on 127.0.0.1 or
+ *       {@code <appId>.localhost});</li>
  *   <li>{@link #onPostMessage} drops anything that is not from the main frame of that
  *       origin;</li>
  *   <li>the script defines nothing outside the top frame.</li>

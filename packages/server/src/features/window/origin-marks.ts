@@ -1,6 +1,7 @@
 /**
  * The app-origin marks a `window.create` for an app carries: whether its iframe moves to
- * the isolated app origin, and — in `proxy-port` mode — which origin that is.
+ * the isolated app origin, and — in `proxy-port` mode — which origin that is, or — in
+ * `loopback-subdomain` mode — that the origin is the app's own (`<appId>.localhost`).
  *
  * The one statement of the rule. Every path that produces an app window asks here: an
  * agent's create (`create.ts`), a replay (`logging/window-restore.ts`), and the desktop
@@ -12,12 +13,17 @@
  * AI-authored HTML are host-authored, not the hostile-app threat, and stay same-origin.
  */
 
-import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
+import {
+  getOriginBoundary,
+  isolatedAppOrigin,
+  isOriginBoundaryActive,
+} from '../../http/origin-boundary.js';
 import { resolveAppSource } from '../apps/roots.js';
 
 export interface AppOriginMarks {
   isolateOrigin?: true;
   appOrigin?: string;
+  perAppOrigin?: true;
 }
 
 /** The marks for an iframe window of `appId`; empty when it stays on the desktop origin. */
@@ -28,5 +34,13 @@ export function appOriginMarks(appId: string | undefined | null): AppOriginMarks
   // boundary the origin is a published address the server chose, so state it: the
   // client has no way to compute `https://<magic-dns>:8443` from where it is standing.
   const appOrigin = isolatedAppOrigin();
-  return { isolateOrigin: true, ...(appOrigin ? { appOrigin } : {}) };
+  // Per-app origins are derived by the frontend too (same port reason), and only after it
+  // has checked that this client resolves `*.localhost` at all — so the mark says "try",
+  // not "use": a client that cannot falls back to the shared alias.
+  const perApp = getOriginBoundary().mode === 'loopback-subdomain';
+  return {
+    isolateOrigin: true,
+    ...(appOrigin ? { appOrigin } : {}),
+    ...(perApp ? { perAppOrigin: true as const } : {}),
+  };
 }

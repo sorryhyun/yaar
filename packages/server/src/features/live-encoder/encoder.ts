@@ -235,6 +235,8 @@ async function openTab(h: Host): Promise<void> {
       await provider.closeSession(BROWSER_ID).catch(() => {});
       return;
     }
+    // The shared app alias even under per-app origins: this is the server's own page in
+    // its own headless tab, not an app, so there is no sibling to keep it apart from.
     await session.navigate(
       `http://${APP_ORIGIN_HOST}:${getPort()}/api/live-encoder/page?ch=${h.secret}`,
     );

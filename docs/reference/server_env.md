@@ -226,7 +226,12 @@ renderer process in Chromium, and no reach into a sibling app's frame. A token i
 app it was minted for on both the `Origin` and the host (`tokenFitsAppOrigin`). The shared
 `127.0.0.1` alias stays an app origin for clients that cannot resolve `*.localhost`.
 
-Off while the frontend half is built. Why and the rollout plan:
+The server marks such windows `perAppOrigin`; the desktop probes `probe.localhost/health` once per
+load (`packages/frontend/src/lib/appOrigin.ts`) and falls back to the shared alias if it does not
+answer. `/health` names the mode in force as `originBoundary`; the client's choice is
+`data-app-origins` on `<html>`.
+
+Off until the native hosts are verified. Why and the rollout plan:
 [`docs/proposals/app_site_isolation_proposal.md`](../proposals/app_site_isolation_proposal.md).
 
 **Source:** `packages/server/src/http/origin-boundary.ts`.

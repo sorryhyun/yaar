@@ -173,6 +173,7 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
         appId: createAction.appId,
         isolateOrigin: createAction.isolateOrigin,
         appOrigin: createAction.appOrigin,
+        perAppOrigin: createAction.perAppOrigin,
         // Carried over, never reset. `WindowFrame` keys the content subtree on this, so
         // rewinding it to undefined remounts the iframe — and a `window.create` for a key
         // that is already open is a *re-describe*, not a reopen: the reconnect snapshot

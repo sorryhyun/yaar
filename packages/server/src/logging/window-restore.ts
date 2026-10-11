@@ -106,7 +106,7 @@ function applyScoped(registry: WindowStateRegistry, action: WindowAction): void 
  *
  * - **The iframe token.** A stale token from a session log isn't in the server's token
  *   map, so the app would get a 403 on every verb call.
- * - **The app-origin marks** (`isolateOrigin` / `appOrigin`). These depend on the
+ * - **The app-origin marks** (`isolateOrigin` / `appOrigin` / `perAppOrigin`). These depend on the
  *   boundary currently in force (`http/origin-boundary.ts`), which is a function of the
  *   transport this run chose — so a log written locally must not tell a Tailscale run to
  *   use `127.0.0.1`, and vice versa. Deriving them here also closes a live gap: the
@@ -140,7 +140,12 @@ export async function refreshRestoredWindowActions(
 
       // The app-origin marks are stripped rather than merged, so a mark from another run
       // cannot survive into one whose boundary is off.
-      const { isolateOrigin: _stale, appOrigin: _staleOrigin, ...rest } = action;
+      const {
+        isolateOrigin: _stale,
+        appOrigin: _staleOrigin,
+        perAppOrigin: _stalePerApp,
+        ...rest
+      } = action;
       return {
         ...rest,
         iframeToken: await generateAppIframeToken(action.windowId, sessionId, { appId, monitorId }),

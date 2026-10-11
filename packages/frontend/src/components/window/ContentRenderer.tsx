@@ -18,6 +18,7 @@ interface ContentRendererProps {
   iframeToken?: string;
   isolateOrigin?: boolean;
   appOrigin?: string;
+  perAppOrigin?: boolean;
   appId?: string;
 }
 
@@ -28,6 +29,7 @@ function ContentRenderer({
   iframeToken,
   isolateOrigin,
   appOrigin,
+  perAppOrigin,
   appId,
 }: ContentRendererProps) {
   const callbacks = useWindowCallbacks();
@@ -63,6 +65,7 @@ function ContentRenderer({
           iframeToken={iframeToken}
           isolateOrigin={isolateOrigin}
           appOrigin={appOrigin}
+          perAppOrigin={perAppOrigin}
           appId={appId}
           onRenderSuccess={handleIframeSuccess}
           onRenderError={handleIframeError}

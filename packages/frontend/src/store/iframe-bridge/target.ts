@@ -8,11 +8,24 @@
  */
 import { DEFAULT_MONITOR_ID, type AppMessageType } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
+import { IFRAME_ORIGIN_DATA_ATTR } from '@/lib/appOrigin';
 import { resolveWindowKey } from '../helpers';
 import { getDesktopState } from './store-access';
 
-/** srcdoc/about:blank iframes have a "null" origin, requiring '*'. */
+/**
+ * The `targetOrigin` to post to a frame with.
+ *
+ * An isolated app frame is cross-origin, so its origin cannot be read off it — but the
+ * renderer stamped the origin it served the app from (`IFRAME_ORIGIN_DATA_ATTR`), and a
+ * post names exactly that. A frame that walked off to another origin then stops receiving
+ * app messages instead of handing them to whatever page it landed on.
+ *
+ * A same-origin frame's origin is readable. srcdoc/about:blank iframes have a "null"
+ * origin, and an external page's is unreadable: both need '*'.
+ */
 export function getIframeTargetOrigin(iframe: HTMLIFrameElement): string {
+  const served = iframe.getAttribute(IFRAME_ORIGIN_DATA_ATTR);
+  if (served) return served;
   try {
     const origin = iframe.contentWindow?.origin;
     if (origin && origin !== 'null') return origin;

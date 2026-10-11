@@ -3,7 +3,7 @@
  *
  * Detects CSP/X-Frame-Options blocking and reports back to the AI.
  */
-import { memo, useEffect, useRef, useState, useCallback } from 'react';
+import { memo, useEffect, useRef, useState, useCallback, useSyncExternalStore } from 'react';
 import {
   APP_MSG,
   IFRAME_IME_GUARD_SCRIPT,
@@ -20,6 +20,14 @@ import {
   IFRAME_VERB_SDK_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
+import {
+  IFRAME_ORIGIN_DATA_ATTR,
+  decideAppOriginPlan,
+  getAppOriginPlan,
+  localAppOrigin,
+  subscribeAppOriginPlan,
+  type AppOriginPlan,
+} from '@/lib/appOrigin';
 import { injectScriptOnce } from '@/lib/injectScriptOnce';
 import { hasInlinePdfViewer, storagePdf } from '@/lib/pdfPages';
 import { useDesktopStore } from '@/store';
@@ -68,6 +76,12 @@ interface IframeRendererProps {
    * browser can do correctly, since the desktop's port is not necessarily the API's.
    */
   appOrigin?: string;
+  /**
+   * Serve this app from its own `<appId>.localhost` origin rather than the shared alias
+   * (`lib/appOrigin.ts`). A request, not an order: the frame waits for this load's
+   * `*.localhost` probe, and takes the shared alias if it failed.
+   */
+  perAppOrigin?: boolean;
   /**
    * Set when this frame hosts an app, which is what makes a *second* load event
    * meaningful: an app document that gets replaced takes every injected script with
@@ -144,24 +158,6 @@ const BASE_FRAME_ALLOW = [
 export const APP_FRAME_ALLOW = [...BASE_FRAME_ALLOW, 'microphone', 'camera'].join('; ');
 export const EXTERNAL_FRAME_ALLOW = BASE_FRAME_ALLOW.join('; ');
 
-/**
- * The app origin — the `127.0.0.1` loopback alias on the current port — or null
- * when the desktop isn't on `localhost` (a LAN IP / remote tunnel, or already on
- * `127.0.0.1`), where isolation has no meaning here.
- *
- * The assignment is pinned, not symmetric (Stage 2): the desktop lives on
- * `localhost` and apps on `127.0.0.1`. The server enforces exactly that — it
- * refuses a token-less request carrying the `127.0.0.1` origin, and redirects a
- * desktop document that lands there back to localhost — so we must never serve an
- * app onto the desktop's own alias. Both aliases resolve to the same local socket,
- * so this only changes the browser-visible origin, not what host is reached.
- */
-function siblingLoopbackOrigin(): string | null {
-  const { protocol, hostname, port } = window.location;
-  if (hostname !== 'localhost') return null;
-  return `${protocol}//127.0.0.1${port ? `:${port}` : ''}`;
-}
-
 // Check if URL is same-origin (relative path or same host)
 function isSameOrigin(url: string): boolean {
   if (url.startsWith('/')) return true;
@@ -191,7 +187,7 @@ function isSameOrigin(url: string): boolean {
  * bar already names the app, so local content needs no target at all.
  *
  * Takes the *resolved* URL rather than the finished one: an isolated app is moved
- * onto the sibling loopback alias afterwards, which would read as cross-origin here.
+ * onto its app origin afterwards, which would read as cross-origin here.
  */
 function loadingHost(resolvedUrl: string): string | null {
   if (isSameOrigin(resolvedUrl)) return null;
@@ -232,12 +228,49 @@ export function violationBlocksFrame(
   }
 }
 
-function IframeRenderer({
+/**
+ * This load's app-origin plan, deciding it if `wanted` and nobody has yet. Null until
+ * decided — and always null-safe to ignore when not wanted.
+ */
+function useAppOriginPlan(wanted: boolean): AppOriginPlan | null {
+  const plan = useSyncExternalStore(subscribeAppOriginPlan, getAppOriginPlan);
+  useEffect(() => {
+    if (wanted && plan === null) void decideAppOriginPlan();
+  }, [wanted, plan]);
+  return plan;
+}
+
+/**
+ * Holds a per-app frame back until this load knows whether per-app origins work.
+ *
+ * The frame's `src` is its origin, so there is no starting on the shared alias and moving
+ * later: a changed `src` is a reload, and the app would lose whatever it had done. The
+ * probe is one loopback round trip, decided once per load.
+ */
+function IframeRenderer(props: IframeRendererProps) {
+  const wantsPerApp =
+    !!props.isolateOrigin && !!props.perAppOrigin && !props.appOrigin && !getRemoteConnection();
+  const plan = useAppOriginPlan(wantsPerApp);
+  if (wantsPerApp && plan === null) {
+    return (
+      <div className={styles.iframeContainer}>
+        <div className={styles.iframeLoading}>
+          <div className={styles.iframeLoadingSpinner} />
+          <span>Loading…</span>
+        </div>
+      </div>
+    );
+  }
+  return <IframeFrame {...props} perAppOrigin={wantsPerApp && plan === 'per-app'} />;
+}
+
+function IframeFrame({
   data,
   requestId,
   iframeToken,
   isolateOrigin,
   appOrigin: serverAppOrigin,
+  perAppOrigin,
   appId,
   onRenderSuccess,
   onRenderError,
@@ -253,12 +286,15 @@ function IframeRenderer({
 
   // App-origin isolation: resolve to the app origin, only when the server marked this
   // app (source:'user'). Either the server named the origin (a remote transport that
-  // publishes both), or we derive the sibling loopback alias from a same-origin path.
+  // publishes both), or we derive it locally from a same-origin path: the app's own
+  // `<appId>.localhost`, or the shared loopback alias (`lib/appOrigin.ts`).
   // Null means "not isolated" and every path below falls back to same-origin behavior.
   const appOrigin = !isolateOrigin
     ? null
     : (serverAppOrigin ??
-      (!getRemoteConnection() && resolved.startsWith('/') ? siblingLoopbackOrigin() : null));
+      (!getRemoteConnection() && resolved.startsWith('/')
+        ? localAppOrigin(appId, !!perAppOrigin)
+        : null));
 
   // Lock sessionId at mount time so late CONNECTION_STATUS doesn't re-render the iframe.
   // If sessionId isn't available yet, pick it up once and freeze.
@@ -667,6 +703,8 @@ function IframeRenderer({
       <iframe
         ref={iframeRef}
         src={url}
+        // The origin this frame was served from, for a post that names it exactly.
+        {...(appOrigin ? { [IFRAME_ORIGIN_DATA_ATTR]: appOrigin } : {})}
         className={styles.iframe}
         {...(sandbox ? { sandbox } : {})}
         allow={allow}

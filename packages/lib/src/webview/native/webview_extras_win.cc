@@ -111,8 +111,14 @@ static bool same_origin(const Origin &a, const Origin &b) {
   return a.ok && b.ok && a.scheme == b.scheme && a.host == b.host && a.port == b.port;
 }
 
+// `<appId>.localhost` too: under per-app origins each installed app has its own, and the
+// browser resolves every *.localhost to loopback itself (RFC 6761 §6.3) — so it is this
+// server, behind the same pinned key, as much as `localhost` is.
 static bool is_loopback_host(const std::wstring &h) {
-  return h == L"localhost" || h == L"127.0.0.1" || h == L"::1";
+  static const std::wstring kSuffix = L".localhost";
+  if (h == L"localhost" || h == L"127.0.0.1" || h == L"::1") return true;
+  return h.size() > kSuffix.size() &&
+         h.compare(h.size() - kSuffix.size(), kSuffix.size(), kSuffix) == 0;
 }
 
 static bool is_http(const Origin &o) { return o.scheme == L"http" || o.scheme == L"https"; }

@@ -410,6 +410,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
               iframeToken={window.iframeToken}
               isolateOrigin={window.isolateOrigin}
               appOrigin={window.appOrigin}
+              perAppOrigin={window.perAppOrigin}
               appId={window.appId}
             />
           </RendererErrorBoundary>

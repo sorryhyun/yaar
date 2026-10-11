@@ -14,6 +14,7 @@ import { pickHostDirectory } from '../../features/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
 import { appOriginMarks } from '../../features/window/origin-marks.js';
+import { getOriginBoundary } from '../origin-boundary.js';
 import { checkEmbeddable } from '../../features/http/embeddable.js';
 import { resolveLinkHandler } from '../../features/config/hooks.js';
 import { requireHost, resolvePrincipal } from '../access.js';
@@ -44,7 +45,16 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     // `tls` is the local h2 socket (http/local-tls.ts): the launcher reads its port and
     // the SPKI to trust from here. Both are public — a port number and a public-key hash.
     const tls = getLocalTlsEndpoint();
-    return jsonResponse({ status: 'ok', remote: IS_REMOTE, ...(tls ? { tls } : {}) });
+    // `originBoundary` is which app-origin mode is in force (http/origin-boundary.ts), so
+    // it can be read off a running server rather than inferred from where frames landed.
+    // A mode name, nothing more. It is also what the frontend's `*.localhost` probe reads
+    // back: an answer from `probe.localhost` proves that name reached this server.
+    return jsonResponse({
+      status: 'ok',
+      remote: IS_REMOTE,
+      originBoundary: getOriginBoundary().mode,
+      ...(tls ? { tls } : {}),
+    });
   }
 
   // What is running, and in which shape. Deliberately a REST route rather than a

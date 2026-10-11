@@ -25,6 +25,7 @@ afterAll(() => rmSync(join(USER_APPS_DIR, USER_APP), { recursive: true, force: t
 afterEach(() => {
   resetOriginBoundary();
   delete process.env.YAAR_APP_ORIGIN_ISOLATION;
+  delete process.env.YAAR_PER_APP_ORIGIN;
 });
 
 describe('appOriginMarks', () => {
@@ -41,6 +42,12 @@ describe('appOriginMarks', () => {
   it('marks nothing when isolation is switched off', () => {
     process.env.YAAR_APP_ORIGIN_ISOLATION = '0';
     expect(appOriginMarks(USER_APP)).toEqual({});
+  });
+
+  it('asks for a per-app origin under the loopback-subdomain boundary', () => {
+    process.env.YAAR_PER_APP_ORIGIN = '1';
+    expect(appOriginMarks(USER_APP)).toEqual({ isolateOrigin: true, perAppOrigin: true });
+    expect(appOriginMarks(BUNDLED_APP)).toEqual({});
   });
 
   it('states the app origin over a proxy-port boundary', () => {
@@ -68,6 +75,11 @@ describe('/api/iframe-token', () => {
     const body = await mint(USER_APP);
     expect(body.token).toBeString();
     expect(body.isolateOrigin).toBe(true);
+  });
+
+  it('passes the per-app mark through', async () => {
+    process.env.YAAR_PER_APP_ORIGIN = '1';
+    expect((await mint(USER_APP)).perAppOrigin).toBe(true);
   });
 
   it('marks nothing for a bundled app', async () => {

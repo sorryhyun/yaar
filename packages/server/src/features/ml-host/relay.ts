@@ -207,6 +207,11 @@ function hostPage(channel: Channel): Response {
   });
 }
 
+/**
+ * The shared `127.0.0.1` app alias, never a per-app `<appId>.localhost` origin: the page
+ * is the server's own, opened in its own headless tab, not an app's frame. Nothing there
+ * needs telling apart from a sibling, so the per-app boundary has nothing to say about it.
+ */
 function hostOrigin(): string {
   return `http://${APP_ORIGIN_HOST}:${getPort()}`;
 }

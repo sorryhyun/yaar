@@ -216,6 +216,17 @@ describe('per-app origin boundary', () => {
       expect(res.headers.get('access-control-allow-origin')).toBeNull();
     });
 
+    it("answers the desktop's *.localhost probe, readable and naming the mode", async () => {
+      on();
+      const origin = `http://localhost:${PORT}`;
+      const res = await fetchVia(`http://probe.localhost:${PORT}/health`, { origin });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('access-control-allow-origin')).toBe(origin);
+      expect(((await res.json()) as { originBoundary?: string }).originBoundary).toBe(
+        'loopback-subdomain',
+      );
+    });
+
     it('keeps the /mcp/ doors closed to a per-app origin', async () => {
       on();
       const res = await fetchVia(
