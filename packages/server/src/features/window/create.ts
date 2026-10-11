@@ -12,7 +12,6 @@ import {
   cascadeWindowBounds,
   defaultWindowSize,
 } from '@yaar/shared';
-import { componentLayoutSchema } from '@yaar/shared/schemas';
 import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
 import { validateRelativePath, getActiveSessionId } from '../../handlers/utils.js';
 import { clientAwayNote } from '../../session/client-presence.js';
@@ -25,6 +24,7 @@ import { getAppMeta } from '../apps/discovery.js';
 import { readSettings } from '../../storage/settings.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 import { appOriginMarks } from './origin-marks.js';
+import { parseComponentLayout } from './component-layout.js';
 import { grantsFromPayload, mayDelegateGrants, undelegatedUris } from './delegated-grants.js';
 import { namesInlinableUri, inlineUriContent } from './inline-content.js';
 import type { PermissionEntry } from '../../http/access.js';
@@ -140,10 +140,9 @@ export async function handleCreate(
           : join(APPS_DIR, filePath);
       try {
         const raw = await Bun.file(fullPath).text();
-        const parsed = JSON.parse(raw);
-        const result = componentLayoutSchema.safeParse(parsed);
-        if (!result.success) return error(`Invalid .yaarcomponent.json: ${result.error.message}`);
-        layoutData = result.data;
+        const result = parseComponentLayout(JSON.parse(raw));
+        if (!result.ok) return error(`Invalid .yaarcomponent.json: ${result.message}`);
+        layoutData = result.layout;
       } catch (err) {
         return error(
           `Error reading jsonfile: ${err instanceof Error ? err.message : 'Unknown error'}`,
@@ -154,14 +153,10 @@ export async function handleCreate(
       typeof payload.content === 'object' &&
       !Array.isArray(payload.content)
     ) {
-      const contentObj = payload.content as Record<string, unknown>;
-      if (!contentObj.components)
-        return error('"content.components" is required for component renderer.');
-      layoutData = {
-        components: contentObj.components as ComponentLayout['components'],
-        cols: contentObj.cols as ComponentLayout['cols'],
-        gap: contentObj.gap as ComponentLayout['gap'],
-      };
+      const { components, cols, gap } = payload.content as Record<string, unknown>;
+      const result = parseComponentLayout({ components, cols, gap });
+      if (!result.ok) return error(result.message);
+      layoutData = result.layout;
     } else {
       return error(
         'Provide "content" with { components: [...] } or "jsonfile" for component renderer.',

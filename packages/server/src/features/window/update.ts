@@ -13,6 +13,7 @@ import {
   emitWindowAction,
 } from './helpers.js';
 import { namesInlinableUri, inlineUriContent } from './inline-content.js';
+import { parseComponentLayout } from './component-layout.js';
 
 /** Handle window content updates (append, prepend, replace, insertAt, clear). */
 export async function handleUpdate(
@@ -30,7 +31,7 @@ export async function handleUpdate(
   const opType = payload.operation as string;
   if (!opType) return error('"operation" is required (append, prepend, replace, insertAt, clear).');
 
-  let data = (payload.content as string | { headers: string[]; rows: string[][] }) ?? '';
+  let data: unknown = payload.content ?? '';
 
   // The same substitution `create` makes, on the same renderers — an update that names a
   // file must not append the pointer's own text to a window (inline-content.ts). The
@@ -42,6 +43,21 @@ export async function handleUpdate(
     const inlined = await inlineUriContent(renderer as string, data);
     if (!inlined.ok) return error(inlined.message);
     data = inlined.data;
+  }
+
+  // A component window's content is a whole layout: only `replace` and `clear` mean anything,
+  // and the layout is validated the way `create` validates it (component-layout.ts).
+  if (renderer === 'component') {
+    if (opType === 'replace') {
+      const result = parseComponentLayout(data);
+      if (!result.ok) return error(result.message);
+      data = result.layout;
+    } else if (opType === 'append' || opType === 'prepend' || opType === 'insertAt') {
+      return error(
+        `Operation "${opType}" does not apply to a component window — use "replace" with the ` +
+          'full layout { components: [...] }.',
+      );
+    }
   }
 
   let operation: ContentUpdateOperation;
