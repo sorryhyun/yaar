@@ -12,11 +12,9 @@
  * the same on every build. It is excluded from `tsconfig.build.json` for the same reason
  * the tests are — it belongs to the exe, not to `dist/`.
  *
- * The tail is an async IIFE rather than a top-level `await` because the exe is built with
- * `--bytecode`, which emits CommonJS, where top-level `await` is a syntax error. The
- * ordering that matters is unchanged: everything above the call is synchronous, so it has
- * all run by the time `import()` is invoked. What a top-level `await` gave us for free was
- * a loud crash if boot threw, so the `catch` below restores that explicitly.
+ * The tail is a top-level `await`, which needs the ESM bytecode build (`--format=esm` in
+ * `scripts/build/exe-bundle.js`): under the CommonJS `--bytecode` emits by default it is a
+ * syntax error. The `catch` names the failure, so a boot that throws says so before it exits.
  */
 
 // The AST protocol extractor is the exe's only reader of an `app.register()` protocol, and
@@ -33,25 +31,23 @@ import { installEmbeddedAssetMaps } from './exe-assets.js';
 
 installEmbeddedAssetMaps();
 
-void (async () => {
-  try {
-    // `yaar --window <url>` is the exe re-spawned to own the desktop window, not a second
-    // server: route it away before any server module loads (desktop-window/host.ts).
-    if (process.argv.includes('--window')) {
-      const { runWindowProcess } = await import('./desktop-window/host.js');
-      runWindowProcess(process.argv);
-    }
-    // `yaar --pick-directory` is the Windows folder-picker helper: show the dialog, print one
-    // JSON line, exit (features/pick-directory.ts spawns it).
-    if (process.argv.includes('--pick-directory')) {
-      const { runFolderDialogProcess } = await import('@yaar/lib/win32');
-      runFolderDialogProcess();
-    }
-    const { seedBundledApps } = await import('./macos-bundle.js');
-    seedBundledApps();
-    await import('./exe-entry.js');
-  } catch (err) {
-    console.error('[yaar] failed to start:', err);
-    process.exit(1);
+try {
+  // `yaar --window <url>` is the exe re-spawned to own the desktop window, not a second
+  // server: route it away before any server module loads (desktop-window/host.ts).
+  if (process.argv.includes('--window')) {
+    const { runWindowProcess } = await import('./desktop-window/host.js');
+    runWindowProcess(process.argv);
   }
-})();
+  // `yaar --pick-directory` is the Windows folder-picker helper: show the dialog, print one
+  // JSON line, exit (features/pick-directory.ts spawns it).
+  if (process.argv.includes('--pick-directory')) {
+    const { runFolderDialogProcess } = await import('@yaar/lib/win32');
+    runFolderDialogProcess();
+  }
+  const { seedBundledApps } = await import('./macos-bundle.js');
+  seedBundledApps();
+  await import('./exe-entry.js');
+} catch (err) {
+  console.error('[yaar] failed to start:', err);
+  process.exit(1);
+}

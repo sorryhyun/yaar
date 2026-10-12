@@ -268,6 +268,11 @@ const buildArgs = [
   // the `engines.bun` floor. The cache format is platform-independent as of the same
   // release, so two builds of one input are byte-identical whatever built them.
   '--bytecode',
+  // ESM, not the CommonJS `--bytecode` emits by default. Two reasons, both Bun >= 1.4.3:
+  // an ESM binary embeds a pre-resolved module graph and loads every bundled module in one
+  // pass, and it keeps `import.meta.dir`/`url` on the executable's virtual mount — the
+  // CommonJS conversion bakes them to the build machine's source directory (exe-assets.ts).
+  '--format=esm',
   '--external', 'cpu-features',
   ...assetPaths.flatMap((p) => ['--asset', relative(rootDir, p)]),
   ...defines,

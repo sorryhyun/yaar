@@ -19,7 +19,7 @@ const fwd = (p: string): string => p.replace(/\\/g, '/');
  * built. This file sits directly in it, which is the whole reason it is here and
  * not in a subdirectory.
  *
- * `import.meta.dir`, never `fileURLToPath(import.meta.url)`: inside the `--bytecode`
+ * `import.meta.dir`, never `fileURLToPath(import.meta.url)`: inside a CommonJS `--bytecode`
  * exe both are baked to the build machine's source directory, and a *URL* spelling of
  * a Linux path is one `fileURLToPath` call away from throwing on Windows (see
  * `config/env.ts` in the server, which shipped that crash once). The stale path itself

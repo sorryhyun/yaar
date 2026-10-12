@@ -62,10 +62,12 @@ export const BUNDLED_APPS_STAMP = '.bundle-stamp';
  *    spelling is what broke the Windows binary once — every asset resolved to a path that
  *    cannot open and the exe 404’d its own frontend, `@bundled/*` libraries and ML runtime
  *    alike. (Mixing separators the other way is fine: Bun opens `B:\~BUN\root/frontend/x`.)
- *  - Under `--bytecode` it is *wrong*: bytecode output is CommonJS, and the conversion bakes
+ *  - Under a CommonJS `--bytecode` build it is *wrong*: the conversion bakes
  *    `import.meta.dir` to the **build machine's source directory**, which does not exist on
  *    the user's machine. `Bun.embeddedFiles` is still correct and complete there — only the
- *    path spelling is lost — so the two known mounts follow as candidates.
+ *    path spelling is lost — so the two known mounts follow as candidates. The exe is built
+ *    as ESM (`--format=esm`), which keeps the mount; CommonJS is what `--bytecode` falls
+ *    back to if that flag is ever dropped.
  *
  * `resolveEmbeddedRoot()` picks between them by *opening a real embedded file*, so a wrong
  * candidate is rejected rather than trusted. Order still matters: `import.meta.dir` wins

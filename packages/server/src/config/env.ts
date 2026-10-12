@@ -41,9 +41,10 @@ export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BU
 /**
  * Directory of this module.
  *
- * `import.meta.dir`, never `fileURLToPath(import.meta.url)`. The exe is compiled with
- * `--bytecode`, whose CommonJS conversion bakes both of those to the **build machine's**
- * source directory — the same root cause `exe-assets.ts` probes its way around. As a bare
+ * `import.meta.dir`, never `fileURLToPath(import.meta.url)`. A CommonJS `--bytecode` build
+ * bakes both of those to the **build machine's** source directory — the same root cause
+ * `exe-assets.ts` probes its way around. The exe is ESM bytecode now, which keeps them on the
+ * virtual mount, but the rule stands: drop `--format=esm` and the bake comes back. As a bare
  * path string that is merely a directory which does not exist, and costs nothing: the exe
  * hangs every path it needs off `process.execPath` (PROJECT_ROOT, just below), and only
  * the dev branch reads this. As a *URL* it is fatal on Windows, and was — the release

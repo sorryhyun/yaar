@@ -1,9 +1,10 @@
 /**
  * Nothing that ships inside the bundled exe may turn `import.meta.url` into a path.
  *
- * The binary is compiled with `--bytecode`, and that conversion bakes `import.meta.url`
- * and `import.meta.dir` to the **build machine's** source location instead of the
- * executable's virtual mount — the same behaviour `exe-assets.ts` probes its way around.
+ * A CommonJS `--bytecode` build bakes `import.meta.url` and `import.meta.dir` to the
+ * **build machine's** source location instead of the executable's virtual mount — the same
+ * behaviour `exe-assets.ts` probes its way around. The exe is ESM bytecode now
+ * (`--format=esm`), which keeps the mount, so this guards against the flag going missing.
  * As a bare string that is a stale directory nobody reads. Put through `fileURLToPath` or
  * `createRequire` it is a crash, on Windows and only on Windows: the release workflow
  * cross-compiles every target on Linux, so the Windows binary carries
