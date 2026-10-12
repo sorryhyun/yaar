@@ -73,6 +73,18 @@ describe('findRestorableSession', () => {
     expect(restorable?.messages).toHaveLength(1);
   });
 
+  it('breaks a createdAt tie on the session id, not on readdir order', async () => {
+    // Same millisecond; a same-second launch gets a numeric suffix, and `_10` is newer
+    // than `_9` even though it sorts before it as a string.
+    const at = '2026-01-01T00:00:00.000Z';
+    await seedSession('2026-01-01_00-00-00_10', at, [userMessage('newest')]);
+    await seedSession('2026-01-01_00-00-00_9', at, [userMessage('older')]);
+    await seedSession('2026-01-01_00-00-00', at, [userMessage('oldest')]);
+
+    const restorable = await findRestorableSession(root);
+    expect(restorable?.session.sessionId).toBe('2026-01-01_00-00-00_10');
+  });
+
   it('skips newer empty logs rather than restoring nothing from them', async () => {
     await seedSession('real', '2026-01-01T00:00:00.000Z', [userMessage('hello')]);
     await seedSession('empty-relaunch', '2026-01-02T00:00:00.000Z', []);
@@ -202,7 +214,9 @@ describe('carry-over into the next launch', () => {
       const { logger, sessionId } = await relaunch();
       logger.logUserMessage(note, 'monitor-0');
       await logger.dispose();
-      // Session ids have one-second resolution; two relaunches in a test do not.
+      // Session ids have one-second resolution; two relaunches in a test do not. Their
+      // `createdAt` can even share a millisecond, which leaves the order to the id — so
+      // these names sort in launch order, the way real timestamp ids do.
       await rename(join(root, sessionId), join(root, note));
     }
 

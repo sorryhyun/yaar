@@ -44,9 +44,14 @@ export async function listSessions(dir: string = SESSIONS_DIR): Promise<SessionI
     }
   }
 
-  // Sort by creation date, newest first
+  // Sort by creation date, newest first. Two launches can share a millisecond, and a tie
+  // left to `readdir` order is whatever the filesystem returns — so break it on the id,
+  // which is a timestamp with a `_2`, `_3`… suffix for same-second launches (numeric, so
+  // `_10` sorts after `_9`).
   sessions.sort(
-    (a, b) => new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime(),
+    (a, b) =>
+      new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime() ||
+      b.sessionId.localeCompare(a.sessionId, undefined, { numeric: true }),
   );
 
   return sessions;
