@@ -317,16 +317,21 @@ export class AppTaskProcessor {
           // Push to timeline so the monitor agent sees it on its next turn — but only
           // carry the response text when no hook will deliver it. Both sinks land in
           // the monitor's next prompt, so including it in both makes the monitor read
-          // the app agent's entire response twice, back to back.
-          this.ctx
-            .timelineFor(monitorId)
-            .pushAI(
-              agentRole,
-              task.content.slice(0, 100),
-              recordedActions,
-              windowId,
-              hookWillFire ? undefined : appResponseText || undefined,
-            );
+          // the app agent's entire response twice, back to back. And with the text dropped,
+          // a turn that emitted no OS actions (only app_command/app_query) would leave a
+          // bare "No actions taken." stub that reads as a separate, unexplained turn — the
+          // hook response is already the whole account of it, so push nothing.
+          if (!hookWillFire || recordedActions.length > 0) {
+            this.ctx
+              .timelineFor(monitorId)
+              .pushAI(
+                agentRole,
+                task.content.slice(0, 100),
+                recordedActions,
+                windowId,
+                hookWillFire ? undefined : appResponseText || undefined,
+              );
+          }
 
           // Also append to context tape for logging/debugging
           if (appResponseText && task.monitorId) {
