@@ -23,12 +23,14 @@ import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import {
   downloadAudio,
+  FORMAT_ID_RE,
   isYtDlpAvailable,
   resolveMediaInfo,
   resolveYtDlpPath,
   ytDlpVersion,
   YtDlpError,
   type DownloadAudioResult,
+  type YtDlpAudioFormat,
   type YtDlpMediaInfo,
 } from '@yaar/lib/ytdlp';
 import { storageWriteStream } from '../../storage/storage-manager.js';
@@ -57,6 +59,13 @@ export interface YtDlpJob {
   id: string;
   url: string;
   stage: 'downloading' | 'saving' | 'done' | 'error' | 'cancelled';
+  /** The format id the caller asked for, when it asked for one. */
+  requestedFormatId?: string;
+  /**
+   * Set once yt-dlp has finished: the format it delivered. Differs from
+   * `requestedFormatId` when that format was not offered or not audio-only.
+   */
+  format?: YtDlpAudioFormat;
   title?: string;
   durationSec?: number | null;
   /** Set when done: where the audio landed. */
@@ -138,12 +147,25 @@ export async function resolveMedia(rawUrl: unknown): Promise<YtDlpMediaInfo> {
   return impl.resolveMediaInfo(url.href);
 }
 
+/** Accept a format id as yt-dlp lists it (`'140'`, `'251-drc'`) or a bare itag number. */
+export function requireFormatId(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const id = typeof raw === 'number' && Number.isInteger(raw) ? String(raw) : raw;
+  if (typeof id !== 'string' || !FORMAT_ID_RE.test(id)) {
+    throw new YtDlpRequestError(
+      `Not a format id: ${String(raw)}. Pass one of the \`formatId\`s \`resolve\` lists (e.g. "140").`,
+    );
+  }
+  return id;
+}
+
 /**
  * Start an audio download job. Returns the job snapshot immediately; poll `read`
  * for progress. The finished file is announced on the job as `yaar://storage/…`.
  */
-export function startAudioDownload(rawUrl: unknown): YtDlpJob {
+export function startAudioDownload(rawUrl: unknown, rawFormatId?: unknown): YtDlpJob {
   const url = requireSupportedUrl(rawUrl);
+  const formatId = requireFormatId(rawFormatId);
   requireAvailable();
 
   const active = [...jobs.values()].filter(
@@ -163,6 +185,7 @@ export function startAudioDownload(rawUrl: unknown): YtDlpJob {
     id: genId('ytdlp', 6),
     url: url.href,
     stage: 'downloading',
+    ...(formatId ? { requestedFormatId: formatId } : {}),
     startedAt: Date.now(),
   };
   const abort = new AbortController();
@@ -198,8 +221,12 @@ export function cancelDownload(jobId: unknown): YtDlpJob {
 async function runJob(job: YtDlpJob, signal: AbortSignal): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'yaar-ytdlp-'));
   try {
-    const result = await impl.downloadAudio(job.url, tmp, { signal });
+    const result = await impl.downloadAudio(job.url, tmp, {
+      signal,
+      formatId: job.requestedFormatId,
+    });
     if (settle(job, signal)) return;
+    job.format = result.format;
     job.title = result.title;
     job.durationSec = result.durationSec;
     job.stage = 'saving';
@@ -210,7 +237,11 @@ async function runJob(job: YtDlpJob, signal: AbortSignal): Promise<void> {
     job.uri = `yaar://storage/${storagePath}`;
     job.bytes = result.bytes;
     job.finishedAt = Date.now();
-    log.info('ytdlp download finished', { jobId: job.id, bytes: result.bytes });
+    log.info('ytdlp download finished', {
+      jobId: job.id,
+      bytes: result.bytes,
+      formatId: result.format.formatId,
+    });
   } catch (err) {
     if (settle(job, signal)) return;
     job.stage = 'error';

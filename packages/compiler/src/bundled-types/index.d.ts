@@ -3637,6 +3637,15 @@ declare module '@bundled/yaar-media' {
     id: string;
     url: string;
     stage: 'downloading' | 'saving' | 'done' | 'error' | 'cancelled';
+    /** The `formatId` the download was started with, when one was given. */
+    requestedFormatId?: string;
+    /**
+     * Set once yt-dlp has finished: the format it delivered. Differs from
+     * `requestedFormatId` when that format was not offered or not audio-only.
+     * `filesizeBytes` is the listed size; `bytes` is what was saved, and the two can
+     * differ when yt-dlp repairs the container after download.
+     */
+    format?: YtDlpAudioFormat;
     title?: string;
     durationSec?: number | null;
     /** Set when done: the finished file, e.g. `yaar://storage/shared/media/abc.m4a`. */
@@ -3657,6 +3666,7 @@ declare module '@bundled/yaar-media' {
   }
 
   export interface YtDlpAudioFormat {
+    /** yt-dlp's format id — the YouTube itag, e.g. `'140'` (m4a) or `'251'` (opus). */
     formatId: string;
     ext: string;
     acodec: string;
@@ -3681,19 +3691,32 @@ declare module '@bundled/yaar-media' {
   export function resolveMedia(url: string): Promise<YtDlpMediaInfo>;
 
   /** Start an audio download job and return its snapshot immediately (fire-and-forget). */
-  export function startAudioDownload(url: string): Promise<YtDlpJob>;
+  export function startAudioDownload(
+    url: string,
+    opts?: {
+      /** A `formatId` from `resolveMedia` (or a bare itag); see `downloadAudio`. */
+      formatId?: string | number;
+    },
+  ): Promise<YtDlpJob>;
 
   /** Cancel a running download job. */
   export function cancelDownload(jobId: string): Promise<YtDlpJob>;
 
   /**
-   * Download a YouTube URL's best audio track and wait for completion.
-   * Resolves with the finished job (`uri` names the file in shared/media/); rejects
-   * on error/cancel/timeout — a timeout also cancels the job server-side.
+   * Download a YouTube URL's audio track and wait for completion.
+   * Resolves with the finished job (`uri` names the file in shared/media/, `format`
+   * the format delivered); rejects on error/cancel/timeout — a timeout also cancels
+   * the job server-side.
    */
   export function downloadAudio(
     url: string,
     opts?: {
+      /**
+       * Which audio format to fetch: a `formatId` from `resolveMedia` (or a bare itag).
+       * Omitted, or not offered / not audio-only: the best audio, m4a preferred. Compare
+       * the result's `format.formatId` to know which you got.
+       */
+      formatId?: string | number;
       /** Poll interval while waiting (default 2000ms). */
       pollMs?: number;
       /** Give up (and cancel the job) after this long (default 15 minutes). */

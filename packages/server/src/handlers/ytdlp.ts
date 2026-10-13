@@ -3,7 +3,7 @@
  *
  *   read('yaar://system/ytdlp')                            → availability, version, job table
  *   invoke('yaar://system/ytdlp', { action:'resolve',  url })   → metadata + audio formats, no bytes
- *   invoke('yaar://system/ytdlp', { action:'download', url })   → starts a job, returns its snapshot
+ *   invoke('yaar://system/ytdlp', { action:'download', url, formatId? }) → starts a job, returns its snapshot
  *   invoke('yaar://system/ytdlp', { action:'cancel',   jobId }) → kills a running job
  *
  * `download` returns as soon as the job is started (a long video outlives the
@@ -28,7 +28,7 @@ import {
 } from '../features/ytdlp/jobs.js';
 import { YtDlpError } from '@yaar/lib/ytdlp';
 
-type Payload = { url?: unknown; jobId?: unknown };
+type Payload = { url?: unknown; formatId?: unknown; jobId?: unknown };
 
 const ACTIONS = defineActions<Payload>(
   {
@@ -38,9 +38,10 @@ const ACTIONS = defineActions<Payload>(
     },
     download: {
       description:
-        'Start downloading the best audio-only track of `url` into shared/media/. Returns the ' +
-        'job immediately; poll `read` until its stage is `done` and `uri` names the file.',
-      run: async (payload) => okJson(startAudioDownload(payload.url)),
+        'Start downloading an audio-only track of `url` into shared/media/: `formatId` when ' +
+        'given, else the best one. Returns the job immediately; poll `read` until its stage ' +
+        'is `done`, `uri` names the file and `format` names the format delivered.',
+      run: async (payload) => okJson(startAudioDownload(payload.url, payload.formatId)),
     },
     cancel: {
       description: 'Cancel the running download job named by `jobId`.',
@@ -57,6 +58,13 @@ const INVOKE_SCHEMA: Record<string, unknown> = {
     url: {
       type: 'string',
       description: 'YouTube video URL (youtube.com / youtu.be). For `resolve` and `download`.',
+    },
+    formatId: {
+      type: 'string',
+      description:
+        'Audio format to download, as `resolve` lists it (a YouTube itag, e.g. "140"). Falls ' +
+        "back to the best audio when not offered; the job's `format` says what was delivered. " +
+        'For `download` only.',
     },
     jobId: {
       type: 'string',

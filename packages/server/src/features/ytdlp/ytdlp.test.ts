@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import {
   cancelDownload,
   getYtDlpStatus,
+  requireFormatId,
   requireSupportedUrl,
   resetYtDlpJobsForTest,
   setYtDlpImplForTest,
@@ -32,12 +33,22 @@ function available(): void {
   setYtDlpImplForTest({ isYtDlpAvailable: () => true, ytDlpVersion: async () => '2026.08.19' });
 }
 
-/** A downloadAudio fake that writes a real tmp file, as the binary would. */
+/**
+ * A downloadAudio fake that writes a real tmp file, as the binary would. It delivers the
+ * requested format, or format 140 when none was asked for.
+ */
 function fakeDownload(id = 'vid01'): typeof import('@yaar/lib/ytdlp').downloadAudio {
-  return async (_url, destDir): Promise<DownloadAudioResult> => {
+  return async (_url, destDir, opts): Promise<DownloadAudioResult> => {
     const filePath = join(destDir, `${id}.m4a`);
     await Bun.write(filePath, 'audio-bytes');
-    return { filePath, bytes: 11, id, title: 'A Title', durationSec: 19 };
+    const format = {
+      formatId: opts?.formatId ?? '140',
+      ext: 'm4a',
+      acodec: 'mp4a.40.2',
+      abrKbps: 129.8,
+      filesizeBytes: 11,
+    };
+    return { filePath, bytes: 11, id, title: 'A Title', durationSec: 19, format };
   };
 }
 
@@ -89,11 +100,41 @@ describe('download jobs', () => {
     expect(job.uri).toBe('yaar://storage/shared/media/abc-123.m4a');
     expect(job.title).toBe('A Title');
     expect(job.bytes).toBe(11);
+    expect(job.requestedFormatId).toBeUndefined();
+    expect(job.format?.formatId).toBe('140');
 
     // The bytes really landed in the (test-pinned) storage root.
     const storageRoot = process.env.YAAR_STORAGE;
     expect(storageRoot).toBeTruthy();
     expect(existsSync(join(storageRoot!, 'shared/media/abc-123.m4a'))).toBe(true);
+  });
+
+  test('a requested format reaches yt-dlp and the delivered one is recorded', async () => {
+    available();
+    let asked: string | undefined;
+    const download = fakeDownload('abc-123');
+    setYtDlpImplForTest({
+      downloadAudio: (url, dest, opts) => {
+        asked = opts?.formatId;
+        return download(url, dest, opts);
+      },
+    });
+
+    // A bare itag number is accepted and normalized to yt-dlp's string id.
+    const started = startAudioDownload(URL_OK, 251);
+    expect(started.requestedFormatId).toBe('251');
+    const job = await untilFinished(started.id);
+    expect(asked).toBe('251');
+    expect(job.format?.formatId).toBe('251');
+  });
+
+  test('refuses a format selector posing as a format id', () => {
+    available();
+    for (const bad of ['bestvideo+bestaudio', '140/18', '140[ext=m4a]', 1.5, {}]) {
+      expect(() => startAudioDownload(URL_OK, bad)).toThrow(/Not a format id/);
+    }
+    expect(requireFormatId('251-drc')).toBe('251-drc');
+    expect(requireFormatId('')).toBeUndefined();
   });
 
   test('a failing download records the yt-dlp error on the job', async () => {
@@ -179,5 +220,20 @@ describe('yaar://system/ytdlp handler', () => {
     expect(result.isError).toBe(true);
     const text = result.content.map((c) => ('text' in c ? c.text : '')).join('');
     expect(text).toContain('not supported');
+  });
+
+  test('download passes formatId through to the job', async () => {
+    available();
+    setYtDlpImplForTest({ downloadAudio: fakeDownload() });
+    const result = await registry().execute('invoke', 'yaar://system/ytdlp', {
+      action: 'download',
+      url: URL_OK,
+      formatId: '140',
+    });
+    expect(result.isError).toBeFalsy();
+    const text = result.content.map((c) => ('text' in c ? c.text : '')).join('');
+    const job = JSON.parse(text) as YtDlpJob;
+    expect(job.requestedFormatId).toBe('140');
+    await untilFinished(job.id);
   });
 });

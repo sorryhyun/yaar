@@ -126,6 +126,12 @@ export async function resolveMediaInfo(url: string, timeoutMs = 60_000): Promise
 }
 
 export interface DownloadAudioOptions {
+  /**
+   * The yt-dlp format id to download (a YouTube itag such as `140`, as `resolveMediaInfo`
+   * lists them). Falls back to the best audio when that format is not audio-only or not
+   * offered; the result's `format` says which one was delivered. Must match FORMAT_ID_RE.
+   */
+  formatId?: string;
   /** Abort the process after this long (default 15 minutes). */
   timeoutMs?: number;
   /** Refuse formats larger than this many bytes (default 512 MB). */
@@ -141,11 +147,27 @@ export interface DownloadAudioResult {
   id: string;
   title: string;
   durationSec: number | null;
+  /**
+   * The format yt-dlp actually selected. `filesizeBytes` is the size it listed for that
+   * format, which can differ from `bytes` when yt-dlp repairs the container after download.
+   */
+  format: YtDlpAudioFormat;
 }
 
+/** A yt-dlp format id: an itag (`140`), a DRC variant (`251-drc`), or similar — never a selector. */
+export const FORMAT_ID_RE = /^[\w-]{1,64}$/;
+
 /**
- * Download the best audio-only track of `url` into `destDir` (m4a preferred,
- * otherwise whatever bestaudio is — no ffmpeg re-encode, native container only).
+ * The pre-download `--print` line: the selected format, then video metadata. Title goes
+ * last because it may itself contain '|'.
+ */
+const META_TEMPLATE =
+  '%(format_id)s|%(ext)s|%(acodec)s|%(abr)s|%(filesize)s|%(id)s|%(duration)s|%(title)s';
+
+/**
+ * Download one audio-only track of `url` into `destDir`: `opts.formatId` when given and
+ * available, otherwise the best audio (m4a preferred) — no ffmpeg re-encode, native
+ * container only.
  * Resolves to the final file path as yt-dlp reports it (`--print after_move:filepath`),
  * so the path is the moved, completed file — never a .part artifact. Metadata comes
  * from the same process (a pre-download `--print` line), not a second resolve.
@@ -158,10 +180,17 @@ export async function downloadAudio(
   const bin = requireBin();
   const timeoutMs = opts.timeoutMs ?? 15 * 60_000;
   const maxBytes = opts.maxBytes ?? 512 * 1024 * 1024;
+  if (opts.formatId !== undefined && !FORMAT_ID_RE.test(opts.formatId)) {
+    throw new YtDlpError(`Not a format id: ${opts.formatId}`, '');
+  }
+  // `[vcodec=none]` keeps a requested id audio-only; a video id falls through to bestaudio.
+  const selector = opts.formatId
+    ? `${opts.formatId}[vcodec=none]/bestaudio[ext=m4a]/bestaudio`
+    : 'bestaudio[ext=m4a]/bestaudio';
 
   const args = [
     '-f',
-    'bestaudio[ext=m4a]/bestaudio',
+    selector,
     '--no-playlist',
     '--no-warnings',
     '--no-progress',
@@ -170,9 +199,9 @@ export async function downloadAudio(
     '-o',
     join(destDir, '%(id)s.%(ext)s'),
     '--no-simulate',
-    // Printed before the download; title goes last because it may itself contain '|'.
+    // Printed before the download, after format selection; see META_TEMPLATE.
     '--print',
-    '%(id)s|%(duration)s|%(title)s',
+    META_TEMPLATE,
     '--print',
     'after_move:filepath',
     '--',
@@ -189,14 +218,27 @@ export async function downloadAudio(
       '',
     );
   }
-  const [id = '', duration = '', ...titleParts] = (lines[0] ?? '').split('|');
   const bytes = (await Bun.file(filePath).stat()).size;
+  return { filePath, bytes, ...parseDownloadMeta(lines[0] ?? '') };
+}
+
+/** Parse a META_TEMPLATE line. yt-dlp prints `NA` for a field it does not have. */
+export function parseDownloadMeta(line: string): Omit<DownloadAudioResult, 'filePath' | 'bytes'> {
+  const [formatId = '', ext = '', acodec = '', abr = '', filesize = '', id = '', duration = ''] =
+    line.split('|', 7);
+  const title = line.split('|').slice(7).join('|');
+  const num = (v: string) => (/^\d+(\.\d+)?$/.test(v) ? Number(v) : null);
   return {
-    filePath,
-    bytes,
     id,
-    title: titleParts.join('|'),
-    durationSec: /^\d+(\.\d+)?$/.test(duration) ? Number(duration) : null,
+    title,
+    durationSec: num(duration),
+    format: {
+      formatId: formatId === 'NA' ? '' : formatId,
+      ext: ext === 'NA' ? '' : ext,
+      acodec: acodec === 'NA' ? '' : acodec,
+      abrKbps: num(abr),
+      filesizeBytes: num(filesize),
+    },
   };
 }
 

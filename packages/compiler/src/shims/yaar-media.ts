@@ -31,6 +31,7 @@
 
  *   const { available } = await ytdlpStatus();       // yt-dlp installed here?
  *   const job = await downloadAudio(videoUrl);       // starts + polls to completion
+ *   job.format.formatId;                             // the format delivered, e.g. '140'
  *   const bytes = await yaar.read(job.uri);          // it's in shared/media/
  *
  *   const stream = await openCamera({ facingMode: 'environment' });
@@ -84,9 +85,16 @@ export async function resolveMedia(url: string) {
   return y.invoke(URI, { action: 'resolve', url });
 }
 
-/** Start an audio download job and return its snapshot immediately (fire-and-forget). */
-export async function startAudioDownload(url: string) {
-  return y.invoke(URI, { action: 'download', url });
+/**
+ * Start an audio download job and return its snapshot immediately (fire-and-forget).
+ * `opts.formatId` picks a format `resolveMedia` listed; see `downloadAudio`.
+ */
+export async function startAudioDownload(url: string, opts = {}) {
+  return y.invoke(URI, {
+    action: 'download',
+    url,
+    ...(opts.formatId !== undefined ? { formatId: opts.formatId } : {}),
+  });
 }
 
 /** Cancel a running download job. */
@@ -95,15 +103,17 @@ export async function cancelDownload(jobId: string) {
 }
 
 /**
- * Download a YouTube URL's best audio track and wait for it to finish.
- * Resolves with the completed job (its `uri` names the file in shared/media/);
+ * Download a YouTube URL's audio track and wait for it to finish: `opts.formatId` (an itag
+ * as `resolveMedia` lists it) when given and offered, else the best audio. Resolves with
+ * the completed job (its `uri` names the file in shared/media/, its `format` the format
+ * delivered, which differs from `requestedFormatId` when yt-dlp had to fall back);
  * rejects if the job errors, is cancelled elsewhere, or `timeoutMs` passes —
  * a timeout also cancels the job rather than leaving it running unobserved.
  */
 export async function downloadAudio(url: string, opts = {}) {
   const pollMs = opts.pollMs ?? 2000;
   const timeoutMs = opts.timeoutMs ?? 15 * 60_000;
-  const started = await startAudioDownload(url);
+  const started = await startAudioDownload(url, { formatId: opts.formatId });
   const deadline = Date.now() + timeoutMs;
 
   for (;;) {
