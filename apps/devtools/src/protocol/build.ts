@@ -226,8 +226,9 @@ export const buildCommands = {
       'Deploy to apps/. Refuses type errors unless skipTypecheck, and refuses a manifest ' +
       'that drops commands the installed app has unless allowProtocolShrink. Snapshots the ' +
       'previous version — see gitRestore. Closes the preview window on success: it shows ' +
-      'the pre-deploy build, so re-open it with `preview` if you still need it. ' +
-      'A `staleWindow` in the result means you deployed the app you are running inside: ' +
+      'the pre-deploy build, so re-open it with `preview` if you still need it. It also ' +
+      "closes the user's open windows of that app (listed in `closedWindows`), losing their " +
+      'in-app state — say so before deploying an app the user has open. A `staleWindow` in the result means you deployed the app you are running inside: ' +
       'that window was spared (closing it would have killed this call) and is STILL ' +
       'RUNNING THE OLD BUNDLE, so verifying the change in it reports the code from before ' +
       "the deploy. Reload it — invoke('yaar://windows/{staleWindow}', {action:'reload'}) — " +
