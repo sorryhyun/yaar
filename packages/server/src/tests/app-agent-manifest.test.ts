@@ -18,7 +18,7 @@ describe('app agent protocol manifest', () => {
     // Union type spelled out — the exact shape that was guessed wrong.
     expect(systemPrompt).toContain(
       '`readFile(path: string|string[], startLine?: number, endLine?: number, ' +
-        'lineNum?: boolean, openInEditor?: boolean)`',
+        'section?: string, lineNum?: boolean, openInEditor?: boolean)`',
     );
     // Required params carry no marker; optional ones carry `?`.
     expect(systemPrompt).toContain('`gitRestore(appId: string, ref: string)`');

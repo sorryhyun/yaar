@@ -54,6 +54,10 @@ import {
   testWindowIdFor,
   parseTestReport,
   trimTestError,
+  markdownOutline,
+  markdownSection,
+  summarizeFiles,
+  groupByFile,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -1101,6 +1105,107 @@ const testReport = suite('test-report', {
   },
 });
 
+const AGENTS_FIXTURE = [
+  '# AGENTS.md — Demo', // 1
+  '', // 2
+  '## Engine', // 3
+  'renders audio', // 4
+  '### Offline renders', // 5
+  'schedule ahead', // 6
+  '```sh', // 7
+  '# not a heading', // 8
+  '```', // 9
+  '## MusicXML import', // 10
+  'parser notes', // 11
+  '## MusicXML export', // 12
+  'writer notes', // 13
+  '',
+].join('\n');
+
+const cloneSummary = suite('clone-summary', {
+  'outline lists headings with their section spans, skipping fenced code'() {
+    eq(markdownOutline(AGENTS_FIXTURE), [
+      { heading: '# AGENTS.md — Demo', line: 1, lines: 13 },
+      { heading: '## Engine', line: 3, lines: 7 },
+      { heading: '### Offline renders', line: 5, lines: 5 },
+      { heading: '## MusicXML import', line: 10, lines: 2 },
+      { heading: '## MusicXML export', line: 12, lines: 2 },
+    ]);
+  },
+  'outline respects maxLevel'() {
+    eq(
+      markdownOutline(AGENTS_FIXTURE, 2).map((h) => h.line),
+      [1, 3, 10, 12],
+    );
+  },
+  'section: an exact heading wins, subsections included'() {
+    eq(markdownSection(AGENTS_FIXTURE, 'engine'), {
+      startLine: 3,
+      endLine: 9,
+      heading: '## Engine',
+    });
+  },
+  'section: a unique substring matches; leading #s are ignored'() {
+    eq(markdownSection(AGENTS_FIXTURE, '### offline'), {
+      startLine: 5,
+      endLine: 9,
+      heading: '### Offline renders',
+    });
+  },
+  'section: an ambiguous substring is refused with both candidates named'() {
+    const r = markdownSection(AGENTS_FIXTURE, 'musicxml');
+    ok('error' in r, 'refused');
+    ok('error' in r && r.error.includes('MusicXML import') && r.error.includes('MusicXML export'));
+  },
+  'section: no match names the headings that do exist'() {
+    const r = markdownSection(AGENTS_FIXTURE, 'pack pins');
+    ok('error' in r && r.error.includes('"Engine"'));
+  },
+  'summary: totals, largest by bytes, two-level rollup, directories ignored'() {
+    const s = summarizeFiles([
+      { path: 'app.json', lines: 10, bytes: 200 },
+      { path: 'src', isDirectory: true },
+      { path: 'src/main.ts', lines: 50, bytes: 1500 },
+      { path: 'src/engine/render.ts', lines: 300, bytes: 9000 },
+      { path: 'src/engine/fx/reverb.ts', lines: 100, bytes: 3000 },
+      { path: 'src/assets/logo.png', bytes: 40000 },
+    ]);
+    eq(s.size.files, 5);
+    eq(s.size.lines, 460);
+    eq(s.size.bytes, 53700);
+    eq(
+      s.size.largest.map((f) => f.path),
+      [
+        'src/assets/logo.png',
+        'src/engine/render.ts',
+        'src/engine/fx/reverb.ts',
+        'src/main.ts',
+        'app.json',
+      ],
+    );
+    eq(s.size.largest[0], { path: 'src/assets/logo.png', bytes: 40000 });
+    eq(s.tree, {
+      '.': { files: 1, lines: 10, bytes: 200 },
+      src: { files: 1, lines: 50, bytes: 1500 },
+      'src/assets': { files: 1, lines: 0, bytes: 40000 },
+      'src/engine': { files: 2, lines: 400, bytes: 12000 },
+    });
+  },
+  'protocol locations group by file, ordered by line'() {
+    eq(
+      groupByFile({
+        exportStems: { file: 'src/protocol/songs.ts', line: 140 },
+        importScore: { file: 'src/protocol/musicxml.ts', line: 12 },
+        renderAudio: { file: 'src/protocol/songs.ts', line: 116 },
+      }),
+      {
+        'src/protocol/musicxml.ts': { importScore: 12 },
+        'src/protocol/songs.ts': { renderAudio: 116, exportStems: 140 },
+      },
+    );
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -1118,4 +1223,5 @@ export const libSuites: Suite[] = [
   previewShape,
   audioAnalysis,
   testReport,
+  cloneSummary,
 ];

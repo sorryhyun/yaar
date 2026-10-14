@@ -464,6 +464,7 @@ async function dispatchDevAction(
           column: body.column as number | undefined,
           callers: body.callers === true,
           maxResults: body.maxResults as number | undefined,
+          excludeTests: body.excludeTests === true,
         },
         { bundles },
       );

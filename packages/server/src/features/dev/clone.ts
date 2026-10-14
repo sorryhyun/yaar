@@ -8,6 +8,7 @@ import { resolveAppDir } from '../apps/roots.js';
 import { agentDocPathsFor, APP_ROOT_DOCS } from '../apps/discovery.js';
 import { agentDocsFilesFor } from '../apps/docs.js';
 import { readManifest } from '../apps/manifest.js';
+import { locateProtocolSources, type ProtocolSources } from '@yaar/compiler';
 
 interface CloneFile {
   path: string;
@@ -21,6 +22,12 @@ interface CloneResult {
   error?: string;
   files?: CloneFile[];
   meta?: { name: string; icon: string; description: string };
+  /**
+   * Where each command and state key is declared, app-relative — absent when it cannot be
+   * said (no `typescript`, or a protocol the extractor refuses). The map from a command an
+   * agent was told about to the code behind it, which grep answers with description strings.
+   */
+  protocolSources?: ProtocolSources;
 }
 
 /**
@@ -121,5 +128,9 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
     return { success: false, error: 'Failed to read source directory.' };
   }
 
-  return { success: true, files, meta };
+  // Best effort: a location map is a convenience, and an app whose protocol the extractor
+  // refuses still clones (the clone is how its author gets to fix it).
+  const protocolSources = await locateProtocolSources(srcDir).catch(() => null);
+
+  return { success: true, files, meta, ...(protocolSources ? { protocolSources } : {}) };
 }

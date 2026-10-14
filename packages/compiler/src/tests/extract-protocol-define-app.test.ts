@@ -53,6 +53,44 @@ function expectRejected(
   }
 }
 
+describe('defineApp: source locations', () => {
+  test('each command and state key maps to where its descriptor is declared', () => {
+    const { sources, errors } = extract({
+      'src/main.ts': `${IMPORT}
+import { songCommands } from './protocol/songs';
+export default defineApp({
+  id: 'demo',
+  state: {
+    tempo: { description: 'BPM', get: () => 120 },
+  },
+  commands: {
+    ...songCommands,
+    stop: { description: 'Stop', run: () => {} },
+  },
+});`,
+      'src/protocol/songs.ts': `const renderAudioDescriptor = {
+  description: 'Render',
+  run: () => {},
+};
+
+export const songCommands = {
+  play: { description: 'Play', run: () => {} },
+  renderAudio: renderAudioDescriptor,
+};`,
+    });
+    expect(errors).toEqual([]);
+    expect(sources).toEqual({
+      state: { tempo: { file: 'src/main.ts', line: 6 } },
+      commands: {
+        play: { file: 'src/protocol/songs.ts', line: 7 },
+        // A `const` reference lands on the declaration it names, not on the key.
+        renderAudio: { file: 'src/protocol/songs.ts', line: 1 },
+        stop: { file: 'src/main.ts', line: 10 },
+      },
+    });
+  });
+});
+
 describe('defineApp: reach', () => {
   test('the default export config is the protocol', () => {
     const { protocol, errors } = extract(

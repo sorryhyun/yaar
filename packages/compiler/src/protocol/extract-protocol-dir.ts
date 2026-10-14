@@ -21,6 +21,7 @@ import {
   APP_REGISTER_REMOVED_MESSAGE,
   extractProtocolFromModules,
   type ProtocolError,
+  type ProtocolSources,
 } from './extract-protocol-ast.js';
 import { loadTypeScript } from '../load-typescript.js';
 import { dedupeProtocolSchemas } from './dedupe-schemas.js';
@@ -367,6 +368,37 @@ export async function extractProtocolFromDir(
   }
 
   return { protocol: null, errors: [], degraded: true };
+}
+
+/**
+ * Where each command and state key of the app in `srcDir` is declared, or null when
+ * that cannot be said: no `typescript`, no registration, or a protocol the extractor
+ * refuses (the compile reports that, with locations; this is not the place).
+ *
+ * The AST pass alone — never the schema fold, which builds and runs the app to learn
+ * what Zod schemas say, and a location does not depend on any of that. So this is cheap
+ * enough to answer on every clone, which is its caller: the agent about to edit an app
+ * otherwise greps a command name and gets its description strings back first.
+ */
+export async function locateProtocolSources(srcDir: string): Promise<ProtocolSources | null> {
+  const ts = await loadTypeScript();
+  if (!ts) return null;
+  let texts: Map<string, string>;
+  try {
+    texts = readModuleTexts(srcDir);
+  } catch {
+    return null;
+  }
+  const appId = (await readAppJson(srcDir)).appId;
+  const readFile = (path: string): string | null => texts.get(toForwardSlash(path)) ?? null;
+  for (const file of ENTRY_FILES) {
+    const entry = `src/${file}`;
+    if (!texts.has(entry)) continue;
+    const result = extractProtocolFromModules(ts, entry, readFile, { appId });
+    if (result.errors.length > 0) return null;
+    if (result.protocol) return result.sources;
+  }
+  return null;
 }
 
 /**

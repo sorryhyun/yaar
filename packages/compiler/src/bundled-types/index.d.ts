@@ -1559,6 +1559,8 @@ interface YaarDevReferencesQuery {
   callers?: boolean;
   /** Cap on `references` and `callers`. Default 200. */
   maxResults?: number;
+  /** Leave test files out (`*.test.ts`, `test/`, `__tests__/`); otherwise they are listed last. */
+  excludeTests?: boolean;
 }
 
 interface YaarDevSourceLocation {
@@ -1597,7 +1599,7 @@ interface YaarDevReferencesResult {
   /** Other declarations the same `symbol` matched — pass `line` to pick one. */
   ambiguous?: YaarDevSourceLocation[];
   definitions?: (YaarDevSourceLocation & { name: string; kind: string })[];
-  /** Project references only, sorted by file then position. */
+  /** Project references only: production files first, then tests; by file then position. */
   references?: YaarDevReferenceHit[];
   /** Present when `callers` was asked. */
   callers?: YaarDevCallerHit[];
@@ -1609,6 +1611,8 @@ interface YaarDevReferencesResult {
   callersFrom?: 'call-hierarchy' | 'references';
   /** References in the project before `maxResults` clipped them. */
   totalReferences?: number;
+  /** How many of `totalReferences` are in test files. */
+  testReferences?: number;
   /** Distinct project files among them. */
   files?: number;
   truncated?: true;

@@ -138,7 +138,11 @@ export const appActions = defineActions<{ appId: string; p: Record<string, unkno
       const { cloneAppSource } = await import('../../features/dev/clone.js');
       const result = await cloneAppSource(appId);
       if (!result.success) return error(result.error!);
-      return okJson({ files: result.files, meta: result.meta });
+      return okJson({
+        files: result.files,
+        meta: result.meta,
+        ...(result.protocolSources ? { protocolSources: result.protocolSources } : {}),
+      });
     },
   },
 });

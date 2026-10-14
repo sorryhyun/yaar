@@ -17,6 +17,11 @@ export interface FindReferencesQuery {
   callers?: boolean;
   /** Cap on `references` and `callers`. Default 200. */
   maxResults?: number;
+  /**
+   * Leave test files out (`*.test.ts`, `test/`, `__tests__/`). Without it they are still
+   * listed after every production reference, so a cap clips tests first.
+   */
+  excludeTests?: boolean;
 }
 
 export interface SourceLocation {
@@ -81,6 +86,8 @@ export type FindReferencesResult =
       callersFrom?: 'call-hierarchy' | 'references';
       /** References in the project before `maxResults` clipped them. */
       totalReferences: number;
+      /** How many of `totalReferences` are in test files — listed last. */
+      testReferences: number;
       /** Distinct project files among them. */
       files: number;
       truncated?: true;

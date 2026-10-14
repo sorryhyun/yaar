@@ -1,6 +1,13 @@
 import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
-import { assetImportLine, editText, isImagePath, isModelPath, type EditSpec } from '../lib';
+import {
+  assetImportLine,
+  editText,
+  isImagePath,
+  isModelPath,
+  markdownSection,
+  type EditSpec,
+} from '../lib';
 import {
   openFile,
   writeFile,
@@ -10,6 +17,7 @@ import {
   grep,
   findReferences,
   readFileContent,
+  readFileText,
   readMediaFile,
   readModelSummary,
   listProjectFiles,
@@ -97,7 +105,8 @@ export const fileCommands = {
       'beginning `[readFile error]`, beside the files that could, and the call throws only ' +
       'when none could. Does not change editor open state unless openInEditor is set. ' +
       'Image files come back as a viewable image block, not text; a .glb/.gltf as its ' +
-      '`inspectModel` summary.',
+      '`inspectModel` summary. `section` reads one Markdown section by its heading — the ' +
+      'outline `cloneApp` returns for AGENTS.md names them.',
     params: {
       type: 'object',
       properties: {
@@ -109,6 +118,14 @@ export const fileCommands = {
         },
         startLine: { type: 'number', description: 'Start line (1-based, inclusive)' },
         endLine: { type: 'number', description: 'End line (1-based, inclusive)' },
+        section: {
+          type: 'string',
+          description:
+            'A Markdown heading ("Layers", or "## Layers"): reads from it to the next heading ' +
+            'of its level or higher, subsections included. Exact text wins, else a unique ' +
+            'substring; an ambiguous one is refused with the candidates. One path only, ' +
+            'and not with startLine/endLine.',
+        },
         lineNum: {
           type: 'boolean',
           description: 'Prefix each line with its number. Default false.',
@@ -132,6 +149,17 @@ export const fileCommands = {
         endLine: p.endLine != null ? Number(p.endLine) : undefined,
         lineNum: Boolean(p.lineNum),
       };
+      if (p.section != null) {
+        if (paths.length !== 1) throw new AppCommandError('`section` reads one path at a time.');
+        if (opts.startLine !== undefined || opts.endLine !== undefined)
+          throw new AppCommandError('Pass `section` or a line range, not both.');
+        const text = await readFileText(paths[0]);
+        if (text == null) throw new AppCommandError(`file not found: ${paths[0]}`);
+        const found = markdownSection(text, String(p.section));
+        if ('error' in found) throw new AppCommandError(`${paths[0]}: ${found.error}`);
+        opts.startLine = found.startLine;
+        opts.endLine = found.endLine;
+      }
       if (p.openInEditor) {
         for (const fp of paths) await openFile(fp);
       }
@@ -600,8 +628,10 @@ export const fileCommands = {
       'not a text search: follows re-exports, renamed imports and methods called through an ' +
       'instance. Name it by `symbol` (declared in `file`), by `line`+`column`, or by ' +
       '`line`+`symbol`. Returns { symbol, at, definitions, references: [{ file, line, column, ' +
-      'text, enclosing, isDefinition?, isWrite?, isCall?, role? }], totalReferences, files }, ' +
-      'plus `callers` when asked; `ambiguous` lists other matching declarations — re-ask with ' +
+      'text, enclosing, isDefinition?, isWrite?, isCall?, role? }], totalReferences, ' +
+      'testReferences, files }, plus `callers` when asked. Production references come ' +
+      'before test files (`*.test.ts`, `test/`), so a cap clips tests first; ' +
+      '`ambiguous` lists other matching declarations — re-ask with ' +
       '`line`. Only `src/**/*.ts` files resolve; throws with the reason (not-found, invalid, ' +
       'unavailable, timeout) rather than answering zero references. Reads saved files, so ' +
       'no compile is needed first.',
@@ -629,6 +659,10 @@ export const fileCommands = {
           type: 'number',
           description: 'Cap on references and callers (default 200); `truncated` says it clipped.',
         },
+        excludeTests: {
+          type: 'boolean',
+          description: 'Leave test files out entirely (default false: listed last).',
+        },
       },
       required: ['file'],
     },
@@ -649,6 +683,7 @@ export const fileCommands = {
         ...(column !== undefined ? { column } : {}),
         ...(p.callers === true ? { callers: true } : {}),
         ...(typeof p.maxResults === 'number' ? { maxResults: p.maxResults } : {}),
+        ...(p.excludeTests === true ? { excludeTests: true } : {}),
       });
     },
   }),

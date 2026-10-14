@@ -104,6 +104,7 @@ export function findReferences(
     column?: number;
     callers?: boolean;
     maxResults?: number;
+    excludeTests?: boolean;
   },
 ) {
   // The full result shape is YaarDevReferencesResult in bundled-types/index.d.ts.

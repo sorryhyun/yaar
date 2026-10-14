@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, list, del, errMsg, safeParseOr } from '@bundled/yaar';
+import { appStorage, invoke, list, read, del, errMsg, safeParseOr } from '@bundled/yaar';
 import type * as z from '@bundled/zod';
 import { ProjectAppJsonSchema } from '../schema';
 import {
@@ -33,6 +33,7 @@ import {
 } from '../core';
 import { previewWindowIdFor, projectPath } from '../lib/paths';
 import { appIdFromName, scaffoldMain } from '../lib/scaffold';
+import { installedVersionOf } from '../lib/app-manifest';
 import { refreshFiles, openFile } from './files';
 
 // Project lifecycle: discovery, creation, cloning, switching, deletion, tabs.
@@ -428,6 +429,16 @@ export interface CloneAppResult {
   previous: { id: string; name: string } | null;
   /** Clones of the same app that were already here, oldest first. */
   existingClones: ExistingClone[];
+  /**
+   * Where each command and state key is declared, from the server's static read of the
+   * installed source. Absent when it could not say (see `locateProtocolSources`).
+   */
+  protocolSources?: {
+    commands: Record<string, { file: string; line: number }>;
+    state: Record<string, { file: string; line: number }>;
+  };
+  /** True when `reuse` reopened an existing clone instead of making one. */
+  reused?: true;
 }
 
 export interface ExistingClone {
@@ -443,11 +454,12 @@ export interface ExistingClone {
 /**
  * Clones of `appId` already in the project list, judged against the installed version.
  *
- * `cloneApp` never reuses one — a fresh copy of the live source is what was asked for —
- * but it reports them, because nothing else did: a devtools that lost track of its open
- * project cloned the same app three times in one session, and an agent may only delete
- * the clones it made itself, so every earlier one stayed. Named here, the caller can reopen
- * one instead or tell the user they are piling up.
+ * `cloneApp` reuses one only when asked (`reuse`) — a non-stale clone carries the
+ * installed version but may also carry edits, and by default a fresh copy of the live
+ * source is what was asked for. It reports them either way, because nothing else did: a
+ * devtools that lost track of its open project cloned the same app three times in one
+ * session, and an agent may only delete the clones it made itself, so every earlier one
+ * stayed. Named here, the caller can reopen one instead or tell the user they are piling up.
  */
 async function existingClonesOf(
   appId: string,
@@ -475,18 +487,79 @@ async function existingClonesOf(
   return out.sort((a, b) => Number(a.id) - Number(b.id));
 }
 
-export async function cloneApp(appId: string): Promise<CloneAppResult> {
-  setStatusText(`Cloning "${appId}"...`);
+/**
+ * The installed app's version, or undefined when it cannot be read — which makes every
+ * existing clone stale, so `reuse` falls back to a fresh clone rather than guessing.
+ */
+async function installedVersionOfApp(appId: string): Promise<string | undefined> {
+  try {
+    return installedVersionOf(await read(`yaar://apps/${appId}`, { missingOk: true })) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reopen `clone` as `cloneApp({ reuse })` asked, answering in the same shape a fresh clone does. */
+async function reopenClone(
+  appId: string,
+  clone: ExistingClone,
+  previous: { id: string; name: string } | null,
+  installedVersion: string | undefined,
+): Promise<CloneAppResult> {
+  if (previous && previous.id !== clone.id)
+    await updateReturnMap((m) => (m[clone.id] = previous.id));
+  await openProject(clone.id);
+  const raw = await appStorage.read(projectPath(clone.id, 'AGENTS.md')).catch(() => null);
+  const meta = safeParseOr(
+    ProjectAppJsonSchema,
+    await appStorage.readJsonOr<unknown>(projectPath(clone.id, 'app.json'), undefined),
+    EMPTY_APP_JSON,
+    { label: `projects/${clone.id}/app.json` },
+  );
+  setStatusText(`Reopened clone of "${clone.name}"`);
+  return {
+    id: clone.id,
+    appId: typeof meta.appId === 'string' ? meta.appId : appId,
+    agentsMd: typeof raw === 'string' ? raw : null,
+    previous: previous && previous.id !== clone.id ? previous : null,
+    existingClones: await existingClonesOf(appId, installedVersion, clone.id),
+    reused: true,
+  };
+}
+
+export async function cloneApp(
+  appId: string,
+  { reuse = false }: { reuse?: boolean } = {},
+): Promise<CloneAppResult> {
   const previous = currentForReturn();
+  if (reuse) {
+    const installedVersion = await installedVersionOfApp(appId);
+    const fresh = (await existingClonesOf(appId, installedVersion, '')).filter((c) => !c.stale);
+    const newest = fresh[fresh.length - 1];
+    if (newest) return await reopenClone(appId, newest, previous, installedVersion);
+  }
+  setStatusText(`Cloning "${appId}"...`);
   const result = await invoke<{
     // `encoding` is set for files whose bytes are not valid UTF-8 (images, fonts,
     // wasm). Writing those with the default utf-8 encoding re-encodes the base64
     // payload as text and corrupts the asset — see cloneAppSource.
     files: { path: string; content: string; encoding?: 'base64' }[];
     meta: Record<string, unknown>;
+    protocolSources?: CloneAppResult['protocolSources'];
   }>('yaar://apps/' + appId, { action: 'clone' });
   const meta = result?.meta ?? {};
   const name = typeof meta.name === 'string' ? meta.name : appId;
+  // `meta` is the server's display triple (name, icon, description) — no version, no
+  // appId. Both come from the cloned app.json itself. Reading `meta.version` once made
+  // every existing clone "stale", since the installed version always read as unknown.
+  const clonedAppJson = result?.files?.find((f) => f.path === 'app.json' && !f.encoding);
+  const cloned = safeParseOr(
+    ProjectAppJsonSchema,
+    clonedAppJson ? safeJson(clonedAppJson.content) : undefined,
+    EMPTY_APP_JSON,
+    { label: `${appId}/app.json` },
+  );
+  const installedVersion = typeof cloned.version === 'string' ? cloned.version : undefined;
   const id = Date.now().toString();
   await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ ...meta, name }, null, 2));
   if (result?.files) {
@@ -513,20 +586,25 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
   await recordOrigin(id, `clone:${appId}`);
   if (previous) await updateReturnMap((m) => (m[id] = previous.id));
   await loadProjects();
-  const existingClones = await existingClonesOf(
-    appId,
-    typeof meta.version === 'string' ? meta.version : undefined,
-    id,
-  );
+  const existingClones = await existingClonesOf(appId, installedVersion, id);
   await openProject(id);
   setStatusText(`Cloned "${name}"`);
   return {
     id,
-    appId: typeof meta.appId === 'string' ? meta.appId : appId,
+    appId: typeof cloned.appId === 'string' ? cloned.appId : appId,
     agentsMd,
     previous,
     existingClones,
+    ...(result?.protocolSources ? { protocolSources: result.protocolSources } : {}),
   };
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

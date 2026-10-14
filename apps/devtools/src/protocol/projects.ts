@@ -1,6 +1,7 @@
 import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import { activeProject, files } from '../core';
 import { createProject, openProject, deleteProject, cloneApp } from '../services';
+import { groupByFile, markdownOutline, summarizeFiles } from '../lib';
 
 export const projectCommands = {
   createProject: defineAppCommand({
@@ -71,39 +72,96 @@ export const projectCommands = {
   cloneApp: defineAppCommand({
     description:
       'Clone an installed app source into a new project and open it. The copy is a sandbox: ' +
-      'editing it changes nothing about the live app until you deploy. Returns `appId` (from ' +
-      'the cloned app.json — the id deploy expects), `files` (the cloned paths), ' +
-      '`agentsMd` with the cloned root AGENTS.md contents (null when the app has none), and ' +
-      '`previousProject` — the project the clone replaced in front, which deleteProject on ' +
-      'the clone reopens. When clones of the same app were already here, `existingClones` ' +
-      'lists them oldest first as { id, name, lastModified, version?, stale } — `stale` ' +
-      'meaning their version is not the installed one. Check projectList before cloning: ' +
-      'a non-stale clone can be reopened with openProject instead of cloning again.',
+      'editing it changes nothing about the live app until you deploy. Answers with a map ' +
+      'to read from, not the contents: `appId` (from the cloned app.json — the id deploy ' +
+      'expects); `size` (file, line and byte totals, plus the five largest files); `tree` ' +
+      '(the same per directory, rolled up two levels); `protocol` — where each command and ' +
+      'state key is declared, as { commands: { file: { name: line } }, state: … }, the way ' +
+      'from a command name to its code; and `agentsMd` — the root AGENTS.md as { bytes, ' +
+      'lines, outline: [{ heading, line, lines }] } (null when the app has none). Read a ' +
+      'section with readFile({ path: "AGENTS.md", section }); `include` returns the full ' +
+      'text or file list instead. `previousProject` is the project the clone replaced in ' +
+      'front, which deleteProject on the clone reopens. When clones of the same app were ' +
+      'already here, `existingClones` comes first, oldest first as { id, name, ' +
+      'lastModified, version?, stale } — `stale` meaning their version is not the installed ' +
+      'one. `reuse: true` reopens the newest non-stale one instead of cloning (`reused` says ' +
+      'it did); its edits, if any, come with it.',
     params: {
       type: 'object',
       properties: {
         appId: { type: 'string', description: 'App ID to clone' },
+        reuse: {
+          type: 'boolean',
+          description:
+            'Reopen the newest existing clone at the installed version, if there is one, ' +
+            'rather than cloning again. Default false: a fresh copy of the live source.',
+        },
+        include: {
+          type: 'array',
+          items: { type: 'string', enum: ['agentsMd', 'files'] },
+          description:
+            '"agentsMd": the whole AGENTS.md text in place of its outline. "files": every ' +
+            'path with its size (what the `project` state also answers).',
+        },
       },
       required: ['appId'],
     },
     replay: 'never',
     run: async (p) => {
+      const include = new Set(Array.isArray(p.include) ? p.include.map(String) : []);
       const {
         id: projectId,
         appId,
         agentsMd,
         previous,
         existingClones,
-      } = await cloneApp(String(p.appId));
+        protocolSources,
+        reused,
+      } = await cloneApp(String(p.appId), { reuse: p.reuse === true });
       const proj = activeProject();
+      const listing = files();
+      const { size, tree } = summarizeFiles(listing);
       return {
+        // First, so a pile of old clones is the first thing read, not the last.
+        ...(existingClones.length > 0 ? { existingClones } : {}),
+        ...(reused ? { reused } : {}),
         projectId,
         appId,
         project: proj ? { id: proj.id, name: proj.name } : undefined,
         ...(previous ? { previousProject: previous } : {}),
-        ...(existingClones.length > 0 ? { existingClones } : {}),
-        files: files().map((f) => f.path),
-        agentsMd,
+        size,
+        tree,
+        ...(protocolSources
+          ? {
+              protocol: {
+                commands: groupByFile(protocolSources.commands),
+                state: groupByFile(protocolSources.state),
+              },
+            }
+          : {}),
+        agentsMd:
+          agentsMd === null
+            ? null
+            : include.has('agentsMd')
+              ? agentsMd
+              : {
+                  bytes: new TextEncoder().encode(agentsMd).length,
+                  lines: agentsMd.split('\n').length,
+                  outline: markdownOutline(agentsMd),
+                },
+        ...(include.has('files')
+          ? {
+              files: listing.map((f) =>
+                f.isDirectory
+                  ? { path: f.path, isDirectory: true as const }
+                  : {
+                      path: f.path,
+                      ...(f.lines !== undefined ? { lines: f.lines } : {}),
+                      ...(f.bytes !== undefined ? { bytes: f.bytes } : {}),
+                    },
+              ),
+            }
+          : {}),
       };
     },
   }),

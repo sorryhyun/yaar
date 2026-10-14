@@ -107,6 +107,10 @@ src/
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + `window.__yaar_links__` + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`. The links block is app.json's `"links"` (an origin relative hrefs in this app's content resolve against) and is emitted **for every app, empty or not** — its presence is also how the link guard tells a compiled app from a plain HTML document shown in a window
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, SDK hash, compiler version
 
+The AST reader also records where each command and state descriptor is declared (`sources`,
+never part of the manifest). `locateProtocolSources(srcDir)` answers that map with the AST pass
+alone — no schema fold — and is what the server's app clone returns as `protocolSources`.
+
 Extraction runs *after* bundling (so genuine build errors keep precedence) and *before* the
 HTML wrap, because the wrapper carries the extracted manifest back into the page.
 
@@ -294,7 +298,7 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 
 **`findReferences(path, query, { bundles })`** — symbol references and callers, from a TypeScript
 LanguageService built on `sandbox-tsconfig.ts`, the same options and grant-sliced declarations
-typecheck hands tsc, so both describe the same program. Three rules:
+typecheck hands tsc, so both describe the same program. Four rules:
 
 - **Never on the calling thread.** Building a program is synchronous and takes about a second per
   10k lines; the caller is the server's event loop. It runs in one Worker that keeps up to two
@@ -305,6 +309,9 @@ typecheck hands tsc, so both describe the same program. Three rules:
   enclosing function (`callersFrom` says which). Call hierarchy cannot start from a variable, and a
   signal setter is one. A query from the renamed end of `export { a as b }` also re-queries from the
   original, because references do not cross a rename backwards.
+- **Production references before test files** (`*.test.ts`, `test/`, `__tests__/`), with
+  `testReferences` counting the latter, so a `maxResults` cap clips tests first; `excludeTests`
+  drops them.
 
 ## Adding to the Agent-Facing Surface
 

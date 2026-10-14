@@ -66,6 +66,25 @@ export interface AstProtocolExtraction {
    * present, and the listed schemas are absent until the fold supplies them.
    */
   pendingFolds: string[];
+  /**
+   * Where each state key and command is declared — the descriptor's own position, which
+   * for a `const` or shorthand reference is the declaration it names, not the key.
+   * Locations only, never part of the manifest: an agent reading the protocol has no use
+   * for them, while one about to edit the app needs exactly this map (`cloneApp`).
+   */
+  sources: ProtocolSources;
+}
+
+export interface ProtocolSourceLocation {
+  /** App-relative, as the extractor names files in its errors (`src/protocol/songs.ts`). */
+  file: string;
+  /** 1-based. */
+  line: number;
+}
+
+export interface ProtocolSources {
+  state: Record<string, ProtocolSourceLocation>;
+  commands: Record<string, ProtocolSourceLocation>;
 }
 
 /**
@@ -353,6 +372,7 @@ function buildProtocol(
   ts: TsModule,
   extractor: Extractor,
   config: Array<{ key: string; value: TsNode; scope: ModuleScope }>,
+  sources: ProtocolSources,
 ): Protocol {
   const sections = new Map(config.map((e) => [e.key, e]));
   const protocol: Protocol = { state: {}, commands: {} };
@@ -382,6 +402,15 @@ function buildProtocol(
     label: string,
   ): Map<string, { value: TsNode; scope: ModuleScope }> | null => {
     const { node, scope } = extractor.unwrap(entry.value, entry.scope);
+    const section = label.startsWith('state.')
+      ? sources.state
+      : label.startsWith('commands.')
+        ? sources.commands
+        : null;
+    if (section) {
+      const { line } = scope.source.getLineAndCharacterOfPosition(node.getStart());
+      section[entry.key] = { file: scope.file, line: line + 1 };
+    }
     if (!ts.isObjectLiteralExpression(node)) {
       extractor.error(
         entry.scope,
@@ -604,8 +633,12 @@ function buildProtocol(
 }
 
 /** An extracted protocol, or null when nothing was declared. */
-function finish(extractor: Extractor, protocol: Protocol | null): AstProtocolExtraction {
-  const rest = { pendingFolds: extractor.pendingFolds };
+function finish(
+  extractor: Extractor,
+  protocol: Protocol | null,
+  sources: ProtocolSources,
+): AstProtocolExtraction {
+  const rest = { pendingFolds: extractor.pendingFolds, sources };
   if (extractor.errors.length > 0) return { protocol: null, errors: extractor.errors, ...rest };
   if (!protocol) return { protocol: null, errors: [], ...rest };
   const empty =
@@ -646,11 +679,13 @@ export function extractProtocolFromModules(
   options: ExtractOptions = {},
 ): AstProtocolExtraction {
   const extractor = new Extractor(ts, readFile);
+  const sources: ProtocolSources = { state: {}, commands: {} };
   /** Every early exit carries the same shape as `finish()`. */
   const bail = (): AstProtocolExtraction => ({
     protocol: null,
     errors: extractor.errors,
     pendingFolds: extractor.pendingFolds,
+    sources,
   });
 
   const scopes = extractor.moduleGraph(entry);
@@ -669,7 +704,7 @@ export function extractProtocolFromModules(
   if (extractor.errors.length > 0) return bail();
   if (!defineApp) return bail();
 
-  return finish(extractor, extractDefineApp(ts, extractor, defineApp, options));
+  return finish(extractor, extractDefineApp(ts, extractor, defineApp, options, sources), sources);
 }
 
 /** Read the protocol out of a located `defineApp({...})` config. */
@@ -678,6 +713,7 @@ function extractDefineApp(
   extractor: Extractor,
   site: { args: TsExpression; scope: ModuleScope },
   options: ExtractOptions,
+  sources: ProtocolSources,
 ): Protocol | null {
   const { node: configNode, scope: configScope } = extractor.unwrap(site.args, site.scope);
   if (!ts.isObjectLiteralExpression(configNode)) {
@@ -695,7 +731,7 @@ function extractDefineApp(
 
   checkAppId(extractor, config, site, options.appId);
 
-  return buildProtocol(ts, extractor, config);
+  return buildProtocol(ts, extractor, config, sources);
 }
 
 /**

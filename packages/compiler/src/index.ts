@@ -88,10 +88,13 @@ export {
   type AstProtocolExtraction,
   type ExtractOptions,
   type ProtocolError,
+  type ProtocolSourceLocation,
+  type ProtocolSources,
   type ReadFile,
 } from './protocol/extract-protocol-ast.js';
 export {
   extractProtocolFromDir,
+  locateProtocolSources,
   type DirExtraction,
   type DirExtractOptions,
 } from './protocol/extract-protocol-dir.js';

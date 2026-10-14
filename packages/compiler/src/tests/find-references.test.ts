@@ -185,6 +185,41 @@ describe('findReferences', () => {
     }
   });
 
+  test('lists production references before tests, and counts the tests', async () => {
+    // `src/aaa.test.ts` sorts ahead of every production file by path alone — the shape
+    // that let a cap cut music-maker's only production caller of `importScore`.
+    const testFile = join(sandbox, 'src', 'aaa.test.ts');
+    await Bun.write(
+      testFile,
+      `import { setBlocks } from './model';\nsetBlocks([]);\nsetBlocks(['x']);\n`,
+    );
+    try {
+      const all = await find({ file: 'src/model.ts', symbol: 'setBlocks' });
+      expect(all.testReferences).toBe(3);
+      const files = all.references.map((r) => r.file);
+      expect(files.slice(-3)).toEqual(['src/aaa.test.ts', 'src/aaa.test.ts', 'src/aaa.test.ts']);
+      expect(files.indexOf('src/aaa.test.ts')).toBe(all.totalReferences - 3);
+
+      const clipped = await find({
+        file: 'src/model.ts',
+        symbol: 'setBlocks',
+        maxResults: all.totalReferences - 3,
+      });
+      expect(clipped.references.some((r) => r.file === 'src/aaa.test.ts')).toBe(false);
+      expect(clipped.truncated).toBe(true);
+
+      const prodOnly = await find({
+        file: 'src/model.ts',
+        symbol: 'setBlocks',
+        excludeTests: true,
+      });
+      expect(prodOnly.totalReferences).toBe(all.totalReferences - 3);
+      expect(prodOnly.testReferences).toBe(0);
+    } finally {
+      await rm(testFile);
+    }
+  });
+
   test('clips to maxResults and says so', async () => {
     const result = await find({ file: 'src/model.ts', symbol: 'setBlocks', maxResults: 1 });
     expect(result.references).toHaveLength(1);

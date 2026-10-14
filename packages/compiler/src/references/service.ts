@@ -43,6 +43,16 @@ const SLICED_TYPES_PATH = join(PACKAGE_ROOT, '.yaar-bundled-types.references.d.t
 
 const fwd = (p: string): string => p.replace(/\\/g, '/');
 
+/**
+ * A test file by the conventions apps use: `*.test.ts` (what `compileTests` builds) or
+ * anything under a `test/` or `__tests__/` directory (devtools' own suites). Takes a
+ * sandbox-relative path: the sandbox's own location may well contain a `test/`.
+ */
+function isTestFile(path: string): boolean {
+  const p = fwd(path);
+  return /\.test\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test|__tests__)\//.test(p);
+}
+
 function mtimeVersion(file: string): string {
   try {
     return String(statSync(file).mtimeMs);
@@ -204,13 +214,22 @@ export class SandboxReferences {
       }
     }
 
-    const ordered = [...entries.values()].sort((a, b) =>
-      a.fileName === b.fileName
-        ? a.textSpan.start - b.textSpan.start
-        : a.fileName < b.fileName
-          ? -1
-          : 1,
-    );
+    // Production files before tests, then by path and position. Alphabetical alone put a
+    // symbol's twenty test call sites ahead of its one production caller, and a capped
+    // answer cut exactly that caller: `src/musicxml/*.test.ts` sorts before
+    // `src/protocol/musicxml.ts`.
+    const isTest = (e: TS.ReferencedSymbolEntry) => isTestFile(this.rel(e.fileName));
+    const ordered = [...entries.values()]
+      .filter((e) => !query.excludeTests || !isTest(e))
+      .sort(
+        (a, b) =>
+          Number(isTest(a)) - Number(isTest(b)) ||
+          (a.fileName === b.fileName
+            ? a.textSpan.start - b.textSpan.start
+            : a.fileName < b.fileName
+              ? -1
+              : 1),
+      );
 
     const hits: ReferenceHit[] = [];
     const callSites: { hit: ReferenceHit; owner: Enclosing | null }[] = [];
@@ -249,13 +268,16 @@ export class SandboxReferences {
       definitions: realDefinitions.length ? realDefinitions : allDefinitions,
       references: hits.slice(0, maxResults),
       totalReferences: hits.length,
+      testReferences: hits.filter((h) => isTestFile(h.file)).length,
       files: new Set(hits.map((h) => h.file)).size,
     };
 
     let truncated = hits.length > maxResults;
     if (query.callers) {
       const fromHierarchy = this.hierarchyCallers(origin.file, origin.position);
-      const callers = fromHierarchy ?? derivedCallers(this, callSites);
+      const callers = (fromHierarchy ?? derivedCallers(this, callSites))
+        .filter((c) => !query.excludeTests || !isTestFile(c.file))
+        .sort((a, b) => Number(isTestFile(a.file)) - Number(isTestFile(b.file)));
       result.callersFrom = fromHierarchy ? 'call-hierarchy' : 'references';
       result.callers = callers.slice(0, maxResults);
       if (callers.length > maxResults) truncated = true;
