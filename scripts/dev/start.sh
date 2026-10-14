@@ -56,12 +56,27 @@ fi
 
 # Build shared, lib and compiler packages first (needed by other packages).
 # Order is the dependency order: lib and compiler both consume shared's dist/.
-echo "Building shared package..."
-bun run --filter @yaar/shared build
-echo "Building lib package..."
-bun run --filter @yaar/lib build
-echo "Building compiler package..."
-bun run --filter @yaar/compiler build
+#
+# Each is skipped while its dist/ is newer than everything it is built from. tsc rewrites
+# every output file even when nothing changed, and the server's `bun --watch` imports
+# these dist/ files — so a second instance started from the same checkout (another
+# YAAR_WORKSPACE, say) restarted the first one's server on every launch, dropping its
+# turn in flight. The stamp lives in dist/, so deleting dist/ forces a build.
+build_if_stale() {
+  local pkg="$1" dir="packages/$1" stamp="packages/$1/dist/.dev-build-stamp"
+  shift
+  if [ -f "$stamp" ] && [ -z "$(find "$dir/src" "$dir/package.json" "$dir"/tsconfig*.json "$@" \
+    -newer "$stamp" -print 2>/dev/null | head -n 1)" ]; then
+    echo "Package $pkg is up to date"
+    return 0
+  fi
+  echo "Building $pkg package..."
+  bun run --filter "@yaar/$pkg" build
+  touch "$stamp"
+}
+build_if_stale shared
+build_if_stale lib packages/shared/dist/.dev-build-stamp
+build_if_stale compiler packages/shared/dist/.dev-build-stamp
 
 # Optionally launch a local Chrome with remote debugging, opened on the YAAR
 # desktop, so (a) you don't have to navigate to it by hand and (b) the session
