@@ -6,6 +6,12 @@
   width: 600px;
   max-width: calc(100vw - 48px);
   z-index: var(--z-panel);
+  /* The box is 600px wide on every row, but the monitor row and the window-tab row are
+     mostly empty, see-through space — a lone "+", two tabs. Over a maximized window that
+     space shows the app and used to swallow its clicks, so the box lets them through and
+     each thing actually drawn here (the bar, the chips, the tabs, the strips above the
+     bar) takes them back with `pointer-events: auto`. */
+  pointer-events: none;
 }
 
 /* Reserve space below input for the window tabs so input position is stable.
@@ -24,6 +30,7 @@
    single glass container — previously the icons were a sibling row of individually
    bordered-and-shadowed 40px tiles, so the palette read as detached fragments. */
 .inputWrapper {
+  pointer-events: auto;
   position: relative;
   flex: 1;
   /* Without this the bar's min-content (icons + the textarea's `cols` width + Send) sets
@@ -175,6 +182,7 @@
 
 /* Drawing indicator */
 .drawingIndicator {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -210,6 +218,7 @@
 
 /* Image attach strip */
 .imageAttachStrip {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -377,6 +386,8 @@
    Edge to edge along the bottom and lifted off the gesture bar. While typing the icon
    cluster steps aside so the textarea gets the row. */
 :global(html[data-form-factor='mobile']) .container {
+  /* The phone's sheet is one solid surface edge to edge; nothing in it is see-through. */
+  pointer-events: auto;
   left: 0;
   right: 0;
   bottom: 0;
