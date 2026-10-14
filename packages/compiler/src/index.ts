@@ -14,10 +14,13 @@ export {
 export { typecheckSandbox, type TypecheckOptions, type TypecheckResult } from './typecheck.js';
 export {
   findReferences,
+  typeAt,
   disposeReferencesWorker,
   type FindReferencesOptions,
   type FindReferencesQuery,
   type FindReferencesResult,
+  type TypeAtQuery,
+  type TypeAtResult,
   type ReferenceHit,
   type CallerHit,
 } from './references/index.js';

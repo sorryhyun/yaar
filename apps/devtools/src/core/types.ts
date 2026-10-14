@@ -42,6 +42,10 @@ export interface FileEntry {
 export interface Diagnostic {
   file: string;
   line: number;
+  /** 1-based; absent when the line was not a tsc diagnostic and was kept as text. */
+  column?: number;
+  /** `TS2304` — absent for the same reason. */
+  code?: string;
   message: string;
   severity: 'error' | 'warning';
 }

@@ -40,6 +40,7 @@ import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
 import { noteExternalCommand } from './external-share.js';
 import { splitStatePath, selectStatePath } from '../../lib/state-path.js';
+import { prepareEvalExpression } from './eval-source.js';
 import {
   gatedStoragePath,
   gatedStoragePathError,
@@ -606,7 +607,11 @@ export async function handleAppEval(
   // on readiness would make eval unusable for exactly the broken-app case it is
   // most useful for. (Same reasoning as the built-in `__console` state key.)
   const askedAt = Date.now();
-  const outcome = await request(win.id, { kind: 'eval', expression }, timeoutMs);
+  const outcome = await request(
+    win.id,
+    { kind: 'eval', expression: prepareEvalExpression(expression) },
+    timeoutMs,
+  );
   if (!outcome.ok) {
     if (outcome.reason === 'cancelled')
       return error('The session ended before the app answered the eval request.');

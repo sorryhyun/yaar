@@ -84,6 +84,23 @@ const SELF_GRANTS = [
   'yaar://apps/self/agents/',
 ];
 
+/**
+ * `permissions` plus each {@link SELF_GRANTS} entry it does not already hold — what an app
+ * iframe's token carries. Exported so `POST /api/dev/check-permissions` judges a project's
+ * source against the list its token will actually hold, not the bare declaration.
+ */
+export function withSelfGrants(permissions: PermissionEntry[]): PermissionEntry[] {
+  let out = permissions;
+  for (const grant of SELF_GRANTS) {
+    const held = out.some((p) => {
+      const uri = typeof p === 'string' ? p : p.uri;
+      return uri === grant || uri.startsWith(grant);
+    });
+    if (!held) out = [...out, grant];
+  }
+  return out;
+}
+
 interface TokenEntry {
   windowId: string;
   sessionId: string;
@@ -416,15 +433,7 @@ export async function generateAppIframeToken(
   // Auto-grant the app's own namespace (see SELF_GRANTS). The commons
   // (`yaar://storage/shared/`) is granted at the gate instead — `permissionsAllow` —
   // because the app *agent* reaches storage through a door that never sees a token.
-  if (appId) {
-    for (const grant of SELF_GRANTS) {
-      const held = permissions.some((p) => {
-        const uri = typeof p === 'string' ? p : p.uri;
-        return uri === grant || uri.startsWith(grant);
-      });
-      if (!held) permissions = [...permissions, grant];
-    }
-  }
+  if (appId) permissions = withSelfGrants(permissions);
 
   // The document this iframe was told to render, and any permissions a privileged
   // caller added on top, used to be folded in here. They are window-scoped authority,

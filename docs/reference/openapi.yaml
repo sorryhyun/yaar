@@ -182,6 +182,16 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/dev/check-permissions:
+    post:
+      summary: "Check verb/URI uses against a project's declared permissions"
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
   /api/dev/compile:
     post:
       summary: Compile a project
@@ -265,6 +275,16 @@ paths:
   /api/dev/git-restore:
     post:
       summary: Roll an app back to an earlier commit
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/type-at:
+    post:
+      summary: The type at one position in a project
       responses:
         '200':
           description: json

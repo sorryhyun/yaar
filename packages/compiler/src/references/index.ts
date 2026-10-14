@@ -1,6 +1,7 @@
 /**
  * `findReferences(sandbox, query)` — symbol references and callers for an app
- * sandbox, answered by the TypeScript language service.
+ * sandbox, answered by the TypeScript language service; `typeAt(sandbox, query)` —
+ * the hover text at one position, from the same service and the same warm program.
  *
  * The service runs in one long-lived Worker, never on the calling thread: building
  * a program is synchronous and takes seconds on a large app, and the caller is the
@@ -17,8 +18,13 @@ import { join } from 'path';
 import { getCompilerConfig } from '../config.js';
 import { loadTypeScript } from '../load-typescript.js';
 import { MODULE_ROOT } from '../paths.js';
-import type { FindReferencesQuery, FindReferencesResult } from './types.js';
-import type { WorkerRequest, WorkerResponse } from './worker.js';
+import type {
+  FindReferencesQuery,
+  FindReferencesResult,
+  TypeAtQuery,
+  TypeAtResult,
+} from './types.js';
+import type { WorkerQuery, WorkerRequest, WorkerResponse } from './worker.js';
 
 export type * from './types.js';
 
@@ -31,8 +37,11 @@ export interface FindReferencesOptions {
 const DEFAULT_TIMEOUT_MS = 60_000;
 const IDLE_MS = 5 * 60_000;
 
+type AnyResult = WorkerResponse['result'];
+type Failure = Extract<AnyResult, { success: false }>;
+
 interface Pending {
-  resolve: (result: FindReferencesResult) => void;
+  resolve: (result: AnyResult) => void;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -42,7 +51,7 @@ const pending = new Map<number, Pending>();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Settle everything in flight with `result` and drop the worker. */
-function failAll(result: FindReferencesResult): void {
+function failAll(result: Failure): void {
   for (const [id, p] of pending) {
     clearTimeout(p.timer);
     p.resolve(result);
@@ -96,13 +105,14 @@ function positiveInt(value: unknown): boolean {
 }
 
 /** Shape errors, answered before a worker is ever involved. */
-function validate(query: FindReferencesQuery): string | null {
+function validate(query: FindReferencesQuery | TypeAtQuery): string | null {
   if (typeof query.file !== 'string' || !query.file) return '"file" is required';
   if (query.symbol !== undefined && typeof query.symbol !== 'string') {
     return '"symbol" must be a string';
   }
   for (const key of ['line', 'column', 'maxResults'] as const) {
-    if (query[key] !== undefined && !positiveInt(query[key])) {
+    const value = (query as Record<string, unknown>)[key];
+    if (value !== undefined && !positiveInt(value)) {
       return `"${key}" must be a positive integer`;
     }
   }
@@ -118,14 +128,42 @@ export async function findReferences(
   query: FindReferencesQuery,
   options: FindReferencesOptions = {},
 ): Promise<FindReferencesResult> {
-  const invalid = validate(query);
+  return (await ask(sandboxPath, { op: 'references', query }, options)) as FindReferencesResult;
+}
+
+/**
+ * The type the checker reports at one position — `findReferences`' symbol resolution and
+ * warm program, answered with the hover text instead of the usages. No typecheck of the
+ * whole program runs, so this is the cheap way to ask "what is this" mid-edit.
+ */
+export async function typeAt(
+  sandboxPath: string,
+  query: TypeAtQuery,
+  options: FindReferencesOptions = {},
+): Promise<TypeAtResult> {
+  const picked: TypeAtQuery = {
+    file: query.file,
+    ...(query.symbol !== undefined ? { symbol: query.symbol } : {}),
+    ...(query.line !== undefined ? { line: query.line } : {}),
+    ...(query.column !== undefined ? { column: query.column } : {}),
+  };
+  return (await ask(sandboxPath, { op: 'typeAt', query: picked }, options)) as TypeAtResult;
+}
+
+async function ask(
+  sandboxPath: string,
+  request: WorkerQuery,
+  options: FindReferencesOptions,
+): Promise<AnyResult> {
+  const name = request.op === 'typeAt' ? 'typeAt' : 'findReferences';
+  const invalid = validate(request.query);
   if (invalid) return { success: false, kind: 'invalid', error: invalid };
 
   if (getCompilerConfig().isBundledExe || !(await loadTypeScript())) {
     return {
       success: false,
       kind: 'unavailable',
-      error: 'findReferences needs the TypeScript language service, which this build does not ship',
+      error: `${name} needs the TypeScript language service, which this build does not ship`,
     };
   }
 
@@ -135,22 +173,22 @@ export async function findReferences(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const id = nextId++;
   const target = getWorker();
-  return new Promise<FindReferencesResult>((resolve) => {
+  return new Promise<AnyResult>((resolve) => {
     const timer = setTimeout(() => {
       // The worker is synchronous inside a query, so a stuck one cannot be told to
       // stop — only terminated, which takes every other query in flight with it.
       failAll({
         success: false,
         kind: 'timeout',
-        error: `findReferences did not answer within ${Math.round(timeoutMs / 1000)}s`,
+        error: `${name} did not answer within ${Math.round(timeoutMs / 1000)}s`,
       });
     }, timeoutMs);
     pending.set(id, { resolve, timer });
     target.postMessage({
+      ...request,
       id,
       root: sandboxPath,
       bundles: options.bundles ?? [],
-      query,
     } satisfies WorkerRequest);
   });
 }

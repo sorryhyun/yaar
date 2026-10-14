@@ -1624,6 +1624,52 @@ interface YaarDevReferencesResult {
   error?: string;
 }
 
+interface YaarDevTypeAtQuery {
+  /** Project-relative file — `src/main.ts`. */
+  file: string;
+  /** A declaration in `file`, or with `line` the first occurrence of that name on the line. */
+  symbol?: string;
+  /** 1-based. */
+  line?: number;
+  /** 1-based. Needs `line`. */
+  column?: number;
+}
+
+interface YaarDevTypeAtResult {
+  success: boolean;
+  /** The identifier the position landed on. */
+  symbol?: string;
+  at?: YaarDevSourceLocation;
+  /** Other declarations the same `symbol` matched — pass `line` to pick one. */
+  ambiguous?: YaarDevSourceLocation[];
+  /**
+   * On success the checker's element kind (`const`, `function`, `alias`, …); on failure
+   * why: `invalid`, `not-found`, `unavailable`, `timeout`, `failed`.
+   */
+  kind?: string;
+  /** The declaration as a hover prints it: `const rows: Accessor<Row[]>`. Clipped past ~4KB. */
+  type?: string;
+  /** The JSDoc summary, when there is one. */
+  documentation?: string;
+  /** JSDoc tags as `name: text`. */
+  tags?: string[];
+  /** Where it is declared; a file outside the project gets a stable label. */
+  definition?: YaarDevSourceLocation;
+  truncated?: true;
+  error?: string;
+}
+
+interface YaarDevPermissionCheck {
+  success: boolean;
+  /** The app id `self` resolved to — app.json's `appId`, or the preview id. */
+  appId?: string;
+  /** One per use, in order: `allowed`, or `error` for a use that was not well-formed. */
+  results?: { verb: string; uri: string; allowed?: boolean; error?: string }[];
+  /** Entries the manifest reading dropped or narrowed — a grant that is not the one written. */
+  problems?: string[];
+  error?: string;
+}
+
 interface YaarDevDeployOpts {
   appId: string;
   name?: string;
@@ -1735,6 +1781,11 @@ interface YaarDev {
   compileTests(path: string, opts?: { title?: string }): Promise<YaarDevCompileTestsResult>;
   typecheck(path: string): Promise<YaarDevTypecheckResult>;
   findReferences(path: string, query: YaarDevReferencesQuery): Promise<YaarDevReferencesResult>;
+  typeAt(path: string, query: YaarDevTypeAtQuery): Promise<YaarDevTypeAtResult>;
+  checkPermissions(
+    path: string,
+    uses: { verb: string; uri: string }[],
+  ): Promise<YaarDevPermissionCheck>;
   format(path: string, source: string): Promise<YaarDevFormatResult>;
   deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
   bundledLibraries(): Promise<string[]>;
@@ -2912,6 +2963,21 @@ declare module '@bundled/yaar-dev' {
     path: string,
     query: YaarDevReferencesQuery,
   ): Promise<YaarDevReferencesResult>;
+  /**
+   * The type at one position — the hover text an editor shows — from the same language
+   * service and warm program as `findReferences`, with no typecheck of the whole project.
+   * Named the same way: `symbol`, `line` + `column`, or `line` + `symbol`.
+   */
+  export function typeAt(path: string, query: YaarDevTypeAtQuery): Promise<YaarDevTypeAtResult>;
+  /**
+   * Which of these verb/URI uses the project's app.json does not grant, decided by the
+   * server's own permission matching (the check a 403 comes from), with the automatic
+   * grants every app holds applied. Finding the uses in source is the caller's job.
+   */
+  export function checkPermissions(
+    path: string,
+    uses: { verb: string; uri: string }[],
+  ): Promise<YaarDevPermissionCheck>;
   /**
    * Format source text with the host's prettier, in the repo's own style.
    *

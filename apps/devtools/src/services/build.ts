@@ -88,9 +88,13 @@ export async function compile(): Promise<void> {
   }
 }
 
-export async function typecheck(): Promise<void> {
+/**
+ * Type check the active project and record the verdict. Answers why it could not run
+ * (and leaves the verdict `unknown`), or null when it ran — whatever it found.
+ */
+export async function typecheck(): Promise<string | null> {
   const proj = activeProject();
-  if (!proj) return;
+  if (!proj) return 'No active project. Open or create one first.';
   setStatusText('Type checking...');
   try {
     const result = await devTypecheck(projectPath(proj.id));
@@ -113,12 +117,14 @@ export async function typecheck(): Promise<void> {
       });
       setStatusText(`${parsed.length || raw.length} type error(s)`);
     }
+    return null;
   } catch (err) {
     // A typecheck that never ran leaves the previous verdict standing, which would
     // let a stale `clean` outlive the code it described. It is unknown, and
     // `compileState` reports that rather than guessing either way.
     setTypecheckState('unknown');
     setStatusText(`Typecheck error: ${errMsg(err)}`);
+    return errMsg(err);
   }
 }
 

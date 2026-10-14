@@ -55,6 +55,37 @@ export interface CallerHit {
   calls: { line: number; column: number }[];
 }
 
+/**
+ * `typeAt` — what the checker says sits at one position: the hover text an editor would
+ * show. Named the way `findReferences` names a symbol, minus the result-shaping options.
+ */
+export type TypeAtQuery = Pick<FindReferencesQuery, 'file' | 'symbol' | 'line' | 'column'>;
+
+export type TypeAtResult =
+  | {
+      success: true;
+      /** The identifier the position landed on. */
+      symbol: string;
+      at: SourceLocation;
+      /** Other declarations the same `symbol` matched — pass `line` to pick one. */
+      ambiguous?: SourceLocation[];
+      /** `const`, `function`, `method`, `property`, `alias`, … — the checker's element kind. */
+      kind: string;
+      /**
+       * The declaration as the checker prints it: `const rows: Accessor<Row[]>`,
+       * `function save(doc: Doc): Promise<void>`. Clipped past a few KB (`truncated`).
+       */
+      type: string;
+      /** The JSDoc summary, when the declaration carries one. */
+      documentation?: string;
+      /** JSDoc tags (`@param`, `@deprecated`, …) as `name: text`. */
+      tags?: string[];
+      /** Where the symbol is declared — a file outside the project gets a stable label. */
+      definition?: SourceLocation;
+      truncated?: true;
+    }
+  | { success: false; kind: FindReferencesFailureKind; error: string };
+
 export type FindReferencesFailureKind =
   /** No TypeScript in this build (the bundled exe). */
   | 'unavailable'

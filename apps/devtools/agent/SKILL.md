@@ -9,4 +9,4 @@ The IDE for YAAR apps: its agent creates, edits, compiles, debugs and deploys th
 
 ## Reading app source
 
-App source is not reachable through `yaar://storage/` or `yaar://apps/`; it has to be cloned first. Devtools clones one app as an editable project. The `search` app's `clone-app` copies source into storage read-only and accepts a glob, so it suits questions spanning many apps.
+App source is not reachable through `yaar://storage/` or `yaar://apps/`. Devtools reads one app's source in place (`readAppSource`) or clones it as an editable project. The `search` app's `clone-app` copies source into storage read-only and accepts a glob, so it suits questions spanning many apps.

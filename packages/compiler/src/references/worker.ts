@@ -1,5 +1,5 @@
 /**
- * Worker entry for `findReferences` — see `index.ts` for why it is a worker.
+ * Worker entry for `findReferences` and `typeAt` — see `index.ts` for why it is a worker.
  *
  * Keeps a small LRU of warm `SandboxReferences`, keyed by sandbox and grants: a
  * follow-up query on the same app pays for the files that changed, not for a
@@ -10,20 +10,29 @@
 import { loadTypeScript } from '../load-typescript.js';
 import { readThreeRenderer } from '../bundled/three-renderer.js';
 import { SandboxReferences } from './service.js';
-import type { FindReferencesQuery, FindReferencesResult } from './types.js';
+import type {
+  FindReferencesQuery,
+  FindReferencesResult,
+  TypeAtQuery,
+  TypeAtResult,
+} from './types.js';
 
 declare const self: Worker;
 
-export interface WorkerRequest {
+/** One question about a sandbox. Both ops share the warm program for that sandbox. */
+export type WorkerQuery =
+  | { op: 'references'; query: FindReferencesQuery }
+  | { op: 'typeAt'; query: TypeAtQuery };
+
+export type WorkerRequest = WorkerQuery & {
   id: number;
   root: string;
   bundles: string[];
-  query: FindReferencesQuery;
-}
+};
 
 export interface WorkerResponse {
   id: number;
-  result: FindReferencesResult;
+  result: FindReferencesResult | TypeAtResult;
 }
 
 const MAX_WARM = 2;
@@ -54,13 +63,16 @@ async function serviceFor(root: string, bundles: string[]): Promise<SandboxRefer
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
-  const { id, root, bundles, query } = event.data;
-  let result: FindReferencesResult;
+  const request = event.data;
+  const { id, root, bundles } = request;
+  let result: WorkerResponse['result'];
   try {
     const service = await serviceFor(root, bundles);
-    result = service
-      ? service.find(query)
-      : { success: false, kind: 'unavailable', error: 'TypeScript is not available in this build' };
+    result = !service
+      ? { success: false, kind: 'unavailable', error: 'TypeScript is not available in this build' }
+      : request.op === 'typeAt'
+        ? service.typeAt(request.query)
+        : service.find(request.query);
   } catch (err) {
     result = {
       success: false,

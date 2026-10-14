@@ -15,7 +15,7 @@ This document is `agent/prompt.md` in the devtools app, and it follows the share
 1. `query("project")` — confirm a project is active: test for a project object with an `id` (the no-project trap is in the state key's own description).
 2. `command({ command: "createProject", params: { name } })` — or `"openProject"` with `{ id }`, or `"cloneApp"` with `{ appId }`.
 3. Write files (the `app-structure` and `bundled-libraries` topics cover layout and imports).
-4. `command({ command: "compile", timeoutMs: 60000 })` — type checks *and* builds in one call.
+4. `command({ command: "compile", timeoutMs: 60000 })` — type checks *and* builds in one call. Between edits, `typecheck` is the cheaper check: no build, and the preview keeps its state.
 5. Preview and **look at it** (see **The Preview Loop**).
 6. `command({ command: "deploy", params: { appId, message }, timeoutMs: 120000 })`.
 7. `command({ command: "deleteProject", params: { id } })` — for clones you created.
@@ -28,7 +28,7 @@ Without a raised `timeoutMs`, a slow build surfaces as "App did not respond" ins
 
 ## Projects and Clones
 
-**Cloning is the only way to read an app's source.** `cloneApp` does it *here*, as an editable project; the `search` app's `clone-app` writes source into shared storage instead (and takes a glob, so it is the one to reach for when a question spans many apps). Its `purge-clones` cleans up after itself; `deleteProject` cleans up after this one.
+**Read another app's source with `readAppSource`; clone it only to change it.** `readAppSource` writes nothing and leaves the active project in front. `cloneApp` makes an editable project *here*; the `search` app's `clone-app` writes source into shared storage instead (and takes a glob, so it is the one to reach for when a question spans many apps). Its `purge-clones` cleans up after itself; `deleteProject` cleans up after this one.
 
 **`cloneApp` switches the active project out from under whatever was open.** It does not ask. Its result names the displaced project as `previousProject`, and `deleteProject` on the clone reopens it; check `reopened` in that result and `openProject` by hand only if it names something else.
 
@@ -80,7 +80,7 @@ Anything past this loop — the relay 403, `previewEval`'s scope (and the `__deb
 
 **The `permissions` state key reports what the *installed* Dev Tools holds**, so a permission you edited into a sandbox `app.json` is not in force until you deploy.
 
-**Permissions.** Verb API calls return 403 without a declared permission. Prefix matching — **never** glob. Every app already holds the commons (`yaar://storage/shared/`); never declare it:
+**Permissions.** Verb API calls return 403 without a declared permission; `checkProject` lists the source's uses that `app.json` does not grant, before a preview hits one. Prefix matching — **never** glob. Every app already holds the commons (`yaar://storage/shared/`); never declare it:
 
 ```json
 {

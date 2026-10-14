@@ -3,8 +3,12 @@ import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { initCompiler } from '../config.js';
-import { disposeReferencesWorker, findReferences } from '../references/index.js';
-import type { FindReferencesQuery, FindReferencesResult } from '../references/types.js';
+import { disposeReferencesWorker, findReferences, typeAt } from '../references/index.js';
+import type {
+  FindReferencesQuery,
+  FindReferencesResult,
+  TypeAtQuery,
+} from '../references/types.js';
 
 setDefaultTimeout(30_000);
 
@@ -248,5 +252,55 @@ describe('findReferences', () => {
     } finally {
       initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: false });
     }
+  });
+});
+
+describe('typeAt', () => {
+  const at = async (query: TypeAtQuery) => {
+    const result = await typeAt(sandbox, query);
+    if (!result.success) throw new Error(`${result.kind}: ${result.error}`);
+    return result;
+  };
+
+  test('prints the declaration a hover would, by name or by position', async () => {
+    const byName = await at({ file: 'src/model.ts', symbol: 'setBlocks' });
+    expect(byName.kind).toBe('function');
+    expect(byName.type).toBe('function setBlocks(blocks: string[]): number');
+
+    // `doc` on line 6 of MAIN: `const doc = new Doc();`, column 7.
+    const byPosition = await at({ file: 'src/main.ts', line: 6, column: 7 });
+    expect(byPosition.symbol).toBe('doc');
+    // The checker names the class by the local import alias, as a hover does.
+    expect(byPosition.type).toBe('const doc: Doc');
+  });
+
+  test('carries JSDoc and points an imported name at what it imports', async () => {
+    const file = join(sandbox, 'src', 'documented.ts');
+    await Bun.write(
+      file,
+      `import { setCount } from './model';\n\n/**\n * Reset the counter.\n * @deprecated use bump\n */\nexport function reset() {\n  setCount(0);\n}\n`,
+    );
+    try {
+      const doc = await at({ file: 'src/documented.ts', symbol: 'reset' });
+      expect(doc.documentation).toBe('Reset the counter.');
+      expect(doc.tags).toEqual(['deprecated: use bump']);
+
+      const imported = await at({ file: 'src/documented.ts', line: 1, symbol: 'setCount' });
+      expect(imported.kind).toBe('alias');
+      expect(imported.type).toContain('import setCount');
+      expect(imported.definition).toMatchObject({ file: 'src/model.ts' });
+    } finally {
+      await rm(file);
+    }
+  });
+
+  test('refuses by kind, as findReferences does', async () => {
+    const kindOf = async (query: TypeAtQuery) => {
+      const result = await typeAt(sandbox, query);
+      return result.success ? 'success' : result.kind;
+    };
+    expect(await kindOf({ file: 'src/main.ts' })).toBe('invalid');
+    expect(await kindOf({ file: 'src/missing.ts', symbol: 'x' })).toBe('not-found');
+    expect(await kindOf({ file: 'src/main.ts', line: 999, column: 1 })).toBe('invalid');
   });
 });

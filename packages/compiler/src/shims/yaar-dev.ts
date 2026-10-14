@@ -114,6 +114,37 @@ export function findReferences(
   });
 }
 
+/**
+ * The type at one position, from the same language service and warm program as
+ * `findReferences` — the hover text an editor shows, with no typecheck of the whole
+ * project. Named the same way: `symbol`, `line` + `column`, or `line` + `symbol`.
+ */
+export function typeAt(
+  path: string,
+  query: { file: string; symbol?: string; line?: number; column?: number },
+) {
+  // The full result shape is YaarDevTypeAtResult in bundled-types/index.d.ts.
+  return devPost<{ success: boolean; kind?: string; error?: string }>('type-at', {
+    path,
+    ...query,
+  });
+}
+
+/**
+ * Which of these verb/URI uses the project's app.json does not grant, decided by the
+ * server's own permission matching (the check a 403 comes from), with the automatic
+ * grants every app holds applied. The uses are the caller's to find.
+ */
+export function checkPermissions(path: string, uses: { verb: string; uri: string }[]) {
+  return devPost<{
+    success: boolean;
+    appId?: string;
+    results?: { verb: string; uri: string; allowed?: boolean; error?: string }[];
+    problems?: string[];
+    error?: string;
+  }>('check-permissions', { path, uses });
+}
+
 export function deploy(
   path: string,
   opts: {

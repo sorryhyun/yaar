@@ -7,6 +7,8 @@
  * POST /api/dev/compile-tests — build a project's src/**\/*.test.ts into dist/test.html
  * POST /api/dev/typecheck     — typecheck a project directory
  * POST /api/dev/find-references — symbol references and callers in a project (TS language service)
+ * POST /api/dev/type-at       — the type at one position in a project (TS language service)
+ * POST /api/dev/check-permissions — which verb/URI uses a project's app.json does not grant
  * POST /api/dev/deploy        — deploy a project as an installed app
  * POST /api/dev/format        — format one file's text (text in, text out; no disk)
  * POST /api/dev/git-history   — list an app's version history
@@ -18,12 +20,20 @@
  * Source paths are resolved relative to the calling app's storage directory.
  */
 
-import { join } from 'path';
+import { basename, join } from 'path';
 import { stat } from 'fs/promises';
 import { getStorageDir } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
-import { requireBundledApp, requireHost, resolvePrincipal, type AppPrincipal } from '../access.js';
-import { generateAppIframeToken } from '../iframe-tokens.js';
+import {
+  permissionsAllow,
+  requireBundledApp,
+  requireHost,
+  resolvePrincipal,
+  type AppPrincipal,
+} from '../access.js';
+import { ALL_VERBS } from '../uri-match.js';
+import type { Verb } from '../../handlers/uri-registry.js';
+import { generateAppIframeToken, withSelfGrants } from '../iframe-tokens.js';
 import { appHtmlCsp } from '../csp.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
 import { resolveAppDir, resolveAppSource } from '../../features/apps/roots.js';
@@ -49,6 +59,18 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     path: '/api/dev/find-references',
     response: 'json',
     description: 'Find symbol references and callers in a project',
+  },
+  {
+    method: 'POST',
+    path: '/api/dev/type-at',
+    response: 'json',
+    description: 'The type at one position in a project',
+  },
+  {
+    method: 'POST',
+    path: '/api/dev/check-permissions',
+    response: 'json',
+    description: "Check verb/URI uses against a project's declared permissions",
   },
   { method: 'POST', path: '/api/dev/deploy', response: 'json', description: 'Deploy a project' },
   {
@@ -89,6 +111,9 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
 ];
 
+/** One check-permissions request: more uses than any app's source plausibly holds. */
+const MAX_PERMISSION_USES = 2_000;
+
 /** App ids are directory names. Keep this to what a directory name may be. */
 const APP_ID = /^[A-Za-z0-9._-]+$/;
 
@@ -97,6 +122,8 @@ const PATH_ACTIONS = [
   'compile-tests',
   'typecheck',
   'find-references',
+  'type-at',
+  'check-permissions',
   'deploy',
 ] as const;
 const GIT_ACTIONS = ['git-history', 'git-diff', 'git-restore', 'git-checkpoint'] as const;
@@ -469,6 +496,55 @@ async function dispatchDevAction(
         { bundles },
       );
       return jsonResponse(result);
+    }
+
+    case 'type-at': {
+      const { typeAt } = await import('@yaar/compiler');
+      const result = await typeAt(
+        absolutePath,
+        {
+          file: body.file as string,
+          symbol: body.symbol as string | undefined,
+          line: body.line as number | undefined,
+          column: body.column as number | undefined,
+        },
+        { bundles },
+      );
+      return jsonResponse(result);
+    }
+
+    case 'check-permissions': {
+      // The caller finds the uses (it has the source and the scanner); the decision is
+      // made here, by the same `permissionsAllow` a 403 comes from. A second copy of the
+      // matching on the app side would disagree with the door the first time either moved.
+      const uses = body.uses;
+      if (!Array.isArray(uses)) return errorResponse('"uses" must be an array', 400);
+      if (uses.length > MAX_PERMISSION_USES) {
+        return errorResponse(`"uses" is capped at ${MAX_PERMISSION_USES} entries`, 400);
+      }
+      const manifest = await readManifestFile(absolutePath);
+      const permissions = withSelfGrants(manifest?.permissions ?? []);
+      // The id the app will deploy as, for `self` and the app's own storage; a project
+      // that names none is checked as the preview it runs as.
+      const appId = manifest?.appId || `preview--${basename(absolutePath)}`;
+      const results = uses.map((use) => {
+        const { verb, uri } = (use ?? {}) as { verb?: unknown; uri?: unknown };
+        if (typeof uri !== 'string' || !uri.startsWith('yaar://')) {
+          return { verb, uri, error: 'uri must be a yaar:// string' };
+        }
+        if (typeof verb !== 'string' || !(ALL_VERBS as readonly string[]).includes(verb)) {
+          return { verb, uri, error: `verb must be one of ${ALL_VERBS.join(', ')}` };
+        }
+        return { verb, uri, allowed: permissionsAllow(permissions, appId, uri, verb as Verb) };
+      });
+      return jsonResponse({
+        success: true,
+        appId,
+        results,
+        // What the manifest reading dropped or narrowed — a grant written in a shape the
+        // server does not honour is a missing grant that reads as a present one.
+        ...(manifest?.problems.length ? { problems: manifest.problems } : {}),
+      });
     }
 
     case 'deploy': {

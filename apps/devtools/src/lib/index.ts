@@ -18,3 +18,5 @@ export * from './preview-shape';
 export * from './audio-analysis';
 export * from './test-report';
 export * from './clone-summary';
+export * from './app-source';
+export * from './permission-uses';

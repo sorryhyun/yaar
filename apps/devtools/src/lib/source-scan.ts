@@ -22,6 +22,13 @@ export interface ScannedSource {
   comments: { text: string; line: number }[];
   /** The text of every string literal and template chunk, in source order. */
   strings: string[];
+  /**
+   * `scanJs` only: the source with every comment blanked to spaces, newlines kept — so an
+   * offset into it is an offset into the source, and a match in it is never in a comment.
+   */
+  masked?: string;
+  /** `scanJs` only: `[start, end)` offsets of every string literal and template chunk. */
+  stringSpans?: [number, number][];
 }
 
 const REGEX_PRECEDERS = '(,=:[!&|?{};+-*%<>~^';
@@ -52,6 +59,8 @@ function countNewlines(s: string): number {
 export function scanJs(src: string): ScannedSource {
   const comments: ScannedSource['comments'] = [];
   const strings: string[] = [];
+  const commentSpans: [number, number][] = [];
+  const stringSpans: [number, number][] = [];
   let code = '';
   let pendingWs = '';
   let line = 1;
@@ -84,6 +93,7 @@ export function scanJs(src: string): ScannedSource {
       if (ch === '`' || (ch === '$' && src[i + 1] === '{')) {
         const text = src.slice(start, i);
         strings.push(text);
+        stringSpans.push([start, i]);
         line += countNewlines(text);
         if (ch === '`') {
           emit(text + '`');
@@ -103,6 +113,7 @@ export function scanJs(src: string): ScannedSource {
     }
     const rest = src.slice(start);
     strings.push(rest);
+    stringSpans.push([start, n]);
     emit(rest);
   };
 
@@ -127,6 +138,7 @@ export function scanJs(src: string): ScannedSource {
       let end = src.indexOf('\n', i);
       if (end < 0) end = n;
       comments.push({ text: src.slice(i + 2, end), line });
+      commentSpans.push([i, end]);
       i = end;
       continue;
     }
@@ -137,6 +149,7 @@ export function scanJs(src: string): ScannedSource {
       const lines = countNewlines(text);
       line += lines;
       space(lines > 0);
+      commentSpans.push([i, close < 0 ? n : close + 2]);
       i = close < 0 ? n : close + 2;
       continue;
     }
@@ -147,6 +160,7 @@ export function scanJs(src: string): ScannedSource {
       i = Math.min(i + 1, n);
       const literal = src.slice(start, i);
       strings.push(literal.slice(1, -1));
+      stringSpans.push([start, i]);
       line += countNewlines(literal);
       emit(literal);
       prevSig = c;
@@ -209,7 +223,14 @@ export function scanJs(src: string): ScannedSource {
     word = '';
     i += 1;
   }
-  return { code, comments, strings };
+  let masked = '';
+  let from = 0;
+  for (const [start, end] of commentSpans) {
+    masked += src.slice(from, start) + src.slice(start, end).replace(/[^\n]/g, ' ');
+    from = end;
+  }
+  masked += src.slice(from);
+  return { code, comments, strings, masked, stringSpans };
 }
 
 /** Scan CSS: block comments and quoted strings; everything else is code. */

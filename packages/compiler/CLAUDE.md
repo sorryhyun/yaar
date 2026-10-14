@@ -20,10 +20,10 @@ src/
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
 ├── sandbox-tsconfig.ts    # sandboxCompilerOptions + sliceBundledTypes — the one TS view of a sandbox, shared by typecheck and references
 ├── references/
-│   ├── index.ts           # findReferences() host — one idle-reaped Worker, per-query timeout, `unavailable` in exe
+│   ├── index.ts           # findReferences() / typeAt() host — one idle-reaped Worker, per-query timeout, `unavailable` in exe
 │   ├── worker.ts          # Worker entry — LRU of 2 warm SandboxReferences
-│   ├── service.ts         # LanguageService over a sandbox: symbol resolution, references, callers (call hierarchy, or derived)
-│   └── types.ts           # FindReferencesQuery / FindReferencesResult
+│   ├── service.ts         # LanguageService over a sandbox: symbol resolution, references, callers (call hierarchy, or derived), quick info
+│   └── types.ts           # FindReferencesQuery / FindReferencesResult, TypeAtQuery / TypeAtResult
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── paths.ts               # MODULE_ROOT / PACKAGE_ROOT / SHIMS_DIR — the one src-vs-dist derivation
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
@@ -78,7 +78,7 @@ src/
     │   ├── protocol-context.ts # createProtocolContext — runtime context for statically-declared handlers
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createSharedSignal, createCollapsiblePanel, createAutosave
-    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, findReferences, deploy, per-app git history (requires bundles: ["yaar-dev"])
+    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, findReferences, typeAt, checkPermissions, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── yaar-media.ts      # Gated SDK: mediaUrl() streaming via /api/media-proxy + yt-dlp audio download (requires bundles: ["yaar-media"])
@@ -298,7 +298,7 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 
 **`findReferences(path, query, { bundles })`** — symbol references and callers, from a TypeScript
 LanguageService built on `sandbox-tsconfig.ts`, the same options and grant-sliced declarations
-typecheck hands tsc, so both describe the same program. Four rules:
+typecheck hands tsc, so both describe the same program. Five rules:
 
 - **Never on the calling thread.** Building a program is synchronous and takes about a second per
   10k lines; the caller is the server's event loop. It runs in one Worker that keeps up to two
@@ -309,6 +309,10 @@ typecheck hands tsc, so both describe the same program. Four rules:
   enclosing function (`callersFrom` says which). Call hierarchy cannot start from a variable, and a
   signal setter is one. A query from the renamed end of `export { a as b }` also re-queries from the
   original, because references do not cross a rename backwards.
+- **`typeAt` is the same service, not a second one.** It resolves `symbol`/`line`/`column`
+  exactly as `findReferences` does and answers `getQuickInfoAtPosition` — the hover text —
+  from the warm program, so "what type is this" costs no typecheck. The worker request
+  carries an `op`; both ops share the LRU.
 - **Production references before test files** (`*.test.ts`, `test/`, `__tests__/`), with
   `testReferences` counting the latter, so a `maxResults` cap clips tests first; `excludeTests`
   drops them.

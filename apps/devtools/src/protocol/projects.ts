@@ -1,6 +1,6 @@
 import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import { activeProject, files } from '../core';
-import { createProject, openProject, deleteProject, cloneApp } from '../services';
+import { createProject, openProject, deleteProject, cloneApp, readAppSource } from '../services';
 import { groupByFile, markdownOutline, summarizeFiles } from '../lib';
 
 export const projectCommands = {
@@ -71,7 +71,8 @@ export const projectCommands = {
   }),
   cloneApp: defineAppCommand({
     description:
-      'Clone an installed app source into a new project and open it. The copy is a sandbox: ' +
+      'Clone an installed app source into a new project and open it — to change it; ' +
+      'readAppSource only reads it. The copy is a sandbox: ' +
       'editing it changes nothing about the live app until you deploy. Answers with a map ' +
       'to read from, not the contents: `appId` (from the cloned app.json — the id deploy ' +
       'expects); `size` (file, line and byte totals, plus the five largest files); `tree` ' +
@@ -163,6 +164,44 @@ export const projectCommands = {
             }
           : {}),
       };
+    },
+  }),
+  readAppSource: defineAppCommand({
+    description:
+      "Read an installed app's source without cloning it: no project is created and the " +
+      'one in front stays in front. For looking at how another app does something; clone ' +
+      'only to change it. Three forms, by which params are given: no `path`/`pattern` — the ' +
+      'file list { path, lines } plus `protocol` (where each command and state key is ' +
+      "declared, by file and line); `path` — that file's text, optionally a " +
+      '`startLine`/`endLine` slice; `pattern` — regex hits { file, line, content } across ' +
+      'its text files, narrowed by `glob`, capped at 200 (`total` counts the rest). Reads ' +
+      'the installed copy, cached for a minute.',
+    params: {
+      type: 'object',
+      properties: {
+        appId: { type: 'string', description: 'Installed app id, e.g. "storage".' },
+        path: { type: 'string', description: 'App-relative file, e.g. "src/main.ts".' },
+        startLine: { type: 'number', description: 'With `path`: first line (1-based).' },
+        endLine: { type: 'number', description: 'With `path`: last line (inclusive).' },
+        pattern: { type: 'string', description: 'Regex to search for (not with `path`).' },
+        glob: { type: 'string', description: 'With `pattern`: file filter, e.g. "src/**/*.ts".' },
+      },
+      required: ['appId'],
+    },
+    replay: 'never',
+    run: async (p) => {
+      if (p.path !== undefined && p.pattern !== undefined) {
+        throw new AppCommandError('Pass `path` or `pattern`, not both.');
+      }
+      const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+      return await readAppSource({
+        appId: String(p.appId),
+        ...(p.path !== undefined ? { path: String(p.path) } : {}),
+        ...(num(p.startLine) !== undefined ? { startLine: num(p.startLine) } : {}),
+        ...(num(p.endLine) !== undefined ? { endLine: num(p.endLine) } : {}),
+        ...(p.pattern !== undefined ? { pattern: String(p.pattern) } : {}),
+        ...(p.glob !== undefined ? { glob: String(p.glob) } : {}),
+      });
     },
   }),
 };

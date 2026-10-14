@@ -1,4 +1,4 @@
-import { wait, defineAppCommand } from '@bundled/yaar';
+import { wait, defineAppCommand, AppCommandError } from '@bundled/yaar';
 import { diagnostics, bundleStatus, compileErrors, previewWindowId, staticProtocol } from '../core';
 import { resolveCompileStatus } from '../lib';
 import {
@@ -127,6 +127,29 @@ export const buildCommands = {
                 'agents. Run the manifest command for details.',
             }
           : {}),
+      };
+    },
+  }),
+  typecheck: defineAppCommand({
+    description:
+      'Type check the active project without bundling and without touching the preview — ' +
+      'the check to run after an edit, where `compile` also rebuilds and remounts the ' +
+      'preview (resetting its state). Records the verdict in `compileState.typecheck` as a ' +
+      'compile does. Returns { clean, errors, warnings, diagnostics: [{ file, line, column, ' +
+      'code, message, severity }] } with project-relative paths. Run `compile` when you ' +
+      'need the build or the preview to show the change.',
+    params: { type: 'object', properties: {} },
+    replay: 'never',
+    run: async () => {
+      const failed = await typecheck();
+      if (failed) throw new AppCommandError(`Typecheck did not run: ${failed}`);
+      const diags = [...diagnostics()];
+      const errors = diags.filter((d) => d.severity === 'error').length;
+      return {
+        clean: errors === 0,
+        errors,
+        warnings: diags.length - errors,
+        diagnostics: diags,
       };
     },
   }),
@@ -292,8 +315,13 @@ export const buildCommands = {
       'project; `css.unused` — classes defined in project CSS that no string in the source ' +
       'names; `css.unstyled` — classes put on elements (class=, className, classList) with ' +
       'no project CSS rule; `css.unknownSdk` — y-* classes the design tokens do not define, ' +
-      'which fail silently. Lexical and heuristic: a class built at runtime from parts, or a ' +
-      'path outside the project, can appear here, so read each before acting on it.',
+      'which fail silently; `permissions.missing` — yaar:// uses ({ verb, uri, file, line, ' +
+      'via }) that app.json does not grant, each a 403 at runtime, judged by the ' +
+      "server's own permission check (`httpFetch` and a cross-origin `fetch` count as " +
+      'invoke yaar://http; a URI built at runtime is not read); `permissions.problems` — ' +
+      'app.json entries the server does not honour as written. Lexical and heuristic: a ' +
+      'class built at runtime from parts, or a path outside the project, can appear here, ' +
+      'so read each before acting on it.',
     params: { type: 'object', properties: {} },
     replay: 'never',
     run: async () => await checkProject(),

@@ -1,6 +1,6 @@
 export {};
 import { AppCommandError, errMsg } from '@bundled/yaar';
-import { findReferences as devFindReferences } from '@bundled/yaar-dev';
+import { findReferences as devFindReferences, typeAt as devTypeAt } from '@bundled/yaar-dev';
 import { activeProject, setStatusText } from '../core';
 import { projectPath } from '../lib/paths';
 
@@ -41,5 +41,31 @@ export async function findReferences(
       c.caller.startsWith('/') ? { ...c, caller: '(top level)' } : c,
     );
   }
+  return rest;
+}
+
+export type TypeAtQuery = Parameters<typeof devTypeAt>[1];
+export type TypeAtResult = Awaited<ReturnType<typeof devTypeAt>>;
+
+/**
+ * The checker's hover text at one position in the active project — the same language
+ * service as `findReferences`, so it reads saved files and needs no compile. Throws with
+ * the server's `kind` on failure, for the same reason.
+ */
+export async function typeAt(query: TypeAtQuery): Promise<Omit<TypeAtResult, 'success'>> {
+  const proj = activeProject();
+  if (!proj) throw new AppCommandError('No active project. Open or create one first.');
+  let result: TypeAtResult;
+  try {
+    result = await devTypeAt(projectPath(proj.id), query);
+  } catch (err) {
+    throw new AppCommandError(`typeAt failed: ${errMsg(err)}`);
+  }
+  if (!result.success) {
+    throw new AppCommandError(
+      `typeAt ${result.kind ?? 'failed'}: ${result.error ?? 'unknown error'}`,
+    );
+  }
+  const { success: _ok, ...rest } = result;
   return rest;
 }

@@ -27,11 +27,15 @@ import type {
   ReferenceDefinition,
   ReferenceHit,
   SourceLocation,
+  TypeAtQuery,
+  TypeAtResult,
 } from './types.js';
 
 export const DEFAULT_MAX_RESULTS = 200;
 const MAX_RESULTS_CEILING = 2_000;
 const TEXT_CLIP = 200;
+/** A hover over a big object type prints all of it; past this it stops being read. */
+const TYPE_CLIP = 4_000;
 const TOP_LEVEL = '(top level)';
 
 /**
@@ -132,17 +136,16 @@ export class SandboxReferences {
     this.fileNames = [this.typesFile, ...sources];
   }
 
-  find(query: FindReferencesQuery): FindReferencesResult {
-    const { ts } = this;
+  /** The program and the query's file in it, after a refresh — or why there is neither. */
+  private openFile(
+    file: string,
+  ):
+    | { program: TS.Program; sourceFile: TS.SourceFile; absFile: string }
+    | { success: false; kind: 'invalid' | 'not-found'; error: string } {
     this.refresh();
-
-    const relFile = fwd(normalize(query.file)).replace(/^\.\//, '');
+    const relFile = fwd(normalize(file)).replace(/^\.\//, '');
     if (isAbsolute(relFile) || relFile.startsWith('../')) {
-      return {
-        success: false,
-        kind: 'invalid',
-        error: `"file" must be sandbox-relative: ${query.file}`,
-      };
+      return { success: false, kind: 'invalid', error: `"file" must be sandbox-relative: ${file}` };
     }
     const absFile = `${this.root}/${relFile}`;
     const program = this.service.getProgram();
@@ -154,6 +157,66 @@ export class SandboxReferences {
         error: `${relFile} is not in the project (sources are ${SANDBOX_INCLUDE.join(', ')})`,
       };
     }
+    return { program, sourceFile, absFile };
+  }
+
+  /**
+   * The checker's hover text at one position — the type an editor would show, without
+   * a typecheck of the whole program. Resolution is `find`'s, so a query that names a
+   * symbol for one names the same symbol for the other.
+   */
+  typeAt(query: TypeAtQuery): TypeAtResult {
+    const { ts } = this;
+    const opened = this.openFile(query.file);
+    if ('success' in opened) return opened;
+    const { sourceFile, absFile } = opened;
+
+    const resolved = this.resolvePosition(sourceFile, query);
+    if ('error' in resolved) return { success: false, kind: resolved.kind, error: resolved.error };
+    const { position, ambiguous } = resolved;
+    const at = this.location(sourceFile, position);
+
+    const info = this.service.getQuickInfoAtPosition(absFile, position);
+    if (!info) {
+      return {
+        success: false,
+        kind: 'not-found',
+        error: `No symbol at ${at.file}:${at.line}:${at.column}`,
+      };
+    }
+    let type = ts.displayPartsToString(info.displayParts);
+    const truncated = type.length > TYPE_CLIP;
+    if (truncated) type = `${type.slice(0, TYPE_CLIP)}…`;
+    const documentation = ts.displayPartsToString(info.documentation ?? []).trim();
+    const tags = (info.tags ?? []).map((t) => {
+      const text = ts.displayPartsToString(t.text ?? []).trim();
+      return text ? `${t.name}: ${text}` : t.name;
+    });
+
+    // The first non-alias definition, so an imported name points at what it imports.
+    const defs = this.service.getDefinitionAtPosition(absFile, position) ?? [];
+    const def = defs.find((d) => d.kind !== ts.ScriptElementKind.alias) ?? defs[0];
+    const defFile = def && this.service.getProgram()?.getSourceFile(def.fileName);
+
+    return {
+      success: true,
+      symbol: identifierAt(ts, sourceFile, position) ?? query.symbol ?? '',
+      at,
+      ...(ambiguous.length ? { ambiguous } : {}),
+      kind: info.kind,
+      type,
+      ...(documentation ? { documentation } : {}),
+      ...(tags.length ? { tags } : {}),
+      ...(def && defFile ? { definition: this.location(defFile, def.textSpan.start) } : {}),
+      ...(truncated ? { truncated: true as const } : {}),
+    };
+  }
+
+  find(query: FindReferencesQuery): FindReferencesResult {
+    const { ts } = this;
+    const opened = this.openFile(query.file);
+    if ('success' in opened) return opened;
+    const { program, sourceFile, absFile } = opened;
 
     const resolved = this.resolvePosition(sourceFile, query);
     if ('error' in resolved) return { success: false, kind: resolved.kind, error: resolved.error };
@@ -333,7 +396,7 @@ export class SandboxReferences {
 
   private resolvePosition(
     file: TS.SourceFile,
-    query: FindReferencesQuery,
+    query: TypeAtQuery,
   ):
     | { position: number; ambiguous: SourceLocation[] }
     | { kind: 'invalid' | 'not-found'; error: string } {

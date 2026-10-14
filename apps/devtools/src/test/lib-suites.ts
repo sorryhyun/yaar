@@ -58,6 +58,11 @@ import {
   markdownSection,
   summarizeFiles,
   groupByFile,
+  countLines,
+  sliceLines,
+  searchSources,
+  verbUsesIn,
+  collectVerbUses,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -248,7 +253,14 @@ const scaffold = suite('scaffold', {
 const diagnosticsSuite = suite('parse-diagnostics', {
   'a tsc error line becomes a structured diagnostic'() {
     eq(parseDiagnostics("src/main.ts(12,5): error TS2304: Cannot find name 'x'."), [
-      { file: 'src/main.ts', line: 12, message: "Cannot find name 'x'.", severity: 'error' },
+      {
+        file: 'src/main.ts',
+        line: 12,
+        column: 5,
+        code: 'TS2304',
+        message: "Cannot find name 'x'.",
+        severity: 'error',
+      },
     ]);
   },
 
@@ -1206,6 +1218,115 @@ const cloneSummary = suite('clone-summary', {
   },
 });
 
+const appSource = suite('app-source', {
+  'countLines counts a last line without a newline, and not a trailing newline'() {
+    eq(countLines(''), 0);
+    eq(countLines('a'), 1);
+    eq(countLines('a\nb\n'), 2);
+    eq(countLines('a\nb'), 2);
+  },
+
+  'sliceLines is 1-based, inclusive, and clamped to the file'() {
+    eq(sliceLines('a\nb\nc\n', 2, 3), { content: 'b\nc', from: 2, to: 3 });
+    eq(sliceLines('a\nb\nc', 0, 99), { content: 'a\nb\nc', from: 1, to: 3 });
+    eq(sliceLines('a\nb\nc', 3), { content: 'c', from: 3, to: 3 });
+  },
+
+  'searchSources skips binary files, honours the glob and counts past the cap'() {
+    const files = [
+      { path: 'src/b.ts', content: 'x\nneedle\nneedle again' },
+      { path: 'src/a.ts', content: 'needle' },
+      { path: 'docs/n.md', content: 'needle' },
+      { path: 'src/img.png', content: 'needle', encoding: 'base64' as const },
+    ];
+    const all = searchSources(files, 'needle', 'src/**/*.ts');
+    eq(
+      all.matches.map((m) => `${m.file}:${m.line}`),
+      ['src/a.ts:1', 'src/b.ts:2', 'src/b.ts:3'],
+    );
+    eq(all.total, 3);
+    const capped = searchSources(files, 'needle', undefined, 2);
+    eq(capped.matches.length, 2);
+    eq(capped.total, 4, 'the cap clips the list, not the count');
+  },
+});
+
+const permissionUses = suite('permission-uses', {
+  'reads literal URIs from the verb calls, with the permission each needs'() {
+    const src = [
+      "import { read, invoke, del, subscribe } from '@bundled/yaar';",
+      "await read<Doc>('yaar://storage/files/a.md', { lines: '1-2' });",
+      "await invoke('yaar://config/settings', { action: 'set' });",
+      "await del('yaar://storage/files/b.md');",
+      "await subscribe('yaar://storage/files/', () => {});",
+    ].join('\n');
+    eq(
+      verbUsesIn('src/main.ts', src).map((u) => `${u.line} ${u.verb} ${u.uri}`),
+      [
+        '2 read yaar://storage/files/a.md',
+        '3 invoke yaar://config/settings',
+        '4 delete yaar://storage/files/b.md',
+        '5 read yaar://storage/files/',
+      ],
+    );
+  },
+
+  'follows a const in the same file, and skips a URI built at runtime'() {
+    const src = [
+      "const SETTINGS: string = 'yaar://config/settings' as const;",
+      'await read(SETTINGS);',
+      'await list(`yaar://windows/${id}`);',
+    ].join('\n');
+    eq(
+      verbUsesIn('src/a.ts', src).map((u) => `${u.verb} ${u.uri}`),
+      ['read yaar://config/settings'],
+    );
+  },
+
+  'ignores comments and text inside strings, and keeps true line numbers'() {
+    const src = [
+      "// read('yaar://commented')",
+      '/* invoke(',
+      "   'yaar://block') */",
+      '',
+      '',
+      'const s = "read(\'yaar://in/string\')";',
+      "await list('yaar://storage/');",
+    ].join('\n');
+    eq(
+      verbUsesIn('src/a.ts', src).map((u) => `${u.line} ${u.uri}`),
+      ['7 yaar://storage/'],
+    );
+  },
+
+  'the HTTP door: httpFetch and a cross-origin fetch, not a relative URL'() {
+    const src = [
+      "await httpFetch('https://api.example.com/x');",
+      "await httpFetch('/api/local');",
+      'await httpFetch(url);',
+      "await fetch('https://example.com');",
+      "await fetch('/same-origin');",
+    ].join('\n');
+    eq(
+      verbUsesIn('src/a.ts', src).map((u) => `${u.line} ${u.via}`),
+      ['1 httpFetch', '3 httpFetch', '4 fetch'],
+    );
+    eq(verbUsesIn('src/a.ts', src)[0].uri, 'yaar://http');
+  },
+
+  'collectVerbUses asks about each verb/URI pair once'() {
+    const { uses, distinct } = collectVerbUses([
+      { path: 'a.ts', text: "read('yaar://x/');\nread('yaar://x/');" },
+      { path: 'b.ts', text: "read('yaar://x/');\nlist('yaar://x/');" },
+    ]);
+    eq(uses.length, 4);
+    eq(distinct, [
+      { verb: 'read', uri: 'yaar://x/' },
+      { verb: 'list', uri: 'yaar://x/' },
+    ]);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -1224,4 +1345,6 @@ export const libSuites: Suite[] = [
   audioAnalysis,
   testReport,
   cloneSummary,
+  appSource,
+  permissionUses,
 ];

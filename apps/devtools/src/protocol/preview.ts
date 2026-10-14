@@ -124,6 +124,9 @@ export const previewCommands = {
   previewEval: defineAppCommand({
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
+      'TypeScript syntax (`as`, `!`, annotations) is stripped first, and code with a ' +
+      'top-level `await` runs in an async wrapper that answers its last expression — where ' +
+      'a `const` stays local to that call rather than visible to the next eval. ' +
       'Module scope is not on the global: what the app declares in `defineApp({ debug })` is ' +
       'reachable as `__debug` (preview only, never deployed). ' +
       'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +

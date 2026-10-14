@@ -1,8 +1,9 @@
 export {};
 import { errMsg } from '@bundled/yaar';
-import { bundledLibraries } from '@bundled/yaar-dev';
+import { bundledLibraries, checkPermissions } from '@bundled/yaar-dev';
 import { activeProject, files } from '../core';
-import { isGeneratedPath } from '../lib/paths';
+import { isGeneratedPath, projectPath } from '../lib/paths';
+import { collectVerbUses, type VerbUse } from '../lib/permission-uses';
 import {
   cssClassReport,
   findStaleFileRefs,
@@ -12,15 +13,28 @@ import {
 import { readFileText } from './files';
 
 // Static checks over the active project's text that neither the type checker nor the
-// bundler makes: comments and docs naming source files that are gone, and CSS classes
-// that are defined but never named, or named but never styled.
+// bundler makes: comments and docs naming source files that are gone, CSS classes
+// that are defined but never named, or named but never styled, and `yaar://` uses that
+// app.json does not grant.
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs)$/;
+/** Test files never ship, so what they reach needs no grant. */
+const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const MAX_LISTED = 40;
+
+export interface PermissionReport {
+  /** Uses app.json does not grant — each one is refused (403) when it runs. */
+  missing: VerbUse[];
+  /** Entries the server reads differently from how they are written — dropped or narrowed. */
+  problems?: string[];
+}
 
 export interface ProjectCheck {
   staleFileRefs: StaleFileRef[];
   css: CssClassReport;
+  permissions?: PermissionReport;
+  /** Why `permissions` is absent: the server could not be asked. */
+  permissionsNote?: string;
   /** Entries past the per-list cap, by list. */
   omitted?: Record<string, number>;
   /** Why the SDK class list was unavailable, when `unknownSdk` could not be checked. */
@@ -42,15 +56,51 @@ async function sdkClasses(): Promise<{ list: string[]; error?: string }> {
   }
 }
 
+/**
+ * The source's verb uses that app.json does not grant. The uses are found here (lexically,
+ * `lib/permission-uses.ts`); the verdict is the server's, from the same matching the door
+ * refuses with, so this cannot disagree with the 403 it predicts.
+ */
+async function permissionReport(
+  projectId: string,
+  sources: { path: string; text: string }[],
+): Promise<{ permissions?: PermissionReport; permissionsNote?: string }> {
+  const { uses, distinct } = collectVerbUses(sources);
+  try {
+    const answer = await checkPermissions(projectPath(projectId), distinct);
+    if (!answer.success || !answer.results) {
+      return { permissionsNote: `permissions not checked: ${answer.error ?? 'no answer'}` };
+    }
+    const denied = new Set(
+      answer.results.filter((r) => r.allowed === false).map((r) => `${r.verb} ${r.uri}`),
+    );
+    return {
+      permissions: {
+        missing: uses.filter((u) => denied.has(`${u.verb} ${u.uri}`)),
+        ...(answer.problems?.length ? { problems: answer.problems } : {}),
+      },
+    };
+  } catch (err) {
+    return { permissionsNote: `permissions not checked: ${errMsg(err)}` };
+  }
+}
+
 export async function checkProject(): Promise<ProjectCheck> {
-  if (!activeProject()) throw new Error('No active project. Open or create one first.');
+  const proj = activeProject();
+  if (!proj) throw new Error('No active project. Open or create one first.');
   const entries = files().filter((f) => !f.isDirectory && !isGeneratedPath(f.path));
   const paths = entries.map((f) => f.path);
   const wanted = paths.filter((p) => SOURCE_EXT.test(p) || p.endsWith('.css') || p.endsWith('.md'));
   const texts = await Promise.all(
     wanted.map(async (path) => ({ path, text: (await readFileText(path)) ?? '' })),
   );
-  const sdk = await sdkClasses();
+  const [sdk, perms] = await Promise.all([
+    sdkClasses(),
+    permissionReport(
+      proj.id,
+      texts.filter((t) => SOURCE_EXT.test(t.path) && !TEST_FILE.test(t.path)),
+    ),
+  ]);
   const staleFileRefs = findStaleFileRefs(texts, paths);
   const css = cssClassReport(
     texts.filter((t) => t.path.endsWith('.css')),
@@ -58,7 +108,7 @@ export async function checkProject(): Promise<ProjectCheck> {
     sdk.list,
   );
   const omitted: Record<string, number> = {};
-  const cap = <T,>(name: string, list: T[]): T[] => {
+  const cap = <T>(name: string, list: T[]): T[] => {
     if (list.length > MAX_LISTED) omitted[name] = list.length - MAX_LISTED;
     return list.slice(0, MAX_LISTED);
   };
@@ -69,6 +119,15 @@ export async function checkProject(): Promise<ProjectCheck> {
       unstyled: cap('unstyled', css.unstyled),
       unknownSdk: cap('unknownSdk', css.unknownSdk),
     },
+    ...(perms.permissions
+      ? {
+          permissions: {
+            ...perms.permissions,
+            missing: cap('permissions.missing', perms.permissions.missing),
+          },
+        }
+      : {}),
+    ...(perms.permissionsNote ? { permissionsNote: perms.permissionsNote } : {}),
     ...(Object.keys(omitted).length ? { omitted } : {}),
     ...(sdk.list.length === 0
       ? {
@@ -81,6 +140,13 @@ export async function checkProject(): Promise<ProjectCheck> {
 /** One line per non-empty finding, for a result that only points at `checkProject`. */
 export function summarizeCheck(check: ProjectCheck): string[] {
   const lines: string[] = [];
+  const missing = check.permissions?.missing.length ?? 0;
+  if (missing) lines.push(`${missing} yaar:// use(s) app.json does not grant — each will 403`);
+  if (check.permissions?.problems?.length) {
+    lines.push(
+      `${check.permissions.problems.length} app.json permission entry(ies) not honoured as written`,
+    );
+  }
   if (check.staleFileRefs.length) {
     lines.push(
       `${check.staleFileRefs.length} comment/doc reference(s) to source files that do not exist`,

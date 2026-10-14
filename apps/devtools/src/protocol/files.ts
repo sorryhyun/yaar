@@ -16,6 +16,7 @@ import {
   copyFile,
   grep,
   findReferences,
+  typeAt,
   readFileContent,
   readFileText,
   readMediaFile,
@@ -684,6 +685,53 @@ export const fileCommands = {
         ...(p.callers === true ? { callers: true } : {}),
         ...(typeof p.maxResults === 'number' ? { maxResults: p.maxResults } : {}),
         ...(p.excludeTests === true ? { excludeTests: true } : {}),
+      });
+    },
+  }),
+  typeAt: defineAppCommand({
+    description:
+      'The type the checker reports for a symbol — the hover text an editor shows — from ' +
+      "findReferences' language service: no typecheck, bundle or preview reload. Ask it " +
+      'before writing a call against an API you have not checked, or to read what an ' +
+      'inferred value actually is. Named the same way as findReferences: `symbol` ' +
+      '(declared in `file`), `line`+`column`, or `line`+`symbol` for a use. Returns ' +
+      '{ symbol, at, kind, type, documentation?, tags?, definition? } — `type` is the ' +
+      'declaration as printed (`const rows: Accessor<Row[]>`), `definition` where it is ' +
+      'declared, including inside @bundled/* declarations. Reads saved files.',
+    params: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          description: 'Project-relative file, e.g. "src/main.ts".',
+        },
+        symbol: {
+          type: 'string',
+          description:
+            'Name declared in `file` (`Class.method` for a member); with `line`, the first ' +
+            'occurrence of that name on the line — the way to ask about a use.',
+        },
+        line: { type: 'number', description: '1-based line.' },
+        column: { type: 'number', description: '1-based column. Needs `line`.' },
+      },
+      required: ['file'],
+    },
+    replay: 'never',
+    run: async (p) => {
+      const symbol = p.symbol ? String(p.symbol) : undefined;
+      const line = typeof p.line === 'number' ? p.line : undefined;
+      const column = typeof p.column === 'number' ? p.column : undefined;
+      if (!symbol && column === undefined) {
+        throw new AppCommandError('Pass `symbol`, or `line` with `column` or `symbol`.');
+      }
+      if (column !== undefined && line === undefined) {
+        throw new AppCommandError('`column` needs `line`.');
+      }
+      return await typeAt({
+        file: String(p.file),
+        ...(symbol ? { symbol } : {}),
+        ...(line !== undefined ? { line } : {}),
+        ...(column !== undefined ? { column } : {}),
       });
     },
   }),

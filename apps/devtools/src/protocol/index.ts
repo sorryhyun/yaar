@@ -117,7 +117,8 @@ export const devtoolsState = {
       'Bun cannot parse, a failed plugin; empty is normal for code full of type errors, ' +
       'because Bun strips types and builds through them. `typecheck` is the ONLY place type ' +
       'errors appear: one entry per diagnostic from the last typecheck, { file, line, ' +
-      'message, severity }. All paths are project-relative, ready to hand back to editFile.',
+      'column, code, message, severity }. All paths are project-relative, ready to hand ' +
+      'back to editFile.',
     // The reducer is pure and lives in lib/compile-status.ts, shared with the `compile`
     // command so the two cannot drift apart. Its unit checks are the `compile-status`
     // suite in selfTest.
