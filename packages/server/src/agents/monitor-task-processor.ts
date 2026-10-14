@@ -20,6 +20,20 @@ import { createLogger } from '../observability/log.js';
 const log = createLogger('MonitorTaskProcessor');
 
 /**
+ * Prefixed to a relay or hook that stopped the running turn to be delivered.
+ *
+ * The provider tells the model about an interrupt in the user's voice — Claude's tool
+ * result reads "The user doesn't want to proceed with this tool use … STOP what you are
+ * doing and wait for the user" — so without this the model takes the system's stop for a
+ * refusal and waits for instructions nobody is going to give.
+ */
+export const SYSTEM_INTERRUPT_NOTE =
+  '[Your previous turn was stopped by YAAR, not by the user, so that the message below ' +
+  'could be delivered. If a tool call was reported as rejected or interrupted by the user, ' +
+  'that was this stop, not a refusal — continue the work, retrying that call if it is ' +
+  'still needed.]\n\n';
+
+/**
  * The monitor a task runs on. Required — a task without a monitor is a routing bug
  * upstream; it must be loud where it is made, not quietly rehomed here.
  */
@@ -155,6 +169,9 @@ export class MonitorTaskProcessor {
       // turn asked for — it ends by itself, and the queue delivers this right after.
       const agent = this.ctx.agentPool.getMonitorAgent(monitorId);
       if (agent?.session.isRunning() && !agent.session.isFollowingExternal()) {
+        // The queue holds this same object and cannot drain while the turn runs, so the
+        // note lands on exactly the delivery that follows the stop.
+        task.content = SYSTEM_INTERRUPT_NOTE + task.content;
         await agent.session.interrupt();
       }
       return;

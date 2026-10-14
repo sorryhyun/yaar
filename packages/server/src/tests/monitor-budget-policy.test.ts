@@ -259,3 +259,55 @@ describe('MonitorTaskProcessor.processMonitorQueue', () => {
     expect(queue.beginProcessing()).toBe(true);
   });
 });
+
+// ── MonitorTaskProcessor: a relay/hook that stops the running turn ──
+
+describe('MonitorTaskProcessor relay interrupt', () => {
+  function setup({ running, external = false }: { running: boolean; external?: boolean }) {
+    const queue = new MonitorQueuePolicy(20);
+    const interrupt = mock(async () => undefined);
+    const agent = {
+      session: {
+        isRunning: () => running,
+        isFollowingExternal: () => external,
+        interrupt,
+      },
+    };
+    const ctx = {
+      getOrCreateMonitorQueue: () => queue,
+      agentPool: { isMonitorAgentBusy: () => true, getMonitorAgent: () => agent },
+      sendEvent: async () => {},
+    } as unknown as MonitorPoolContext;
+    return { queue, interrupt, processor: new MonitorTaskProcessor(ctx) };
+  }
+
+  const hook = () => ({
+    requestedType: 'monitor' as const,
+    kind: 'hook' as const,
+    messageId: 'hook-resp-1',
+    monitorId: '0',
+    content: '<agent-hook type="response">done</agent-hook>',
+  });
+
+  // The provider reports the stop as the user's ("The user doesn't want to proceed with
+  // this tool use"), and the model used to wait for a user who never refused anything.
+  it('tells the model the stop was not the user', async () => {
+    const { queue, interrupt, processor } = setup({ running: true });
+    await processor.queueMonitorTask(hook());
+
+    expect(interrupt).toHaveBeenCalledTimes(1);
+    const queued = queue.dequeue()!.task.content;
+    expect(queued).toStartWith('[Your previous turn was stopped by YAAR, not by the user');
+    expect(queued).toEndWith('<agent-hook type="response">done</agent-hook>');
+  });
+
+  it('adds nothing when no turn was stopped', async () => {
+    for (const opts of [{ running: false }, { running: true, external: true }]) {
+      const { queue, interrupt, processor } = setup(opts);
+      await processor.queueMonitorTask(hook());
+
+      expect(interrupt).not.toHaveBeenCalled();
+      expect(queue.dequeue()!.task.content).toBe('<agent-hook type="response">done</agent-hook>');
+    }
+  });
+});
