@@ -103,7 +103,14 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     ...(data.folderId && { folderId: data.folderId }),
     createdAt: Date.now(),
   };
-  await addShortcut(shortcut);
+  const added = await addShortcut(shortcut);
+  if (!added.created) {
+    return ok(
+      `The desktop already has a shortcut that opens ${added.shortcut.target}: ` +
+        `"${added.shortcut.label}" (${added.shortcut.id}). Nothing was added; pass that id ` +
+        `to change it.`,
+    );
+  }
   broadcastDesktopAction({ type: 'desktop.createShortcut', shortcut } as OSAction);
   return ok(`Shortcut created: "${shortcut.label}" (${shortcut.id})`);
 }

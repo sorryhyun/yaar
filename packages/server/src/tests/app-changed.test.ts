@@ -18,6 +18,7 @@ import { notifyAppChanged } from '../features/apps/changed.js';
 import { readManifest } from '../features/apps/manifest.js';
 import { USER_APPS_DIR } from '../features/apps/roots.js';
 import {
+  addShortcut,
   forgetAppShortcutDismissal,
   readShortcuts,
   removeAppShortcut,
@@ -198,5 +199,70 @@ describe('an app whose files changed', () => {
     await notifyAs(false);
 
     expect((await readManifest(appDir))?.name).toBe('Two');
+  });
+});
+
+describe('a shortcut that only opens an app', () => {
+  const agentMade = (id: string) => ({
+    id,
+    label: 'Changed Fixture',
+    icon: '🎬',
+    target: `yaar://apps/${APP_ID}`,
+    createdAt: Date.now(),
+  });
+  const forApp = async () =>
+    (await readShortcuts()).filter((s) => s.target === `yaar://apps/${APP_ID}`).map((s) => s.id);
+
+  afterEach(async () => {
+    for (const id of await forApp()) await removeShortcut(id);
+  });
+
+  // An agent asks for "a desktop icon for the app I just built" without knowing the
+  // install already gave it one; each ask used to put a second icon on the desktop.
+  it('is not added beside the one the app already has', async () => {
+    writeApp({ name: 'Changed Fixture' });
+    await notifyAs(false);
+
+    const added = await addShortcut(agentMade('shortcut-dup'));
+    expect(added.created).toBe(false);
+    expect(added.shortcut.id).toBe(`app-${APP_ID}`);
+    expect(await forApp()).toEqual([`app-${APP_ID}`]);
+  });
+
+  it('stands in for the app’s own, on install and on startup', async () => {
+    expect((await addShortcut(agentMade('shortcut-first'))).created).toBe(true);
+
+    writeApp({ name: 'Changed Fixture' });
+    const installed = await notifyAs(false);
+    expect(installed.desktop.map((a) => a.type)).toEqual(['desktop.refreshApps']);
+
+    await syncAppShortcuts([{ id: APP_ID, name: 'Changed Fixture' }]);
+    expect(await forApp()).toEqual(['shortcut-first']);
+  });
+
+  it('is the one dropped when a duplicate pair is already on disk', async () => {
+    writeApp({ name: 'Changed Fixture' });
+    await notifyAs(false);
+    // A pair written before addShortcut refused them: bypass it the way the old code did.
+    const { configWrite } = await import('../storage/storage-manager.js');
+    await configWrite(
+      'shortcuts.json',
+      JSON.stringify([...(await readShortcuts()), agentMade('shortcut-old-dup')]),
+    );
+
+    const removed = await syncAppShortcuts([{ id: APP_ID, name: 'Changed Fixture' }]);
+    expect(removed).toEqual(['shortcut-old-dup']);
+    expect(await forApp()).toEqual([`app-${APP_ID}`]);
+  });
+
+  it('is still added when it does more than open the app', async () => {
+    writeApp({ name: 'Changed Fixture' });
+    await notifyAs(false);
+
+    const withActions = {
+      ...agentMade('shortcut-actions'),
+      osActions: [{ type: 'window.close', windowId: 'x' }],
+    } as Parameters<typeof addShortcut>[0];
+    expect((await addShortcut(withActions)).created).toBe(true);
   });
 });

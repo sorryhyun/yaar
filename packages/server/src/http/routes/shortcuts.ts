@@ -89,8 +89,8 @@ export async function handleShortcutRoutes(req: Request, url: URL): Promise<Resp
         ...(data.folderId ? { folderId: data.folderId as string } : {}),
         createdAt: Date.now(),
       };
-      await addShortcut(shortcut);
-      return jsonResponse({ shortcut }, 201);
+      const added = await addShortcut(shortcut);
+      return jsonResponse({ shortcut: added.shortcut }, added.created ? 201 : 200);
     } catch {
       return errorResponse('Failed to create shortcut');
     }

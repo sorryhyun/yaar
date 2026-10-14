@@ -75,13 +75,44 @@ function appIdOfAutoShortcut(shortcutId: string): string | null {
     : null;
 }
 
-/** Add a shortcut on the user's behalf. Re-adding an app's own shortcut lifts its dismissal. */
-export async function addShortcut(shortcut: DesktopShortcut): Promise<void> {
+/**
+ * The app a shortcut does nothing but open — target exactly `yaar://apps/{id}`, no OS
+ * actions or skill of its own — or null. Two of these for one app are the same icon twice.
+ */
+function plainAppTarget(shortcut: DesktopShortcut): string | null {
+  if (shortcut.osActions?.length || shortcut.skill) return null;
+  const appId = extractAppId(shortcut.target);
+  return appId && shortcut.target === buildYaarUri('apps', appId) ? appId : null;
+}
+
+/** The shortcut already on the desktop that only opens `appId`, if any. */
+function findPlainAppShortcut(
+  shortcuts: DesktopShortcut[],
+  appId: string,
+): DesktopShortcut | undefined {
+  return shortcuts.find((s) => plainAppTarget(s) === appId);
+}
+
+/**
+ * Add a shortcut on the user's behalf. Re-adding an app's own shortcut lifts its dismissal.
+ *
+ * A plain shortcut to an app that already has one is not added: `shortcut` is then the one
+ * already there and `created` is false. Agents ask for "a desktop icon for the app I just
+ * built" without knowing its install gave it one, and each such ask used to put a second
+ * icon beside the first.
+ */
+export async function addShortcut(
+  shortcut: DesktopShortcut,
+): Promise<{ shortcut: DesktopShortcut; created: boolean }> {
   const shortcuts = await readShortcuts();
+  const targetApp = plainAppTarget(shortcut);
+  const existing = targetApp ? findPlainAppShortcut(shortcuts, targetApp) : undefined;
+  if (existing) return { shortcut: existing, created: false };
   shortcuts.push(shortcut);
   await writeShortcuts(shortcuts);
   const appId = appIdOfAutoShortcut(shortcut.id);
   if (appId) await setDismissed(appId, false);
+  return { shortcut, created: true };
 }
 
 async function deleteShortcut(shortcutId: string): Promise<boolean> {
@@ -117,7 +148,8 @@ export async function updateShortcut(
 }
 
 /**
- * Give an app its desktop shortcut unless it already has one or the user deleted it.
+ * Give an app its desktop shortcut unless it already has one — its own, or any shortcut
+ * that only opens it — or the user deleted it.
  * `shortcut` is null when the user deleted it. `created` says which — the frontend
  * *appends* a `desktop.createShortcut`, so announcing one that was already there puts a
  * second icon on the desktop.
@@ -129,7 +161,8 @@ export async function ensureAppShortcut(app: {
   iconType?: 'emoji' | 'image';
 }): Promise<{ shortcut: DesktopShortcut | null; created: boolean }> {
   const shortcuts = await readShortcuts();
-  const existing = shortcuts.find((s) => s.id === `app-${app.id}`);
+  const existing =
+    shortcuts.find((s) => s.id === `app-${app.id}`) ?? findPlainAppShortcut(shortcuts, app.id);
   if (existing) return { shortcut: existing, created: false };
   if ((await readDismissed()).has(app.id)) return { shortcut: null, created: false };
   const shortcut = buildAppShortcut(app);
@@ -155,7 +188,9 @@ export async function forgetAppShortcutDismissal(appId: string): Promise<void> {
  * Sync shortcuts with the current app list:
  * - Remove shortcuts for apps that no longer exist (createShortcut: false only
  *   prevents auto-creation; existing shortcuts are kept)
- * - Ensure shortcuts exist for apps that should have them, unless the user deleted one
+ * - Remove all but one of the shortcuts that only open the same app
+ * - Ensure shortcuts exist for apps that should have them, unless the user deleted one or
+ *   another shortcut already only opens the app
  * - Forget deletions for apps that no longer exist
  * Returns the list of removed shortcut IDs (for emitting frontend actions).
  */
@@ -177,10 +212,19 @@ export async function syncAppShortcuts(
   const removedIds: string[] = [];
   let changed = false;
 
+  // An app shown twice by shortcuts that only open it keeps one: its own if it has one,
+  // else the first. Before `addShortcut` refused them, agents left such pairs behind.
+  const keptPlain = new Map<string, string>();
+  for (const s of shortcuts) {
+    const appId = plainAppTarget(s);
+    if (appId && (!keptPlain.has(appId) || s.id === `app-${appId}`)) keptPlain.set(appId, s.id);
+  }
+
   // Remove shortcuts only for apps that no longer exist (not just createShortcut: false)
   const result = shortcuts.filter((s) => {
     const appId = extractAppId(s.target);
-    if (appId && !allAppIds.has(appId)) {
+    const plainApp = plainAppTarget(s);
+    if ((appId && !allAppIds.has(appId)) || (plainApp && keptPlain.get(plainApp) !== s.id)) {
       removedIds.push(s.id);
       changed = true;
       return false;
@@ -191,7 +235,10 @@ export async function syncAppShortcuts(
   // Auto-create shortcuts only for apps that opt in
   for (const app of apps) {
     if (!autoShortcutAppIds.has(app.id) || dismissed.has(app.id)) continue;
-    if (!result.some((s) => s.id === `app-${app.id}`)) {
+    if (
+      !result.some((s) => s.id === `app-${app.id}`) &&
+      !findPlainAppShortcut(result, app.id)
+    ) {
       result.push(buildAppShortcut(app));
       changed = true;
     }
