@@ -8,16 +8,14 @@
 import type { SliceCreator, DesktopStore } from '../types';
 import type { WindowModel } from '@/types/state';
 import type { WindowAction, WindowCreateAction, WindowBounds } from '@yaar/shared';
-import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
+import { fitWindowBounds, isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, findWindowKeyBySuffix, toWindowKey } from '../helpers';
 import { notifyIframeClose } from '../iframe-bridge';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
-  TITLEBAR_HEIGHT,
   TASKBAR_HEIGHT,
   DEFAULT_VIEWPORT_WIDTH,
   DEFAULT_VIEWPORT_HEIGHT,
-  MIN_VISIBLE_WINDOW_EDGE,
 } from '@/constants/layout';
 
 export interface WindowsSliceState {
@@ -148,14 +146,17 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
         typeof globalThis.innerHeight === 'number'
           ? globalThis.innerHeight
           : DEFAULT_VIEWPORT_HEIGHT;
-      const b = { ...createAction.bounds };
       const isStandard = !variant || variant === 'standard';
-      // Skip titlebar offset for widget/panel (no titlebar)
-      const yOffset = isStandard ? TITLEBAR_HEIGHT : 0;
-      b.x = Math.max(0, Math.min(b.x, vw - MIN_VISIBLE_WINDOW_EDGE));
-      b.y = Math.max(0, Math.min(b.y, vh - TASKBAR_HEIGHT - yOffset));
-      b.w = Math.min(b.w, vw - b.x);
-      b.h = Math.min(b.h, vh - TASKBAR_HEIGHT - b.y);
+      // The whole window on screen, moved before it is shrunk: narrowing in place kept
+      // an oversized window at its requested x and cut off its right edge — the window
+      // controls and the app's own right-hand buttons (#182). The server fits against
+      // the viewport it last heard about; this is the backstop for the one actually here.
+      const b = fitWindowBounds(createAction.bounds, {
+        x: 0,
+        y: 0,
+        w: vw,
+        h: vh - TASKBAR_HEIGHT,
+      });
       const window: WindowModel = {
         id: key,
         title: createAction.title,

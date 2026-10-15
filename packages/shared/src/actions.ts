@@ -150,6 +150,31 @@ export function nextCascadeBounds(
   return cascadeWindowBounds(occupied.length, w, h, viewport);
 }
 
+/**
+ * Fit a window into `area`, moving it before resizing it.
+ *
+ * The window is moved left/up until its far edges are inside the area. It is only made
+ * smaller when it is wider or taller than the area itself. Narrowing first, which the
+ * desktop used to do, keeps a window exactly where it was asked to go while cutting off
+ * its right side: the window controls and the app's right-hand buttons end up off screen
+ * (#182). An empty or degenerate area returns the bounds unchanged, since there is
+ * nothing to fit into.
+ */
+export function fitWindowBounds(
+  bounds: WindowBounds,
+  area: { x: number; y: number; w: number; h: number },
+): WindowBounds {
+  if (!(area.w > 0 && area.h > 0)) return { ...bounds };
+  const w = Math.min(bounds.w, area.w);
+  const h = Math.min(bounds.h, area.h);
+  return {
+    x: Math.max(area.x, Math.min(bounds.x, area.x + area.w - w)),
+    y: Math.max(area.y, Math.min(bounds.y, area.y + area.h - h)),
+    w,
+    h,
+  };
+}
+
 export interface WindowContent {
   renderer: string; // 'markdown', 'table', 'html', 'text', 'iframe'
   data: unknown;

@@ -4,6 +4,7 @@ import {
   isContentUpdateOperationValid,
   cascadeWindowBounds,
   nextCascadeBounds,
+  fitWindowBounds,
 } from '../actions.js';
 
 // The per-renderer shape guards (table / iframe / component) are module-internal; they are
@@ -149,5 +150,66 @@ describe('nextCascadeBounds', () => {
     expect(nextCascadeBounds(occupied, 820, 600, viewport)).toEqual(
       cascadeWindowBounds(10, 820, 600, viewport),
     );
+  });
+});
+
+describe('fitWindowBounds', () => {
+  const desktop = { x: 0, y: 0, w: 1600, h: 900 };
+
+  it('leaves a window that already fits alone', () => {
+    const b = { x: 100, y: 80, w: 800, h: 600 };
+    expect(fitWindowBounds(b, desktop)).toEqual(b);
+  });
+
+  it('moves an overflowing window left before it would narrow it (#182)', () => {
+    // The reported case: 1400px wide at x=306 on a 1600px desktop.
+    expect(fitWindowBounds({ x: 306, y: 40, w: 1400, h: 700 }, desktop)).toEqual({
+      x: 200,
+      y: 40,
+      w: 1400,
+      h: 700,
+    });
+  });
+
+  it('moves an overflowing window up before it would shorten it', () => {
+    expect(fitWindowBounds({ x: 0, y: 500, w: 400, h: 600 }, desktop)).toEqual({
+      x: 0,
+      y: 300,
+      w: 400,
+      h: 600,
+    });
+  });
+
+  it('shrinks only a window larger than the area, pinned to its origin', () => {
+    expect(fitWindowBounds({ x: 50, y: 50, w: 2000, h: 1200 }, desktop)).toEqual({
+      x: 0,
+      y: 0,
+      w: 1600,
+      h: 900,
+    });
+  });
+
+  it('pulls a window back from a negative origin', () => {
+    expect(fitWindowBounds({ x: -300, y: -20, w: 400, h: 300 }, desktop)).toEqual({
+      x: 0,
+      y: 0,
+      w: 400,
+      h: 300,
+    });
+  });
+
+  it('respects an area that does not start at the origin', () => {
+    const area = { x: 0, y: 52, w: 1600, h: 721 };
+    expect(fitWindowBounds({ x: 10, y: 0, w: 400, h: 300 }, area)).toEqual({
+      x: 10,
+      y: 52,
+      w: 400,
+      h: 300,
+    });
+  });
+
+  it('returns the bounds unchanged for an empty area', () => {
+    const b = { x: 10, y: 10, w: 400, h: 300 };
+    expect(fitWindowBounds(b, { x: 0, y: 0, w: 0, h: 0 })).toEqual(b);
   });
 });

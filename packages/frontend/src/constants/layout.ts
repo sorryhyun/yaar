@@ -20,7 +20,8 @@ export const TITLEBAR_CENTER_OFFSET = TITLEBAR_HEIGHT / 2;
 
 /**
  * Minimum pixels of window edge that must remain visible inside the viewport
- * horizontally during creation and drag.
+ * horizontally during a drag. (Creation keeps the whole window on screen —
+ * see `fitWindowBounds` in `@yaar/shared`.)
  */
 export const MIN_VISIBLE_WINDOW_EDGE = 100;
 

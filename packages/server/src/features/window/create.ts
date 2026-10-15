@@ -11,6 +11,8 @@ import {
   type WindowSizePreset,
   nextCascadeBounds,
   defaultWindowSize,
+  fitWindowBounds,
+  WINDOW_PLACEMENT,
 } from '@yaar/shared';
 import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
 import { validateRelativePath, getActiveSessionId } from '../../handlers/utils.js';
@@ -53,14 +55,22 @@ const IFRAME_RENDER_TIMEOUT_MS = 2_000;
  *  - **Monitor-scoped count.** `getWindowCount()` counted every window in the
  *    session across all monitors and never decremented on close, so the offset
  *    tracked session history rather than what is actually on screen.
- *  - **Clamped to the viewport**, so a deep cascade can't push a window off-screen
- *    (the frontend clamp runs after x is fixed and silently narrows w instead).
+ *  - **Clamped to the viewport**, so a deep cascade can't push a window off-screen.
+ *
+ * Whatever the source of the numbers (an explicit `x`/`y`/`width`/`height`, app.json, or
+ * the cascade), the result is then fitted to the monitor's last reported viewport with
+ * `fitWindowBounds` — moved back on screen first, shrunk only if larger than the desktop.
+ * A 1400px window asked for at x=306 on a 1600px desktop otherwise opened with its window
+ * controls and right-hand buttons off screen (#182). When the caller's own numbers were
+ * changed, `adjusted` says how, so the agent does not go on believing its requested bounds.
+ * A phone is left alone: there every standard window is a full-screen card, and the
+ * stored bounds are what the window will use when it is next seen on a desktop.
  */
 function resolveDefaultBounds(
   payload: Record<string, unknown>,
   appMeta: { defaultWidth?: number; defaultHeight?: number } | null,
   sizePreset: WindowSizePreset,
-): WindowBounds {
+): { bounds: WindowBounds; adjusted?: string } {
   const sid = getSessionId();
   const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
   const monitorId = actionEmitter.resolveWindowMonitor();
@@ -72,17 +82,46 @@ function resolveDefaultBounds(
 
   const explicitX = payload.x as number | undefined;
   const explicitY = payload.y as number | undefined;
-  if (explicitX != null && explicitY != null) return { x: explicitX, y: explicitY, w, h };
 
-  const occupied = session
-    ? session.windowState
-        .listWindows()
-        .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId)
-        .map((win) => win.bounds)
-    : [];
+  let requested: WindowBounds;
+  if (explicitX != null && explicitY != null) {
+    requested = { x: explicitX, y: explicitY, w, h };
+  } else {
+    const occupied = session
+      ? session.windowState
+          .listWindows()
+          .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId)
+          .map((win) => win.bounds)
+      : [];
+    const cascaded = nextCascadeBounds(occupied, w, h, viewport);
+    requested = { x: explicitX ?? cascaded.x, y: explicitY ?? cascaded.y, w, h };
+  }
 
-  const cascaded = nextCascadeBounds(occupied, w, h, viewport);
-  return { x: explicitX ?? cascaded.x, y: explicitY ?? cascaded.y, w, h };
+  if (!viewport || session?.layoutContext.getFormFactor(monitorId) === 'mobile') {
+    return { bounds: requested };
+  }
+  // The bottom strip is the command palette's: a window reaching under it has its
+  // bottom row (an app's Send button, say) covered.
+  const area = { x: 0, y: 0, w: viewport.w, h: viewport.h - WINDOW_PLACEMENT.paletteInset };
+  const bounds = fitWindowBounds(requested, area);
+  const asked =
+    payload.x != null || payload.y != null || payload.width != null || payload.height != null;
+  if (!asked || sameBounds(bounds, requested)) return { bounds };
+  return {
+    bounds,
+    adjusted:
+      `The requested bounds (${describeBounds(requested)}) did not fit the ` +
+      `${viewport.w}×${viewport.h} desktop, so the window opened at ${describeBounds(bounds)} ` +
+      `instead — moved back on screen, and shrunk only where it was larger than the desktop.`,
+  };
+}
+
+function sameBounds(a: WindowBounds, b: WindowBounds): boolean {
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+}
+
+function describeBounds(b: WindowBounds): string {
+  return `${b.w}×${b.h} at x=${b.x}, y=${b.y}`;
 }
 
 /** Handle window creation (both component and non-component renderers). */
@@ -168,11 +207,12 @@ export async function handleCreate(
     const { windowSize } = await readSettings();
 
     const componentAppId = payload.appId as string | undefined;
+    const placement = resolveDefaultBounds(payload, appMeta, windowSize);
     const osAction: OSAction = {
       type: 'window.create',
       windowId: actualId,
       title,
-      bounds: resolveDefaultBounds(payload, appMeta, windowSize),
+      bounds: placement.bounds,
       content: { renderer: 'component', data: layoutData },
       ...getAppMetaOverrides(appMeta),
       ...(componentAppId ? { appId: componentAppId } : {}),
@@ -183,6 +223,7 @@ export async function handleCreate(
     return okJson({
       windowId: actualId,
       message: `Created component window "${formatWindowRef(actualId)}"`,
+      ...(placement.adjusted ? { boundsAdjusted: placement.adjusted } : {}),
     });
   }
 
@@ -227,11 +268,13 @@ export async function handleCreate(
   // of the grants recorded for this window.
   const windowMonitorId = renderer === 'iframe' ? actionEmitter.resolveWindowMonitor() : undefined;
 
+  const placement = resolveDefaultBounds(payload, appMeta, windowSize);
+  const boundsNote = placement.adjusted ? { boundsAdjusted: placement.adjusted } : {};
   const osAction: OSAction = {
     type: 'window.create',
     windowId: actualId,
     title,
-    bounds: resolveDefaultBounds(payload, appMeta, windowSize),
+    bounds: placement.bounds,
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),
     ...(appId ? { appId } : {}),
@@ -321,6 +364,7 @@ export async function handleCreate(
           `be loading, or may have failed silently — read ${formatWindowRef(actualId)} to see it ` +
           `before telling the user it is ready. Do not create the window again.` +
           (away ? ` ${away}` : ''),
+        ...boundsNote,
       });
     }
 
@@ -328,9 +372,14 @@ export async function handleCreate(
       windowId: actualId,
       renderConfirmed: true,
       message: `Created window "${formatWindowRef(actualId)}" with embedded iframe`,
+      ...boundsNote,
     });
   }
 
   actionEmitter.emitAction(osAction);
-  return okJson({ windowId: actualId, message: `Created window "${formatWindowRef(actualId)}"` });
+  return okJson({
+    windowId: actualId,
+    message: `Created window "${formatWindowRef(actualId)}"`,
+    ...boundsNote,
+  });
 }
