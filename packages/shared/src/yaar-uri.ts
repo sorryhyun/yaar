@@ -195,6 +195,12 @@ export function resolveContentUri(uri: string): string | null {
  */
 export const PREVIEW_APP_PREFIX = 'preview--';
 
+/**
+ * The app that owns every preview: devtools builds the projects and opens their windows,
+ * so work coming *out* of a preview window is devtools' to read, not the monitor's.
+ */
+export const PREVIEW_OWNER_APP_ID = 'devtools';
+
 /** The preview principal for a devtools project. */
 export function previewAppId(projectId: string): string {
   return `${PREVIEW_APP_PREFIX}${projectId}`;

@@ -31,7 +31,7 @@
  */
 
 import { join } from 'node:path';
-import { isPreviewAppId, PREVIEW_APP_PREFIX } from '@yaar/shared';
+import { isPreviewAppId, PREVIEW_APP_PREFIX, PREVIEW_OWNER_APP_ID } from '@yaar/shared';
 import type { PermissionEntry } from './access.js';
 // The matching rule lives in a leaf module precisely so this file can use it: `access.js`
 // imports *this* one at runtime, so importing the gate here would close a cycle.
@@ -297,7 +297,7 @@ async function previewManifest(
   const manifestPath = join(
     storageRoot,
     'apps',
-    DEVTOOLS_APP_ID,
+    PREVIEW_OWNER_APP_ID,
     'projects',
     projectId,
     'app.json',
@@ -314,9 +314,6 @@ async function previewManifest(
     return undefined;
   }
 }
-
-/** The app whose sandbox holds every preview project, and whose reach is their ceiling. */
-const DEVTOOLS_APP_ID = 'devtools';
 
 /**
  * Permissions a devtools *preview* holds, read from the project's own app.json.
@@ -360,7 +357,7 @@ export async function previewPermissions(
   const declared = (await previewManifest(appId, storageRoot))?.permissions;
   if (!Array.isArray(declared)) return undefined;
 
-  const ceiling = (await getAppMeta(DEVTOOLS_APP_ID))?.permissions ?? [];
+  const ceiling = (await getAppMeta(PREVIEW_OWNER_APP_ID))?.permissions ?? [];
   const granted: PermissionEntry[] = [];
   for (const entry of declared) {
     if (typeof entry !== 'string' && (typeof entry !== 'object' || entry === null)) continue;

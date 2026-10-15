@@ -441,6 +441,11 @@ app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection
 
 This posts a `{ type: 'yaar:app-interaction', content, instructions?, toMonitor }` message to the parent, which routes it to the window's agent (or the monitor agent if `toMonitor` is set).
 
+From a Dev Tools preview (a `preview--{projectId}` window) neither applies: the interaction is
+test output, so it goes to the devtools app agent on that monitor, wrapped in
+`<preview_interaction>`, whatever `toMonitor` says. With no devtools window open it is left on
+the monitor's timeline without waking it (`ContextPool.routePreviewTask`).
+
 When the window's app agent is idle, `sendInteraction()` invokes it immediately. When that
 agent already has an active turn, the interaction is delivered to the normal steering path
 instead of being accumulated as deferred context.

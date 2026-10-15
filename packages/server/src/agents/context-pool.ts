@@ -24,6 +24,7 @@
  * | `ClientEventController` — USER_MESSAGE (target `monitor`) | `user` | monitor | MonitorTaskProcessor |
  * | `ClientEventController` — USER_MESSAGE (target `session`) | `user` | session | SessionTaskProcessor |
  * | `ClientEventController` — WINDOW_MESSAGE / APP_INTERACTION / COMPONENT_ACTION | `user` | app | App, or Monitor for a plain window |
+ * | `ClientEventController` — USER_MESSAGE from a devtools preview's `toMonitor` | `user` | app | devtools' App agent, else buffered (`routePreviewTask`) |
  * | `features/agents/relay.ts` + the app agent's `relay` tool | `relay` | monitor | MonitorTaskProcessor |
  * | `mcp/messaging` — `direct_message` | `relay` | monitor \| app | per target |
  * | `handlers/window.ts` — `invoke {action:'message'}` | `relay` | app | AppTaskProcessor |
@@ -47,6 +48,8 @@ import { AgentPool } from './agent-pool.js';
 import type { PooledAgent, AgentEntry } from './agent-roster.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import {
+  NO_AGENT_ACK,
+  PREVIEW_OWNER_APP_ID,
   ServerEventType,
   isPreviewAppId,
   type ServerEvent,
@@ -591,8 +594,9 @@ export class ContextPool implements PoolContext {
    * ```
    *   requestedType: 'monitor'  →  MonitorTaskProcessor
    *   requestedType: 'app'      →  AppTaskProcessor      … if the window belongs to an app
-   *                             →  MonitorTaskProcessor  … if it is a plain window, or a
-   *                                                        devtools preview (see below)
+   *                             →  devtools' app agent   … if it is a devtools preview
+   *                                                        (`routePreviewTask`)
+   *                             →  MonitorTaskProcessor  … if it is a plain window
    *   requestedType: 'session'  →  never arrives here; handleSessionTask is its only door
    * ```
    */
@@ -625,10 +629,12 @@ export class ContextPool implements PoolContext {
         const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
         // A preview window carries an app identity so that `self` resolves inside it, but it
         // is not the app: devtools is the agent for anything happening in a preview. Routing
-        // it here would spawn a second app agent nobody asked for, and — since this is the
-        // only writer of AppTaskProcessor.activeWindows — would let the preview claim the
-        // active-window slot that cross-app control and direct messages resolve through.
-        if (appId && task.windowId && !isPreviewAppId(appId)) {
+        // it to its own app agent would spawn a second one nobody asked for, and — since that
+        // is the only writer of AppTaskProcessor.activeWindows — would let the preview claim
+        // the active-window slot that cross-app control and direct messages resolve through.
+        if (appId && task.windowId && isPreviewAppId(appId)) {
+          await this.routePreviewTask(task, appId);
+        } else if (appId && task.windowId) {
           await this.appProcessor.handleAppTask(task, appId);
         } else {
           // Plain window → the monitor agent, on the window's OWN monitor.
@@ -646,6 +652,63 @@ export class ContextPool implements PoolContext {
     } finally {
       this.inflightExit();
     }
+  }
+
+  /**
+   * Work that came out of a devtools preview window: to devtools, labelled, never to the
+   * monitor as real work.
+   *
+   * A preview runs a test build of an app under `preview--{projectId}`, and what it says
+   * (`sendInteraction`, a window message, a click) is the output of that test. It used to
+   * fall through to the plain-window branch, so the monitor read a test's
+   * `pins_for_review` as the user asking for something (issue #182, gap 10).
+   *
+   * Devtools opens every preview, onto its own monitor, so devtools' app agent on that
+   * monitor is the owner: the task runs there (steered into its turn if it is mid-test),
+   * addressed to devtools' own window so the preview never takes the active-window slot.
+   * With no devtools window on the monitor — the user closed it and left the preview up —
+   * there is nobody who asked for the test, so the note goes on the monitor's timeline,
+   * where its next turn reads it, rather than starting a turn of its own.
+   */
+  private async routePreviewTask(task: Task, previewAppId: string): Promise<void> {
+    const monitorId = this.monitorForWindowTask(task);
+    const previewWindow = this.windowState.handleMap.getRawWindowId(task.windowId!);
+    const content =
+      `<preview_interaction appId="${previewAppId}" windowId="${previewWindow}">\n` +
+      'From a Dev Tools preview — a test build, not the installed app and not the user ' +
+      'asking for something. Treat it as test output.\n' +
+      `${task.content}\n</preview_interaction>`;
+
+    const devtoolsWindow = this.previewOwnerWindowOn(monitorId);
+    if (devtoolsWindow) {
+      await this.appProcessor.handleAppTask(
+        { ...task, requestedType: 'app', windowId: devtoolsWindow, monitorId, content },
+        PREVIEW_OWNER_APP_ID,
+      );
+      return;
+    }
+
+    log.info('preview interaction buffered — no devtools window on its monitor', {
+      messageId: task.messageId,
+      monitorId,
+      appId: previewAppId,
+    });
+    this.timelineFor(monitorId).pushRaw(content);
+    // Taken, by nobody: settles the sender's chip without filing a status for a message
+    // no agent will answer.
+    await this.sendEvent({
+      type: ServerEventType.MESSAGE_ACCEPTED,
+      messageId: task.messageId,
+      agentId: NO_AGENT_ACK,
+    });
+  }
+
+  /** The devtools window on this monitor — the one its app agent last worked in, if open. */
+  private previewOwnerWindowOn(monitorId: string): string | undefined {
+    const owner = PREVIEW_OWNER_APP_ID;
+    const active = this.getActiveAppWindow(monitorId, owner);
+    if (active && this.windowState.getAppIdForWindow(active) === owner) return active;
+    return this.windowState.listWindows(monitorId).find((w) => w.appId === owner)?.id;
   }
 
   /**

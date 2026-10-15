@@ -54,6 +54,14 @@ export interface UserMessageEvent {
    * Set from the CLI-panel Monitor/Session toggle.
    */
   target?: 'monitor' | 'session';
+  /**
+   * The app window this message came out of, when it is not the user typing: an app's
+   * `sendInteraction({ toMonitor: true })` is sent as a user message so it wakes the
+   * monitor, and this is the only thing that tells the server whose it is. A devtools
+   * preview's interaction is test traffic, not work for the monitor, and the server
+   * reroutes it on this field (`ClientEventController.handleUserMessage`).
+   */
+  sourceWindowId?: string;
 }
 
 export interface WindowMessageEvent {

@@ -19,6 +19,7 @@ import {
   ClientEventType,
   NO_AGENT_ACK,
   ServerEventType,
+  isPreviewAppId,
   type OSAction,
   type ServerEvent,
   type UserInteraction,
@@ -309,6 +310,30 @@ export class ClientEventController {
         messageId: event.messageId,
         agentId: 'duplicate',
       });
+      return;
+    }
+
+    // An app's `sendInteraction({ toMonitor: true })` from a devtools preview. The client
+    // sends every toMonitor wake as a user message, so without this a test build's
+    // interaction reached the monitor as real work (issue #182, gap 10). It goes down the
+    // window-task path instead, whose preview branch (`ContextPool.routePreviewTask`) hands
+    // it to devtools, labelled as preview traffic, and never wakes the monitor with it.
+    if (
+      event.sourceWindowId &&
+      isPreviewAppId(this.deps.windowState.getAppIdForWindow(event.sourceWindowId))
+    ) {
+      void this.startTask(
+        connectionId,
+        event.messageId,
+        monitorId,
+        this.deps.getPool()?.handleTask({
+          requestedType: 'app',
+          kind: 'user',
+          messageId: event.messageId,
+          windowId: event.sourceWindowId,
+          content: event.content,
+        }),
+      );
       return;
     }
 

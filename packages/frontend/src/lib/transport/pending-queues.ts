@@ -85,7 +85,15 @@ export function drainPendingQueues({ send, addCliEntry }: DrainDeps): void {
       const content = `<app_interaction>${item.content}</app_interaction>${item.instructions ? `\n\n${item.instructions}` : ''}`;
       if (item.toMonitor) {
         const monitorId = useDesktopStore.getState().activeMonitorId;
-        send({ type: ClientEventType.USER_MESSAGE, messageId, content, monitorId });
+        // `sourceWindowId` lets the server tell an app's wake from the user typing — a
+        // devtools preview's is rerouted away from the monitor (UserMessageEvent).
+        send({
+          type: ClientEventType.USER_MESSAGE,
+          messageId,
+          content,
+          monitorId,
+          sourceWindowId: item.windowId,
+        });
       } else {
         send({
           type: ClientEventType.APP_INTERACTION,
