@@ -11,7 +11,7 @@
  * everything else takes the store through it, so the (deliberate, runtime-only) cycle
  * between the store and the bridge stays confined to one file.
  */
-export { tryIframeSelfCapture, captureWindow } from './capture';
+export { captureIframe, captureWindow } from './capture';
 export {
   resendAppProtocolReady,
   notifyIframeClose,

@@ -6,6 +6,7 @@ import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/lib/transport/transport-manager';
 import { softKeyboard } from '@/lib/device';
 import { getDesktopState } from './store-access';
+import { captureFrameImage, frameImageOf, handlerlessDocumentType } from './capture-image';
 import {
   explainMissingWindow,
   findIframeIn,
@@ -23,10 +24,42 @@ import {
  * or a composite that failed and was rescued by the largest-canvas fallback —
  * which returns one canvas, not the window). Without it a partial picture is
  * indistinguishable from a complete one, and the caller believes the wrong thing.
+ *
+ * A failure can carry `detail`, a sentence for the agent when the reason code alone does not
+ * say what was in the window.
  */
 export type IframeCaptureResult =
-  | { imageData: string; reason?: undefined; degraded?: string[] }
-  | { imageData: null; reason: string; degraded?: undefined };
+  | { imageData: string; reason?: undefined; degraded?: string[]; detail?: undefined }
+  | { imageData: null; reason: string; degraded?: undefined; detail?: string };
+
+/**
+ * Capture what an iframe is showing.
+ *
+ * A frame whose whole document is an image is drawn here, by the desktop (`capture-image.ts`):
+ * the self-capture handler is a script injected into the document's `<head>`, which an SVG
+ * document does not have. Everything else is asked to draw itself, and a request that goes
+ * unanswered by a document the handler could never have been injected into says so —
+ * `no-capture-handler (<type>)` — instead of the generic `no-response`, which suggests a retry.
+ */
+export async function captureIframe(
+  iframe: HTMLIFrameElement,
+  timeoutMs = 2000,
+): Promise<IframeCaptureResult> {
+  const image = frameImageOf(iframe);
+  if (image) return captureFrameImage(iframe, image);
+
+  const result = await tryIframeSelfCapture(iframe, timeoutMs);
+  if (result.reason !== 'no-response') return result;
+  const type = handlerlessDocumentType(iframe);
+  if (!type) return result;
+  return {
+    imageData: null,
+    reason: `no-capture-handler (${type})`,
+    detail:
+      `The window shows a ${type} document, which the capture script cannot be injected ` +
+      `into; retrying will not help.`,
+  };
+}
 
 /**
  * Try capturing iframe content via the postMessage self-capture protocol.
@@ -88,10 +121,10 @@ export function tryIframeSelfCapture(
 /**
  * Capture a window element as an image and send feedback directly over WebSocket.
  *
- * Sends a postMessage capture request to the iframe. The injected capture
- * script handles canvas and DOM (via foreignObject) capture using the
- * browser's native CSS engine. Feedback is sent directly over WebSocket
- * (bypassing the Zustand queue) to minimize latency.
+ * See `captureIframe`: an image document is drawn by the desktop; anything else is sent a
+ * postMessage capture request, and the injected capture script handles canvas and DOM (via
+ * foreignObject) capture using the browser's native CSS engine. Feedback is sent directly
+ * over WebSocket (bypassing the Zustand queue) to minimize latency.
  */
 export async function captureWindow(windowId: string, requestId: string) {
   const sendFeedback = (
@@ -134,7 +167,7 @@ export async function captureWindow(windowId: string, requestId: string) {
       return;
     }
 
-    const result = await tryIframeSelfCapture(iframe);
+    const result = await captureIframe(iframe);
     if (result.imageData) {
       const base64 = result.imageData.replace(/^data:image\/[^;]+;base64,/, '');
       // Only the phone shell fits a window above the keyboard; a desktop-layout window
@@ -147,7 +180,7 @@ export async function captureWindow(windowId: string, requestId: string) {
       });
     } else {
       sendFeedback(false, {
-        error: `Capture returned empty (${result.reason})`,
+        error: result.detail ?? `Capture returned empty (${result.reason})`,
         captureFailure: result.reason,
       });
     }

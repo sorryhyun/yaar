@@ -5,7 +5,7 @@
  * capture can be triggered from anywhere (e.g. the send flow).
  */
 import { PALETTE_DARK, captureScale } from '@yaar/shared';
-import { tryIframeSelfCapture } from '@/store';
+import { captureIframe } from '@/store';
 
 let drawingCanvas: HTMLCanvasElement | null = null;
 
@@ -268,7 +268,7 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
     const docEl = document.documentElement;
     const scale = captureScale(docEl.clientWidth, docEl.clientHeight);
 
-    // Pre-capture visible iframes via self-capture (canvas/svg/DOM foreignObject)
+    // Pre-capture visible iframes (self-capture, or drawn here when the frame shows an image)
     const iframes = document.querySelectorAll('iframe');
     const iframeCaptures: { rect: DOMRect; dataUrl: string }[] = [];
 
@@ -278,7 +278,7 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
         const rect = iframe.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
 
-        const { imageData } = await tryIframeSelfCapture(iframe, 2000);
+        const { imageData } = await captureIframe(iframe, 2000);
         if (imageData) {
           iframeCaptures.push({ rect, dataUrl: imageData });
         }

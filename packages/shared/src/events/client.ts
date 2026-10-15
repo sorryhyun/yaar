@@ -125,9 +125,13 @@ export interface RenderingFeedbackEvent {
    *
    * One of the iframe capture script's reasons ('taint', 'zero-size',
    * 'serialize-error', 'img-load-error', 'no-provider'), 'no-response' when the
-   * iframe never answered at all, 'not-mounted' when this tab does not have the
-   * window in its DOM (another tab may), 'no-iframe' when the window element holds no
-   * live iframe, or 'exception' when the capture itself threw. Absent on success and on non-capture feedback.
+   * iframe never answered at all, 'no-capture-handler (<content type>)' when it never
+   * answered because its document is one the capture script cannot be injected into
+   * (an XML document with no `<head>`; an image document such as SVG is drawn by the
+   * desktop instead, failing with the script's own reasons), 'not-mounted' when this
+   * tab does not have the window in its DOM (another tab may), 'no-iframe' when the
+   * window element holds no live iframe, or 'exception' when the capture itself threw.
+   * Absent on success and on non-capture feedback.
    * A failed capture used to be reported as a bare "returned empty", which reads
    * the same whether the canvas was tainted (retrying is futile) or the page was
    * merely slow (retrying is the fix).

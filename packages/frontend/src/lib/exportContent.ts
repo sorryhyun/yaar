@@ -1,7 +1,7 @@
 /**
  * Export window content as downloadable files.
  */
-import { tryIframeSelfCapture } from '@/store';
+import { captureIframe } from '@/store';
 import type { WindowModel } from '@/types/state';
 import { useDesktopStore } from '@/store';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
@@ -98,7 +98,7 @@ export async function exportContent(
 
           // Tier 2: Screenshot via self-capture protocol
           if (el.contentWindow) {
-            const { imageData } = await tryIframeSelfCapture(el);
+            const { imageData } = await captureIframe(el);
             if (imageData) {
               const res = await fetch(imageData);
               const pngBlob = await res.blob();

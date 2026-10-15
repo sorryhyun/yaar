@@ -5,7 +5,7 @@ export {
   handleVerbSubscriptionUpdate,
   handleStreamFrame,
   resendAppProtocolReady,
-  tryIframeSelfCapture,
+  captureIframe,
   getIframeDragSource,
   consumeIframeDragSource,
   dropFilesOnWindow,
