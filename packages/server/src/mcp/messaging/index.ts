@@ -25,7 +25,12 @@
 
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { requireMonitorId, getWindowId, getAgentRole } from '../../agents/agent-context.js';
+import {
+  requireMonitorId,
+  getAgentId,
+  getWindowId,
+  getAgentRole,
+} from '../../agents/agent-context.js';
 import { getActiveSession } from '../../handlers/utils.js';
 import { ok, error } from '../../lib/verb-result.js';
 import type { LiveSession } from '../../session/live-session.js';
@@ -134,6 +139,10 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
           monitorId,
         })
         .catch((err: unknown) => log.error('monitor route failed', { monitorId, err }));
+      // So the sender's response hook, if its turn has one, knows the monitor already has
+      // this reply and does not deliver it again (AppTaskProcessor, `repliedDirectly`).
+      const senderAgentId = getAgentId();
+      if (senderAgentId) pool.agentPool.noteMonitorMessaged(senderAgentId, monitorId);
       return {
         ok: true,
         text: `Message delivered to monitor "${monitorId}" (messageId: ${messageId}).`,

@@ -178,7 +178,7 @@ example); the built-ins are for the jobs no command covers.
 
 ### Monitor ↔ App Agent communication
 
-- **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back.
+- **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back. A turn that already answered that monitor with `direct_message` fires no hook — the reply would arrive twice (`AppTaskProcessor`, `repliedDirectly`).
 - **Monitor → App, starting over**: the same call with `fresh: true` retires the app agent first (its memory lives in its provider session, which `disposeAppAgent` ends). A `fresh` task never steers, releases inside the processing lock, and drops handoff fingerprints; sub-agents deliberately survive. Rationale in `AppTaskProcessor` and `AgentPool`.
 - **App → Monitor**: App agent's `relay` tool enqueues a `type: 'monitor'` task. App agent responses are also pushed to `InteractionTimeline` and drained by the monitor on its next turn.
 

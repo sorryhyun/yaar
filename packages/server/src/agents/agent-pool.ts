@@ -528,6 +528,19 @@ export class AgentPool {
   }
 
   /**
+   * Record that this agent just sent a `direct_message` to a monitor. See
+   * {@link PooledAgent.monitorMessageCount}. An id that is not one of this pool's is ignored.
+   */
+  noteMonitorMessaged(agentId: string, monitorId: string): void {
+    for (const { agent } of this.allAgents()) {
+      if (agent.instanceId !== agentId) continue;
+      const counts = (agent.monitorMessageCount ??= new Map());
+      counts.set(monitorId, (counts.get(monitorId) ?? 0) + 1);
+      return;
+    }
+  }
+
+  /**
    * Find the monitorId for a given agent instanceId.
    *
    * App agents count: they are keyed by the monitor whose windows they drive, and

@@ -288,6 +288,11 @@ export class AppTaskProcessor {
 
       // Capture the app-agent's response text for relaying to the monitor
       let appResponseText = '';
+      // How many `direct_message`s this agent had sent the asking monitor before the turn;
+      // a higher count after it means the turn answered the monitor itself.
+      const messagedBefore = task.monitorId
+        ? (agent.monitorMessageCount?.get(task.monitorId) ?? 0)
+        : 0;
 
       await runAgentTurn(this.ctx, {
         agent,
@@ -318,17 +323,35 @@ export class AppTaskProcessor {
           // Skip it when the turn was interrupted (e.g. "stop all") — otherwise
           // the hook re-enqueues a monitor task and resurrects the monitor agent
           // the user just asked to stop.
-          const hookWillFire =
+          //
+          // Nor when the agent already answered that monitor itself, with `direct_message`
+          // during this turn. That message woke the monitor (a relay interrupts and
+          // queues), so the hook was a second delivery of the same reply and a second
+          // interrupt of whatever the monitor had started on the first (issue #182, gap 11).
+          const repliedDirectly =
+            !!task.monitorId &&
+            (agent.monitorMessageCount?.get(task.monitorId) ?? 0) > messagedBefore;
+          const hookRequested =
             task.hook === 'response' && !!task.monitorId && !agent.session.wasInterrupted();
+          const hookWillFire = hookRequested && !repliedDirectly;
+          if (hookRequested && repliedDirectly) {
+            log.info('response hook skipped — the agent already messaged the monitor', {
+              messageId: task.messageId,
+              appId,
+              monitorId: task.monitorId,
+            });
+          }
+          // The reply reaches the monitor by another sink: the hook, or the agent's own message.
+          const answerDelivered = hookWillFire || repliedDirectly;
 
           // Push to timeline so the monitor agent sees it on its next turn — but only
-          // carry the response text when no hook will deliver it. Both sinks land in
+          // carry the response text when nothing else delivers it. Both sinks land in
           // the monitor's next prompt, so including it in both makes the monitor read
           // the app agent's entire response twice, back to back. And with the text dropped,
           // a turn that emitted no OS actions (only app_command/app_query) would leave a
           // bare "No actions taken." stub that reads as a separate, unexplained turn — the
-          // hook response is already the whole account of it, so push nothing.
-          if (!hookWillFire || recordedActions.length > 0) {
+          // delivered reply is already the whole account of it, so push nothing.
+          if (!answerDelivered || recordedActions.length > 0) {
             this.ctx
               .timelineFor(monitorId)
               .pushAI(
@@ -336,7 +359,7 @@ export class AppTaskProcessor {
                 task.content.slice(0, 100),
                 recordedActions,
                 windowId,
-                hookWillFire ? undefined : appResponseText || undefined,
+                answerDelivered ? undefined : appResponseText || undefined,
               );
           }
 
