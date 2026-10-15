@@ -28,6 +28,7 @@ function appToken(): string {
       'yaar://config/app/other-app',
       'yaar://config/hooks/',
       'yaar://config/mcp/',
+      'yaar://apps/no-such-app-xyz',
     ],
   });
 }
@@ -94,4 +95,23 @@ describe('read of an absent config entry with missingOk', () => {
       expect(without.error).toContain('not found');
     });
   }
+});
+
+// `yaar://apps/{appId}` for an app that is not installed: the agent-facing log recorded
+// `{ missingOk: true }` reads of it as failures.
+describe('read of an uninstalled app with missingOk', () => {
+  beforeAll(() => {
+    initRegistry();
+  });
+
+  it('answers null with missingOk, and a not-found failure without it', async () => {
+    const uri = 'yaar://apps/no-such-app-xyz';
+    const withOption = await read(uri, { missingOk: true });
+    expect(withOption.ok).toBe(true);
+    expect(withOption.data).toBeNull();
+
+    const without = await read(uri);
+    expect(without.ok).toBe(false);
+    expect(String(without.error)).toContain('not found');
+  });
 });

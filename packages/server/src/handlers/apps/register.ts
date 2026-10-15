@@ -216,7 +216,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const skillResult = await readAppSkill(resolved.sourceUri);
       if (skillResult) return skillResult;
 
-      return rejectUnhandledSubPath(resolved.sourceUri) ?? readApplication(resolved);
+      return rejectUnhandledSubPath(resolved.sourceUri) ?? readApplication(resolved, options);
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {

@@ -13,9 +13,18 @@
 
 import type { OSAction } from '@yaar/shared';
 import type { ResourceHandler } from '../uri-registry.js';
-import { ok, okJson, okLinks, error, type VerbResult } from '../../lib/verb-result.js';
+import {
+  ok,
+  okJson,
+  okLinks,
+  okMissing,
+  error,
+  notFoundError,
+  type VerbResult,
+} from '../../lib/verb-result.js';
 import { extractIdFromUri } from '../utils.js';
 import type { ResolvedUri } from '../uri-resolve.js';
+import type { ReadOptions } from '../../lib/read-options.js';
 import { defineActions } from '../define-actions.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { listApps, getAppMeta } from '../../features/apps/discovery.js';
@@ -184,13 +193,19 @@ export async function describeApplication(resolved: ResolvedUri): Promise<VerbRe
  * `kind`, `source` and `version` ride along because they are not in the file at all —
  * they are decided by which root the app was found in.
  */
-export async function readApplication(resolved: ResolvedUri): Promise<VerbResult> {
+export async function readApplication(
+  resolved: ResolvedUri,
+  options?: ReadOptions,
+): Promise<VerbResult> {
   const appId = extractIdFromUri(resolved.sourceUri, 'apps');
   if (!appId) return error('App ID required.');
 
   const apps = await listApps();
   const app = apps.find((a) => a.id === appId);
-  if (!app) return error(`App "${appId}" not found.`);
+  if (!app) {
+    // An optional-dependency probe (`read(uri, { missingOk: true })`) is expecting this.
+    return options?.missingOk ? okMissing() : notFoundError(`App "${appId}" not found.`);
+  }
 
   const meta = await getAppMeta(appId);
 
