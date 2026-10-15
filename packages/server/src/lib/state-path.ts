@@ -22,6 +22,8 @@
  * segment is YAAR's syntax, not a name from the app's data.
  */
 
+import { compilePattern } from './regex-pattern.js';
+
 /** The segment that makes the next one a position rather than a name. */
 export const INDEX_SEGMENT = '__idx';
 
@@ -159,12 +161,9 @@ export function searchValuePaths(
   context = 0,
   addressable = false,
 ): string {
-  let regex: RegExp;
-  try {
-    regex = new RegExp(pattern);
-  } catch {
-    return `Invalid regex pattern: "${pattern}"`;
-  }
+  const compiled = compilePattern(pattern);
+  if ('error' in compiled) return `Invalid regex pattern: "${pattern}" (${compiled.error})`;
+  const { regex } = compiled;
 
   const leaves: Leaf[] = [];
   collectLeaves(value, '', leaves);

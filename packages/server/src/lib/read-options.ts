@@ -8,6 +8,7 @@
 
 import type { GltfSummaryOptions } from '@yaar/lib/gltf';
 import { searchValuePaths } from './state-path.js';
+import { compilePattern } from './regex-pattern.js';
 
 /**
  * glTF/GLB only. A model read returns a structural summary (node tree, bounds, materials,
@@ -249,12 +250,11 @@ export function applyReadOptions(
 
   // Step 2: Apply pattern filter
   if (options.pattern) {
-    let regex: RegExp;
-    try {
-      regex = new RegExp(options.pattern);
-    } catch {
-      return `Invalid regex pattern: "${options.pattern}"`;
+    const compiled = compilePattern(options.pattern);
+    if ('error' in compiled) {
+      return `Invalid regex pattern: "${options.pattern}" (${compiled.error})`;
     }
+    const { regex } = compiled;
 
     const ctx = options.context ?? 0;
     const matchedLineNums = new Set<number>();

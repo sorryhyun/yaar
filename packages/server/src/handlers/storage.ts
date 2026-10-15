@@ -187,7 +187,10 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       required: ['action'],
       properties: {
         action: storageActions.schema,
-        pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
+        pattern: {
+          type: 'string',
+          description: 'Regex pattern to search for (grep); a leading "(?i)" ignores case',
+        },
         glob: {
           type: 'string',
           description:

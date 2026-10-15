@@ -18,7 +18,9 @@ export const STORAGE_ACTION_DOCS = {
   edit:
     'Edit this text file: replace "old_string" with "new_string", or lines ' +
     '"start_line".."end_line" with "new_string".',
-  grep: 'Search the files under this path for regex "pattern", optionally narrowed by "glob".',
+  grep:
+    'Search the files under this path for regex "pattern" (JavaScript syntax; a leading ' +
+    '"(?i)" makes it case-insensitive), optionally narrowed by "glob".',
   extract: 'Unpack the archive at "from" into this (new) folder.',
   compress: 'Pack "from" (a file or folder, or an array of them) into the archive this URI names.',
   share: "Open Android's share sheet for this file; the user picks the app it goes to.",

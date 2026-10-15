@@ -38,6 +38,7 @@ import type {
 import { resolveMountPath, mountRootAlias, loadMounts, type ResolvedPath } from './mounts.js';
 // A leaf, shared with window content inlining — see text-extensions.ts for why not here.
 import { isTextFile } from './text-extensions.js';
+import { compilePattern } from '../lib/regex-pattern.js';
 import {
   GLTF_READ_OPTION_HINTS,
   pickGltfOptions,
@@ -919,13 +920,9 @@ export async function storageGrep(
   }
   const basePath = resolved.absolutePath;
 
-  let regex: RegExp;
-  try {
-    regex = new RegExp(pattern);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Invalid regex';
-    return { success: false, error: `Invalid pattern: ${msg}` };
-  }
+  const compiled = compilePattern(pattern);
+  if ('error' in compiled) return { success: false, error: `Invalid pattern: ${compiled.error}` };
+  const { regex } = compiled;
 
   let dirStat;
   try {
