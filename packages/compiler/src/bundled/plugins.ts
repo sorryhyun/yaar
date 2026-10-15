@@ -16,6 +16,7 @@ import { MODULE_ROOT, SHIMS_DIR } from '../paths.js';
 import { scanSourceFile, formatFindings } from '../guards/solid-html-guard.js';
 import { scanMountTargetsIn, formatMountFindings } from '../guards/mount-guard.js';
 import { loadTypeScript } from '../load-typescript.js';
+import { rewriteHtmlClosingTags } from '../guards/html-closing-tags.js';
 import { createAppSourceFile } from '../guards/guard-report.js';
 import { readThrough, type AppSourceCache } from '../build/source-cache.js';
 import {
@@ -489,13 +490,13 @@ export function solidHtmlSourcePlugin(sources?: AppSourceCache): Bun.BunPlugin {
         // most of these files already, and this hook must still return the
         // (possibly rewritten) contents either way.
         const text = await readThrough(sources, filePath);
-        const rewritten = text.replace(/<\/\$\{([^}]+)\}>/g, '</>');
-
         // Cheap text gates so the TS parser only runs on files that could match.
         const mayHaveTemplates = text.includes('html`');
         const mayMount = text.includes('render(');
+        const ts = mayHaveTemplates || mayMount ? await loadTs() : null;
+        const rewritten = rewriteHtmlClosingTags(ts, filePath, text);
+
         if (mayHaveTemplates || mayMount) {
-          const ts = await loadTs();
           if (ts) {
             // One parse for both guards — a file that matches both gates used to
             // be handed to `ts.createSourceFile` twice over identical text.

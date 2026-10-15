@@ -19,6 +19,7 @@ import { readdir, readFile } from 'fs/promises';
 import { join, relative, sep } from 'path';
 import { loadTypeScript } from '../load-typescript.js';
 import { createAppSourceFile } from './guard-report.js';
+import { rewriteHtmlClosingTags } from './html-closing-tags.js';
 import { scanSourceFile } from './solid-html-guard.js';
 import { scanMountTargetsIn, APP_MOUNT_ID } from './mount-guard.js';
 
@@ -80,9 +81,9 @@ export async function scanProjectGuards(sandboxPath: string): Promise<string[]> 
     if (!mayHaveTemplates && !mayMount) continue;
 
     // The plugin rewrites `</${Component}>` to `</>` before parsing; without the
-    // same rewrite a legal closing tag parses as junk and reports a finding the
+    // same rewrite (html templates only) a legal closing tag parses as junk and reports a finding the
     // build never raises.
-    const rewritten = text.replace(/<\/\$\{([^}]+)\}>/g, '</>');
+    const rewritten = rewriteHtmlClosingTags(ts, file, text);
     const rel = relative(sandboxPath, file).split(sep).join('/');
     const sf = createAppSourceFile(ts, rel, rewritten);
 
