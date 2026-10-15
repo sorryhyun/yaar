@@ -319,7 +319,11 @@ export const buildCommands = {
       'via }) that app.json does not grant, each a 403 at runtime, judged by the ' +
       "server's own permission check (`httpFetch` and a cross-origin `fetch` count as " +
       'invoke yaar://http; a URI built at runtime is not read); `permissions.problems` — ' +
-      'app.json entries the server does not honour as written. Lexical and heuristic: a ' +
+      'app.json entries the server does not honour as written; `storagePolling` — a ' +
+      'setInterval, or a self-re-arming setTimeout, whose callback reads storage (a warning: ' +
+      'storage writes notify, so watch with `subscribe(uri, cb)` or ' +
+      '`appDb.createReactiveCollection` — the `multi-window-sync` topic). Lexical and ' +
+      'heuristic: a ' +
       'class built at runtime from parts, or a path outside the project, can appear here, ' +
       'so read each before acting on it.',
     params: { type: 'object', properties: {} },

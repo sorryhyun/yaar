@@ -26,6 +26,18 @@ Without a raised `timeoutMs`, a slow build surfaces as "App did not respond" ins
 
 **Testing after fixes:** pin a fixed bug in pure logic with a unit test and `runTests` (the `unit-testing` topic). For a complex or uncertain change, `relay` the monitor to open and exercise the real app. For a refactor that must preserve behavior, capture a `previewScript` baseline on the pre-change build and re-run it after — the `regression-testing` topic — rather than driving commands by hand and judging the numbers yourself.
 
+## Before Designing: Match the Spec to a Topic
+
+These platform features exist and are easy to miss — reinventing one costs the whole design. When the request carries the signal, pull the topic **before** writing code:
+
+| Spec says | Reach for | Never |
+|---|---|---|
+| several agents, roles, workers, characters | `sub-agents` topic (`yaar://apps/self/agents`, personas) | open more windows of one app and role-play the rest: they share one app agent |
+| a user action should trigger / wake the agent | `agent-and-user` topic ("Which user actions wake the agent": `app.sendInteraction`, `toMonitor`) | leave the user's question in app state for an agent that never looks |
+| several windows share or sync state | `multi-window-sync` topic (`createSharedSignal`, `subscribe(uri, cb)`, `appDb.createReactiveCollection`) | poll storage on a timer — writes already notify, and `checkProject` flags a poll |
+| a large or fixed layout | `defaultWidth`/`defaultHeight` in `app.json` — `create` uses them when the caller passes no size | assume the default window size fits |
+| custom visuals: WebGL, nested iframes, canvas the screenshot cannot see | `defineApp({ onCapture })` returning a data-URL image | ship an app whose captures come back blank |
+
 ## Projects and Clones
 
 **Read another app's source with `readAppSource`; clone it only to change it.** `readAppSource` writes nothing and leaves the active project in front. `cloneApp` makes an editable project *here*; the `search` app's `clone-app` writes source into shared storage instead (and takes a glob, so it is the one to reach for when a question spans many apps). Its `purge-clones` cleans up after itself; `deleteProject` cleans up after this one.

@@ -4,6 +4,7 @@ import { bundledLibraries, checkPermissions } from '@bundled/yaar-dev';
 import { activeProject, files } from '../core';
 import { isGeneratedPath, projectPath } from '../lib/paths';
 import { collectVerbUses, type VerbUse } from '../lib/permission-uses';
+import { findStoragePolling, type StoragePoll } from '../lib/storage-polling';
 import {
   cssClassReport,
   findStaleFileRefs,
@@ -14,8 +15,8 @@ import { readFileText } from './files';
 
 // Static checks over the active project's text that neither the type checker nor the
 // bundler makes: comments and docs naming source files that are gone, CSS classes
-// that are defined but never named, or named but never styled, and `yaar://` uses that
-// app.json does not grant.
+// that are defined but never named, or named but never styled, `yaar://` uses that
+// app.json does not grant, and timer loops that poll storage.
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs)$/;
 /** Test files never ship, so what they reach needs no grant. */
@@ -33,6 +34,8 @@ export interface ProjectCheck {
   staleFileRefs: StaleFileRef[];
   css: CssClassReport;
   permissions?: PermissionReport;
+  /** Timer loops that re-read storage — a warning: `subscribe` delivers the change instead. */
+  storagePolling?: StoragePoll[];
   /** Why `permissions` is absent: the server could not be asked. */
   permissionsNote?: string;
   /** Entries past the per-list cap, by list. */
@@ -102,6 +105,9 @@ export async function checkProject(): Promise<ProjectCheck> {
     ),
   ]);
   const staleFileRefs = findStaleFileRefs(texts, paths);
+  const storagePolling = findStoragePolling(
+    texts.filter((t) => SOURCE_EXT.test(t.path) && !TEST_FILE.test(t.path)),
+  );
   const css = cssClassReport(
     texts.filter((t) => t.path.endsWith('.css')),
     texts.filter((t) => SOURCE_EXT.test(t.path)),
@@ -127,6 +133,7 @@ export async function checkProject(): Promise<ProjectCheck> {
           },
         }
       : {}),
+    ...(storagePolling.length ? { storagePolling: cap('storagePolling', storagePolling) } : {}),
     ...(perms.permissionsNote ? { permissionsNote: perms.permissionsNote } : {}),
     ...(Object.keys(omitted).length ? { omitted } : {}),
     ...(sdk.list.length === 0
@@ -158,5 +165,10 @@ export function summarizeCheck(check: ProjectCheck): string[] {
   if (check.css.unstyled.length)
     lines.push(`${check.css.unstyled.length} class(es) used with no CSS rule`);
   if (check.css.unused.length) lines.push(`${check.css.unused.length} CSS class(es) nothing names`);
+  if (check.storagePolling?.length) {
+    lines.push(
+      `${check.storagePolling.length} timer loop(s) re-reading storage — subscribe instead (multi-window-sync topic)`,
+    );
+  }
   return lines;
 }

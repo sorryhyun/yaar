@@ -61,8 +61,10 @@ import {
   countLines,
   sliceLines,
   searchSources,
+  compileSearchPattern,
   verbUsesIn,
   collectVerbUses,
+  storagePollsIn,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -1226,6 +1228,11 @@ const appSource = suite('app-source', {
     eq(countLines('a\nb'), 2);
   },
 
+  'compileSearchPattern lifts leading i, m, s into RegExp flags'() {
+    eq(compileSearchPattern('(?is)a.b').flags, 'is');
+    eq(compileSearchPattern('(?is)a.b').source, 'a.b');
+  },
+
   'sliceLines is 1-based, inclusive, and clamped to the file'() {
     eq(sliceLines('a\nb\nc\n', 2, 3), { content: 'b\nc', from: 2, to: 3 });
     eq(sliceLines('a\nb\nc', 0, 99), { content: 'a\nb\nc', from: 1, to: 3 });
@@ -1248,6 +1255,13 @@ const appSource = suite('app-source', {
     const capped = searchSources(files, 'needle', undefined, 2);
     eq(capped.matches.length, 2);
     eq(capped.total, 4, 'the cap clips the list, not the count');
+  },
+
+  'a leading (?i) group is read as a flag, and an unsupported one is named'() {
+    const files = [{ path: 'src/a.ts', content: 'Needle\nneedle\nhay' }];
+    eq(searchSources(files, '(?i)NEEDLE').total, 2);
+    eq(searchSources(files, '(?<=N)eedle').total, 1, 'a lookbehind is left to the engine');
+    throwsWith(() => searchSources(files, '(?x)needle'), 'i, m and s');
   },
 });
 
@@ -1327,6 +1341,51 @@ const permissionUses = suite('permission-uses', {
   },
 });
 
+const storagePolling = suite('storage-polling', {
+  'an interval whose callback reads storage, inline or one call deep'() {
+    const src = [
+      "import { appStorage, read } from '@bundled/yaar';",
+      'setInterval(async () => { setBoard(await appStorage.readJson("board.json")); }, 1000);',
+      'async function refresh() { return read("yaar://apps/self/storage/board.json"); }',
+      'window.setInterval(() => refresh(), 2000);',
+      'setInterval(refresh, 500);',
+    ].join('\n');
+    eq(
+      storagePollsIn('src/main.ts', src).map((p) => `${p.line} ${p.timer} ${p.read}`),
+      [
+        '2 setInterval appStorage.readJson(',
+        '4 setInterval read("yaar://apps/self/storage',
+        '5 setInterval read("yaar://apps/self/storage',
+      ],
+    );
+  },
+
+  'a setTimeout counts only when it re-arms the reading function'() {
+    const src = [
+      "const notes = appDb.collection('notes');",
+      'const poll = async () => {',
+      '  render(await notes.find({}));',
+      '  setTimeout(poll, 1000);',
+      '};',
+      'function once() { appStorage.read("a.txt"); setTimeout(() => toast(), 50); }',
+    ].join('\n');
+    eq(
+      storagePollsIn('src/store.ts', src).map((p) => `${p.line} ${p.timer} ${p.read}`),
+      ['4 setTimeout notes.find('],
+    );
+  },
+
+  'timers that never read storage, and reads in comments, are not reported'() {
+    const src = [
+      'setInterval(() => tick(clock() + 1), 1000);',
+      '// setInterval(() => appStorage.read("x"), 1000);',
+      'const t = "setInterval(() => appStorage.read(1))";',
+      'subscribe("yaar://apps/self/storage/board.json", () => appStorage.read("board.json"));',
+    ].join('\n');
+    eq(storagePollsIn('src/main.ts', src), []);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -1347,4 +1406,5 @@ export const libSuites: Suite[] = [
   cloneSummary,
   appSource,
   permissionUses,
+  storagePolling,
 ];

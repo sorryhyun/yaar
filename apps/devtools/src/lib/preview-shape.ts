@@ -1,4 +1,5 @@
 export {};
+import { compileSearchPattern } from './search-pattern';
 
 // Shaping what preview and search reads hand back to the agent: pure, so the cuts can be
 // pinned by the lib suite without a running preview.
@@ -19,7 +20,7 @@ export function clipMatchLine(content: string, pattern: string, max = GREP_LINE_
   let start = 0;
   let end = 0;
   try {
-    const m = new RegExp(pattern).exec(content);
+    const m = compileSearchPattern(pattern).exec(content);
     if (m) {
       start = m.index;
       end = m.index + m[0].length;
