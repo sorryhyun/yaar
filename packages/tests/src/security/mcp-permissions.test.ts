@@ -101,8 +101,25 @@ describe('isDomainAllowed — with storage mock', () => {
     mockAllowlistStorage(null);
 
     const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
-    // Falls back to default empty config → deny
+    // Falls back to the seeded default → deny everything but the marketplace
     expect(await isDomainAllowed('example.com')).toBe(false);
+  });
+
+  it('seeds a fresh allowlist with the marketplace host only', async () => {
+    mockAllowlistStorage(null);
+
+    const { isDomainAllowed, seedAllowedDomains } =
+      await import('@yaar/server/features/config/domains');
+    expect(seedAllowedDomains()).toEqual(['yaarmarket.vercel.app']);
+    expect(await isDomainAllowed('yaarmarket.vercel.app')).toBe(true);
+    expect(await isDomainAllowed('www.githubstatus.com')).toBe(false);
+  });
+
+  it('does not re-add the marketplace to an existing allowlist', async () => {
+    mockAllowlistStorage('allowed_domains: []\n');
+
+    const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
+    expect(await isDomainAllowed('yaarmarket.vercel.app')).toBe(false);
   });
 
   it('serves a later fixture instead of the cached one when the mtime moves', async () => {

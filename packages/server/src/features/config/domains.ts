@@ -6,8 +6,20 @@
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { configRead, configWrite, configStatMtime } from '../../storage/index.js';
+import { MARKET_URL } from '../../config.js';
 
 const ALLOWED_DOMAINS_FILE = 'curl_allowed_domains.yaml';
+
+/**
+ * Domains a fresh allowlist starts with. The bundled Market Apps window fetches the
+ * marketplace catalog through the proxy, so an empty seed greets every new install
+ * with a domain dialog for YAAR's own marketplace. Seed-only: an existing file —
+ * including one where the user removed the entry — is never rewritten.
+ */
+export function seedAllowedDomains(): string[] {
+  const market = extractDomain(MARKET_URL ?? '');
+  return market ? [market] : [];
+}
 
 // In-memory cache of the parsed allowlist. `isDomainAllowed` runs on every
 // proxied httpFetch, and re-reading + YAML-parsing a tiny file each time is pure
@@ -45,7 +57,7 @@ async function readConfig(): Promise<AllowedDomainsConfig> {
 
   const result = await configRead(ALLOWED_DOMAINS_FILE);
   if (!result.success || !result.content) {
-    const defaultConfig: AllowedDomainsConfig = { allowed_domains: [] };
+    const defaultConfig: AllowedDomainsConfig = { allowed_domains: seedAllowedDomains() };
     await configWrite(ALLOWED_DOMAINS_FILE, stringifyYaml(defaultConfig));
     cache = { config: defaultConfig, mtimeMs: (await configStatMtime(ALLOWED_DOMAINS_FILE)) ?? 0 };
     return defaultConfig;

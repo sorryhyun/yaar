@@ -4,8 +4,8 @@
  * Every route that fetches a user-named URL has to consult the allowlist. Two of them
  * used to consult it and stop there: `/api/ml-weights` and `/api/ml-weights/download`
  * answered a miss with a bare 403, so on a fresh install — where `config/` doesn't
- * exist yet and the allowlist seeds empty — downloading a model from huggingface.co
- * failed with no dialog ever reaching the desktop. Asking lives here now, and every
+ * exist yet and the allowlist seeds with only the marketplace host — downloading a
+ * model from huggingface.co failed with no dialog ever reaching the desktop. Asking lives here now, and every
  * caller shares it.
  *
  * Asking is also *batched per session*. Each request used to ask on its own, so an app
