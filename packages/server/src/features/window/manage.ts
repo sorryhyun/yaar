@@ -1,19 +1,67 @@
 /**
- * Window management logic (close, reload, lock, unlock).
+ * Window management logic (close, minimize, reload, lock, unlock).
  */
 
 import type { OSAction } from '@yaar/shared';
 import { ok, error, type VerbResult } from '../../lib/verb-result.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getAgentId } from '../../agents/agent-context.js';
+import { getSessionHub } from '../../session/session-hub.js';
+import { getAgentId, getSessionId } from '../../agents/agent-context.js';
+import type { PooledAgent } from '../../agents/agent-roster.js';
 import { formatWindowRef, requireWindowExists, emitWindowAction } from './helpers.js';
 
-/** Handle window management actions (close, reload, lock, unlock). */
+/** The one question the close path asks of the app-agent tier. */
+export interface AppAgentLookup {
+  get(monitorId: string, appId: string): PooledAgent | undefined;
+}
+
+/** The calling session's app agents, or undefined before its pool exists. */
+function sessionAppAgents(): AppAgentLookup | undefined {
+  const sid = getSessionId();
+  const hub = getSessionHub();
+  return (sid ? hub.get(sid) : hub.getDefault())?.getPool()?.agentPool.appAgents;
+}
+
+/**
+ * The app whose agent this close is about to retire with its working context, if any.
+ *
+ * Closing an app's last window on a monitor disposes its app agent
+ * (`WindowEventCoordinator.handleWindowClose`) — by design, but invisibly to the caller,
+ * which tends to close a delegated window to tidy up and reopen it for follow-up work
+ * minutes later, to an agent that remembers nothing (issue #180). Asked *before* the
+ * close is emitted: the emit folds into the registry synchronously and starts the
+ * teardown, after which there is nothing left to ask. Only an agent that has run a turn
+ * counts — one that never did had no context to lose.
+ */
+function appAgentRetiredByClose(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  appAgents: AppAgentLookup | undefined,
+): string | undefined {
+  const win = windowState.getWindow(windowId);
+  const appId = win?.appId;
+  const monitorId = windowState.getMonitorForWindow(windowId);
+  if (!appId || !monitorId || !appAgents) return undefined;
+  const othersRemain = windowState
+    .listWindows()
+    .some(
+      (w) => w !== win && w.appId === appId && windowState.getMonitorForWindow(w.id) === monitorId,
+    );
+  if (othersRemain) return undefined;
+  return appAgents.get(monitorId, appId)?.session.hasConversation() ? appId : undefined;
+}
+
+/**
+ * Handle window management actions (close, minimize, reload, lock, unlock).
+ *
+ * `appAgents` defaults to the calling session's; tests pass their own.
+ */
 export async function handleManage(
   windowState: WindowStateRegistry,
   windowId: string,
-  action: 'close' | 'reload' | 'lock' | 'unlock',
+  action: 'close' | 'minimize' | 'reload' | 'lock' | 'unlock',
+  appAgents: AppAgentLookup | undefined = sessionAppAgents(),
 ): Promise<VerbResult> {
   const existsErr = requireWindowExists(windowState, windowId);
   if (existsErr) return existsErr;
@@ -24,8 +72,26 @@ export async function handleManage(
   switch (action) {
     case 'close': {
       if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+      const retired = appAgentRetiredByClose(windowState, windowId, appAgents);
       emitWindowAction({ type: 'window.close', windowId } satisfies OSAction, agentId);
-      return ok(`Closed window "${formatWindowRef(windowId)}"`);
+      const closed = `Closed window "${formatWindowRef(windowId)}"`;
+      if (!retired) return ok(closed);
+      return ok(
+        `${closed}. This retired the "${retired}" app agent and its working context; reopening ` +
+          'starts a fresh agent. If you expect follow-up work, minimize the window instead of ' +
+          'closing it.',
+      );
+    }
+
+    case 'minimize': {
+      // Keeps the window — and so its app agent — alive, out of the user's way.
+      if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+      const variant = windowState.getWindow(windowId)?.variant;
+      if (variant === 'widget' || variant === 'panel') {
+        return error(`Window "${windowId}" is a ${variant}; only standard windows minimize.`);
+      }
+      emitWindowAction({ type: 'window.minimize', windowId } satisfies OSAction, agentId);
+      return ok(`Minimized window "${formatWindowRef(windowId)}"`);
     }
 
     case 'reload': {

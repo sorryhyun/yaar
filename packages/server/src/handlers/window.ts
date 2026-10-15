@@ -229,6 +229,7 @@ export function registerWindowHandlers(
     create: ({ windowId, p }) => handleCreate(windowId, p),
     update: ({ windowId, p }) => handleUpdate(getWindowState(), windowId, p),
     close: ({ windowId }) => handleManage(getWindowState(), windowId, 'close'),
+    minimize: ({ windowId }) => handleManage(getWindowState(), windowId, 'minimize'),
     reload: ({ windowId }) => handleManage(getWindowState(), windowId, 'reload'),
     lock: ({ windowId }) => handleManage(getWindowState(), windowId, 'lock'),
     unlock: ({ windowId }) => handleManage(getWindowState(), windowId, 'unlock'),

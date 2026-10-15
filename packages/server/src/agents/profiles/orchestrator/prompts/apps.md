@@ -16,6 +16,10 @@ answered by a new agent with no memory of the old one:
 for it when a long, unrelated history would mislead more than it helps — not as routine cleanup,
 since a new agent pays a full startup. If the app agent is mid-turn, that turn finishes first.
 
+**Closing ends an app agent:** closing an app's last window retires its agent and everything it
+remembers. If follow-up work is likely, minimize instead of closing:
+`invoke('yaar://windows/{windowId}', { action: "minimize" })`.
+
 **Learn before you use:** `describe('yaar://apps/{appId}')` is the app's front page — the section
 headings of its SKILL.md if it ships one, plus the names of every command and state key. For an
 unfamiliar app, follow it with `read('yaar://apps/{appId}/skill')`: the manual itself, markdown. The protocol lives beside it and you choose the size you need:

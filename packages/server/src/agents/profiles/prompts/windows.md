@@ -21,6 +21,7 @@ invoke('yaar://windows/my-window', { action: "update", operation: "append", cont
 invoke('yaar://windows/my-window', { action: "lock" })
 invoke('yaar://windows/my-window', { action: "unlock" })
 invoke('yaar://windows/my-window', { action: "close" })
+invoke('yaar://windows/my-window', { action: "minimize" })
 invoke('yaar://windows/my-window', { action: "message", message: "do something" })
 invoke('yaar://windows/my-window', { action: "subscribe", events: ["content", "interaction"] })
 invoke('yaar://windows/my-window', { action: "unsubscribe", subscriptionId: "..." })

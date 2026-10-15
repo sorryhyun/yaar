@@ -271,6 +271,14 @@ export class AgentSession {
     return this.running && this.followingExternal;
   }
 
+  /**
+   * Whether this agent holds a conversation its next turn would continue — the working
+   * context that disposing it throws away. False for an agent that never ran a turn.
+   */
+  hasConversation(): boolean {
+    return this.hasProcessedFirstUserTurn && this.sessionId !== null;
+  }
+
   /** True if the most recent turn was interrupted (stays true through the post-turn callbacks). */
   wasInterrupted(): boolean {
     return this.interrupted;
