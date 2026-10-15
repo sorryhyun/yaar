@@ -127,3 +127,71 @@ describe('capture response — largest-canvas rescue', () => {
     expect(posted[0]?.degraded).toBeUndefined();
   });
 });
+
+/**
+ * A child frame never makes it into the composite: an SVG-as-image renders no nested
+ * browsing context. An app hosting a sandboxed user-content iframe came back as a blank
+ * window with nothing saying why (GitHub issue #182), so a visible frame is now a
+ * degraded note of its own.
+ */
+describe('capture — nested frames', () => {
+  function shippedCountVisibleFrames() {
+    return new Function('window', `${extract('countVisibleFrames')}; return countVisibleFrames;`)(
+      window,
+    ) as (root: Element) => number;
+  }
+
+  function shippedFramesNote() {
+    return new Function(`${extract('framesNote')}; return framesNote;`)() as (n: number) => string;
+  }
+
+  /** happy-dom runs no layout, so each element gets the box a browser would give it. */
+  function sized<T extends Element>(el: T, w: number, h: number): T {
+    el.getBoundingClientRect = () => ({ width: w, height: h }) as DOMRect;
+    return el;
+  }
+
+  it('counts every visible frame-like element', () => {
+    const root = document.createElement('div');
+    root.append(
+      sized(document.createElement('iframe'), 600, 400),
+      sized(document.createElement('embed'), 100, 100),
+      sized(document.createElement('object'), 50, 50),
+    );
+    expect(shippedCountVisibleFrames()(root)).toBe(3);
+  });
+
+  it('skips frames that leave no hole in the picture', () => {
+    const root = document.createElement('div');
+    const hiddenByStyle = sized(document.createElement('iframe'), 600, 400);
+    hiddenByStyle.style.display = 'none';
+    const invisible = sized(document.createElement('iframe'), 600, 400);
+    invisible.style.visibility = 'hidden';
+    const zeroSize = sized(document.createElement('iframe'), 0, 0);
+    root.append(hiddenByStyle, invisible, zeroSize);
+    document.body.append(root);
+    try {
+      expect(shippedCountVisibleFrames()(root)).toBe(0);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('reports zero for a document with no frames', () => {
+    const root = document.createElement('div');
+    root.append(sized(document.createElement('img'), 100, 100));
+    expect(shippedCountVisibleFrames()(root)).toBe(0);
+  });
+
+  it('names the count and the way out', () => {
+    const note = shippedFramesNote()(2);
+    expect(note).toContain('2 nested frame(s)');
+    expect(note).toContain('defineApp({ onCapture })');
+  });
+
+  it('is wired into the default capture, counted on the live document', () => {
+    const body = extract('defaultCapture');
+    expect(body).toContain('countVisibleFrames(docEl)');
+    expect(body).toContain('notes.push(framesNote(framesMissing))');
+  });
+});

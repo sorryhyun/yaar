@@ -30,13 +30,17 @@
  *
  * Degraded successes. A capture can also *succeed* while omitting real content, and
  * silence there is worse than a failure: the caller gets a plausible picture and
- * believes it. Three ways that happens, all of them now reported in `degraded` on
+ * believes it. Four ways that happens, all of them now reported in `degraded` on
  * the successful response:
  *   - the composite failed and the largest-canvas fallback rescued the pixels — the
  *     returned image is one canvas, not the window (this is the one that rendered an
  *     app's whole chrome as an empty dark box while the DOM held it)
  *   - a <canvas> could not be snapshotted (tainted or zero-size), so it composites blank
  *   - an <img> could not be inlined, so it composites as a transparent placeholder
+ *   - a visible child frame (<iframe>, <frame>, <embed>, <object>) is in the page. An
+ *     SVG-as-image loads nothing external and renders no nested browsing context, so
+ *     every one of them composites as an empty box — the sandboxed user-content frame
+ *     an app hosts came back as a blank window with no caveat (#182)
  * `degraded` is advisory text for whoever is looking at the image; its absence means
  * the composite believes it drew everything.
  */
@@ -417,6 +421,36 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     }
   }
 
+  /**
+   * How many child frames in \`root\` the user can currently see.
+   *
+   * The composite cannot draw any of them: an SVG-as-image renders no nested browsing
+   * context, and the src that would load one is stripped before serializing anyway. A
+   * frame the user cannot see (display:none, visibility:hidden, zero-size — a hidden
+   * bridge or analytics iframe) leaves no hole in the picture, so it is not counted.
+   */
+  function countVisibleFrames(root) {
+    var frames = root.querySelectorAll('iframe, frame, embed, object');
+    var n = 0;
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        var el = frames[i];
+        var r = el.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) continue;
+        var cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
+        if (cs && (cs.display === 'none' || cs.visibility === 'hidden')) continue;
+        n++;
+      } catch (e) {}
+    }
+    return n;
+  }
+
+  function framesNote(n) {
+    return n + ' nested frame(s) (<iframe>/<frame>/<embed>/<object>) not captured: ' +
+      'each renders as an empty box in this image, whatever it shows on screen. The app ' +
+      'can supply its own image via defineApp({ onCapture }).';
+  }
+
   /** Old tier-1 behavior, kept only as a last-resort fallback. */
   function largestCanvasCapture() {
     var canvases = document.querySelectorAll('canvas');
@@ -468,6 +502,10 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         return;
       }
 
+      // Counted on the live document, before the clone (which has no layout to measure).
+      var framesMissing = 0;
+      try { framesMissing = countVisibleFrames(docEl); } catch (e) {}
+
       var clone = docEl.cloneNode(true);
       // Order matters: inlineFormState/inlineResources pair original and clone
       // elements by index, so they must run while the clone is still an exact
@@ -485,6 +523,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       inlineFormState(clone, docEl);
       inlineResources(clone, docEl).then(function(imgsDropped) {
         var notes = [];
+        if (framesMissing > 0) notes.push(framesNote(framesMissing));
         if (imgsDropped > 0) {
           notes.push(imgsDropped + ' <img> element(s) could not be inlined and composite ' +
             'as transparent placeholders (an external URL would taint the canvas).');
