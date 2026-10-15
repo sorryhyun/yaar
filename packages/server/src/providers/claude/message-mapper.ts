@@ -322,8 +322,10 @@ export function mapClaudeMessage(
       // `errors[]` is routinely empty, which is how every failed turn used to
       // read "Unknown SDK error" regardless of cause. `describeResultError`
       // assembles the message out of `terminal_reason` and `stop_reason` too.
+      // Not logged here: an escape-guard retry swallows the interrupted turn's
+      // terminal, and logging it at this point read as a failure in the server
+      // log every time a retry recovered. The caller logs what it yields.
       const { text, code } = describeResultError(result);
-      log.error('SDK error', { error: text, subtype: result.subtype });
       return {
         type: 'error',
         error: text,

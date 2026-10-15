@@ -187,6 +187,28 @@ export function escapeGuardNotice(record: EscapeGuardRecord): StreamMessage {
   };
 }
 
+/** A call the trip's interrupt cut off: issued, still waiting on its result. */
+export interface CutOffCall {
+  toolName: string;
+  target?: string;
+}
+
+/** The same target a trip is named by, read off a parsed tool input. */
+export function callTarget(input: unknown): string | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  for (const key of ['uri', 'file_path', 'notebook_path']) {
+    const value = (input as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value) return value.slice(0, 200);
+  }
+  return undefined;
+}
+
+function describeCall(call: CutOffCall): string {
+  return call.target
+    ? `\`${call.toolName}\` call on \`${call.target}\``
+    : `\`${call.toolName}\` call`;
+}
+
 /**
  * The correction pushed to the model after a trip.
  *
@@ -194,17 +216,45 @@ export function escapeGuardNotice(record: EscapeGuardRecord): StreamMessage {
  * else was undone: the model sees an interrupt land after calls that already
  * returned results, and without both it guesses which call died — and redoes
  * one that had succeeded.
+ *
+ * The interrupt also cuts off every call still waiting on its result
+ * (`cutOff`), and the CLI answers each with "The user doesn't want to
+ * proceed…". Unexplained, the model takes that as the user rejecting the call
+ * and stops — and tells the user they rejected it — while the call's side
+ * effects carry on and land anyway. So the correction always disowns that
+ * wording, and names the cut-off calls with an instruction to check before
+ * redoing them.
  */
-export function escapeCorrection(record: Pick<EscapeGuardRecord, 'toolName' | 'target'>): string {
-  const call = record.target
-    ? `\`${record.toolName}\` call on \`${record.target}\``
-    : `\`${record.toolName}\` call`;
-  return (
-    `Your ${call} was cancelled before it ran: its arguments were being written as ` +
-    `\\uXXXX escape sequences instead of characters. Only that call was cancelled — ` +
-    `every call that already returned a result this turn ran normally, so do not repeat ` +
-    `those. Retry just the cancelled call, writing the text natively ` +
-    `(안녕, not \\uc548\\ub155). If a parameter takes JSON as a string, escape it once ` +
-    `for that string (\\\\n inside it, not \\n).`
+export function escapeCorrection(
+  record: Pick<EscapeGuardRecord, 'toolName' | 'target'>,
+  cutOff: readonly CutOffCall[] = [],
+): string {
+  const lines = [
+    `Your ${describeCall(record)} was cancelled before it ran: its arguments were being ` +
+      `written as \\uXXXX escape sequences instead of characters.`,
+  ];
+  if (cutOff.length === 0) {
+    lines.push(
+      `Only that call was cancelled — every call that already returned a result this turn ` +
+        `ran normally, so do not repeat those.`,
+    );
+  } else {
+    const [that, it] = cutOff.length === 1 ? ['That call', 'it'] : ['Those calls', 'them'];
+    lines.push(
+      `Cancelling it also cut off ${cutOff.map(describeCall).join(', ')}, which had not ` +
+        `returned yet. ${that} may already have run, or still be running — check whether ` +
+        `what ${it} produced exists before repeating ${it}; do not assume nothing ` +
+        `happened. Every call that already returned a result this turn ran normally, so do ` +
+        `not repeat those.`,
+    );
+  }
+  lines.push(
+    `Any "The user doesn't want to proceed with this tool use" result you see from this ` +
+      `cancellation came from YAAR, not the user — nobody rejected anything, so do not stop ` +
+      `or tell the user they rejected it.`,
+    `Retry the cancelled call, writing the text natively (안녕, not \\uc548\\ub155). If a ` +
+      `parameter takes JSON as a string, escape it once for that string (\\\\n inside it, ` +
+      `not \\n).`,
   );
+  return lines.join(' ');
 }

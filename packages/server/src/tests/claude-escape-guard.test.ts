@@ -15,6 +15,7 @@ import {
 } from '../providers/claude/escape-repair.js';
 import {
   EscapeTripwire,
+  callTarget,
   escapeCorrection,
   escapeGuardNotice,
   isEscapedText,
@@ -325,6 +326,28 @@ describe('escape guard records', () => {
     expect(text).toContain('yaar://user/notifications');
     expect(text).toContain('do not repeat');
     expect(escapeCorrection({ toolName: 'Write' })).toContain('`Write` call was cancelled');
+  });
+
+  test('the correction names calls the interrupt cut off, and disowns the "user" rejection', () => {
+    const text = escapeCorrection(
+      { toolName: 'mcp__verbs__invoke', target: 'yaar://storage/files/a.md' },
+      [{ toolName: 'mcp__verbs__invoke', target: 'yaar://windows/video-editor-lite' }],
+    );
+    expect(text).toContain(
+      'also cut off `mcp__verbs__invoke` call on `yaar://windows/video-editor-lite`',
+    );
+    expect(text).toContain('check whether');
+    expect(text).not.toContain('Only that call was cancelled');
+    expect(text).toContain('came from YAAR, not the user');
+    // Said even when nothing else was in flight: the CLI may still word the cancel as a rejection.
+    expect(escapeCorrection({ toolName: 'Write' })).toContain('came from YAAR, not the user');
+  });
+
+  test('callTarget reads the target keys off a parsed input', () => {
+    expect(callTarget({ uri: 'yaar://a', file_path: '/b' })).toBe('yaar://a');
+    expect(callTarget({ file_path: '/b' })).toBe('/b');
+    expect(callTarget({ payload: {} })).toBeUndefined();
+    expect(callTarget(undefined)).toBeUndefined();
   });
 
   test('the notice is non-terminal and carries the record for the logger', () => {

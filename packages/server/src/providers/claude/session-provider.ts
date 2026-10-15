@@ -30,7 +30,13 @@ import { createInputChannel, type InputChannel } from '../input-channel.js';
 import { withDeadline } from '../deadline.js';
 import { TurnGate } from '../turn-gate.js';
 import { TurnRouter, type DetachedTurn } from './turn-router.js';
-import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tripwire.js';
+import {
+  callTarget,
+  EscapeTripwire,
+  escapeCorrection,
+  escapeGuardNotice,
+  type CutOffCall,
+} from './escape-tripwire.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
@@ -151,6 +157,15 @@ const FINGERPRINT_SEP = '\u0000';
  */
 function isStaleSessionError(mapped: StreamMessage): boolean {
   return mapped.type === 'error' && !!mapped.error?.includes('No conversation found');
+}
+
+/**
+ * Log a failed turn's terminal at the point it is yielded. Not in the mapper:
+ * there it also logged the terminal an escape retry swallows, so every
+ * recovered retry read as an SDK failure.
+ */
+function logResultError(mapped: StreamMessage): void {
+  log.error('SDK error', { error: mapped.error, code: mapped.errorCode });
 }
 
 /** The conversation id an SDK frame names. Nearly every frame names one. */
@@ -523,6 +538,9 @@ export class ClaudeSessionProvider implements AITransport {
     // Per-turn too: block indices restart with each assistant message.
     const tripwire = new EscapeTripwire();
     let escapeRetries = 0;
+    // Calls issued this turn that have no result yet — what a trip's interrupt
+    // cuts off along with the call it means to cancel.
+    const unanswered = new Map<string, CutOffCall>();
     const sessions = new SessionReporter();
     // Set between "we interrupted" and "the interrupted turn's terminal arrived",
     // which is the one result message this turn must swallow rather than yield.
@@ -602,7 +620,7 @@ export class ClaudeSessionProvider implements AITransport {
               // correction queued; the turn either ends on its own or the outer
               // abort path takes it. Nothing useful to do here.
             });
-            this.send(session, escapeCorrection(tripped));
+            this.send(session, escapeCorrection(tripped, [...unanswered.values()]));
             continue;
           }
         }
@@ -625,8 +643,19 @@ export class ClaudeSessionProvider implements AITransport {
         if (awaitingEscapeRetry && (mapped.type === 'complete' || mapped.type === 'error')) {
           awaitingEscapeRetry = false;
           tripwire.reset();
+          log.info('escape retry: dropped the interrupted turn terminal', { type: mapped.type });
           continue;
         }
+
+        if (mapped.type === 'tool_use' && mapped.toolUseId) {
+          unanswered.set(mapped.toolUseId, {
+            toolName: mapped.toolName ?? 'unknown',
+            target: callTarget(mapped.toolInput),
+          });
+        } else if (mapped.type === 'tool_result' && mapped.toolUseId) {
+          unanswered.delete(mapped.toolUseId);
+        }
+        if (mapped.type === 'error') logResultError(mapped);
 
         yield mapped;
         // 'complete'/'error' map the SDK result message: the turn is over but
@@ -741,6 +770,7 @@ export class ClaudeSessionProvider implements AITransport {
       const sessionReport = sessions.report(frameSession);
       if (sessionReport) yield sessionReport;
       const mapped = mapClaudeMessage(msg as SDKMessage, usage, toolBlocks);
+      if (mapped?.type === 'error') logResultError(mapped);
       if (mapped) yield mapped;
     }
   }
