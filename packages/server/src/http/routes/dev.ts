@@ -199,7 +199,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
     const lib = url.searchParams.get('lib');
     if (lib) {
       const { getBundledLibraryDetail } = await import('@yaar/compiler');
-      const detail = getBundledLibraryDetail(lib, {
+      const detail = await getBundledLibraryDetail(lib, {
         symbol: url.searchParams.get('symbol') ?? undefined,
         section: url.searchParams.get('section') ?? undefined,
         full: ['1', 'true'].includes(url.searchParams.get('full') ?? ''),

@@ -39,6 +39,7 @@ src/
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 │   ├── three-renderer.ts  # app.json `"three": "webgpu"` — which three build `@bundled/three` means (readThreeRenderer)
 │   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent: index / symbol / section / full (+ design-tokens pseudo-library)
+│   ├── describe-upstream.ts # the export list of an npm package a block forwards (`export * from 'diff'`), read with the TS checker
 │   ├── ort-version.ts     # getOrtVersion() + the `define` that stamps it into yaar-ml's `?v=` runtime URLs
 │   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
 ├── guards/
@@ -356,13 +357,23 @@ default — section → export → first doc sentence — and `symbol` / `sectio
 exactly the types it references (`full: true` returns the whole block). `describe-library.test.ts` holds the two invariants: the
 index names every export, and a slice never names a module type it does not show.
 
+A block that forwards a package wholesale (`export * from 'diff'`, or `export = X` of an import)
+used to answer with that one line, or "0 exports in 0 sections" to a `symbol` query — so an
+agent hand-wrote the line diff `diff` already ships. `bundled/describe-upstream.ts` now lists
+the package's exports from its own types (resolved from this package's node_modules with the
+TypeScript checker, cached per specifier), appended to the answer as a `## Re-exported from`
+index, and a `symbol` miss in the block falls through to the upstream declaration plus the
+package types it names. Large packages collapse name lists to counts past a budget. Where the
+types cannot be read (the exe ships no node_modules) the index says so instead of listing
+nothing. This is why `getBundledLibraryDetail` is async.
+
 Three rules about `bundled-types/index.d.ts` itself:
 
 - **In a sectioned block, a new export goes under the section header it belongs to, and its
   doc comment's first sentence is its index line** — the whole of what an agent reads about it
   until it asks for more. An export with no doc comment is indexed by its bare signature.
 - **In-block comments in bare `export * from 'pkg'` blocks are part of the tool's output; keep
-  them accurate.** A bare re-export tells the agent nothing (it cannot open the upstream package),
+  them accurate.** The upstream index lists names, not which one to reach for,
   so the `solid-js` blocks name what lives in each entry point and which export to reach for —
   including that **Solid does not diff**, so `produce` (not an Immer-style copy) is the right
   store-update primitive. `@bundled/mediabunny` and `@bundled/hls.js` carry the same kind of block.

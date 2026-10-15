@@ -6,13 +6,22 @@
  * `bundled-types/index.d.ts` and prepending the `Yaar*` declarations they
  * reference — or, for a library sectioned with `// ── Title ──` headers, an index
  * of it and then one export or section on request. It is text-slicing over a `.d.ts` — no bundler, no TypeScript
- * program — which is why it lives beside the registry rather than in `plugins.ts`.
+ * program — which is why it lives beside the registry rather than in `plugins.ts`. The one
+ * exception is a block that forwards an npm package wholesale (`export * from 'diff'`):
+ * its exports are listed from the package's own types by `describe-upstream.ts`.
  */
 
 import { readFileSync } from 'fs';
 import { BUNDLED_TYPES_DTS } from '../paths.js';
 import { describeDesignTokens } from '../design-tokens.js';
 import { BUNDLED_LIBRARIES, getAvailableBundledLibraries } from './registry.js';
+import {
+  loadUpstreamModule,
+  upstreamSpecifiers,
+  UPSTREAM_TYPE_KINDS,
+  type UpstreamExport,
+  type UpstreamModule,
+} from './describe-upstream.js';
 
 // Lazily cached .d.ts content
 let _dtsContent: string | null = null;
@@ -77,10 +86,10 @@ export interface LibraryDetailQuery {
  * sentence of its doc), and `symbol`/`section` pull one slice with exactly the
  * types that slice references.
  */
-export function getBundledLibraryDetail(
+export async function getBundledLibraryDetail(
   name: string,
   query: LibraryDetailQuery = {},
-): string | null {
+): Promise<string | null> {
   const pseudo = PSEUDO_LIBRARIES[name];
   if (pseudo) return pseudo();
 
@@ -101,10 +110,11 @@ export function getBundledLibraryDetail(
 
   if (blocks.length === 0) return null;
 
+  const upstream = await loadUpstreams(blocks);
   const sections = blocks.flatMap(parseSections);
   const sectioned = sections.some((s) => s.title !== null);
   if (query.full || (!sectioned && !query.symbol && !query.section)) {
-    return fullDetail(content, blocks);
+    return fullDetail(content, blocks, upstream);
   }
 
   const library = `@bundled/${name}`;
@@ -113,7 +123,10 @@ export function getBundledLibraryDetail(
       s.members.filter((m) => m.name === query.symbol).map((m) => ({ ...m, section: s.title })),
     );
     if (members.length === 0) {
-      return `No export \`${query.symbol}\` in ${library}.\n\n${renderIndex(library, sections)}`;
+      return (
+        upstreamSlice(upstream, query.symbol) ??
+        `No export \`${query.symbol}\` in ${library}.\n\n${renderIndex(library, sections, upstream)}`
+      );
     }
     const where = members[0].section ? ` — section "${members[0].section}"` : '';
     const body = members.map((m) => m.text).join('\n\n');
@@ -125,7 +138,7 @@ export function getBundledLibraryDetail(
       sections.find((s) => s.title?.toLowerCase() === want) ??
       sections.find((s) => s.title?.toLowerCase().includes(want));
     if (!hit) {
-      return `No section matching "${query.section}" in ${library}.\n\n${renderIndex(library, sections)}`;
+      return `No section matching "${query.section}" in ${library}.\n\n${renderIndex(library, sections, upstream)}`;
     }
     const prose = hit.prose.length
       ? `\n${hit.prose.map((l) => `// ${l}`.trimEnd()).join('\n')}`
@@ -138,11 +151,15 @@ export function getBundledLibraryDetail(
       content,
     );
   }
-  return renderIndex(library, sections);
+  return renderIndex(library, sections, upstream);
 }
 
-/** The whole answer: module blocks plus every `Yaar*` declaration they reach. */
-function fullDetail(content: string, blocks: string[]): string {
+/**
+ * The whole answer: module blocks plus every `Yaar*` declaration they reach, then the
+ * export index of any npm package a block forwards — a bare `export * from 'diff'`
+ * names nothing an agent can call.
+ */
+function fullDetail(content: string, blocks: string[], upstream: Upstream[]): string {
   // Resolution is transitive and covers `type` aliases as well as `interface`es,
   // because a single `:`-anchored `interface`-only pass answered the question the
   // caller did not ask. The case that forced it was the old `app.register(config:
@@ -155,6 +172,12 @@ function fullDetail(content: string, blocks: string[]): string {
   // has the same depth.
   const preambles = resolveTopLevelRefs(content, blocks.join('\n\n'), new Set());
   const parts = preambles.length > 0 ? [...preambles, '', ...blocks] : blocks;
+  if (upstream.length > 0) {
+    parts.push(
+      'Describe again with `symbol` for one export (its declaration and the types it references).',
+      renderUpstream(upstream),
+    );
+  }
   return parts.join('\n\n');
 }
 
@@ -301,11 +324,13 @@ function summarize(doc: string[], declaration: string[]): string {
   return text.length > 180 ? `${text.slice(0, 177)}…` : text;
 }
 
-function renderIndex(library: string, sections: Section[]): string {
-  const count = new Set(sections.flatMap((s) => s.members.map((m) => m.name))).size;
+function renderIndex(library: string, sections: Section[], upstream: Upstream[]): string {
+  const names = new Set(sections.flatMap((s) => s.members.map((m) => m.name)));
+  for (const u of upstream) for (const e of u.module?.exports ?? []) names.add(e.name);
   const titled = sections.filter((s) => s.title !== null).length;
+  const where = titled > 0 ? ` in ${titled} sections` : '';
   const out = [
-    `${library} — ${count} exports in ${titled} sections. This is the index. Describe again ` +
+    `${library} — ${names.size} exports${where}. This is the index. Describe again ` +
       'with `symbol` for one export (with the types it references), `section` for a whole ' +
       'section, or `full: true` for everything.',
   ];
@@ -322,7 +347,136 @@ function renderIndex(library: string, sections: Section[]): string {
     }
     if (types.length) out.push(`- types: ${types.map((t) => `\`${t}\``).join(', ')}`);
   }
+  if (upstream.length > 0) out.push('', renderUpstream(upstream));
   return out.join('\n');
+}
+
+/**
+ * An npm package a `@bundled/*` block forwards, and the block that forwards it. `module` is
+ * null where the package's types cannot be read (the bundled exe ships no node_modules).
+ */
+interface Upstream {
+  via: string;
+  specifier: string;
+  module: UpstreamModule | null;
+}
+
+async function loadUpstreams(blocks: string[]): Promise<Upstream[]> {
+  const out: Upstream[] = [];
+  for (const block of blocks) {
+    const via = /^declare module '([^']+)'/.exec(block)?.[1];
+    if (!via) continue;
+    for (const spec of upstreamSpecifiers(block)) {
+      const module = await loadUpstreamModule(spec);
+      out.push({ via, specifier: spec, module: module?.exports.length ? module : null });
+    }
+  }
+  return out;
+}
+
+/** A package this small is listed with each value's first doc sentence. */
+const UPSTREAM_SUMMARY_LIMIT = 80;
+/**
+ * Name lists past this are collapsed to a count. three, pixi.js and lucide each export
+ * hundreds to thousands of names; spelling all of them out would make `three` the largest
+ * describe payload, the problem the `yaar` index exists to avoid.
+ */
+const UPSTREAM_INDEX_BUDGET = 10_000;
+
+const KIND_ORDER = [
+  'class',
+  'function',
+  'const',
+  'namespace',
+  'enum',
+  'interface',
+  'type',
+] as const;
+const KIND_PLURAL: Record<string, string> = {
+  class: 'classes',
+  function: 'functions',
+  const: 'constants',
+  namespace: 'namespaces',
+  enum: 'enums',
+  interface: 'interfaces',
+  type: 'type aliases',
+};
+
+function renderUpstream(upstream: Upstream[]): string {
+  const out: string[] = [];
+  let budget = UPSTREAM_INDEX_BUDGET;
+  const list = (label: string, of: UpstreamExport[], plural: string) => {
+    const line = `- ${label}: ${of.map((e) => `\`${e.name}\``).join(', ')}`;
+    if (line.length <= budget) {
+      out.push(line);
+      budget -= line.length;
+    } else {
+      out.push(`- ${of.length} ${plural} (too many to list; ask for one by \`symbol\`)`);
+    }
+  };
+  for (const { via, specifier, module } of upstream) {
+    if (out.length) out.push('');
+    if (!module) {
+      out.push(
+        `## Re-exported from \`${specifier}\` — import from \`${via}\``,
+        `- export list unavailable: \`${specifier}\`'s type declarations are not installed here. ` +
+          'Use its documented API, and let `typecheck` confirm the names.',
+      );
+      continue;
+    }
+    out.push(
+      module.ofDefault
+        ? `## Re-exported from \`${module.specifier}\` — members of the default import of \`${via}\` (${module.exports.length})`
+        : `## Re-exported from \`${module.specifier}\` — import from \`${via}\` (${module.exports.length} exports)`,
+    );
+    if (module.exports.length <= UPSTREAM_SUMMARY_LIMIT) {
+      const types: UpstreamExport[] = [];
+      for (const e of module.exports) {
+        if (UPSTREAM_TYPE_KINDS.has(e.kind)) types.push(e);
+        else out.push(`- \`${e.name}\` (${e.kind}) — ${e.summary}`);
+      }
+      if (types.length) list('types', types, 'types');
+      continue;
+    }
+    for (const kind of KIND_ORDER) {
+      const of = module.exports.filter((e) => e.kind === kind);
+      if (of.length) list(KIND_PLURAL[kind], of, KIND_PLURAL[kind]);
+    }
+  }
+  return out.join('\n');
+}
+
+/** Past this many referenced types a slice stops pulling more in. */
+const MAX_UPSTREAM_REFS = 20;
+
+/** One upstream export, with the package's own exported types it names, transitively. */
+function upstreamSlice(upstream: Upstream[], symbol: string): string | null {
+  for (const { via, module } of upstream) {
+    const hit = module?.exports.find((e) => e.name === symbol);
+    if (!module || !hit) continue;
+    const types = new Map(
+      module.exports.filter((e) => UPSTREAM_TYPE_KINDS.has(e.kind)).map((e) => [e.name, e]),
+    );
+    const included = new Set([hit.name]);
+    const refs: string[] = [];
+    let frontier = [hit.text];
+    while (frontier.length && refs.length < MAX_UPSTREAM_REFS) {
+      const next: string[] = [];
+      for (const text of frontier) {
+        for (const [, id] of text.matchAll(/\b([A-Z]\w*)\b/g)) {
+          const ref = types.get(id);
+          if (!ref || included.has(id) || refs.length >= MAX_UPSTREAM_REFS) continue;
+          included.add(id);
+          refs.push(ref.text);
+          next.push(ref.text);
+        }
+      }
+      frontier = next;
+    }
+    const head = `// ${via} — re-exported from '${module.specifier}'\n\n${hit.text}`;
+    return refs.length ? `${head}\n\n// Referenced types\n\n${refs.join('\n\n')}` : head;
+  }
+  return null;
 }
 
 /**
