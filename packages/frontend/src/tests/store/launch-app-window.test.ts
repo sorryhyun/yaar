@@ -141,7 +141,7 @@ describe('launchAppWindow', () => {
     expect(data).toEqual([`${NOTES.run}?url=x`, 'yaar://apps/q/index.html?mode=a&url=y']);
   });
 
-  it("cascades past the windows already open, at the manifest's size when it has one", async () => {
+  it("takes the first free cascade slot, at the manifest's size when it has one", async () => {
     const first = await launchAppWindow(NOTES);
     const second = await launchAppWindow({
       id: 'panel',
@@ -153,9 +153,10 @@ describe('launchAppWindow', () => {
       frameless: true,
     });
 
+    // Differently sized windows centre on different origins, so slot 0 is still free.
     expect(second.bounds).not.toEqual(first.bounds);
     const viewport = { w: globalThis.innerWidth, h: globalThis.innerHeight };
-    expect(second.bounds).toEqual(cascadeWindowBounds(1, 320, 240, viewport));
+    expect(second.bounds).toEqual(cascadeWindowBounds(0, 320, 240, viewport));
     const panel = openedWindows().find((w) => w.appId === 'panel');
     expect(panel?.variant).toBe('widget');
     expect(panel?.frameless).toBe(true);

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'bun:test';
-import { isWindowContentData, isContentUpdateOperationValid } from '../actions.js';
+import {
+  isWindowContentData,
+  isContentUpdateOperationValid,
+  cascadeWindowBounds,
+  nextCascadeBounds,
+} from '../actions.js';
 
 // The per-renderer shape guards (table / iframe / component) are module-internal; they are
 // exercised here through `isWindowContentData`, the one exported entry point that dispatches
@@ -111,5 +116,38 @@ describe('Runtime Validation', () => {
       expect(isContentUpdateOperationValid('markdown', { op: 'clear' })).toBe(true);
       expect(isContentUpdateOperationValid('table', { op: 'clear' })).toBe(true);
     });
+  });
+});
+
+describe('nextCascadeBounds', () => {
+  const viewport = { w: 1400, h: 900 };
+
+  it('uses slot 0 when nothing is open', () => {
+    expect(nextCascadeBounds([], 820, 600, viewport)).toEqual(
+      cascadeWindowBounds(0, 820, 600, viewport),
+    );
+  });
+
+  it('skips a slot still held by a survivor after an earlier window closed', () => {
+    const slot1 = cascadeWindowBounds(1, 820, 600, viewport);
+    // Slot 0 was closed; one window remains at slot 1, so count (1) would land on it.
+    const next = nextCascadeBounds([slot1], 820, 600, viewport);
+    expect(next).toEqual(cascadeWindowBounds(0, 820, 600, viewport));
+    expect(next.x === slot1.x && next.y === slot1.y).toBe(false);
+  });
+
+  it('treats positions within a few px as occupied', () => {
+    const slot0 = cascadeWindowBounds(0, 820, 600, viewport);
+    const next = nextCascadeBounds([{ x: slot0.x + 2, y: slot0.y - 3 }], 820, 600, viewport);
+    expect(next).toEqual(cascadeWindowBounds(1, 820, 600, viewport));
+  });
+
+  it('cycles by count when every slot is taken', () => {
+    const occupied = Array.from({ length: 10 }, (_, i) =>
+      cascadeWindowBounds(i, 820, 600, viewport),
+    );
+    expect(nextCascadeBounds(occupied, 820, 600, viewport)).toEqual(
+      cascadeWindowBounds(10, 820, 600, viewport),
+    );
   });
 });

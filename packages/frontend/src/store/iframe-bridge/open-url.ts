@@ -45,7 +45,7 @@
  *   the agent only once the app has taken the link. `"launch": false` on the hook opts
  *   out per rule.
  */
-import { cascadeWindowBounds, defaultWindowSize } from '@yaar/shared';
+import { nextCascadeBounds, defaultWindowSize } from '@yaar/shared';
 import type { OSAction, WindowBounds } from '@yaar/shared';
 import { apiFetch } from '@/lib/api';
 import { toWindowKey } from '@/store/helpers';
@@ -73,15 +73,15 @@ const PROBE_TIMEOUT_MS = 3_000;
  */
 function nextBounds(monitorId: string, size: { w?: number; h?: number } = {}) {
   const state = getDesktopState();
-  const openOnMonitor = Object.values(state.windows).filter(
-    (win) => win.monitorId === monitorId,
-  ).length;
+  const occupied = Object.values(state.windows)
+    .filter((win) => win.monitorId === monitorId)
+    .map((win) => win.bounds);
   const viewport = {
     w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
     h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
   };
   const fallback = defaultWindowSize(state.windowSize, viewport);
-  return cascadeWindowBounds(openOnMonitor, size.w ?? fallback.w, size.h ?? fallback.h, viewport);
+  return nextCascadeBounds(occupied, size.w ?? fallback.w, size.h ?? fallback.h, viewport);
 }
 
 /** A window the desktop opened on its own, in the shape `recordOpened` reports. */

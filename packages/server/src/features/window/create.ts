@@ -9,7 +9,7 @@ import {
   type WindowBounds,
   extractAppId,
   type WindowSizePreset,
-  cascadeWindowBounds,
+  nextCascadeBounds,
   defaultWindowSize,
 } from '@yaar/shared';
 import { okJson, error, type VerbResult } from '../../lib/verb-result.js';
@@ -74,13 +74,14 @@ function resolveDefaultBounds(
   const explicitY = payload.y as number | undefined;
   if (explicitX != null && explicitY != null) return { x: explicitX, y: explicitY, w, h };
 
-  const count = session
+  const occupied = session
     ? session.windowState
         .listWindows()
-        .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId).length
-    : 0;
+        .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId)
+        .map((win) => win.bounds)
+    : [];
 
-  const cascaded = cascadeWindowBounds(count, w, h, viewport);
+  const cascaded = nextCascadeBounds(occupied, w, h, viewport);
   return { x: explicitX ?? cascaded.x, y: explicitY ?? cascaded.y, w, h };
 }
 

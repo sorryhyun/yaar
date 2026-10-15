@@ -126,6 +126,30 @@ export function cascadeWindowBounds(
   };
 }
 
+/**
+ * Like `cascadeWindowBounds`, but picks the first slot whose origin is not already taken by
+ * one of `occupied` (within a few px), so closing an earlier window never sends the next
+ * one onto a survivor. When every slot is taken, cycles by `occupied.length`.
+ */
+export function nextCascadeBounds(
+  occupied: ReadonlyArray<{ x: number; y: number }>,
+  w: number,
+  h: number,
+  viewport?: { w: number; h: number },
+): WindowBounds {
+  const P = WINDOW_PLACEMENT;
+  const slots = Math.max(1, Math.ceil(P.cascadeMax / P.cascadeStep));
+  const tolerance = 4;
+  for (let i = 0; i < slots; i++) {
+    const candidate = cascadeWindowBounds(i, w, h, viewport);
+    const taken = occupied.some(
+      (o) => Math.abs(o.x - candidate.x) <= tolerance && Math.abs(o.y - candidate.y) <= tolerance,
+    );
+    if (!taken) return candidate;
+  }
+  return cascadeWindowBounds(occupied.length, w, h, viewport);
+}
+
 export interface WindowContent {
   renderer: string; // 'markdown', 'table', 'html', 'text', 'iframe'
   data: unknown;
