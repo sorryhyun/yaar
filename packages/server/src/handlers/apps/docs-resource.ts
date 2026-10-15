@@ -31,7 +31,7 @@ import {
   prependNote,
   type VerbResult,
 } from '../../lib/verb-result.js';
-import { listApps } from '../../features/apps/discovery.js';
+import { listApps, loadAppSkill } from '../../features/apps/discovery.js';
 import { loadAppDocs, runtimeDocs, type AppDocTopic } from '../../features/apps/docs.js';
 import { parseAppDocsPath } from './paths.js';
 
@@ -55,6 +55,17 @@ function parseTarget(uri: string): Target | null {
   return { ok: true, appId, name: rest };
 }
 
+/**
+ * The pointer to the app's SKILL.md, for a refusal on this tier — or '' when it ships none.
+ * The skill is not a topic, but "no topic docs" read without it sounds like "no docs at
+ * all", and `docs/skill` is the address a caller guesses for it.
+ */
+async function skillPointer(appId: string): Promise<string> {
+  return (await loadAppSkill(appId)) !== null
+    ? ` Its manual is SKILL.md, which is not a topic: read("yaar://apps/${appId}/skill").`
+    : '';
+}
+
 /** Either the app's topics, or the refusal explaining why there aren't any. */
 async function loadTopics(appId: string): Promise<AppDocTopic[] | ReturnType<typeof error>> {
   const apps = await listApps();
@@ -62,18 +73,24 @@ async function loadTopics(appId: string): Promise<AppDocTopic[] | ReturnType<typ
   const topics = await loadAppDocs(appId);
   if (topics.length === 0) {
     return error(
-      `App "${appId}" ships no topic docs (agent/docs/). ` +
-        `describe("yaar://apps/${appId}") for what it does document.`,
+      `App "${appId}" ships no topic docs (agent/docs/).` +
+        ((await skillPointer(appId)) ||
+          ` describe("yaar://apps/${appId}") for what it does document.`),
     );
   }
   return topics;
 }
 
 /** The not-found answer that names what *is* addressable, so a near-miss costs one call. */
-function unknownTopic(appId: string, name: string, topics: AppDocTopic[]): VerbResult {
+async function unknownTopic(
+  appId: string,
+  name: string,
+  topics: AppDocTopic[],
+): Promise<VerbResult> {
   return error(
     `"${name}" is not a doc topic of "${appId}". ` +
-      `Declared: ${topics.map((t) => t.name).join(', ')}.`,
+      `Declared: ${topics.map((t) => t.name).join(', ')}.` +
+      (await skillPointer(appId)),
   );
 }
 

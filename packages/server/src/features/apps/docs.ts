@@ -148,6 +148,16 @@ export function runtimeDocs(topics: AppDocTopic[]): AppDocTopic[] {
 }
 
 /**
+ * Whether a topic name a caller asked for means the app's `agent/SKILL.md`. The skill is
+ * not a topic — it is the manual `describe` opens with, served whole at
+ * `yaar://apps/{id}/skill` — but "skill" is the name callers reach for, so the topic doors
+ * answer it (or point at it) instead of reporting that nothing is documented.
+ */
+export function isSkillTopicName(name: string): boolean {
+  return /^skill(\.md)?$/i.test(name.trim());
+}
+
+/**
  * The topic files an app on disk keeps, as root-relative paths — what clone and deploy
  * carry. Enumerated rather than derived from `loadAppDocs` because the callers hold an
  * arbitrary directory (a sandbox, an app root), not an installed appId.

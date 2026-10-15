@@ -173,10 +173,10 @@ export function appRelativeEntries(appId: string, result: StorageListResult): St
 }
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '@yaar/lib/ids';
-import { getAppMeta } from '../../features/apps/discovery.js';
+import { getAppMeta, loadAppSkill } from '../../features/apps/discovery.js';
 import type { ControlEntry } from '../../features/apps/manifest.js';
 import { describeApp } from '../../features/apps/describe.js';
-import { loadAppDocs } from '../../features/apps/docs.js';
+import { isSkillTopicName, loadAppDocs } from '../../features/apps/docs.js';
 import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';
 import { renderPayloadExample } from '../../lib/command-signature.js';
 import {
@@ -445,6 +445,42 @@ async function sharedStorageCommand(
       return listAnswer(uri, await storageList(path), options);
     }
   }
+}
+
+/**
+ * `describe({ topic })` — one topic doc in full, by the name the index shows.
+ *
+ * `SKILL.md` is not a topic (it is the manual a bare `describe()` opens with), but "skill"
+ * is the name a caller reaches for: the monitor is told `yaar://apps/{id}/skill`, a URI
+ * an app agent holds no `read` to open. So the skill answers that name, and every miss
+ * names it — "ships no topic docs" alone read as "ships no docs at all" to a fresh agent
+ * whose app has a SKILL.md and nothing under `agent/docs/` (issue #182).
+ *
+ * The lookup is against *all* topics, not the runtime-filtered index: a `dev` topic asked
+ * for by name is answered, same as the verbs door.
+ */
+export async function describeAppTopic(
+  appId: string,
+  name: string,
+  /** The `appId` the caller passed, if any — echoed into the suggested call. */
+  passedAppId?: string,
+): Promise<VerbResult> {
+  const [topics, skill] = await Promise.all([loadAppDocs(appId), loadAppSkill(appId)]);
+  const topic = topics.find((t) => t.name === name);
+  if (topic) return ok(topic.body);
+  if (skill !== null && isSkillTopicName(name)) return ok(skill);
+  const skillCall = `describe({ topic: "skill"${passedAppId ? `, appId: "${passedAppId}"` : ''} })`;
+  return error(
+    `"${name}" is not a doc topic of "${appId}". ` +
+      (topics.length
+        ? `Declared: ${topics.map((t) => t.name).join(', ')}.`
+        : 'It ships no topic docs (agent/docs/).') +
+      (skill !== null
+        ? ` Its manual is SKILL.md, which is not a topic: ${skillCall} returns it.`
+        : topics.length
+          ? ''
+          : ' It ships no SKILL.md either.'),
+  );
 }
 
 export function registerAppAgentTools(server: McpServer): void {
@@ -915,22 +951,8 @@ export function registerAppAgentTools(server: McpServer): void {
       // One topic doc in full — the app agent's spelling of
       // `read('yaar://apps/{id}/docs/{name}')`, for the same reason as `command` above:
       // this caller holds no `read` verb, so the URI the docs index would otherwise
-      // point at is a door it cannot open. The lookup is against *all* topics, not the
-      // runtime-filtered index: a `dev` topic asked for by name is answered, same as
-      // the verbs door.
-      if (args.topic) {
-        const topics = await loadAppDocs(targetAppId);
-        const topic = topics.find((t) => t.name === args.topic);
-        if (!topic) {
-          return error(
-            `"${args.topic}" is not a doc topic of "${targetAppId}". ` +
-              (topics.length
-                ? `Declared: ${topics.map((t) => t.name).join(', ')}.`
-                : 'It ships no topic docs at all.'),
-          );
-        }
-        return ok(topic.body);
-      }
+      // point at is a door it cannot open.
+      if (args.topic) return { ...(await describeAppTopic(targetAppId, args.topic, args.appId)) };
 
       // One shape for one verb: this is `describeApp`, the same builder behind
       // describe("yaar://apps/{id}"). It used to assemble a third shape of its own here

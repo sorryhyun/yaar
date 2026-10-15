@@ -254,6 +254,13 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
 
     if (protocol.commands && Object.keys(protocol.commands).length > 0) {
       systemPrompt += '\n## Available Commands — run with `command(command, params)`\n\n';
+      // An unknown tool name is refused by the provider CLI before any YAAR code sees the
+      // call ("No such tool available: mcp__app__inspect"), so the error cannot be made to
+      // point here — the one place to say it is before the first call.
+      systemPrompt +=
+        'These are app commands, not tools: there is no `mcp__app__{name}` tool for any of ' +
+        'them. Call each through the `command` tool — `command({ command: "name", params: ' +
+        '{ … } })`.\n\n';
       systemPrompt +=
         'Signatures below are exact — `?` marks an optional param. Pass params under the ' +
         'names shown; an undeclared name is rejected, not ignored. ' +
