@@ -125,6 +125,12 @@ export interface ParsedMessage {
    * only by `SessionLogger.carryOver()`; see `SessionMetadata.restoredFrom`.
    */
   restored?: boolean;
+  /**
+   * On a `user` entry: injected into the agent's running turn rather than starting one
+   * (`SessionLogger.logSteeredMessage`). Absent in logs from older builds, which did not
+   * record steered messages at all.
+   */
+  steered?: boolean;
 }
 
 /**

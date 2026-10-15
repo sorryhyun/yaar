@@ -334,6 +334,36 @@ describe('a window message answered on a fresh app agent', () => {
     await first;
   });
 
+  it('frames a steered message with its source, and hands the agent its window source', async () => {
+    // Bare, a message landing mid-turn read to the busy agent as a misdirected broadcast
+    // (issue #182). The frame names who sent it and through which window; the source is
+    // what `AgentSession.steer` logs the entry under.
+    blockTurns = true;
+    const first = message('m1');
+    const incumbent = await runningAgent();
+
+    await pool.handleTask({
+      requestedType: 'app',
+      kind: 'relay',
+      messageId: 'brief',
+      windowId: WINDOW,
+      monitorId: MONITOR,
+      content: '<monitor:0>\nyou are the reviewer\n</monitor:0>',
+    });
+
+    const steer = incumbent.session.steer as unknown as { mock: { calls: unknown[][] } };
+    const [content, source] = steer.mock.calls[0] as [string, string];
+    expect(content.split('\n')[0]).toBe(
+      `<mid_turn_message from="agent" window="${APP}" monitor="${MONITOR}">`,
+    );
+    expect(content).toContain('addressed to you');
+    expect(content).toContain('<monitor:0>\nyou are the reviewer\n</monitor:0>');
+    expect(source).toBe(`yaar://windows/${WINDOW}`);
+
+    releaseHeldTurns();
+    await first;
+  });
+
   it('keeps the app busy when a parallel action finishes under a running turn', async () => {
     // A parallel (`actionId`) task skips the processing flag on the way in, so it must
     // leave it alone on the way out. When it cleared the flag unconditionally, a button

@@ -23,6 +23,7 @@ import {
   type RosterMember,
 } from './agent-roster.js';
 import { SpawnReservations } from './spawn-reservations.js';
+import type { ContextSource } from './context.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AppAgentRegistry');
@@ -231,10 +232,15 @@ export class AppAgentRegistry {
    * Try to steer an app agent's active turn with additional input.
    * Returns true if steering succeeded, false otherwise.
    */
-  async steer(monitorId: string, appId: string, content: string): Promise<boolean> {
+  async steer(
+    monitorId: string,
+    appId: string,
+    content: string,
+    source?: ContextSource,
+  ): Promise<boolean> {
     const agent = this.records.get(appAgentKey(monitorId, appId));
     if (!agent || !agent.session.isRunning()) return false;
-    return agent.session.steer(content);
+    return agent.session.steer(content, source);
   }
 
   // ── Disposal ─────────────────────────────────────────────────────────

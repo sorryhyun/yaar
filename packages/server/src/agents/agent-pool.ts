@@ -62,6 +62,7 @@ import type { SessionId } from '../session/types.js';
 import type { AITransport, TokenUsage } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
 import type { AgentPoolStats, PoolHost } from './pool-types.js';
+import type { ContextSource } from './context.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('AgentPool');
@@ -573,10 +574,14 @@ export class AgentPool {
    * Try to steer the monitor agent's active turn with additional input.
    * Returns true if steering succeeded, false otherwise.
    */
-  async steerMonitorAgent(monitorId = '0', content: string): Promise<boolean> {
+  async steerMonitorAgent(
+    monitorId = '0',
+    content: string,
+    source?: ContextSource,
+  ): Promise<boolean> {
     const agent = this.monitorAgents.get(monitorId);
     if (!agent || !agent.session.isRunning()) return false;
-    return agent.session.steer(content);
+    return agent.session.steer(content, source);
   }
 
   // ── Query / interrupt ───────────────────────────────────────────────

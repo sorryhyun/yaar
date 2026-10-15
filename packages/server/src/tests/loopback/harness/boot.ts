@@ -83,6 +83,7 @@ function createLoggerDouble(): SessionLogger {
     updateProvider: noop,
     registerAgent: asyncNoop,
     logUserMessage: noop,
+    logSteeredMessage: noop,
     logAssistantMessage: noop,
     logThinking: noop,
     logToolUse: noop,

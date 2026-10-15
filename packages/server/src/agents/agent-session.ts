@@ -644,9 +644,22 @@ export class AgentSession {
     return this.provider?.getRemoteControl?.() ?? null;
   }
 
-  async steer(content: string): Promise<boolean> {
+  /**
+   * Inject a message into the running turn. True when the provider took it.
+   *
+   * Logged here, as the user side of this agent's conversation, because a steered message
+   * never passes through {@link runTurn}'s `logUserMessage` — it used to leave nothing in
+   * `messages.jsonl` but a `server.log` line, so a transcript showed the agent reacting to
+   * a message it had no record of receiving. Only on success: a refused steer is queued or
+   * rerouted by the caller, and is logged as the turn it then becomes.
+   */
+  async steer(content: string, source?: ContextSource): Promise<boolean> {
     if (!this.running || !this.provider?.steer) return false;
-    return this.provider.steer(content);
+    const steered = await this.provider.steer(content);
+    if (steered) {
+      this.sessionLogger()?.logSteeredMessage(content, this.currentRole ?? undefined, source);
+    }
+    return steered;
   }
 
   /**

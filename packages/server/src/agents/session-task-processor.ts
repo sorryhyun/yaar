@@ -13,6 +13,7 @@
 import { ServerEventType } from '@yaar/shared';
 import { monitorSource } from './context.js';
 import { sessionRole } from './roles.js';
+import { frameSteeredMessage } from './steer-framing.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { SESSION_AGENT_PROFILE, turnOptionsFor } from './profiles/index.js';
 import type { PooledAgent } from './agent-roster.js';
@@ -61,15 +62,13 @@ export class SessionTaskProcessor {
     // If the deputy is mid-turn, steer it rather than queueing a run behind it.
     const running = this.ctx.agentPool.getSessionAgent();
     if (this.turn && running?.session.isRunning()) {
-      const steered = await running.session.steer(task.content);
+      const source = monitorSource(monitorId);
+      const framed = frameSteeredMessage(task.content, { kind: task.kind, monitorId });
+      const steered = await running.session.steer(framed, source);
       if (steered) {
         // Pin as a turn would: the steered message is about the user's monitor now.
         this.ctx.agentPool.setSessionAgentMonitor(monitorId);
-        this.ctx.contextAssembly.appendUserMessage(
-          this.ctx.contextTape,
-          task.content,
-          monitorSource(monitorId),
-        );
+        this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, framed, source);
         await this.ctx.sendEvent({
           type: ServerEventType.MESSAGE_ACCEPTED,
           messageId: task.messageId,

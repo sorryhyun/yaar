@@ -425,6 +425,17 @@ export class SessionLogger {
     this.appendEntry('user', agentId, { content, ...(source ? { source } : {}) });
   }
 
+  /**
+   * A message injected into `agentId`'s running turn rather than starting one.
+   *
+   * A `user` entry like any other — it is the user side of that agent's conversation, and
+   * a context restore should bring it back as such — marked `steered` so a reader can tell
+   * it arrived mid-turn, after the assistant output logged before it.
+   */
+  logSteeredMessage(content: string, agentId: string | undefined, source?: ContextSource): void {
+    this.appendEntry('user', agentId, { content, steered: true, ...(source ? { source } : {}) });
+  }
+
   logAssistantMessage(content: string, agentId: string | undefined, source?: ContextSource): void {
     this.appendEntry('assistant', agentId, { content, ...(source ? { source } : {}) });
   }

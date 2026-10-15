@@ -14,6 +14,7 @@ import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './
 import { monitorSource } from './context.js';
 import { monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
 import { enqueueOrReject } from './queue-refusal.js';
+import { frameSteeredMessage } from './steer-framing.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
 
@@ -198,15 +199,20 @@ export class MonitorTaskProcessor {
       return;
     }
 
-    // Non-relay: try to steer the active turn (Codex mid-turn injection)
-    const steered = await this.ctx.agentPool.steerMonitorAgent(monitorId, task.content);
+    // Non-relay: try to steer the active turn (Codex mid-turn injection), framed as a
+    // message that arrived mid-turn (`steer-framing.ts`).
+    const source = monitorSource(monitorId);
+    const framed = frameSteeredMessage(task.content, {
+      kind: task.kind,
+      windowId: task.windowId
+        ? this.ctx.windowState.handleMap.getRawWindowId(task.windowId)
+        : undefined,
+      monitorId,
+    });
+    const steered = await this.ctx.agentPool.steerMonitorAgent(monitorId, framed, source);
     if (steered) {
       log.info('steered active turn', { monitorId, messageId: task.messageId });
-      this.ctx.contextAssembly.appendUserMessage(
-        this.ctx.contextTape,
-        task.content,
-        monitorSource(monitorId),
-      );
+      this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, framed, source);
       const agent = this.ctx.agentPool.getMonitorAgent(monitorId)!;
       await this.ctx.sendEvent({
         type: ServerEventType.MESSAGE_ACCEPTED,

@@ -18,6 +18,7 @@ import { windowSource, monitorSource } from './context.js';
 import { appRolePrefix, monitorRole } from './roles.js';
 import { appAgentKey } from './agent-roster.js';
 import { enqueueOrReject } from './queue-refusal.js';
+import { frameSteeredMessage } from './steer-framing.js';
 import {
   AppStateHandoffStore,
   formatAppStateHandoffNotice,
@@ -176,7 +177,8 @@ export class AppTaskProcessor {
     const isParallel = !!task.actionId;
 
     // If the app agent is already busy, try to steer (inject mid-turn message).
-    // Falls back to queuing if the provider doesn't support steering.
+    // Falls back to queuing if the provider doesn't support steering. A steered message is
+    // framed as one (`steer-framing.ts`): bare, it read to a busy agent as noise.
     //
     // A `fresh` task never steers: steering injects it into the very turn — and the
     // very memory — it asked not to be answered from. It queues instead, and the
@@ -184,12 +186,17 @@ export class AppTaskProcessor {
     // flag says the *next* request needs no history, not that the running one should
     // be abandoned.
     if (!isParallel && slot.turn) {
+      const source = windowSource(windowId);
+      const framed = frameSteeredMessage(task.content, {
+        kind: task.kind,
+        windowId: this.ctx.windowState.handleMap.getRawWindowId(windowId),
+        monitorId: task.monitorId ?? monitorId,
+      });
       const steered =
-        !task.fresh && (await this.ctx.agentPool.appAgents.steer(monitorId, appId, task.content));
+        !task.fresh && (await this.ctx.agentPool.appAgents.steer(monitorId, appId, framed, source));
       if (steered) {
         log.info('steered task into running app agent', { messageId: task.messageId, appId });
-        const source = windowSource(windowId);
-        this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
+        this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, framed, source);
         await this.ctx.sendEvent({
           type: ServerEventType.MESSAGE_ACCEPTED,
           messageId: task.messageId,

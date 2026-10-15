@@ -146,7 +146,9 @@ export async function readSessionTranscript(sessionId: string): Promise<string |
     const ts = msg.timestamp;
     switch (msg.type) {
       case 'user':
-        lines.push(`## User → ${msg.agentId} (${ts})\n\n${msg.content ?? ''}\n`);
+        lines.push(
+          `## User → ${msg.agentId}${msg.steered ? ', mid-turn' : ''} (${ts})\n\n${msg.content ?? ''}\n`,
+        );
         break;
       case 'assistant':
         lines.push(`## ${msg.agentId} (${ts})\n\n${msg.content ?? ''}\n`);

@@ -202,6 +202,9 @@ the caller's `app.json` `controls` list (bundled apps only) — e.g. devtools de
 
 Tasks for one app on one monitor are serialized by `AppTaskProcessor` (a bounded queue per app
 agent, steered into the running turn where the provider allows); different apps run in parallel.
+A steered message arrives wrapped in `<mid_turn_message from=… window=… monitor=…>`, saying it is
+addressed to the agent and needs handling (`agents/steer-framing.ts`), and is logged as a `user`
+entry of the receiving agent with `steered: true`.
 
 ### Sub-agents — the app's worker threads
 
