@@ -1,6 +1,6 @@
 {
   "name": "@yaar/compiler",
-  "version": "0.25.3",
+  "version": "0.25.4",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
