@@ -6,22 +6,31 @@
  */
 
 import { join } from 'path';
-import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } from 'fs';
+import { cpSync, mkdirSync, readdirSync, rmSync, statSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
 import { envFlag } from '../config/env.js';
 import { errMessage } from '@yaar/lib/errors';
 import { SHELL_RESET_CSS } from '@yaar/shared';
 import { registerDevReloadHandler } from './server.js';
 import { createLogger } from '../observability/log.js';
+import {
+  asideDirFor,
+  assertEntriesStaged,
+  removeStaleBuildDirs,
+  stagingDirFor,
+  swapIntoPlace,
+} from './dev-dist-swap.js';
 
 const log = createLogger('dev');
 
 const FRONTEND_ROOT = join(PROJECT_ROOT, 'packages', 'frontend');
 const FRONTEND_SRC = join(FRONTEND_ROOT, 'src');
 const FRONTEND_PUBLIC = join(FRONTEND_ROOT, 'public');
-// Sibling of FRONTEND_DIST (same volume, so renameSync is atomic) where each
-// build is staged before being swapped into place. Git-ignored.
-const FRONTEND_STAGE = FRONTEND_DIST + '.staging';
+// Per-process siblings of FRONTEND_DIST: another dev server on this checkout
+// builds into the same dist, so a shared scratch dir is one it can delete
+// mid-build. See dev-dist-swap.ts.
+const FRONTEND_STAGE = stagingDirFor(FRONTEND_DIST);
+const FRONTEND_ASIDE = asideDirFor(FRONTEND_DIST);
 
 type SSEController = ReadableStreamDefaultController<Uint8Array>;
 const sseClients = new Set<SSEController>();
@@ -29,6 +38,8 @@ const encoder = new TextEncoder();
 
 /** Initialize the dev bundler: build frontend, start watcher, register SSE route. */
 export async function initDevBundler(): Promise<void> {
+  const stale = removeStaleBuildDirs(FRONTEND_DIST);
+  if (stale.length > 0) log.info('removed stale frontend build dirs', { dirs: stale });
   await scheduleBuild();
   startWatcher();
   registerDevReloadHandler(handleDevReload);
@@ -131,7 +142,8 @@ async function runBundleWorker(
  * that lost a race with a half-saved file recovers on its own.
  *
  * Never call this directly — go through `scheduleBuild()`. Two builds overlapping
- * would stage into the same directory and delete each other's output mid-build.
+ * in this process would stage into the same directory and delete each other's
+ * output mid-build. (Other processes stage into their own; see dev-dist-swap.ts.)
  */
 async function buildFrontend(retry: boolean): Promise<void> {
   try {
@@ -190,9 +202,10 @@ async function buildFrontendInner(): Promise<void> {
   const html = generateDevHtml(jsFiles, cssFiles);
   await Bun.write(join(stageDir, 'index.html'), html);
 
-  // Atomically swap the freshly built dist into place.
-  rmSync(FRONTEND_DIST, { recursive: true, force: true });
-  renameSync(stageDir, FRONTEND_DIST);
+  // A dist whose index.html links a missing entry boots to a blank desktop, so
+  // refuse it here, where it is still a failed build rather than a served one.
+  assertEntriesStaged(stageDir, jsFiles, cssFiles);
+  swapIntoPlace(stageDir, FRONTEND_DIST, FRONTEND_ASIDE);
 
   const elapsed = (performance.now() - start).toFixed(0);
   log.info('frontend built', { elapsedMs: elapsed, files: total });

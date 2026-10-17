@@ -26,7 +26,7 @@
  *   - **`DirectoryRouteOptions` has no header hook,** so responses would leave without
  *     the CORS headers `withCors` attaches, and it answers POST/OPTIONS with the file.
  *   - **It pins the directory by fd at `serve()` time.** `dev-bundler.ts` swaps a whole
- *     freshly built `dist/` into place with `rmSync` + `renameSync`, which leaves that
+ *     freshly built `dist/` into place by renaming the old one aside, which leaves that
  *     fd pointing at the deleted inode: every asset `404`s from the first hot rebuild
  *     onward, with `statCache: false` no different. It also throws `ENOENT` at boot if
  *     `dist/` does not exist yet.
