@@ -137,7 +137,9 @@ export interface StreamMessage {
   /**
    * How the raw argument JSON spelled its text, recorded before JSON.parse
    * erases the distinction. `unicodeEscapes` counts `\uXXXX` spellings that
-   * decoded to printable characters (valid JSON, normalized on parse);
+   * decoded to printable characters — valid JSON, but each is whatever codepoint
+   * the model typed, and nothing checks it was the one meant (a hand-typed
+   * escape one digit off writes a different character, e.g. 끝 as 끭);
    * `literalBackslashU` counts backslash-u sequences that survived parsing as
    * literal text in the value — the double-escape form that actually corrupts
    * payloads. Absent when the raw text had neither, or the provider hands

@@ -38,8 +38,13 @@
  * served from a stale cache with a live iframe token is not a thing we want to debug.
  */
 
-/** Bump to invalidate everything. `activate` deletes every cache that is not this one. */
-const CACHE = 'yaar-shell-v1';
+/**
+ * Bump to invalidate everything. `activate` deletes every cache that is not this one.
+ *
+ * v2: v1 could hold index.html under a hashed chunk's URL — the server used to answer a
+ * missing chunk with the SPA fallback, and cache-first meant forever (see `immutableResponse`).
+ */
+const CACHE = 'yaar-shell-v2';
 
 /** The key the desktop document is stored under, whatever path it was requested at. */
 const SHELL_KEY = '/index.html';
@@ -114,12 +119,20 @@ async function documentResponse(request) {
   return (await Promise.race([network, timeout])) ?? cached;
 }
 
-/** Cache-first, for URLs that carry their own content hash. */
+/**
+ * Cache-first, for URLs that carry their own content hash.
+ *
+ * Never stores an HTML answer: a `.js`/`.css` URL that comes back as a page is a server
+ * (or a proxy in front of it) saying "not here" with a 200, and cache-first would replay
+ * that refusal for as long as the cache lives — the import failing as "Expected a
+ * JavaScript module … text/html" on every load, reloads included.
+ */
 async function immutableResponse(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  void store(request, response);
+  const type = response.headers.get('content-type') ?? '';
+  if (!type.toLowerCase().startsWith('text/html')) void store(request, response);
   return response;
 }
 

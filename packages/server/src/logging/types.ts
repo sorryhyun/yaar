@@ -12,6 +12,20 @@ export interface AgentInfo {
    * parsing it back out of `agentId`. Absent in logs from older builds.
    */
   monitorId?: string;
+  /**
+   * The model the agent's turns asked for (`TurnOptions.model`), as resolved when it was
+   * registered. Absent when the turn left the choice to the provider, and in logs from
+   * older builds.
+   */
+  model?: string;
+  /**
+   * The per-agent log file this agent's entries are appended to — `agents/<logKey>.jsonl`
+   * (with characters outside `[a-zA-Z0-9-_]` replaced by `_`). Set only when it differs
+   * from `agentId`: an app agent runs one role per turn but keeps one file for all of them
+   * (`agentLogKey()` in `agents/roles.ts`). Absent in logs from older builds, which wrote
+   * one file per role.
+   */
+  logKey?: string;
   createdAt: string;
 }
 
@@ -93,7 +107,8 @@ export interface ParsedMessage {
   toolName?: string;
   toolInput?: unknown;
   // How the raw argument JSON spelled its text (Claude provider only):
-  // unicodeEscapes = \uXXXX spellings normalized away by parse (harmless),
+  // unicodeEscapes = \uXXXX spellings decoded by parse — valid JSON, but the character is
+  // whatever codepoint the model typed, unverified (a mistyped one lands as a wrong character),
   // literalBackslashU = backslash-u text surviving in the parsed value (corrupting).
   toolInputEscapes?: { unicodeEscapes: number; literalBackslashU: number };
   /**
@@ -120,6 +135,11 @@ export interface ParsedMessage {
   /** See {@link NOT_FOUND_CATEGORY} for the one value the failure tally treats specially. */
   errorCategory?: string;
   durationMs?: number;
+  /**
+   * On a `thinking` entry: when the block's first delta arrived. The entry is written when
+   * the block ends, so `timestamp` is its end. Absent in logs from older builds.
+   */
+  startedAt?: string;
   /**
    * Copied from the session this one restored from, not recorded by this launch. Written
    * only by `SessionLogger.carryOver()`; see `SessionMetadata.restoredFrom`.

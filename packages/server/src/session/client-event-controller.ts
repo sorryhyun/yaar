@@ -388,6 +388,8 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.WINDOW_MESSAGE>,
     connectionId: ConnectionId,
   ): void {
+    // Before the task starts: the turn it begins must command the copy the user acted in.
+    this.deps.appWindows.followUserAction(event.windowId, connectionId);
     void this.startTask(
       connectionId,
       event.messageId,
@@ -407,6 +409,7 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.APP_INTERACTION>,
     connectionId: ConnectionId,
   ): void {
+    this.deps.appWindows.followUserAction(event.windowId, connectionId);
     void this.startTask(
       connectionId,
       event.messageId,
@@ -425,6 +428,7 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.COMPONENT_ACTION>,
     connectionId: ConnectionId,
   ): void {
+    this.deps.appWindows.followUserAction(event.windowId, connectionId);
     const windowContext = event.windowTitle
       ? `in window "${event.windowTitle}"`
       : `in window ${event.windowId}`;

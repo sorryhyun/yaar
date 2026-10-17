@@ -228,6 +228,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       className={styles.frame}
       style={style}
       data-window-id={window.id}
+      data-app-id={window.appId}
       data-variant={variant}
       data-frameless={isFrameless || undefined}
       data-card={isCard || undefined}
@@ -412,6 +413,8 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
               appOrigin={window.appOrigin}
               perAppOrigin={window.perAppOrigin}
               appId={window.appId}
+              // An attribute on the frame, not part of the key: retitling never reloads it.
+              windowTitle={window.title}
             />
           </RendererErrorBoundary>
         </WindowCallbackProvider>

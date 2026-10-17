@@ -11,12 +11,13 @@ import type { CliRestoreEntry } from '@yaar/shared';
 const MAX_CLI_RESTORE_ENTRIES = 200;
 
 /**
- * Extract monitor ID from an agent ID like "monitor-0" → "0".
+ * Extract the monitor ID from a monitor agent's role: "monitor-0", or a turn's
+ * "monitor-0-{messageId}" (`monitorTurnRole`, what a turn's messages are logged under) → "0".
  * Returns null for non-monitor agents (window agents, app agents).
  */
 function getMonitorIdFromAgent(agentId: string | null): string | null {
   if (!agentId) return null;
-  const match = agentId.match(/^monitor-(\d+)$/);
+  const match = agentId.match(/^monitor-(\d+)(?:-.+)?$/);
   return match ? match[1] : null;
 }
 

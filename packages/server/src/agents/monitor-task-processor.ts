@@ -12,7 +12,7 @@ import type { PooledAgent } from './agent-roster.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';
-import { monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
+import { agentLogKey, monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
 import { enqueueOrReject } from './queue-refusal.js';
 import { frameSteeredMessage } from './steer-framing.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
@@ -296,14 +296,20 @@ export class MonitorTaskProcessor {
     // names as its parent, and a log whose `agents` lacked it had app agents parented to
     // nothing. `monitor-0` is seeded by `createSession()`; this covers every other monitor
     // (and is a no-op once registered).
-    await this.ctx
-      .getSessionLogger()
-      ?.registerAgent(monitorRole(monitorId), null, undefined, monitorId);
+    //
+    // Every turn's role is routed to that one file too (`agentLogKey`): the monitor keeps a
+    // single conversation, and its log should read as one rather than a file per message.
+    const logger = this.ctx.getSessionLogger();
+    const turnOptions = getMonitorTurnOptions(this.ctx.providerType ?? '');
+    await logger?.registerAgent(monitorRole(monitorId), null, undefined, monitorId, {
+      model: turnOptions.model,
+    });
+    const turnRole = monitorTurnRole(monitorId, task.messageId);
+    logger?.routeAgentLog(turnRole, agentLogKey({ kind: 'monitor', monitorId }));
     if (task.external) {
       await this.runRemoteTurn(agent, task, monitorId, task.external);
       return;
     }
-    const turnRole = monitorTurnRole(monitorId, task.messageId);
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
 
@@ -336,7 +342,7 @@ export class MonitorTaskProcessor {
       canonicalAgent: canonicalMonitor,
       resumeSessionId,
       monitorId,
-      ...getMonitorTurnOptions(this.ctx.providerType ?? ''),
+      ...turnOptions,
       onFinally: () => {
         agent.session.setOutputCallback(null);
       },

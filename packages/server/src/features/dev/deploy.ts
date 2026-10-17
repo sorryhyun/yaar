@@ -20,6 +20,8 @@ import { normalizeManifest, readManifest, readManifestFile } from '../apps/manif
 import { agentDocsFilesFor } from '../apps/docs.js';
 import { notifyAppChanged } from '../apps/changed.js';
 import { snapshotApp } from './git.js';
+import { claudeModelToCodex, resolveAgentModel } from '../../agents/profiles/model-tiers.js';
+import { getWarmPool } from '../../providers/warm-pool.js';
 
 /**
  * Sync a source directory to a destination, only writing files whose content changed.
@@ -144,6 +146,12 @@ export interface DeployResult {
    * deploy's own answer has been delivered.
    */
   staleWindow?: string;
+  /**
+   * The model the app's agent will run on — `agentType` resolved, or the default when
+   * app.json leaves it out. Reported so an author who never chose one learns which one
+   * they got.
+   */
+  agentModel?: string;
 }
 
 export interface DeployRefusal {
@@ -483,6 +491,14 @@ export async function doDeploy(
 
     emit('done', { name: finalName, icon: finalIcon, closedWindows, staleWindow });
 
+    const claudeModel = resolveAgentModel(
+      typeof metadata.agentType === 'string' ? metadata.agentType : undefined,
+    );
+    const agentModel =
+      getWarmPool().getPreferredProvider() === 'codex'
+        ? claudeModelToCodex(claudeModel)
+        : claudeModel;
+
     return {
       success: true,
       appId,
@@ -490,6 +506,7 @@ export async function doDeploy(
       icon: finalIcon,
       closedWindows,
       ...(staleWindow ? { staleWindow } : {}),
+      ...(agentModel ? { agentModel } : {}),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

@@ -31,6 +31,8 @@
  *    what the user sees.
  */
 
+import { announceStaleBuild, isChunkLoadError } from '@/lib/staleBuild';
+
 /** Shell tokens, in the roles mermaid's `base` theme derives the rest from. */
 function token(name: string): string {
   try {
@@ -177,6 +179,11 @@ const CACHE_MAX = 32;
  * on each chunk. Failures are cached too — a diagram is *usually* invalid while
  * its fence is still arriving, and that half-written source repeats just as
  * often as a finished one.
+ *
+ * A chunk that would not load (`isChunkLoadError`) is not cached: it says nothing
+ * about the source, and caching it would pin the error on this diagram until the
+ * page reloads. It is almost always a chunk from an older build (see
+ * `staleBuild.ts`), so the user is offered that reload instead.
  */
 export async function renderMermaidCached(cacheKey: string, source: string): Promise<string> {
   const hit = renderCache.get(cacheKey);
@@ -192,6 +199,10 @@ export async function renderMermaidCached(cacheKey: string, source: string): Pro
   try {
     entry = { ok: true, svg: await renderMermaid(source) };
   } catch (err) {
+    if (isChunkLoadError(err)) {
+      announceStaleBuild();
+      throw err;
+    }
     entry = { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
 

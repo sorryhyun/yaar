@@ -95,23 +95,37 @@ describe('isEscapedText', () => {
 describe('EscapeTripwire', () => {
   test('trips mid-stream on a watched tool', () => {
     const wire = new EscapeTripwire();
-    expect(wire.observe(startBlock(0, 'Write'))).toBeNull();
+    expect(wire.observe(startBlock(0, 'mcp__verbs__invoke'))).toBeNull();
     expect(wire.observe(delta(0, '{"content":"'))).toBeNull();
-    expect(wire.observe(delta(0, HANGUL_3))?.toolName).toBe('Write');
+    expect(wire.observe(delta(0, HANGUL_3))?.toolName).toBe('mcp__verbs__invoke');
   });
 
   test('reassembles an escape split across two deltas', () => {
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
     const split = HANGUL_3.slice(0, -2);
     expect(wire.observe(delta(0, `{"content":"${split}`))).toBeNull();
-    expect(wire.observe(delta(0, HANGUL_3.slice(-2)))?.toolName).toBe('Write');
+    expect(wire.observe(delta(0, HANGUL_3.slice(-2)))?.toolName).toBe('mcp__verbs__invoke');
   });
 
   test('ignores tools outside the watched set', () => {
     const wire = new EscapeTripwire();
     wire.observe(startBlock(0, 'Bash'));
     expect(wire.observe(delta(0, HANGUL_3))).toBeNull();
+    // The CLI's own Write is never enabled, and an app query carries only a key.
+    wire.observe(startBlock(1, 'Write'));
+    expect(wire.observe(delta(1, HANGUL_3))).toBeNull();
+    wire.observe(startBlock(2, 'mcp__app__query'));
+    expect(wire.observe(delta(2, HANGUL_3))).toBeNull();
+  });
+
+  test("trips on an app agent's command — Dev Tools writeFile is how app agents write files", () => {
+    const wire = new EscapeTripwire();
+    wire.observe(startBlock(0, 'mcp__app__command'));
+    wire.observe(
+      delta(0, '{"command": "writeFile", "params": {"path": "src/main.ts", "content": "'),
+    );
+    expect(wire.observe(delta(0, HANGUL_3))?.toolName).toBe('mcp__app__command');
   });
 
   test('ignores deltas for a block it never saw start', () => {
@@ -121,22 +135,22 @@ describe('EscapeTripwire', () => {
 
   test('trips only once per content block', () => {
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
-    expect(wire.observe(delta(0, HANGUL_3))?.toolName).toBe('Write');
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
+    expect(wire.observe(delta(0, HANGUL_3))?.toolName).toBe('mcp__verbs__invoke');
     expect(wire.observe(delta(0, HANGUL_3))).toBeNull();
   });
 
   test('tracks concurrent blocks independently', () => {
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
-    wire.observe(startBlock(1, 'Edit'));
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
+    wire.observe(startBlock(1, 'mcp__verbs__read'));
     expect(wire.observe(delta(0, '{"content":"plain text"'))).toBeNull();
-    expect(wire.observe(delta(1, HANGUL_3))?.toolName).toBe('Edit');
+    expect(wire.observe(delta(1, HANGUL_3))?.toolName).toBe('mcp__verbs__read');
   });
 
   test('reset drops block state', () => {
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
     wire.reset();
     expect(wire.observe(delta(0, HANGUL_3))).toBeNull();
   });
@@ -164,6 +178,28 @@ describe('decodeOverEscaped', () => {
 
   test('decodes a run embedded in surrounding prose', () => {
     expect(decodeOverEscaped(`greeting: ${HANGUL_2}!`)).toBe('greeting: 안녕!');
+  });
+
+  test('leaves an escaped backslash followed by u-hex alone', () => {
+    // Source text `'hi \\uc548\\ub155'`: each backslash is escaped, so the text
+    // means the six characters, not the syllables — decoding would change it.
+    const src = `'hi ${BS}${BS}uc548${BS}${BS}ub155'`;
+    expect(decodeOverEscaped(src)).toBe(src);
+    // Four backslashes is two escaped ones: still not an escape.
+    const four = `${BS}${BS}${BS}${BS}uc548`;
+    expect(decodeOverEscaped(four)).toBe(four);
+  });
+
+  test('decodes an escape that follows an escaped backslash, keeping the pair', () => {
+    expect(decodeOverEscaped(`${BS}${BS}${esc(0xc548)}`)).toBe(`${BS}${BS}안`);
+  });
+
+  test('keeps a doubly-escaped run inside nested JSON valid', () => {
+    // A JSON payload carried as a string, double-escaped one level down: decoding
+    // it would leave `\안` — an invalid escape — in the payload.
+    const payload = `{"t":"${BS}${BS}uc548"}`;
+    expect(decodeOverEscaped(payload)).toBe(payload);
+    expect(() => JSON.parse(decodeOverEscaped(payload))).not.toThrow();
   });
 });
 
@@ -248,11 +284,11 @@ describe('repairToolInput', () => {
 describe('escape guard records', () => {
   test('a trip carries the raw JSON that triggered it', () => {
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
     const record = wire.observe(delta(0, `{"content":"${HANGUL_3}`));
     expect(record).not.toBeNull();
     expect(record!.stage).toBe('tripwire');
-    expect(record!.toolName).toBe('Write');
+    expect(record!.toolName).toBe('mcp__verbs__invoke');
     // The evidence is the spelling: the sample must hold escape *text*, not
     // the characters those escapes stand for.
     expect(record!.sample).toContain(HANGUL_3);
@@ -264,7 +300,7 @@ describe('escape guard records', () => {
     // is already bounded before truncation ever applies — an escaped document
     // cannot put its whole length in the log.
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
     const record = wire.observe(delta(0, escapeAll('안'.repeat(500))));
     expect(record).not.toBeNull();
     expect(record!.sample.length).toBeLessThanOrEqual(ESCAPE_SAMPLE_LIMIT);
@@ -302,12 +338,24 @@ describe('escape guard records', () => {
     expect(record?.target).toBe('yaar://user/notifications');
   });
 
-  test('a trip names a Write by its file_path, even once the tail has slid past it', () => {
+  test('a trip names an app command by its params.path, even once the tail has slid past it', () => {
     const wire = new EscapeTripwire();
-    wire.observe(startBlock(0, 'Write'));
-    wire.observe(delta(0, `{"file_path": "/tmp/a.md", "content": "${'x'.repeat(600)}`));
+    wire.observe(startBlock(0, 'mcp__app__command'));
+    wire.observe(
+      delta(
+        0,
+        `{"command": "writeFile", "params": {"path": "src/i18n.md", "content": "${'x'.repeat(600)}`,
+      ),
+    );
     const record = wire.observe(delta(0, HANGUL_3));
-    expect(record?.target).toBe('/tmp/a.md');
+    expect(record?.target).toBe('src/i18n.md');
+  });
+
+  test('a trip prefers the uri over a path nested in the payload', () => {
+    const wire = new EscapeTripwire();
+    wire.observe(startBlock(0, 'mcp__verbs__invoke'));
+    wire.observe(delta(0, '{"payload": {"path": "a.md"}, "uri": "yaar://storage/b.md", "x": "'));
+    expect(wire.observe(delta(0, HANGUL_3))?.target).toBe('yaar://storage/b.md');
   });
 
   test('a trip whose target is not written yet carries none', () => {
@@ -346,6 +394,10 @@ describe('escape guard records', () => {
   test('callTarget reads the target keys off a parsed input', () => {
     expect(callTarget({ uri: 'yaar://a', file_path: '/b' })).toBe('yaar://a');
     expect(callTarget({ file_path: '/b' })).toBe('/b');
+    expect(callTarget({ command: 'writeFile', params: { path: 'src/main.ts' } })).toBe(
+      'src/main.ts',
+    );
+    expect(callTarget({ params: 'not an object' })).toBeUndefined();
     expect(callTarget({ payload: {} })).toBeUndefined();
     expect(callTarget(undefined)).toBeUndefined();
   });
@@ -405,5 +457,70 @@ describe('escape guard records', () => {
     );
     expect(seen).toEqual([]);
     expect(result).toEqual({});
+  });
+});
+
+describe('repair hook on source-file targets', () => {
+  const run = async (toolName: string, toolInput: Record<string, unknown>) => {
+    const seen: EscapeGuardRecord[] = [];
+    const hook = createEscapeRepairHook((r) => seen.push(r));
+    const result = await hook(
+      {
+        hook_event_name: 'PreToolUse',
+        tool_name: toolName,
+        tool_input: toolInput,
+        tool_use_id: 'tu_src',
+        session_id: 's',
+        transcript_path: '',
+        cwd: '',
+        permission_mode: 'bypassPermissions',
+      } as Parameters<typeof hook>[0],
+      'tu_src',
+      { signal: new AbortController().signal },
+    );
+    const output = result as { hookSpecificOutput?: { updatedInput?: Record<string, unknown> } };
+    return { seen, updated: output.hookSpecificOutput?.updatedInput };
+  };
+
+  test('leaves escapes in a .ts file as written — they may be meant', async () => {
+    const content = `export const hi = '${HANGUL_2}';`;
+    const { seen, updated } = await run('mcp__app__command', {
+      command: 'writeFile',
+      params: { path: 'src/main.ts', content },
+    });
+    expect(seen).toEqual([]);
+    expect(updated).toBeUndefined();
+  });
+
+  test('skips by uri too, for every source extension', async () => {
+    for (const ext of ['ts', 'tsx', 'js', 'mjs', 'cjs', 'jsx', 'json']) {
+      const { seen } = await run('mcp__verbs__invoke', {
+        uri: `yaar://storage/a.${ext}`,
+        payload: { content: HANGUL_2 },
+      });
+      expect(seen).toEqual([]);
+    }
+  });
+
+  test('still decodes for a non-source target', async () => {
+    const { seen, updated } = await run('mcp__app__command', {
+      command: 'writeFile',
+      params: { path: 'notes/readme.md', content: HANGUL_2 },
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].overEscaped).toEqual(['params.content']);
+    expect((updated?.params as { content: string }).content).toBe('안녕');
+  });
+
+  test('still repairs an under-escaped nested JSON payload in a source-file call', async () => {
+    const { seen, updated } = await run('mcp__app__command', {
+      command: 'writeFile',
+      params: { path: 'data.json', content: `{"body":"one${NL}two"}` },
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].underEscaped).toEqual(['params.content']);
+    expect(seen[0].overEscaped).toBeUndefined();
+    const content = (updated?.params as { content: string }).content;
+    expect(JSON.parse(content)).toEqual({ body: `one${NL}two` });
   });
 });

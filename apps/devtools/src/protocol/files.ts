@@ -1,6 +1,7 @@
 import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
 import {
+  appSourceRef,
   assetImportLine,
   editText,
   isImagePath,
@@ -23,6 +24,7 @@ import {
   readModelSummary,
   listProjectFiles,
   resolveProjectPath,
+  copyFromApp,
   copyFromStorage,
   exportToStorage,
   defaultAssetPath,
@@ -32,6 +34,14 @@ import {
 } from '../services';
 
 import { getMimeType, imageBlocks, type ReadBlock } from './read-blocks';
+
+function inlineSizeWarning(path: string, bytes: number): string {
+  return (
+    `${path} is ${Math.round(bytes / 1000)}KB and will be inlined as base64 ` +
+    `(~${Math.round((bytes * 1.33) / 1000)}KB in the bundle). Consider a smaller source, ` +
+    `or deploying the file to the app's own storage and fetching it at runtime.`
+  );
+}
 
 /** A string lands verbatim; anything else is the JSON the caller most likely meant. */
 function serialize(content: unknown): string {
@@ -372,38 +382,46 @@ export const fileCommands = {
       'scene document, a generated dataset), which is the only way to hand one over — a ' +
       'file read into this conversation and written back out is a corrupted binary and a ' +
       'flooded transcript. Both storage directions are server-side and byte-exact: the ' +
-      'bytes never enter this app or your context. ONLY a `yaar://` prefix means storage, ' +
-      'so a file in storage can never shadow one in the project. `to` is required except ' +
-      'for a storage import, where it defaults to src/assets/<source name>. Raster images ' +
-      'imported from storage are re-encoded to WebP unless `recompress: false`, and kept ' +
-      'only if that came out smaller; the result carries the import line when the ' +
-      'destination is an asset under src/, since the bundler inlines it as a data: URI ' +
-      'instead of fetching it at runtime. For 3D models import a self-contained .glb, not a ' +
-      '.gltf with sidecar files (the static-assets topic). Destination directories are ' +
-      'created automatically. Does NOT delete the original — pair with deleteFile to move.',
+      'bytes never enter this app or your context. `from` may also be ' +
+      '`yaar://apps/{appId}/{path}` — a file of an installed app (src/, app.json, agent/; ' +
+      'the paths readAppSource lists) — to reuse its asset: copied byte for byte, never ' +
+      're-encoded, into the project only. ONLY a `yaar://` prefix means outside the ' +
+      'project, so a file in storage can never shadow one in the project. `to` is required ' +
+      'except for an import (storage or app), where it defaults to src/assets/<source ' +
+      'name>. On a storage import, JPEG and BMP are re-encoded to WebP by default (PNG only ' +
+      'with `recompress: true`, since it is lossless); a WebP is written only under a ' +
+      '.webp name — renamed when `to` was defaulted, otherwise the original is copied — ' +
+      'and a defaulted one is kept only if it came out smaller. The result carries the ' +
+      'import line when the destination is an asset under src/, since the bundler inlines ' +
+      'it as a data: URI instead of fetching it at runtime. For 3D models import a ' +
+      'self-contained .glb, not a .gltf with sidecar files (the static-assets topic). ' +
+      'Destination directories are created automatically. Does NOT delete the original — ' +
+      'pair with deleteFile to move.',
     params: {
       type: 'object',
       properties: {
         from: {
           type: 'string',
           description:
-            'Source: a project-relative path ("src/Foo.ts"), or a yaar://storage/... URI ' +
-            '("yaar://storage/shared/anima/dragon.png") to import a file from storage.',
+            'Source: a project-relative path ("src/Foo.ts"), a yaar://storage/... URI ' +
+            '("yaar://storage/shared/anima/dragon.png") to import a file from storage, or ' +
+            'a yaar://apps/{appId}/... URI ("yaar://apps/mascot/src/assets/idle.png") to ' +
+            "copy a file out of an installed app's source.",
         },
         to: {
           type: 'string',
           description:
             'Destination: a project-relative path ("src/ui/Foo.ts"), or a yaar://storage/... ' +
             'URI ("yaar://storage/shared/devtools/level01.json") to export the file out to ' +
-            'storage. Required except for a storage import, where it defaults to ' +
+            'storage. Required except for an import, where it defaults to ' +
             'src/assets/<source name>.',
         },
         recompress: {
           type: 'boolean',
           description:
-            'Storage imports only. Re-encode raster images to WebP (default true). Set false ' +
-            'to keep the original bytes exactly — needed for SVG, GIF animation, or anything ' +
-            'lossless.',
+            'Storage imports only. Re-encode a raster image to WebP. Default: on for ' +
+            'JPEG/BMP, off for PNG (lossless — pixel art survives). true with an explicit ' +
+            '`to` needs a .webp name; false keeps the original bytes exactly.',
         },
       },
       required: ['from'],
@@ -414,6 +432,38 @@ export const fileCommands = {
         throw new AppCommandError('No active project. Open or create one first.');
       const from = String(p.from);
       const toRef = p.to === undefined ? undefined : String(p.to);
+
+      // Another app's source is read-only and arrives in the clone payload, so it can
+      // only go into this project, and only as the bytes the app ships.
+      const appRef = appSourceRef(from);
+      if (appRef) {
+        if (toRef !== undefined && isStorageRef(toRef))
+          throw new AppCommandError(
+            "An installed app's file can only be copied into the project. Copy it here " +
+              'first, then export that copy to storage.',
+          );
+        if (p.recompress !== undefined)
+          throw new AppCommandError(
+            "`recompress` applies only to a yaar://storage/... import; an app's file is " +
+              'copied byte for byte.',
+          );
+        const to = projectDestination(toRef ?? defaultAssetPath(appRef.path));
+        try {
+          const copied = await copyFromApp(appRef.appId, appRef.path, to);
+          const importLine = assetImportLine(to);
+          return {
+            from: copied.from,
+            to,
+            bytes: copied.bytes,
+            ...(importLine ? { importLine } : {}),
+            ...(copied.bytes > SIZE_WARN_BYTES
+              ? { warning: inlineSizeWarning(to, copied.bytes) }
+              : {}),
+          };
+        } catch (err) {
+          throw err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
+        }
+      }
 
       // The export door: a project file out to storage, so another app can open it.
       // Refused when `from` is itself a storage URI — that is a storage-to-storage
@@ -446,7 +496,7 @@ export const fileCommands = {
         if (toRef === undefined)
           throw new AppCommandError(
             '`to` is required when copying within the project. Only a yaar://storage/... ' +
-              'source defaults to src/assets/.',
+              'or yaar://apps/... source defaults to src/assets/.',
           );
         if (p.recompress !== undefined)
           throw new AppCommandError(
@@ -484,13 +534,7 @@ export const fileCommands = {
           recompressed: result.recompressed,
           ...(importLine ? { importLine } : {}),
           ...(result.bytes > SIZE_WARN_BYTES
-            ? {
-                warning:
-                  `${result.path} is ${Math.round(result.bytes / 1000)}KB and will be inlined ` +
-                  `as base64 (~${Math.round((result.bytes * 1.33) / 1000)}KB in the bundle). ` +
-                  `Consider a smaller source, or deploying the file to the app's own storage ` +
-                  `and fetching it at runtime.`,
-              }
+            ? { warning: inlineSizeWarning(result.path, result.bytes) }
             : {}),
         };
       } catch (err) {

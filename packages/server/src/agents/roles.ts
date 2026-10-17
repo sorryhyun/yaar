@@ -78,6 +78,28 @@ export function appRolePrefix(monitorId: string, appId: string): string {
 }
 
 /**
+ * The session-log file (`agents/<key>.jsonl`) a turn's entries go to: the agent's stable
+ * identity, not the per-turn role.
+ *
+ * A monitor agent and an app agent each keep one provider conversation across many turns,
+ * but each turn runs under its own role (`monitorTurnRole`, `${appRolePrefix}-${messageId}`)
+ * — and the per-agent log used to be keyed on that role, so one conversation came out as
+ * one file per message. Entries still carry the per-turn role as their `agentId`; only the
+ * file they are appended to is shared. Keyed on the parts rather than parsed out of the
+ * role, since neither an appId nor a messageId is dash-free.
+ *
+ * Ephemeral and session-agent turns are not covered: an ephemeral agent lives for one
+ * turn, and a session-agent turn is already its own identity.
+ */
+export function agentLogKey(
+  agent: { kind: 'monitor'; monitorId: string } | { kind: 'app'; monitorId: string; appId: string },
+): string {
+  return agent.kind === 'app'
+    ? appRolePrefix(agent.monitorId, agent.appId)
+    : monitorRole(agent.monitorId);
+}
+
+/**
  * Map a per-turn role string (`monitor-0-msg1`, `app-foo-m0-msg2`,
  * `session-audit-123`) to its principal tier.
  *

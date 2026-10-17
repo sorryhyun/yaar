@@ -164,7 +164,14 @@ export function connectionPresence(
   return sessions.get(sessionId)?.get(connectionId)?.state;
 }
 
-/** Drop a connection's presence when its socket closes. */
+/**
+ * Whether a connection reports itself running with nobody looking (the Android app in the
+ * background — see {@link ConnectionPresence.unattended}). Silence counts as attended.
+ */
+export function isUnattended(sessionId: SessionId, connectionId: ConnectionId): boolean {
+  return sessions.get(sessionId)?.get(connectionId)?.unattended ?? false;
+}
+
 /**
  * Whether a connection has ever reported being away. A tab that backgrounds once (a phone)
  * will do it again; one that never has (the always-visible companion) is the steadier pick
@@ -174,6 +181,7 @@ export function hasBeenAway(sessionId: SessionId, connectionId: ConnectionId): b
   return (sessions.get(sessionId)?.get(connectionId)?.lastAwayState ?? null) !== null;
 }
 
+/** Drop a connection's presence when its socket closes. */
 export function forgetConnectionPresence(sessionId: SessionId, connectionId: ConnectionId): void {
   const companionSet = companions.get(sessionId);
   companionSet?.delete(connectionId);

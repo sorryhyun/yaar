@@ -190,6 +190,11 @@ export function deploy(
      * without discarding the window's app agent.
      */
     staleWindow?: string;
+    /**
+     * The model the deployed app's agent runs on: app.json `agentType` resolved, or the
+     * default tier when it names none.
+     */
+    agentModel?: string;
   }>('deploy', { path, ...opts });
 }
 

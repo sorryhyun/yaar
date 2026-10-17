@@ -67,6 +67,10 @@ file into the iframe. Both storage directions use it — import (`yaar://storage
 export (as `to`, via `exportToStorage`). A copy *within* the project has no storage URI on either
 side, so it cannot; that is why it reads, rewrites and renames.
 
+An import's bytes must match its extension — the bundler takes the data: URI's MIME type from the
+name. `planAssetImport` (`lib/asset-import.ts`) is the one place that decides whether a storage
+import is re-encoded and under which name; the `asset-import` suite pins it.
+
 ## compileState is three-valued
 
 `resolveCompileStatus` in `lib/compile-status.ts` is the single reducer, shared by the

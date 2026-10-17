@@ -191,7 +191,9 @@
   "desktop": {
     "iconsLoadFailed": "无法加载应用。",
     "retry": "重试",
-    "backAgainToExit": "再按一次返回键退出"
+    "backAgainToExit": "再按一次返回键退出",
+    "newerVersion": "YAAR 有新版本可用 — 请重新加载。",
+    "reload": "重新加载"
   },
   "notifications": {
     "title": "通知",

@@ -39,7 +39,8 @@ beforeEach(() => {
     err.push(args.join(' '));
     warnOnly.push(args.join(' '));
   };
-  configureLogging({ level: 'info', format: 'pretty' });
+  // Whole-line assertions below; the clock prefix has its own test.
+  configureLogging({ level: 'info', format: 'pretty', time: false });
   resetLogContextResolver();
 });
 
@@ -55,6 +56,17 @@ describe('pretty format', () => {
   test('reads like the [Component] message it replaced', () => {
     createLogger('AgentSession').info('turn started');
     expect(out).toEqual(['[AgentSession] turn started']);
+  });
+
+  test('leads with a local HH:MM:SS.mmm clock time', () => {
+    configureLogging({ time: true });
+    const before = new Date();
+    createLogger('AgentSession').info('turn started');
+    const match = out[0].match(/^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) \[AgentSession\] turn started$/);
+    expect(match).not.toBeNull();
+    // Local time, not a UTC slice: the hour is the wall clock's (within the second it ran).
+    const after = new Date();
+    expect([before.getHours(), after.getHours()]).toContain(Number(match![1]));
   });
 
   test('appends fields as key=value', () => {

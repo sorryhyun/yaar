@@ -5,7 +5,7 @@
  * detector for the third lives in `escape-tripwire.ts`):
  *
  *  - **Over-escaping.** `"안녕"` is written as `"\\uc548\\ub155"`, which parses to
- *    the *literal text* `안녕` rather than to characters. This is the one
+ *    the *literal text* `\uc548\ub155` rather than to characters. This is the one
  *    that lands visibly corrupted in files.
  *  - **Under-escaping.** A parameter whose value is itself JSON text is written
  *    with `\n` where `\\n` was meant. The outer parse consumes the escape, so the
@@ -16,7 +16,7 @@
  *
  * Both repairs are deliberately conservative: each rewrites only when it can
  * prove the rewrite is the fix. Over-escaping decodes a run only when the result
- * is non-ASCII (so `A` in genuine source survives); under-escaping rewrites
+ * is non-ASCII (so `\u0041` in genuine source survives); under-escaping rewrites
  * only when the candidate fails `JSON.parse` before and succeeds after. A repair
  * that cannot demonstrate it helped leaves the value untouched.
  *
@@ -24,8 +24,18 @@
  * catches over-escaping before the arguments finish generating.
  */
 
-/** A run of one or more `\uXXXX` escapes, as literal text in an already-parsed string. */
-const LITERAL_ESCAPE_RUN = /(?:\\u[0-9A-Fa-f]{4})+/g;
+/**
+ * A run of one or more `\uXXXX` escapes, as literal text in an already-parsed
+ * string, whose leading backslash is not itself escaped.
+ *
+ * Group 1 is the even run of backslashes before it (zero included), which stays
+ * as written: `\\uc548` is an escaped backslash followed by the text `uc548`,
+ * not an escape, and decoding it would change what the text means — in source
+ * it becomes `\안`, and inside a nested JSON payload an invalid escape. The
+ * lookbehind pins the pairs to the start of the backslash run, so the scan
+ * cannot begin halfway through one.
+ */
+const LITERAL_ESCAPE_RUN = /(?<!\\)((?:\\\\)*)((?:\\u[0-9A-Fa-f]{4})+)/g;
 
 /** JSON's own short escapes for the control characters that have one. */
 const SHORT_ESCAPES: Record<string, string> = {
@@ -40,19 +50,35 @@ const SHORT_ESCAPES: Record<string, string> = {
  * Decode literal `\uXXXX` runs that were meant to be characters.
  *
  * Scoped by result, not by tool: a run is decoded only when it yields at least
- * one non-ASCII character. An agent writing `"A"` into a source file means
+ * one non-ASCII character. An agent writing `"\u0041"` into a source file means
  * those six characters, and rewriting them would be the corruption rather than
  * the fix. Surrogate pairs survive because the halves are emitted adjacently
  * into the same output string, which is UTF-16.
  */
 export function decodeOverEscaped(text: string): string {
-  return text.replace(LITERAL_ESCAPE_RUN, (run) => {
+  return text.replace(LITERAL_ESCAPE_RUN, (whole, pairs: string, run: string) => {
     const decoded = run.replace(/\\u([0-9A-Fa-f]{4})/g, (_, hex: string) =>
       String.fromCharCode(parseInt(hex, 16)),
     );
     const hasNonAscii = [...decoded].some((c) => (c.codePointAt(0) ?? 0) > 0x7f);
-    return hasNonAscii ? decoded : run;
+    return hasNonAscii ? pairs + decoded : whole;
   });
+}
+
+/**
+ * Extensions whose files carry `\uXXXX` as meaningful syntax.
+ *
+ * In a source file or JSON document a single-backslash escape is a legitimate
+ * way to write a character (`'\uc548'` in a string literal, a `\u` escape in
+ * JSON), and the parsed tool input cannot tell that apart from over-escaping —
+ * both arrive as the same six characters. Decoding would rewrite text the agent
+ * meant, so for these targets the escapes are left as written.
+ */
+const SOURCE_FILE = /\.(?:ts|tsx|js|mjs|cjs|jsx|json)$/i;
+
+/** Whether a call target (a path or `yaar://` URI) names a source file. */
+export function isSourceFile(target: string): boolean {
+  return SOURCE_FILE.test(target.replace(/[?#].*$/, ''));
 }
 
 /**
@@ -134,14 +160,20 @@ export interface RepairReport {
  *
  * Order matters: over-escaping is decoded first, since a doubly-escaped nested
  * payload has to become text before it can be recognized as JSON at all.
+ *
+ * `decodeEscapes: false` skips that decode (see `isSourceFile`); the nested-JSON
+ * repair still runs, since it only rewrites a value it can prove was broken.
  */
-export function repairToolInput(input: unknown): RepairReport {
+export function repairToolInput(
+  input: unknown,
+  { decodeEscapes = true }: { decodeEscapes?: boolean } = {},
+): RepairReport {
   const overEscaped: string[] = [];
   const underEscaped: string[] = [];
 
   const walk = (value: unknown, path: string): unknown => {
     if (typeof value === 'string') {
-      let next = decodeOverEscaped(value);
+      let next = decodeEscapes ? decodeOverEscaped(value) : value;
       if (next !== value) overEscaped.push(path || '<root>');
       const nested = repairNestedJson(next);
       if (nested !== null) {

@@ -384,6 +384,9 @@ for every open app window, so an app with side effects on mount runs them twice.
   of each window; the companion is the **fallback** responder — a user's tab in front answers, the
   companion covers while that tab cannot run script, and the window moves back once the tab has
   been in front for `userTabSettleMs` (`AppWindowCoordinator.rankResponders` / `settledUserTab`).
+  A user acting in a window (window message, app interaction, component click) from a registered,
+  answering user tab moves the window to that tab, so the turn it starts commands the copy the
+  user touched; the companion and an unattended tab never move it (`followUserAction`).
   State an app must show on both copies goes in `createSharedSignal` (see `apps/CLAUDE.md`).
 
 A box with no Chromium goes without, and says so once.

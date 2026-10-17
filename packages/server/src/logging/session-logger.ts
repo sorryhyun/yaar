@@ -149,6 +149,14 @@ export async function createSession(
   return { sessionId, directory, metadata };
 }
 
+/** What {@link SessionLogger.registerAgent} records beyond the agent's place in the tree. */
+export interface AgentRegistrationOptions {
+  /** See `AgentInfo.model`. */
+  model?: string;
+  /** See `AgentInfo.logKey`. */
+  logKey?: string;
+}
+
 /** Where an iframe verb call came from — see {@link SessionLogger.logVerbCall}. */
 export interface VerbCaller {
   windowId?: string;
@@ -186,6 +194,10 @@ export class SessionLogger {
   // Entries carried over from the session this launch restored from, held until this
   // launch records something of its own — see carryOver().
   private carriedLines: string[] | null = null;
+
+  // Per-turn role → the agent log file key it writes to, when not its own — see
+  // registerAgent() and routeAgentLog().
+  private logKeys = new Map<string, string>();
 
   constructor(sessionInfo: SessionInfo) {
     this.sessionInfo = sessionInfo;
@@ -247,15 +259,30 @@ export class SessionLogger {
 
   /**
    * Register a new agent in the session hierarchy.
+   *
+   * `options.logKey` names the per-agent file the agent's entries go to when that is not
+   * its own id — an app agent's per-turn roles all share one (`agentLogKey()` in
+   * `agents/roles.ts`). The file is created if missing and never truncated, since an
+   * earlier turn may already have written to it.
    */
   async registerAgent(
     agentId: string,
     parentAgentId: string | null,
     windowId?: string,
     monitorId?: string,
+    options: AgentRegistrationOptions = {},
   ): Promise<void> {
-    if (this.sessionInfo.metadata.agents[agentId]) {
-      return; // Already registered
+    const { model, logKey } = options;
+    if (logKey && logKey !== agentId) this.logKeys.set(agentId, logKey);
+    const existing = this.sessionInfo.metadata.agents[agentId];
+    if (existing) {
+      // Already registered — but `monitor-0` is seeded by `createSession()`, before any
+      // turn has resolved a model, so its first real registration is where it gets one.
+      if (model && !existing.model) {
+        existing.model = model;
+        this.scheduleMetadataSave();
+      }
+      return;
     }
 
     const agentInfo: AgentInfo = {
@@ -263,17 +290,34 @@ export class SessionLogger {
       parentAgentId,
       windowId,
       monitorId,
+      ...(model ? { model } : {}),
+      ...(logKey && logKey !== agentId ? { logKey } : {}),
       createdAt: new Date().toISOString(),
     };
 
     this.sessionInfo.metadata.agents[agentId] = agentInfo;
 
-    // Create agent-specific JSONL file (empty, entries appended later)
-    const agentFilename = agentId.replace(/[^a-zA-Z0-9-_]/g, '_');
-    await Bun.write(join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`), '');
+    // Create the agent's JSONL file (empty, entries appended later) — without truncating
+    // one a sibling role sharing the same log key has already written to.
+    await appendFile(this.agentLogPath(logKey ?? agentId), '');
 
     // Update metadata (debounced)
     this.scheduleMetadataSave();
+  }
+
+  /**
+   * Send the entries of an unregistered per-turn role to another agent's file — a monitor
+   * turn (`monitorTurnRole`) to its monitor's (`monitorRole`), so a monitor's conversation
+   * is one file rather than one per message. In memory only: the role is not added to
+   * `metadata.agents`.
+   */
+  routeAgentLog(role: string, logKey: string): void {
+    if (role !== logKey) this.logKeys.set(role, logKey);
+  }
+
+  private agentLogPath(key: string): string {
+    const agentFilename = key.replace(/[^a-zA-Z0-9-_]/g, '_');
+    return join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`);
   }
 
   /**
@@ -309,9 +353,7 @@ export class SessionLogger {
 
     // Buffer per-agent JSONL (skip for agent-less entries like user interactions)
     if (agent) {
-      const agentFilename = agent.replace(/[^a-zA-Z0-9-_]/g, '_');
-      const agentPath = join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`);
-      this.bufferLine(agentPath, line);
+      this.bufferLine(this.agentLogPath(this.logKeys.get(agent) ?? agent), line);
     }
 
     this.scheduleFlush();
@@ -440,8 +482,12 @@ export class SessionLogger {
     this.appendEntry('assistant', agentId, { content, ...(source ? { source } : {}) });
   }
 
-  logThinking(content: string, agentId?: string): void {
-    this.appendEntry('thinking', agentId, { content });
+  /**
+   * One thinking block, logged when it ends — so the entry's `timestamp` is the block's end
+   * and `startedAt` (when the mapper saw its first delta) is its start.
+   */
+  logThinking(content: string, agentId?: string, startedAt?: string): void {
+    this.appendEntry('thinking', agentId, { content, ...(startedAt ? { startedAt } : {}) });
   }
 
   logToolUse(

@@ -167,6 +167,7 @@ export async function deploy(opts: {
   previewClosed?: boolean;
   closedWindows?: string[];
   staleWindow?: string;
+  agentModel?: string;
 }> {
   const proj = activeProject();
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');
@@ -192,7 +193,10 @@ export async function deploy(opts: {
     throw await deployFailure(result.error ?? 'Unknown error', bumped, appJsonBefore);
   }
   const name = result.name ?? opts.appId;
-  const deployedAs = `Deployed as "${name}"${version ? ` v${version}` : ''}`;
+  const agentModel = typeof result.agentModel === 'string' ? result.agentModel : undefined;
+  const deployedAs =
+    `Deployed as "${name}"${version ? ` v${version}` : ''}` +
+    (agentModel ? ` (agent: ${agentModel})` : '');
 
   // Close the preview once the deploy has actually landed. A preview is a window onto a
   // *build*, not onto the app: it runs under the throwaway `preview--{projectId}` principal
@@ -237,6 +241,7 @@ export async function deploy(opts: {
     ...(previewClosed ? { previewClosed } : {}),
     ...(closedWindows.length > 0 ? { closedWindows } : {}),
     ...(staleWindow ? { staleWindow } : {}),
+    ...(agentModel ? { agentModel } : {}),
   };
 }
 

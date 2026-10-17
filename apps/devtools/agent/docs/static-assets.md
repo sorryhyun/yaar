@@ -58,6 +58,8 @@ producer's directory with `storage:list`, then `copyFile` the `yaar://storage/..
 the project and compile; it inlines like any other asset. Nothing there means the file
 exists but was never published (app storage is private to its owner): ask the user to
 publish it from the producing app, or `relay` to the monitor, which can reach both trees.
-**Never ask another app for the bytes**: `exportDataUrl` and anything shaped like it pushes
+An asset an installed app *ships* (a sprite under its `src/`) is not in storage at all:
+`copyFile` from `yaar://apps/{appId}/src/...` copies it byte for byte (`readAppSource` lists
+the paths). **Never ask another app for the bytes**: `exportDataUrl` and anything shaped like it pushes
 a several-hundred-KB base64 string through the conversation; publishing and importing moves
 them server-side.

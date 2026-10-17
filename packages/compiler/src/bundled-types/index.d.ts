@@ -1713,6 +1713,11 @@ interface YaarDevDeployResult {
    * without discarding the window's app agent.
    */
   staleWindow?: string;
+  /**
+   * The model the deployed app's agent runs on: app.json `agentType` resolved, or the
+   * default tier when it names none.
+   */
+  agentModel?: string;
 }
 
 /** A commit in an app's version history. */

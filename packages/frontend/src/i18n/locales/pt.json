@@ -191,7 +191,9 @@
   "desktop": {
     "iconsLoadFailed": "Não foi possível carregar seus apps.",
     "retry": "Tentar novamente",
-    "backAgainToExit": "Pressione voltar novamente para sair"
+    "backAgainToExit": "Pressione voltar novamente para sair",
+    "newerVersion": "Há uma versão mais recente do YAAR — recarregue para usá-la.",
+    "reload": "Recarregar"
   },
   "notifications": {
     "title": "Notificações",

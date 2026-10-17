@@ -174,8 +174,10 @@ export const projectCommands = {
       'file list { path, lines } plus `protocol` (where each command and state key is ' +
       "declared, by file and line); `path` — that file's text, optionally a " +
       '`startLine`/`endLine` slice; `pattern` — regex hits { file, line, content } across ' +
-      'its text files, narrowed by `glob`, capped at 200 (`total` counts the rest). Reads ' +
-      'the installed copy, cached for a minute.',
+      'its text files, narrowed by `glob`, capped at 200 (`total` counts the rest). A ' +
+      'binary file (an image, a font) is listed as { path, binary: true } and cannot be ' +
+      'read as text — copyFile from "yaar://apps/{appId}/{path}" copies it into the ' +
+      'project byte for byte. Reads the installed copy, cached for a minute.',
     params: {
       type: 'object',
       properties: {

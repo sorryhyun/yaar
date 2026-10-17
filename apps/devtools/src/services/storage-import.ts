@@ -1,7 +1,7 @@
 export {};
 import { appStorage, errMsg, invoke, storage, storagePath, toWebP } from '@bundled/yaar';
 import { activeProject, setStatusText, setTypecheckState } from '../core';
-import { projectPath } from '../lib';
+import { planAssetImport, projectPath } from '../lib';
 import { recordChange } from './changes';
 import { refreshFiles } from './files';
 
@@ -13,9 +13,6 @@ import { refreshFiles } from './files';
 //
 // The export direction (`exportToStorage`) is the same copy run backwards; the two
 // differ only in which side of the copy names the project.
-
-/** Formats worth re-encoding. WebP and SVG are already what we would convert to. */
-const RECOMPRESSIBLE = new Set(['png', 'jpg', 'jpeg', 'bmp']);
 
 /**
  * Inlined assets land in the bundle as base64, which costs ~33% on top of the raw
@@ -40,10 +37,6 @@ function baseName(path: string): string {
   return path.split('/').pop() ?? path;
 }
 
-function extOf(path: string): string {
-  return path.split('.').pop()?.toLowerCase() ?? '';
-}
-
 /** The file name a storage source lands under when no destination was given. */
 export function defaultAssetPath(sourcePath: string): string {
   return `src/assets/${baseName(sourcePath)}`;
@@ -66,14 +59,12 @@ export function isStorageRef(ref: string): boolean {
 export function resolveStorageSource(ref: string): string {
   const path = storagePath(ref);
   if (path === null) {
-    throw new Error(`"${ref}" is not a file in storage. Expected a yaar://storage/... path.`);
+    throw new Error(
+      `"${ref}" is not a file in storage. Expected a yaar://storage/... path, or ` +
+        "yaar://apps/{appId}/{path} for a file of an installed app's source.",
+    );
   }
   return path;
-}
-
-/** Whether this source is a raster format a WebP re-encode could shrink. */
-export function isRecompressible(sourcePath: string): boolean {
-  return RECOMPRESSIBLE.has(extOf(sourcePath));
 }
 
 /** The source's size on disk, or null if it cannot be determined. */
@@ -169,11 +160,12 @@ export async function exportToStorage(
 /**
  * Copy a storage file into the active project.
  *
- * `recompress` defaults to on for raster formats, and the WebP is kept only if it
- * actually won: a small PNG with few colours can re-encode *larger*, and paying that
- * in the bundle to no benefit is worse than keeping the original. `renameToWebP` is
- * set only when the caller did not name a destination — an explicit `to` is honoured
- * as written, extension included.
+ * Whether to re-encode, and under which name, is `planAssetImport`'s call: JPEG and
+ * BMP are re-encoded by default, PNG only on request, and WebP bytes only ever land
+ * under a `.webp` name. A WebP the caller did not name is kept only if it actually won:
+ * a small image with few colours can re-encode *larger*, and paying that in the bundle
+ * to no benefit is worse than keeping the original. `renameToWebP` is set only when the
+ * caller did not name a destination.
  */
 export async function copyFromStorage(
   sourcePath: string,
@@ -183,16 +175,28 @@ export async function copyFromStorage(
   const proj = activeProject();
   if (!proj) throw new Error('No active project. Open or create one first.');
 
-  const wantsRecompress = opts.recompress !== false && isRecompressible(sourcePath);
-  let path = destination;
+  const plan = planAssetImport(sourcePath, destination, {
+    ...(opts.recompress !== undefined ? { recompress: opts.recompress } : {}),
+    renamed: opts.renameToWebP === true,
+  });
+  let path = plan.path;
   let bytes: number;
   let recompressed = false;
 
   try {
-    const encoded = wantsRecompress ? await recompressToWebP(sourcePath) : null;
-    const originalSize = encoded ? await sourceSize(sourcePath) : null;
-    if (encoded && (originalSize === null || encoded.bytes < originalSize)) {
-      if (opts.renameToWebP) path = path.replace(/\.[^.]+$/, '.webp');
+    const encoded = plan.webpPath ? await recompressToWebP(sourcePath) : null;
+    if (plan.webpRequired && !encoded)
+      throw new Error(
+        `the browser could not re-encode it to WebP for ${plan.webpPath}. Pass ` +
+          '`recompress: false` with a `to` named after the source format to copy it as is.',
+      );
+    const originalSize = encoded && !plan.webpRequired ? await sourceSize(sourcePath) : null;
+    if (
+      encoded &&
+      plan.webpPath &&
+      (plan.webpRequired || originalSize === null || encoded.bytes < originalSize)
+    ) {
+      path = plan.webpPath;
       // `appStorage`, not `storage` — the project lives in devtools' own app-scoped
       // tree, and the flat SDK would resolve the same path against the storage root.
       await appStorage.save(projectPath(proj.id, path), encoded.base64, { encoding: 'base64' });

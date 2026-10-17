@@ -576,6 +576,7 @@ async function dispatchDevAction(
         icon: result.icon,
         closedWindows: result.closedWindows,
         ...(result.staleWindow ? { staleWindow: result.staleWindow } : {}),
+        ...(result.agentModel ? { agentModel: result.agentModel } : {}),
       });
     }
   }

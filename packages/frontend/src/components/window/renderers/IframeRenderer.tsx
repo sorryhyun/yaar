@@ -89,6 +89,16 @@ interface IframeRendererProps {
    * must keep doing so.
    */
   appId?: string;
+  /**
+   * The hosting window, stamped on the `<iframe>` as `data-window-id` so an outside
+   * driver (CDP, Playwright) can find a window's frame without walking the DOM.
+   */
+  windowId?: string;
+  /**
+   * The window's title — the frame's accessible name. Only an attribute: a title
+   * change re-renders this element in place and never reloads the frame.
+   */
+  windowTitle?: string;
   onRenderSuccess?: () => void;
   onRenderError?: (error: string, url: string) => void;
 }
@@ -272,6 +282,8 @@ function IframeFrame({
   appOrigin: serverAppOrigin,
   perAppOrigin,
   appId,
+  windowId,
+  windowTitle,
   onRenderSuccess,
   onRenderError,
 }: IframeRendererProps) {
@@ -711,7 +723,12 @@ function IframeFrame({
         // @ts-expect-error React doesn't recognize lowercase HTML attribute
         allowtransparency="true"
         loading="lazy"
-        title="Embedded content"
+        title={windowTitle || appId || 'Embedded content'}
+        // Handles for outside drivers: a cross-origin app frame reports an empty URL
+        // in CDP's frame list, so the element is how a driver finds it
+        // (docs/guides/headless_driving.md).
+        data-window-id={windowId}
+        data-app-id={appId}
         onLoad={handleLoad}
         onError={handleError}
       />

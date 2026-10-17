@@ -220,8 +220,16 @@ async function serveEmbeddedAsset(req: Request, filePath: string, urlPath: strin
  * HTML there reads as "the file exists but will not parse" — an MCP client probing
  * `/.well-known/mcp.json`, or one with a mistyped shared-window URL, got the desktop
  * instead of a 404.
+ *
+ * Nor for a path that names a file (an extension on its last segment). The desktop has no
+ * client route like that, so it can only be an asset that is not there — usually a hashed
+ * chunk from a build this server no longer has, asked for by a tab loaded before a
+ * rebuild. Answered with index.html, the browser refuses it as "Expected a JavaScript
+ * module … text/html" and the service worker caches the HTML under the chunk's URL for
+ * good; a 404 is a plain failed import the page can recover from.
  */
 export function servesSpaFallback(pathname: string): boolean {
+  if (extname(pathname) !== '') return false;
   return !['/api', '/ws', '/mcp/', '/.well-known/'].some((prefix) => pathname.startsWith(prefix));
 }
 

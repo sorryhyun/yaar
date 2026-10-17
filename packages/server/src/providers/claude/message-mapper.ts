@@ -352,10 +352,10 @@ export function mapClaudeMessage(
 /**
  * Scan raw argument JSON for backslash-u spellings, before JSON.parse erases
  * the distinction. Backslash-run parity decides which side each hit is on:
- * an odd run ends in a live escape (`안` — the model chose the escape
- * spelling for a character; parse normalizes it), an even run puts literal
- * `\uXXXX` text into the parsed value (`\\uc548` — the double-escape form
- * that corrupts payloads). Escapes for control characters (< 0x20) are the
+ * an odd run ends in a live escape (`\uc548` — the model chose the escape
+ * spelling for a character; parse decodes it to whatever codepoint was typed,
+ * right or not), an even run puts literal `\uXXXX` text into the parsed value
+ * (`\\uc548` — the double-escape form that corrupts payloads). Escapes for control characters (< 0x20) are the
  * only ones JSON requires, so they don't count as a spelling choice.
  */
 function countEscapeSpellings(rawJson: string): StreamMessage['toolInputEscapes'] {

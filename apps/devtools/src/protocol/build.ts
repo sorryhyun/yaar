@@ -269,7 +269,8 @@ export const buildCommands = {
       'installed version number again: unless app.json `version` is already above the ' +
       'installed one, it is raised one patch step above the higher of the two and saved in ' +
       'the project. The result carries `version` (as deployed), `installedVersion`, and ' +
-      '`bumped: { from, to, reason }` whenever it moved.',
+      '`bumped: { from, to, reason }` whenever it moved, and `agentModel`: the model the ' +
+      "app's agent runs on (app.json `agentType`, or the default) — name it in your report.",
     params: {
       type: 'object',
       properties: {

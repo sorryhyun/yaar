@@ -99,3 +99,38 @@ describe('deriveWindowId collisions', () => {
     });
   });
 });
+
+describe('deriveWindowId from non-ASCII titles', () => {
+  const derive = (title: string) => deriveWindowId(undefined, undefined, title);
+
+  it('keeps the ASCII slug and adds a hash, so two titles that share only digits differ', () => {
+    const a = derive('1.2.0 텍스트 완주 보고');
+    const b = derive('1.2.0 이미지 완주 보고');
+    expect(a).toMatch(/^1-2-0-[0-9a-f]{8}$/);
+    expect(b).toMatch(/^1-2-0-[0-9a-f]{8}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it('gives a pure non-Latin title a stable id instead of a timestamp', () => {
+    const id = derive('텍스트 완주 보고');
+    expect(id).toMatch(/^win-[0-9a-f]{8}$/);
+    expect(derive('텍스트 완주 보고')).toBe(id);
+    expect(derive('이미지 보고')).not.toBe(id);
+  });
+
+  it('stays ASCII, so the window URI needs no encoding', () => {
+    for (const title of ['1.2.0 텍스트 완주 보고', 'Café Menu', '東京 2024', 'Привет']) {
+      expect(derive(title)).toMatch(/^[a-z0-9-]+$/);
+    }
+  });
+
+  it('distinguishes accented Latin from its unaccented spelling', () => {
+    expect(derive('Café')).toMatch(/^caf-[0-9a-f]{8}$/);
+    expect(derive('Cafe')).toBe('cafe');
+  });
+
+  it('leaves an all-ASCII title, punctuation and symbols included, exactly as before', () => {
+    expect(derive('Generated Image Preview')).toBe('generated-image-preview');
+    expect(derive('Report — 2024 (final)')).toBe('report-2024-final');
+  });
+});

@@ -49,6 +49,20 @@ press(key: "Shift+Tab")                       # open CLI panel (streaming + Moni
 `press()` correctly handles modifier prefixes (`Shift+Tab`, `Ctrl+1`, `Meta+P`); navigation
 timeouts resolve with `null` instead of rejecting, so a stalled page doesn't crash the server.
 
+### Finding an app's frame
+
+App windows render their app in an `<iframe>`, and both the window and the frame are tagged for
+outside drivers:
+
+- the window root: `[data-window-id="<windowId>"]`, plus `data-app-id="<appId>"` for app windows
+- the frame itself: `iframe[data-app-id="<appId>"]` / `iframe[data-window-id="<windowId>"]`,
+  with the window title as its `title` (accessible name)
+
+Locate the **element**, then step into it (`elementHandle.contentFrame()` in Puppeteer/Playwright,
+or `page.frameLocator('iframe[data-app-id="memo"]')`). Don't look the frame up in CDP's
+`page.frames()` by URL: an app served from an isolated origin is cross-origin to the desktop, and
+its frame shows an empty URL there.
+
 ## Caveats for agent-driven sessions
 
 - Don't drive YAAR through YAAR's own Browser app — that nests YAAR inside YAAR and produces

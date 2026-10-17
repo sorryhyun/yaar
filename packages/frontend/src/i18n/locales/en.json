@@ -193,7 +193,9 @@
   "desktop": {
     "iconsLoadFailed": "Couldn't load your apps.",
     "retry": "Retry",
-    "backAgainToExit": "Press back again to exit"
+    "backAgainToExit": "Press back again to exit",
+    "newerVersion": "A newer version of YAAR is available — reload to use it.",
+    "reload": "Reload"
   },
   "notifications": {
     "title": "Notifications",

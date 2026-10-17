@@ -24,7 +24,7 @@ Without a raised `timeoutMs`, a slow build surfaces as "App did not respond" ins
 
 `skipTypecheck: true` is for emergencies only. If you use it, tell the user.
 
-**Testing after fixes:** pin a fixed bug in pure logic with a unit test and `runTests` (the `unit-testing` topic). For a complex or uncertain change, `relay` the monitor to open and exercise the real app. For a refactor that must preserve behavior, capture a `previewScript` baseline on the pre-change build and re-run it after — the `regression-testing` topic — rather than driving commands by hand and judging the numbers yourself.
+**Testing after fixes:** pin a fixed bug in pure logic with a unit test and `runTests` (the `unit-testing` topic). For a complex or uncertain change, `relay` the monitor to open and exercise the real app. The user's open window of an app holds their progress, and the app's storage is shared by all its windows: verify in the preview (its storage is separate), and when you relay, tell the monitor not to run a command that resets or overwrites state (new game, clear, load, import) in the user's window without asking. For a refactor that must preserve behavior, capture a `previewScript` baseline on the pre-change build and re-run it after — the `regression-testing` topic — rather than driving commands by hand and judging the numbers yourself.
 
 ## Before Designing: Match the Spec to a Topic
 
@@ -104,7 +104,7 @@ Anything past this loop — the relay 403, `previewEval`'s scope (and the `__deb
 }
 ```
 
-**`agentType`** picks the model for the app agent: `"haiku"`, `"sonnet"`, `"opus"`, or a full model ID. Omit for the default.
+**`agentType`** picks the model for the app agent: `"haiku"`, `"sonnet"`, `"opus"`, or a full model ID. Omitted, it is `"sonnet"`. Choose it from the work the agent does when woken, not the app's size: `"haiku"` for routing a request to one command; `"sonnet"` for multi-step driving in English; `"opus"` when it writes prose the user reads (story, dialogue, non-English text) or reasons over the app's state. A wake with a deadline (`sendInteraction` the app waits on) is answered no sooner than the model can think and write; give the app a fallback for a late answer. Deploy reports the model as `agentModel`; say it in your report.
 
 ## Untrusted HTML
 

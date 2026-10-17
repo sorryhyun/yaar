@@ -191,7 +191,9 @@
   "desktop": {
     "iconsLoadFailed": "Apps konnten nicht geladen werden.",
     "retry": "Erneut versuchen",
-    "backAgainToExit": "Zum Beenden erneut Zurück drücken"
+    "backAgainToExit": "Zum Beenden erneut Zurück drücken",
+    "newerVersion": "Eine neuere Version von YAAR ist verfügbar — neu laden, um sie zu verwenden.",
+    "reload": "Neu laden"
   },
   "notifications": {
     "title": "Mitteilungen",

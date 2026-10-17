@@ -37,6 +37,14 @@ automation.
 5. Shift+Tab toggles the CLI panel — watch the agent stream + tool calls live
 ```
 
+## Finding an app's frame
+
+Every window root carries `data-window-id` (and `data-app-id` for app windows); an app's
+`<iframe>` carries both too, and its `title` is the window title. Select the element —
+`iframe[data-app-id="<appId>"]` or `[data-window-id="<id>"] iframe` — and take its
+`contentFrame()`. Don't search CDP `page.frames()` by URL: a cross-origin (isolated) app frame
+reports an empty URL there.
+
 ## Hard rules
 
 - **Never** drive YAAR through YAAR's own Browser app — that nests YAAR inside YAAR: recursive

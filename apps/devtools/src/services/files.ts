@@ -543,7 +543,7 @@ function decodeCopyText(bytes: ArrayBuffer): string | null {
  * Write a file's bytes, for the files that are not text.
  *
  * Reading one as text and writing the string back corrupted every image it touched, so
- * the bytes travel as bytes: `blobToDataUrl` for the base64 `save` wants. Every binary
+ * the bytes travel as bytes: base64, which is what `save` takes for them. Every binary
  * round-trips exactly this way, images included.
  *
  * A server-side `action: 'copy'` would avoid the read entirely — it is how a storage
@@ -552,17 +552,14 @@ function decodeCopyText(bytes: ArrayBuffer): string | null {
  * `yaar://apps/{id}/storage/` and `yaar://storage/apps/{id}/` are refused, the flat-root
  * grant deliberately excluding `apps/`.
  */
-async function saveCopyBytes(
+async function saveCopyBase64(
   projectId: string,
   from: string,
   to: string,
-  blob: Blob,
+  base64: string,
 ): Promise<void> {
   try {
-    const dataUrl = await blobToDataUrl(blob);
-    await appStorage.save(projectPath(projectId, to), dataUrl.slice(dataUrl.indexOf(',') + 1), {
-      encoding: 'base64',
-    });
+    await appStorage.save(projectPath(projectId, to), base64, { encoding: 'base64' });
   } catch (err) {
     // Keeps the server's reason, drops the host path it names it with.
     throw new Error(
@@ -572,8 +569,31 @@ async function saveCopyBytes(
 }
 
 /**
+ * Write binary bytes copied from `from` (a project path or a `yaar://` source) to `to`.
+ *
+ * Binary cannot go through writeFile at all: it takes a string, and would record
+ * mojibake as the diff. Recorded as the fact instead — the shape deleteFile already
+ * uses to report removing one.
+ */
+export async function writeBinaryCopy(to: string, base64: string, from: string): Promise<void> {
+  const proj = activeProject();
+  if (!proj) throw new Error('No active project. Open or create one first.');
+  await saveCopyBase64(proj.id, from, to, base64);
+  recordChange({
+    path: to,
+    kind: 'create',
+    before: '',
+    after: `(binary file copied from ${from})`,
+    label: `copy from ${from}`,
+  });
+  setTypecheckState('unknown');
+  await refreshFiles();
+  setStatusText(`Copied ${from} → ${to}`);
+}
+
+/**
  * Copies `from` to `to` byte for byte — text through `writeFile`, anything else through
- * `saveCopyBytes` — and returns the size copied.
+ * `writeBinaryCopy` — and returns the size copied.
  */
 export async function copyFile(from: string, to: string): Promise<{ bytes: number }> {
   const proj = activeProject();
@@ -591,20 +611,8 @@ export async function copyFile(from: string, to: string): Promise<{ bytes: numbe
     return { bytes: blob.size };
   }
 
-  // Binary cannot go through writeFile at all: it takes a string, and would record
-  // mojibake as the diff. Recorded as the fact instead — the shape deleteFile already
-  // uses to report removing one.
-  await saveCopyBytes(proj.id, from, to, blob);
-  recordChange({
-    path: to,
-    kind: 'create',
-    before: '',
-    after: `(binary file copied from ${from})`,
-    label: `copy from ${from}`,
-  });
-  setTypecheckState('unknown');
-  await refreshFiles();
-  setStatusText(`Copied ${from} → ${to}`);
+  const dataUrl = await blobToDataUrl(blob);
+  await writeBinaryCopy(to, dataUrl.slice(dataUrl.indexOf(',') + 1), from);
   return { bytes: blob.size };
 }
 

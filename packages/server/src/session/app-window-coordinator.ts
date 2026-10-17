@@ -24,6 +24,7 @@ import {
   connectionPresence,
   hasBeenAway,
   isCompanionConnection,
+  isUnattended,
   visibleFor,
 } from './client-presence.js';
 import { deadlines } from '../config.js';
@@ -106,6 +107,10 @@ export class AppWindowCoordinator {
    * refused the deploy as a protocol mismatch. So a window keeps its responder until that
    * responder can no longer answer, and a change is announced (`takeResponderSwitchNote`)
    * instead of being silent.
+   *
+   * The one thing that moves a pin that can still answer, besides leaving the companion
+   * (`pickResponder`), is the user acting in the window from another tab
+   * (`followUserAction`): the copy they touched is the one the turn they started is about.
    */
   private readonly pinned = new Map<string, ConnectionId>();
 
@@ -214,7 +219,8 @@ export class AppWindowCoordinator {
    * registered tab is in front. The second is the phone-plus-companion case the companion
    * exists for — a backgrounded phone cannot run script, so staying pinned to it is a
    * timeout on every request. Either way the new copy has not seen what the old one did,
-   * and the agent is told so rather than left to discover it.
+   * and the agent is told so rather than left to discover it. (A pin is also moved from
+   * outside, by the user acting in another tab — `followUserAction`.)
    */
   private pickResponder(windowKey: string): ConnectionId | null {
     const registered = (this.readyConnections.get(windowKey) ?? []).filter((id) =>
@@ -284,6 +290,48 @@ export class AppWindowCoordinator {
     return (this.readyConnections.get(windowKey) ?? []).includes(pin) ? pin : null;
   }
 
+  /**
+   * The user just acted in this window — a window message, an app interaction, a component
+   * click — from this connection's copy of it. Make that copy the window's responder.
+   *
+   * Every copy has its own in-memory state, and the interaction happened in this one: the
+   * selection, the open document, the half-filled form are here and nowhere else. Left on
+   * the old pin, the turn the interaction starts commands a copy that never saw it — an
+   * `answerIntervention` failing with "No intervention is pending" in tab A while tab B,
+   * where the user answered, waits out its deadline. So the pin follows the user, including
+   * for the first pick: with no pin yet, ranking would hand the window to the newest
+   * registration, which is the wrong tab exactly when the older one is the one that acted.
+   *
+   * Only a sender that shows a person was there moves it:
+   * - **registered** for this window — a tab whose iframe has not said it can be commanded
+   *   is not one to command;
+   * - **not the companion** — app code runs in every copy, so an interaction from the
+   *   companion is app code firing, not a user; following it would also let an app that
+   *   calls `sendInteraction` on a timer bounce the pin away from the user's tab;
+   * - **not unattended** — the Android app running out of sight has nobody to tap it, so
+   *   the same holds;
+   * - **able to answer** — a hidden or frozen tab would only turn the command into a timeout.
+   *
+   * Requests already sent stay where they went; only the next one follows. A move off an
+   * earlier pin is announced, so the agent re-checks state instead of trusting what it
+   * learned from the other copy.
+   */
+  followUserAction(windowId: string, connectionId: ConnectionId): void {
+    const windowKey = this.resolveKey(windowId);
+    const registered = this.readyConnections.get(windowKey) ?? [];
+    if (!registered.includes(connectionId) || !this.deps.hasConnection(connectionId)) return;
+    if (this.isCompanion(connectionId)) return;
+    if (isUnattended(this.deps.sessionId, connectionId)) return;
+    if (!this.canAnswer(connectionId)) return;
+
+    const pin = this.pinned.get(windowKey);
+    if (pin === connectionId) return;
+    this.pinned.set(windowKey, connectionId);
+    if (!pin) return;
+    const pinAlive = registered.includes(pin) && this.deps.hasConnection(pin);
+    this.announceSwitch(windowKey, pinAlive ? 'acted' : 'gone');
+  }
+
   /** Whether a connection's tab can run script — silence counts as yes, see client-presence. */
   private canAnswer(connectionId: ConnectionId): boolean {
     const state = connectionPresence(this.deps.sessionId, connectionId);
@@ -314,13 +362,15 @@ export class AppWindowCoordinator {
       .map((entry) => entry.id);
   }
 
-  private announceSwitch(windowKey: string, reason: 'away' | 'gone' | 'returned'): void {
+  private announceSwitch(windowKey: string, reason: 'away' | 'gone' | 'returned' | 'acted'): void {
     const why =
       reason === 'gone'
         ? 'the tab that was answering disconnected'
         : reason === 'returned'
           ? "the user's own tab is back in front"
-          : 'the tab that was answering went to the background';
+          : reason === 'acted'
+            ? 'the user acted in this window from another open tab'
+            : 'the tab that was answering went to the background';
     log.warn('app window responder changed', {
       sessionId: this.deps.sessionId,
       windowId: windowKey,

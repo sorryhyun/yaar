@@ -218,4 +218,17 @@ describe('servesSpaFallback', () => {
     expect(servesSpaFallback('/api/nope')).toBe(false);
     expect(servesSpaFallback('/ws')).toBe(false);
   });
+
+  it('answers a missing file with a 404, never the desktop', () => {
+    // A stale tab's chunk from an older build: index.html under a .js URL fails as
+    // "Expected a JavaScript module … text/html", and the service worker kept it.
+    expect(servesSpaFallback('/chunk-x4h10bek.js')).toBe(false);
+    expect(servesSpaFallback('/main-a1b2c3d4.css')).toBe(false);
+    expect(servesSpaFallback('/missing.png')).toBe(false);
+  });
+
+  it('only looks at the last segment for an extension', () => {
+    expect(servesSpaFallback('/some/route')).toBe(true);
+    expect(servesSpaFallback('/dir.with.dot/route')).toBe(true);
+  });
 });

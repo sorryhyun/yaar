@@ -4,8 +4,9 @@
  * The repairs in `escape-repair.ts` run on the *parsed* tool input, which is
  * the only place double-escaping is visible but also too late to be cheap: by
  * then the arguments are fully generated. Plain over-escaping is invisible
- * there entirely — `안녕` has already decoded to `안녕`, so the parsed
- * input looks perfect no matter how wastefully it arrived.
+ * there entirely — `\uc548\ub155` has already decoded to `안녕`, so the parsed
+ * input looks perfect no matter how wastefully it arrived, and no matter
+ * whether the codepoints the model typed were the ones it meant.
  *
  * The raw JSON the model is generating *is* visible, one delta at a time, on
  * `content_block_delta` / `input_json_delta.partial_json` (YAAR already runs
@@ -27,6 +28,17 @@ import { escapeSample, type EscapeGuardRecord, type StreamMessage } from '../typ
 /**
  * Three or more consecutive escapes. `\\{1,2}` also catches the double-escaped
  * spelling (`\\uc548`), which is the same mistake one level deeper.
+ *
+ * Backslash parity on the raw wire, for `n` backslashes before a `u`: odd `n`
+ * ends in a live JSON escape (the character itself was escaped), `n = 2` is the
+ * double-escaped form, and `n = 4` is an escaped backslash followed by the
+ * literal text `uXXXX` — not an escape at either level. This needs no parity
+ * guard of its own: each element must begin right where the previous one's hex
+ * digits end, so a run of `n = 4` elements never chains into a match, and only
+ * the *first* element of a run can sit behind extra backslashes. That bounds
+ * the misread to one escape at the head of a run that already holds two real
+ * ones — and `n = 4` is also how a double escape inside a JSON-in-a-string
+ * parameter is spelled, so it is not clearly wrong to count it either.
  */
 const ESCAPE_RUN = /(?:\\{1,2}u[0-9A-Fa-f]{4}){3,}/;
 
@@ -62,6 +74,13 @@ const HEAD = 512;
 const TARGET_KEY = /"(?:uri|file_path|notebook_path)"\s*:\s*"([^"\\]{1,200})"/;
 
 /**
+ * The fallback when none of those is written: an app command names its file in
+ * `params.path`. A bare `"path"` key is only read when nothing better is there,
+ * since the raw head is a prefix of JSON and the key's nesting cannot be checked.
+ */
+const PATH_KEY = /"path"\s*:\s*"([^"\\]{1,200})"/;
+
+/**
  * Whether a raw-JSON fragment carries a run of escapes that are mostly text.
  *
  * The non-ASCII test is what keeps genuine source code out of it: an agent
@@ -85,8 +104,13 @@ export function isEscapedText(fragment: string): boolean {
  * Tools whose arguments are large enough that a cancelled turn beats a doomed
  * one. A short `describe` call escaping three characters is not worth the
  * restart, and the parsed-input repair covers it anyway.
+ *
+ * `mcp__app__command` is an app agent's write path — Dev Tools' `writeFile`
+ * and `editFile` carry whole files in `params`. The CLI's own Write/Edit/
+ * NotebookEdit are not listed: `sdk-options.ts` never enables them. (`query`
+ * carries only a state key, so it is not worth a cancelled turn.)
  */
-const WATCHED_TOOLS = /^(Write|Edit|NotebookEdit|mcp__verbs__(invoke|read))$/;
+const WATCHED_TOOLS = /^mcp__(verbs__(invoke|read)|app__command)$/;
 
 /** One turn's worth of per-content-block state. Not reusable across turns. */
 export class EscapeTripwire {
@@ -134,12 +158,13 @@ export class EscapeTripwire {
     const fragment = e.delta.partial_json ?? '';
     const buffer = (prev + fragment).slice(-TAIL);
     this.tails.set(index, buffer);
-    const head = this.heads.get(index) ?? '';
-    if (head.length < HEAD) this.heads.set(index, (head + fragment).slice(0, HEAD));
+    const sofar = this.heads.get(index) ?? '';
+    if (sofar.length < HEAD) this.heads.set(index, (sofar + fragment).slice(0, HEAD));
 
     if (!isEscapedText(buffer)) return null;
     const toolName = this.names.get(index) ?? 'unknown';
-    const target = TARGET_KEY.exec(this.heads.get(index) ?? '')?.[1];
+    const head = this.heads.get(index) ?? '';
+    const target = (TARGET_KEY.exec(head) ?? PATH_KEY.exec(head))?.[1];
     this.forget(index);
     // `buffer`, not the delta: the tail is what the detector actually matched,
     // and a single delta is often a fragment too short to read as evidence.
@@ -193,14 +218,26 @@ export interface CutOffCall {
   target?: string;
 }
 
+/**
+ * Every target a parsed tool input names, most specific first: `uri`,
+ * `file_path`, `notebook_path`, then an app command's `params.path`.
+ */
+export function callTargets(input: unknown): string[] {
+  if (!input || typeof input !== 'object') return [];
+  const record = input as Record<string, unknown>;
+  const params = record.params;
+  const values = [
+    record.uri,
+    record.file_path,
+    record.notebook_path,
+    params && typeof params === 'object' ? (params as Record<string, unknown>).path : undefined,
+  ];
+  return values.filter((v): v is string => typeof v === 'string' && v.length > 0);
+}
+
 /** The same target a trip is named by, read off a parsed tool input. */
 export function callTarget(input: unknown): string | undefined {
-  if (!input || typeof input !== 'object') return undefined;
-  for (const key of ['uri', 'file_path', 'notebook_path']) {
-    const value = (input as Record<string, unknown>)[key];
-    if (typeof value === 'string' && value) return value.slice(0, 200);
-  }
-  return undefined;
+  return callTargets(input)[0]?.slice(0, 200);
 }
 
 function describeCall(call: CutOffCall): string {

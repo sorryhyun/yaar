@@ -1,6 +1,8 @@
 export {};
 import { AppCommandError, invoke } from '@bundled/yaar';
+import { setStatusText } from '../core';
 import {
+  base64ByteLength,
   countLines,
   groupByFile,
   searchSources,
@@ -8,6 +10,7 @@ import {
   type ProtocolSourceLocation,
   type SourceFile,
 } from '../lib';
+import { writeBinaryCopy, writeFile } from './files';
 
 // Read an installed app's source without making it a project. `cloneApp` is for editing:
 // it writes a sandbox, opens it, and replaces the project in front — a heavy way to read
@@ -51,26 +54,61 @@ export interface AppSourceQuery {
   glob?: string;
 }
 
+function checkAppId(appId: string): void {
+  if (!/^[A-Za-z0-9._-]+$/.test(appId)) throw new AppCommandError(`Invalid appId: ${appId}`);
+}
+
+function findFile(appId: string, files: SourceFile[], rawPath: string): SourceFile {
+  const path = rawPath.replace(/^\.?\//, '');
+  const file = files.find((f) => f.path === path);
+  if (file) return file;
+  const near = files
+    .map((f) => f.path)
+    .filter((p) => p.endsWith(path.split('/').pop() ?? path))
+    .slice(0, 5);
+  throw new AppCommandError(
+    `file not found in ${appId}: ${path}` +
+      (near.length ? ` — did you mean ${near.join(', ')}?` : ''),
+  );
+}
+
+/**
+ * Copy one file of an installed app into the active project, byte for byte.
+ *
+ * The bytes come from the same clone payload readAppSource answers from, so this is
+ * the read-only counterpart of `cloneApp` for one asset: no project is created, and a
+ * binary file that readAppSource refuses to show as text is still reachable. Text
+ * goes through writeFile so the copy records a diff; binary through writeBinaryCopy.
+ */
+export async function copyFromApp(
+  appId: string,
+  path: string,
+  destination: string,
+): Promise<{ from: string; bytes: number }> {
+  checkAppId(appId);
+  const file = findFile(appId, (await fetchSource(appId)).files, path);
+  const from = `yaar://apps/${appId}/${file.path}`;
+  if (file.encoding) {
+    await writeBinaryCopy(destination, file.content, from);
+    return { from, bytes: base64ByteLength(file.content) };
+  }
+  await writeFile(destination, file.content, { label: `copy from ${from}` });
+  setStatusText(`Copied ${from} → ${destination}`);
+  return { from, bytes: new TextEncoder().encode(file.content).length };
+}
+
 export async function readAppSource(q: AppSourceQuery): Promise<Record<string, unknown>> {
-  if (!/^[A-Za-z0-9._-]+$/.test(q.appId)) throw new AppCommandError(`Invalid appId: ${q.appId}`);
+  checkAppId(q.appId);
   const { files, protocolSources } = await fetchSource(q.appId);
 
   if (q.path !== undefined) {
-    const path = q.path.replace(/^\.?\//, '');
-    const file = files.find((f) => f.path === path);
-    if (!file) {
-      const near = files
-        .map((f) => f.path)
-        .filter((p) => p.endsWith(path.split('/').pop() ?? path))
-        .slice(0, 5);
+    const file = findFile(q.appId, files, q.path);
+    const path = file.path;
+    if (file.encoding)
       throw new AppCommandError(
-        `file not found in ${q.appId}: ${path}` +
-          (near.length ? ` — did you mean ${near.join(', ')}?` : ''),
+        `${path} is binary and cannot be read as text. To use it, copyFile from ` +
+          `"yaar://apps/${q.appId}/${path}" — it lands in the project byte for byte.`,
       );
-    }
-    if (file.encoding) {
-      throw new AppCommandError(`${path} is binary (base64 in the clone payload), not text.`);
-    }
     const lines = countLines(file.content);
     if (q.startLine === undefined && q.endLine === undefined) {
       return { appId: q.appId, path, lines, content: file.content };
@@ -93,6 +131,7 @@ export async function readAppSource(q: AppSourceQuery): Promise<Record<string, u
     };
   }
 
+  const binary = files.some((f) => f.encoding);
   return {
     appId: q.appId,
     files: files
@@ -102,6 +141,13 @@ export async function readAppSource(q: AppSourceQuery): Promise<Record<string, u
           : { path: f.path, lines: countLines(f.content) },
       )
       .sort((a, b) => a.path.localeCompare(b.path)),
+    ...(binary
+      ? {
+          binaryNote:
+            'binary files cannot be read as text; copyFile from ' +
+            `"yaar://apps/${q.appId}/<path>" copies one into the project byte for byte.`,
+        }
+      : {}),
     ...(protocolSources
       ? {
           protocol: {

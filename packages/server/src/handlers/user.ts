@@ -51,11 +51,21 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
       if (!payload?.title) {
         return error('"title" is required.');
       }
+      // The client auto-dismisses only on a positive `duration`; anything else would be
+      // accepted here and then silently ignored there, so it is refused instead.
+      const duration = payload.duration;
+      if (
+        duration !== undefined &&
+        (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0)
+      ) {
+        return error('"duration" must be a positive number of milliseconds.');
+      }
       const result = showNotification({
         id: payload.id as string | undefined,
         title: payload.title as string,
         body: payload.body as string | undefined,
         icon: payload.icon as string | undefined,
+        duration,
       });
       return ok(result.message);
     },

@@ -56,4 +56,9 @@ and take `timeoutMs` the same way. Note the difference from `{ action: "message"
 these run the protocol yourself, synchronously. A message hands a natural-language request to the
 app's own agent, which then decides what to run.
 
+A user's open app window holds their progress, and an app's storage is shared by all its windows.
+Ask before running a command that resets or overwrites it (new game, clear, load, import) there —
+including to check that a deploy worked. Check in Dev Tools' preview, whose storage is separate,
+or in a slot or file the user isn't using.
+
 **Waiting on slow apps:** never idle. For a job that reports completion, use a blocking call — an app command with a raised `timeoutMs`, or a window message with `hook: "response"` — so you're woken exactly when it's done. If nothing reports completion, poll instead: `read` the app's state, and if it isn't ready go do other work and check again later. Do not stall the turn waiting on work that has no completion signal — end the turn and pick the state up next time.

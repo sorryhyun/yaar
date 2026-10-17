@@ -491,3 +491,63 @@ describe('violationBlocksFrame', () => {
     expect(at('inline')).toBe(false);
   });
 });
+
+// An outside driver (CDP, Playwright) sees a cross-origin app frame with an empty URL in
+// its frame list, so the element's attributes are how it finds the frame at all
+// (docs/guides/headless_driving.md).
+describe('IframeRenderer — handles for outside drivers', () => {
+  const originalHref = window.location.href;
+
+  beforeEach(() => {
+    setUrl('http://localhost:8000/');
+    useDesktopStore.setState({ sessionId: 'sess-1', notifications: {} });
+  });
+
+  afterEach(() => {
+    cleanup();
+    setUrl(originalHref);
+  });
+
+  it('names the frame after its window and stamps the window and app ids', () => {
+    const { container } = render(
+      <MemoizedIframeRenderer
+        data={APP_URL}
+        appId="reader"
+        windowId="win-reader"
+        windowTitle="Reader — chapter 1"
+      />,
+    );
+    const iframe = container.querySelector('iframe[data-app-id="reader"]');
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute('data-window-id')).toBe('win-reader');
+    expect(iframe?.getAttribute('title')).toBe('Reader — chapter 1');
+  });
+
+  it('falls back to the app id, then a generic name, and omits absent ids', () => {
+    const { container, rerender } = render(
+      <MemoizedIframeRenderer data={APP_URL} appId="reader" />,
+    );
+    expect(container.querySelector('iframe')?.getAttribute('title')).toBe('reader');
+
+    rerender(<MemoizedIframeRenderer data="https://example.com/" />);
+    const iframe = container.querySelector('iframe');
+    expect(iframe?.getAttribute('title')).toBe('Embedded content');
+    expect(iframe?.hasAttribute('data-app-id')).toBe(false);
+    expect(iframe?.hasAttribute('data-window-id')).toBe(false);
+  });
+
+  it('retitles the frame in place without remounting or reloading it', () => {
+    const props = { data: APP_URL, appId: 'reader', windowId: 'win-reader' };
+    const { container, rerender } = render(
+      <MemoizedIframeRenderer {...props} windowTitle="Reader" />,
+    );
+    const before = container.querySelector('iframe') as HTMLIFrameElement;
+    const src = before.getAttribute('src');
+
+    rerender(<MemoizedIframeRenderer {...props} windowTitle="Reader — chapter 2" />);
+    const after = container.querySelector('iframe') as HTMLIFrameElement;
+    expect(after).toBe(before);
+    expect(after.getAttribute('src')).toBe(src);
+    expect(after.getAttribute('title')).toBe('Reader — chapter 2');
+  });
+});

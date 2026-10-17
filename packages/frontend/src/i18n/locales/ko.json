@@ -188,7 +188,9 @@
   "desktop": {
     "iconsLoadFailed": "앱을 불러오지 못했습니다.",
     "retry": "다시 시도",
-    "backAgainToExit": "한 번 더 누르면 종료됩니다"
+    "backAgainToExit": "한 번 더 누르면 종료됩니다",
+    "newerVersion": "YAAR의 새 버전을 사용할 수 있습니다 — 새로고침하세요.",
+    "reload": "새로고침"
   },
   "notifications": {
     "title": "알림",

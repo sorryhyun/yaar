@@ -82,6 +82,7 @@ function createLoggerDouble(): SessionLogger {
     getAgentPath: () => join(tmpdir(), 'harness-agent.jsonl'),
     updateProvider: noop,
     registerAgent: asyncNoop,
+    routeAgentLog: noop,
     logUserMessage: noop,
     logSteeredMessage: noop,
     logAssistantMessage: noop,

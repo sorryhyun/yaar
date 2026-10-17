@@ -5,11 +5,15 @@ import './i18n'; // Must be imported before React renders
 import App from './App';
 import { registerServiceWorker } from './lib/registerServiceWorker';
 import { injectScriptOnce } from './lib/injectScriptOnce';
+import { installStaleBuildListener } from './lib/staleBuild';
 import { IFRAME_AUTOFILL_GUARD_SCRIPT } from '@yaar/shared';
 
 // The same opt-out app frames get, for the shell's own fields (palette, dialogs,
 // component-DSL inputs) — before the first render, so no field is seen unstamped.
 injectScriptOnce(document, 'data-yaar-autofill-guard', IFRAME_AUTOFILL_GUARD_SCRIPT);
+
+// A lazy chunk from a build the server no longer has: offer a reload instead of failing quietly.
+installStaleBuildListener();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -12,6 +12,8 @@ export interface ShowNotificationPayload {
   title: string;
   body?: string;
   icon?: string;
+  /** Auto-dismiss after this many milliseconds. Absent: the toast stays until closed. */
+  duration?: number;
 }
 
 /**
@@ -31,6 +33,7 @@ export function showNotification(payload: ShowNotificationPayload): {
     title: payload.title,
     body: payload.body ?? '',
     icon: payload.icon,
+    ...(payload.duration !== undefined ? { duration: payload.duration } : {}),
   };
   actionEmitter.emitAction(osAction);
   return { id, message: `Notification "${payload.title}" shown` };

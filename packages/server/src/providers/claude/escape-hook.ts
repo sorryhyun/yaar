@@ -20,7 +20,8 @@
  */
 
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
-import { repairToolInput } from './escape-repair.js';
+import { isSourceFile, repairToolInput } from './escape-repair.js';
+import { callTargets } from './escape-tripwire.js';
 import { escapeSample, type EscapeGuardRecord } from '../types.js';
 import { createLogger } from '../../observability/log.js';
 
@@ -83,7 +84,11 @@ export function createEscapeRepairHook(
   return async (input) => {
     if (input.hook_event_name !== 'PreToolUse') return {};
 
-    const { value, overEscaped, underEscaped } = repairToolInput(input.tool_input);
+    // A source file's `\uXXXX` may be meant (see `isSourceFile`); leave it as written.
+    const decodeEscapes = !callTargets(input.tool_input).some(isSourceFile);
+    const { value, overEscaped, underEscaped } = repairToolInput(input.tool_input, {
+      decodeEscapes,
+    });
     if (overEscaped.length === 0 && underEscaped.length === 0) return {};
 
     const summary = describeRepair(overEscaped, underEscaped);

@@ -13,6 +13,11 @@
  * tab that remounted. If the chosen tab disconnects before answering, the request moves to
  * another registered tab, unless it is a `replay: 'never'` command the gone tab may have
  * already run.
+ *
+ * A user acting in the window — a window message, an app interaction — moves it to the tab
+ * they acted in, so the turn they started commands the copy they touched. That is why the
+ * ranking tests below send their message from a `bystander`: a tab with no registration for
+ * the window, whose message says nothing about which copy should answer.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
 import { ClientEventType, ServerEventType } from '@yaar/shared';
@@ -65,7 +70,25 @@ async function bootTwoTabs() {
   return { h, windowKey, first, second };
 }
 
-async function runCommand(h: Harness, windowKey: string, command: string, messageId: string) {
+/**
+ * A tab on the session that has not registered the window — its iframe never said it can be
+ * commanded — so a message it sends leaves the choice of responder to the server's ranking.
+ */
+async function connectBystander(h: Harness) {
+  return h.connect('0');
+}
+
+/**
+ * The user sends the window a message (or the app an interaction) from `from`, and the turn
+ * it starts runs one app command. Returns the command's tool result text.
+ */
+async function runCommand(
+  h: Harness,
+  windowKey: string,
+  command: string,
+  messageId: string,
+  { from = h.client, via = 'window' }: { from?: FakeClient; via?: 'window' | 'app' } = {},
+) {
   h.registry.onTurn(() => [
     {
       kind: 'tool',
@@ -74,23 +97,35 @@ async function runCommand(h: Harness, windowKey: string, command: string, messag
     },
   ]);
   await expectSettlesWithin(
-    h.client.deliverAsync({
-      type: ClientEventType.WINDOW_MESSAGE,
-      messageId,
-      windowId: windowKey,
-      content: `run ${command}`,
-    }),
+    from.deliverAsync(
+      via === 'window'
+        ? {
+            type: ClientEventType.WINDOW_MESSAGE,
+            messageId,
+            windowId: windowKey,
+            content: `run ${command}`,
+          }
+        : {
+            type: ClientEventType.APP_INTERACTION,
+            messageId,
+            windowId: windowKey,
+            content: `<app_interaction>run ${command}</app_interaction>`,
+          },
+    ),
     1000,
     `the ${command} turn`,
   );
   return h.registry.tools.at(-1)?.text;
 }
 
+const ACTED_NOTE = 'the user acted in this window from another open tab';
+
 describe('S7 — one app protocol request, one responder', () => {
   it('a command reaches only one of two registered tabs — the newest', async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
+    const from = await connectBystander(h);
 
-    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1');
+    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1', { from });
 
     // RED before the fix: both tabs got the frame, so the handler ran twice.
     expect(commandFrames(first)).toHaveLength(0);
@@ -104,8 +139,9 @@ describe('S7 — one app protocol request, one responder', () => {
     // so asking it is a timeout now and a duplicate the moment it wakes.
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
     await first.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
+    const from = await connectBystander(h);
 
-    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1');
+    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1', { from });
 
     expect(commandFrames(second)).toHaveLength(0);
     expect(commandFrames(first)).toHaveLength(1);
@@ -151,6 +187,7 @@ describe('S7 — one app protocol request, one responder', () => {
     const reached = deferred();
     second.onFrame(ServerEventType.APP_PROTOCOL_REQUEST, () => reached.resolve());
     await second.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
+    const bystander = await connectBystander(h);
 
     h.registry.onTurn(() => [
       {
@@ -159,7 +196,7 @@ describe('S7 — one app protocol request, one responder', () => {
         run: (ctx) => handleAppCommand(ctx.windowState, windowKey, { command: 'refresh' }),
       },
     ]);
-    const turn = h.client.deliverAsync({
+    const turn = bystander.deliverAsync({
       type: ClientEventType.WINDOW_MESSAGE,
       messageId: 'm1',
       windowId: windowKey,
@@ -197,6 +234,7 @@ describe('S7 — one app protocol request, one responder', () => {
       windowId: windowKey,
       noReplay: ['createIssue'],
     });
+    const bystander = await connectBystander(h);
 
     h.registry.onTurn(() => [
       {
@@ -205,7 +243,7 @@ describe('S7 — one app protocol request, one responder', () => {
         run: (ctx) => handleAppCommand(ctx.windowState, windowKey, { command: 'createIssue' }),
       },
     ]);
-    const turn = h.client.deliverAsync({
+    const turn = bystander.deliverAsync({
       type: ClientEventType.WINDOW_MESSAGE,
       messageId: 'm1',
       windowId: windowKey,
@@ -223,7 +261,8 @@ describe('S7 — one app protocol request, one responder', () => {
   });
   it('a window keeps its responder across requests when another tab re-registers', async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'cloneApp', 'm1');
+    const from = await connectBystander(h);
+    await runCommand(h, windowKey, 'cloneApp', 'm1', { from });
 
     // The first tab re-announces and is now the newest registration. Its copy of the
     // iframe never ran `cloneApp`, so moving the next request there is the bug: devtools
@@ -233,7 +272,7 @@ describe('S7 — one app protocol request, one responder', () => {
       windowId: windowKey,
       reannounce: true,
     });
-    const answeredBy = await runCommand(h, windowKey, 'deploy', 'm2');
+    const answeredBy = await runCommand(h, windowKey, 'deploy', 'm2', { from });
 
     expect(commandFrames(first)).toHaveLength(0);
     expect(commandFrames(second).map((r) => r.command)).toEqual(['cloneApp', 'deploy']);
@@ -242,11 +281,12 @@ describe('S7 — one app protocol request, one responder', () => {
 
   it('a pinned tab that goes to the background hands over once, and says so', async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'cloneApp', 'm1');
+    const from = await connectBystander(h);
+    await runCommand(h, windowKey, 'cloneApp', 'm1', { from });
     expect(commandFrames(second)).toHaveLength(1);
 
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
-    const switched = await runCommand(h, windowKey, 'compile', 'm2');
+    const switched = await runCommand(h, windowKey, 'compile', 'm2', { from });
 
     expect(commandFrames(first).map((r) => r.command)).toEqual(['compile']);
     expect(switched).toContain('first');
@@ -255,7 +295,7 @@ describe('S7 — one app protocol request, one responder', () => {
     // The phone comes back. The window stays where it is now — switching back would be a
     // second jump between copies — and the notice is not repeated.
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
-    const after = await runCommand(h, windowKey, 'deploy', 'm3');
+    const after = await runCommand(h, windowKey, 'deploy', 'm3', { from });
 
     expect(commandFrames(first).map((r) => r.command)).toEqual(['compile', 'deploy']);
     expect(commandFrames(second)).toHaveLength(1);
@@ -270,11 +310,122 @@ describe('S7 — one app protocol request, one responder', () => {
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
     await first.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
+    const from = await connectBystander(h);
 
-    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1');
+    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1', { from });
 
     expect(commandFrames(second)).toHaveLength(0);
     expect(answeredBy).toBe('first');
+  });
+  it("an app interaction from another tab moves the window to that tab's copy, and says so once", async () => {
+    // RED before: the pin stayed on `second`, so the command the interaction's turn ran
+    // landed on a copy that never saw the interaction — "No intervention is pending" there,
+    // and a timeout in the copy the user actually answered.
+    const { h, windowKey, first, second } = await bootTwoTabs();
+    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    expect(commandFrames(second)).toHaveLength(1);
+
+    const moved = await runCommand(h, windowKey, 'answerIntervention', 'm2', {
+      from: first,
+      via: 'app',
+    });
+
+    expect(commandFrames(first).map((r) => r.command)).toEqual(['answerIntervention']);
+    expect(commandFrames(second)).toHaveLength(1);
+    expect(moved).toContain('first');
+    expect(moved).toContain(ACTED_NOTE);
+
+    const after = await runCommand(h, windowKey, 'refresh', 'm3', { from: first, via: 'app' });
+    expect(after).toBe('first');
+  });
+
+  it("a window message from another tab moves the window to that tab's copy, and says so once", async () => {
+    const { h, windowKey, first, second } = await bootTwoTabs();
+    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+
+    const moved = await runCommand(h, windowKey, 'compile', 'm2', { from: first });
+
+    expect(commandFrames(first).map((r) => r.command)).toEqual(['compile']);
+    expect(commandFrames(second)).toHaveLength(1);
+    expect(moved).toContain('first');
+    expect(moved).toContain(ACTED_NOTE);
+
+    expect(await runCommand(h, windowKey, 'deploy', 'm3', { from: first })).toBe('first');
+  });
+
+  it('the first request goes to the tab that acted, not the newest registration', async () => {
+    // With no pin yet, ranking alone would pick `second` (registered last) — the wrong copy
+    // exactly when the older tab is the one the user acted in.
+    const { h, windowKey, first, second } = await bootTwoTabs();
+
+    const answeredBy = await runCommand(h, windowKey, 'createIssue', 'm1', {
+      from: first,
+      via: 'app',
+    });
+
+    expect(commandFrames(second)).toHaveLength(0);
+    // No earlier copy to differ from, so nothing to announce.
+    expect(answeredBy).toBe('first');
+  });
+
+  it('an interaction from the companion does not move the window', async () => {
+    // App code runs in every copy, so the companion "interacting" is app code, not a user.
+    const { h, windowKey, first, second } = await bootTwoTabs();
+    const companion = await h.connect('0', { companion: true });
+    answerAs(companion, 'companion');
+    await companion.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
+    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+
+    const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', {
+      from: companion,
+      via: 'app',
+    });
+
+    expect(answeredBy).toBe('second');
+    expect(commandFrames(companion)).toHaveLength(0);
+    expect(commandFrames(first)).toHaveLength(0);
+  });
+
+  it('an interaction from a backgrounded tab does not move the window', async () => {
+    // It could not run the command — moving there would only turn it into a timeout.
+    const { h, windowKey, first, second } = await bootTwoTabs();
+    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await first.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
+
+    const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', { from: first });
+
+    expect(answeredBy).toBe('second');
+    expect(commandFrames(first)).toHaveLength(0);
+  });
+
+  it('an interaction from a tab running with nobody watching does not move the window', async () => {
+    // The Android app out of sight keeps its page visible; nobody can have tapped it.
+    const { h, windowKey, first, second } = await bootTwoTabs();
+    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await first.deliver({
+      type: ClientEventType.CLIENT_PRESENCE,
+      state: 'visible',
+      unattended: true,
+    });
+
+    const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', {
+      from: first,
+      via: 'app',
+    });
+
+    expect(answeredBy).toBe('second');
+    expect(commandFrames(first)).toHaveLength(0);
+  });
+
+  it('a message from a tab that has not registered the window does not move it', async () => {
+    const { h, windowKey, first, second } = await bootTwoTabs();
+    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    const bystander = await connectBystander(h);
+
+    const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', { from: bystander });
+
+    expect(answeredBy).toBe('second');
+    expect(commandFrames(first)).toHaveLength(0);
   });
 });
 
@@ -306,8 +457,9 @@ describe('S7d — the tab the user is looking at answers, the companion covers f
     // The phone has backgrounded before — which used to rank it below the companion.
     await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
     await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
+    const from = await connectBystander(h);
 
-    const answeredBy = await runCommand(h, windowKey, 'openFile', 'm1');
+    const answeredBy = await runCommand(h, windowKey, 'openFile', 'm1', { from });
 
     expect(commandFrames(companion)).toHaveLength(0);
     expect(answeredBy).toBe('phone');
@@ -316,13 +468,16 @@ describe('S7d — the tab the user is looking at answers, the companion covers f
   it('the companion covers while the phone is away, and the window moves back when it returns', async () => {
     const { h, windowKey, phone, companion } = await bootPhoneAndCompanion();
     await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
+    // Not from the phone: its own message would move the window there and say "acted",
+    // and this is about the move the server makes by itself once the phone is back.
+    const from = await connectBystander(h);
 
-    const covered = await runCommand(h, windowKey, 'compile', 'm1');
+    const covered = await runCommand(h, windowKey, 'compile', 'm1', { from });
     expect(covered).toContain('companion');
     expect(commandFrames(companion).map((r) => r.command)).toEqual(['compile']);
 
     await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
-    const back = await runCommand(h, windowKey, 'deploy', 'm2');
+    const back = await runCommand(h, windowKey, 'deploy', 'm2', { from });
 
     expect(commandFrames(phone).map((r) => r.command)).toEqual(['deploy']);
     expect(back).toContain('phone');
@@ -355,7 +510,11 @@ describe('S7b — a capture is not decided by the tab that does not have the win
     });
   }
 
-  async function capture(h: Harness, windowKey: string) {
+  /**
+   * `from` matters once a window is pinned: a message is the user acting in the window, so
+   * sent from another registered tab it would move the pin these tests are about.
+   */
+  async function capture(h: Harness, windowKey: string, from: FakeClient = h.client) {
     h.registry.onTurn(() => [
       {
         kind: 'tool',
@@ -365,7 +524,7 @@ describe('S7b — a capture is not decided by the tab that does not have the win
       },
     ]);
     await expectSettlesWithin(
-      h.client.deliverAsync({
+      from.deliverAsync({
         type: ClientEventType.WINDOW_MESSAGE,
         messageId: `cap-${Date.now()}`,
         windowId: windowKey,
@@ -418,7 +577,8 @@ describe('S7b — a capture is not decided by the tab that does not have the win
     answerAs(second, 'second');
     await first.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
     await second.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
-    expect(await runCommand(h, windowKey, 'openSheet', 'm1')).toBe('second');
+    // Opened from `second`'s own copy: the user acted there, so the agent's command ran there.
+    expect(await runCommand(h, windowKey, 'openSheet', 'm1', { from: second })).toBe('second');
     return { h, windowKey, first, second };
   }
 
@@ -429,7 +589,7 @@ describe('S7b — a capture is not decided by the tab that does not have the win
     answerCapture(first, { success: true, imageData: 'dW50b3VjaGVk' });
     answerCapture(second, { success: true, imageData: 'c2hlZXRvcGVu' }, 100);
 
-    const outcome = await capture(h, windowKey);
+    const outcome = await capture(h, windowKey, second);
 
     expect(outcome.value?.imageData).toBe('c2hlZXRvcGVu');
     expect((outcome.value as { captureDegraded?: string[] }).captureDegraded).toBeUndefined();
@@ -440,7 +600,7 @@ describe('S7b — a capture is not decided by the tab that does not have the win
     answerCapture(second, { success: false, captureFailure: 'not-mounted' });
     answerCapture(first, { success: true, imageData: 'dW50b3VjaGVk' }, 50);
 
-    const outcome = (await capture(h, windowKey)) as {
+    const outcome = (await capture(h, windowKey, second)) as {
       value?: { imageData?: string; captureDegraded?: string[] };
     };
 

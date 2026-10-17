@@ -2,6 +2,7 @@
  * Shared helpers for window feature logic.
  */
 
+import { createHash } from 'node:crypto';
 import { error, type VerbResult } from '../../lib/verb-result.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -42,7 +43,16 @@ export function formatWindowRef(windowId: string): string {
   return `yaar://windows/${windowId}`;
 }
 
-/** Derive a window ID from payload fields. */
+/**
+ * Derive a window ID from payload fields.
+ *
+ * The slug is ASCII-only on purpose, so a window URI never needs percent-encoding. That
+ * used to cost a non-Latin title everything but its digits and punctuation: "1.2.0 텍스트
+ * 완주 보고" came out as `1-2-0`, the same id as any other "1.2.0 …" report, and a
+ * pure-Korean title fell through to a timestamp. When the slug dropped letters or digits
+ * the source had, a short hash of the source is appended — stable, so the same title
+ * derives the same id the way an ASCII one does, and distinct for different titles.
+ */
 export function deriveWindowId(appId?: string, name?: string, title?: string): string {
   if (appId) return appId;
   const source = name ?? title ?? '';
@@ -50,7 +60,16 @@ export function deriveWindowId(appId?: string, name?: string, title?: string): s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+  if (droppedLettersOrDigits(source)) {
+    const hash = createHash('sha256').update(source.normalize('NFC')).digest('hex').slice(0, 8);
+    return slug ? `${slug}-${hash}` : `win-${hash}`;
+  }
   return slug || `win-${Date.now().toString(36)}`;
+}
+
+/** True if `source` has a letter or digit the ASCII slug cannot carry. */
+function droppedLettersOrDigits(source: string): boolean {
+  return /[\p{L}\p{N}]/u.test(source.replace(/[A-Za-z0-9]/g, ''));
 }
 
 /**

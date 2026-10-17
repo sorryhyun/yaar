@@ -15,7 +15,7 @@ import type { AgentProfile } from './profiles/types.js';
 import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
-import { appRolePrefix, monitorRole } from './roles.js';
+import { agentLogKey, appRolePrefix, monitorRole } from './roles.js';
 import { appAgentKey } from './agent-roster.js';
 import { enqueueOrReject } from './queue-refusal.js';
 import { frameSteeredMessage } from './steer-framing.js';
@@ -294,6 +294,7 @@ export class AppTaskProcessor {
         ? (agent.monitorMessageCount?.get(task.monitorId) ?? 0)
         : 0;
 
+      const turnOptions = turnOptionsFor(profile, this.ctx.providerType ?? '');
       await runAgentTurn(this.ctx, {
         agent,
         role: agentRole,
@@ -308,13 +309,16 @@ export class AppTaskProcessor {
         // `relay` reaches.
         monitorId,
         systemPromptOverride: profile.systemPrompt,
-        ...turnOptionsFor(profile, this.ctx.providerType ?? ''),
+        ...turnOptions,
         onAssistantResponse: (text) => {
           appResponseText = text;
         },
         onBeforeRun: async () => {
           const logger = this.ctx.getSessionLogger();
-          await logger?.registerAgent(agentRole, monitorRole(monitorId), windowId, monitorId);
+          await logger?.registerAgent(agentRole, monitorRole(monitorId), windowId, monitorId, {
+            model: turnOptions.model,
+            logKey: agentLogKey({ kind: 'app', monitorId, appId }),
+          });
           await this.sendWindowStatus(windowId, agentRole, 'assigned');
           await this.sendWindowStatus(windowId, agentRole, 'active');
         },

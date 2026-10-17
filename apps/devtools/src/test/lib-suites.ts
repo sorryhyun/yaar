@@ -65,6 +65,9 @@ import {
   verbUsesIn,
   collectVerbUses,
   storagePollsIn,
+  planAssetImport,
+  appSourceRef,
+  base64ByteLength,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -1386,6 +1389,88 @@ const storagePolling = suite('storage-polling', {
   },
 });
 
+const assetImport = suite('asset-import', {
+  'a PNG is copied as is unless recompress is asked for'() {
+    eq(planAssetImport('shared/a/hero.png', 'src/assets/hero.png', { renamed: true }), {
+      path: 'src/assets/hero.png',
+      webpPath: null,
+      webpRequired: false,
+    });
+    eq(
+      planAssetImport('shared/a/hero.png', 'src/assets/hero.png', {
+        recompress: true,
+        renamed: true,
+      }).webpPath,
+      'src/assets/hero.webp',
+    );
+  },
+
+  'a defaulted JPEG is renamed to follow its WebP bytes, keeping the original as fallback'() {
+    eq(planAssetImport('shared/a/photo.JPG', 'src/assets/photo.JPG', { renamed: true }), {
+      path: 'src/assets/photo.JPG',
+      webpPath: 'src/assets/photo.webp',
+      webpRequired: false,
+    });
+  },
+
+  'an explicit non-WebP `to` never receives WebP bytes'() {
+    eq(planAssetImport('shared/a/photo.jpg', 'src/img/photo.jpg'), {
+      path: 'src/img/photo.jpg',
+      webpPath: null,
+      webpRequired: false,
+    });
+    throwsWith(
+      () => planAssetImport('shared/a/hero.png', 'src/img/hero.png', { recompress: true }),
+      'not a .webp name',
+    );
+  },
+
+  'an explicit .webp `to` must get WebP, even when it is larger'() {
+    eq(planAssetImport('shared/a/hero.png', 'src/img/hero.webp'), {
+      path: 'src/img/hero.webp',
+      webpPath: 'src/img/hero.webp',
+      webpRequired: true,
+    });
+  },
+
+  'recompress: false and non-raster sources are straight copies'() {
+    eq(
+      planAssetImport('shared/a/photo.jpg', 'src/assets/photo.jpg', {
+        recompress: false,
+        renamed: true,
+      }).webpPath,
+      null,
+    );
+    eq(planAssetImport('shared/a/run.gif', 'src/assets/run.gif', { renamed: true }).webpPath, null);
+    eq(
+      planAssetImport('shared/a/logo.svg', 'src/assets/logo.svg', { recompress: true }).webpPath,
+      null,
+    );
+  },
+
+  "appSourceRef names an installed app's file, never its storage"() {
+    eq(appSourceRef('yaar://apps/mascot/src/assets/idle.png'), {
+      appId: 'mascot',
+      path: 'src/assets/idle.png',
+    });
+    eq(appSourceRef('yaar://apps/mascot/app.json'), { appId: 'mascot', path: 'app.json' });
+    eq(appSourceRef('yaar://apps/mascot/storage/save.json'), null);
+    eq(appSourceRef('yaar://apps/mascot/storage'), null);
+    eq(appSourceRef('yaar://apps/self/src/x.png'), null);
+    eq(appSourceRef('yaar://apps/mascot'), null);
+    eq(appSourceRef('yaar://storage/shared/x.png'), null);
+    eq(appSourceRef('src/x.png'), null);
+  },
+
+  'base64ByteLength counts decoded bytes, padding included'() {
+    eq(base64ByteLength(''), 0);
+    eq(base64ByteLength('YQ=='), 1);
+    eq(base64ByteLength('YWI='), 2);
+    eq(base64ByteLength('YWJj'), 3);
+    eq(base64ByteLength('YWJj\nZA=='), 4);
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -1407,4 +1492,5 @@ export const libSuites: Suite[] = [
   appSource,
   permissionUses,
   storagePolling,
+  assetImport,
 ];

@@ -17,7 +17,8 @@
  * ## Two output modes, because there are two readers
  *
  * `pretty` (default) is for the developer watching a terminal, and deliberately looks
- * like what it replaced: `[AgentSession] turn overlapped  role=main`. `json`
+ * like what it replaced, behind a local clock time: `14:03:07.512 [AgentSession] turn
+ * overlapped  role=main`. `json`
  * (`YAAR_LOG_FORMAT=json`) is one object per line for a collector, carrying every
  * context id and an ISO timestamp. Pretty mode shows only the two ids that help a
  * human skim — printing a full session id on every line is how a log becomes
@@ -108,11 +109,33 @@ function parseLevel(raw: string | undefined): LogLevel {
 
 let minLevel: LogLevel = parseLevel(process.env.YAAR_LOG_LEVEL);
 let format: 'pretty' | 'json' = process.env.YAAR_LOG_FORMAT === 'json' ? 'json' : 'pretty';
+let prettyTime = true;
 
-/** Test seam: pin level and format regardless of the developer's environment. */
-export function configureLogging(opts: { level?: LogLevel; format?: 'pretty' | 'json' }): void {
+/**
+ * Test seam: pin level and format regardless of the developer's environment. `time: false`
+ * drops the pretty-mode clock prefix, for a test that compares whole lines.
+ */
+export function configureLogging(opts: {
+  level?: LogLevel;
+  format?: 'pretty' | 'json';
+  time?: boolean;
+}): void {
   if (opts.level) minLevel = opts.level;
   if (opts.format) format = opts.format;
+  if (opts.time !== undefined) prettyTime = opts.time;
+}
+
+/**
+ * `HH:MM:SS.mmm`, local time — the pretty-mode line prefix.
+ *
+ * Local rather than a UTC slice of the ISO string because the reader is a person matching a
+ * line against the wall clock and the session log directory, which is named in local time
+ * too (`generateSessionId`). No date: a terminal session rarely spans midnight, and JSON
+ * mode carries the full ISO timestamp for anything that needs one.
+ */
+function clockTime(now: Date): string {
+  const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}`;
 }
 
 /** The active minimum level — for a caller that wants to skip building an expensive field. */
@@ -210,7 +233,8 @@ function emit(
   const fieldParts = Object.entries(merged).map(([key, value]) => `${key}=${renderValue(value)}`);
   const suffix = [...idParts, ...fieldParts];
 
-  sink(`[${component}] ${message}${suffix.length ? `  ${suffix.join(' ')}` : ''}`);
+  const time = prettyTime ? `${clockTime(new Date())} ` : '';
+  sink(`${time}[${component}] ${message}${suffix.length ? `  ${suffix.join(' ')}` : ''}`);
 }
 
 /**

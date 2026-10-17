@@ -191,7 +191,9 @@
   "desktop": {
     "iconsLoadFailed": "アプリを読み込めませんでした。",
     "retry": "再試行",
-    "backAgainToExit": "もう一度押すと終了します"
+    "backAgainToExit": "もう一度押すと終了します",
+    "newerVersion": "YAAR の新しいバージョンがあります — 再読み込みしてください。",
+    "reload": "再読み込み"
   },
   "notifications": {
     "title": "通知",

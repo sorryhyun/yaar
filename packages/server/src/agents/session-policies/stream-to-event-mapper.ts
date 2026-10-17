@@ -126,6 +126,12 @@ export class StreamToEventMapper {
   private lastThinkingEmitTime = 0;
   private lastFlushedThinkingLength = 0;
   private thinkingDirty = false;
+  /**
+   * When the first delta of the unflushed thinking block arrived. The block is logged only
+   * at {@link flushThinking}, whose entry timestamp is the block's *end* — on a long think
+   * that is many seconds after the agent started it, so the start rides along explicitly.
+   */
+  private thinkingStartedAt: string | null = null;
   private lastResponseEmitTime = 0;
   private responseDirty = false;
   private toolStartTimes = new Map<string, { toolName: string; startTime: number }>();
@@ -415,6 +421,7 @@ export class StreamToEventMapper {
         if (message.content) {
           this.state.thinkingText += message.content;
           this.thinkingDirty = true;
+          this.thinkingStartedAt ??= new Date().toISOString();
           this.emitStreamFrame('thinking', { delta: message.content });
 
           // Throttle: emit AGENT_THINKING at most once per 200ms
@@ -710,11 +717,12 @@ export class StreamToEventMapper {
     // Handles multiple thinking blocks: only what's new since the last flush.
     const newText = this.state.thinkingText.slice(this.lastFlushedThinkingLength);
     if (newText) {
-      this.logger?.logThinking(newText, this.role);
+      this.logger?.logThinking(newText, this.role, this.thinkingStartedAt ?? undefined);
     }
 
     this.lastFlushedThinkingLength = this.state.thinkingText.length;
     this.thinkingDirty = false;
+    this.thinkingStartedAt = null;
     this.lastThinkingEmitTime = 0;
   }
 }

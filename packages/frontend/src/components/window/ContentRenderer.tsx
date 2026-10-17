@@ -20,6 +20,7 @@ interface ContentRendererProps {
   appOrigin?: string;
   perAppOrigin?: boolean;
   appId?: string;
+  windowTitle?: string;
 }
 
 function ContentRenderer({
@@ -31,6 +32,7 @@ function ContentRenderer({
   appOrigin,
   perAppOrigin,
   appId,
+  windowTitle,
 }: ContentRendererProps) {
   const callbacks = useWindowCallbacks();
 
@@ -67,6 +69,8 @@ function ContentRenderer({
           appOrigin={appOrigin}
           perAppOrigin={perAppOrigin}
           appId={appId}
+          windowId={windowId}
+          windowTitle={windowTitle}
           onRenderSuccess={handleIframeSuccess}
           onRenderError={handleIframeError}
         />
