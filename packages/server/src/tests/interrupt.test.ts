@@ -46,7 +46,9 @@ function fakePersistentSession(overrides: {
   const closed = { channel: false, aborted: false, returned: false };
   const abortController = new AbortController();
   const turns = new TurnGate();
-  if (overrides.busy) turns.begin().start();
+  const turn = overrides.busy ? turns.begin() : null;
+  turn?.start();
+  const interrupt = overrides.interrupt ?? (async () => ({ still_queued: [] }));
   const session = {
     turns,
     fingerprint: 'fp',
@@ -60,7 +62,13 @@ function fakePersistentSession(overrides: {
       },
     },
     stream: {
-      interrupt: overrides.interrupt ?? (async () => ({ still_queued: [] })),
+      // The CLI answers an interrupt with the stopped command's `result`, which
+      // is what ends the turn: an acknowledgement alone is not a stop.
+      interrupt: async () => {
+        const receipt = await interrupt();
+        turn?.end();
+        return receipt;
+      },
       return: async () => {
         closed.returned = true;
       },

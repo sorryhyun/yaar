@@ -107,6 +107,25 @@ const STEER_TURN_START_MS = MCP_CONNECT_WAIT_MS + 5000;
  */
 const MAX_ESCAPE_RETRIES = 1;
 
+/**
+ * How long a swallowed escape-retry terminal waits for the correction's answer
+ * to begin before it is taken as the turn's real end.
+ *
+ * A CLI that folds the correction into the interrupted command answers both
+ * with that one `result`. When the result says so (`user_message_uuids`) the
+ * turn ends on it at once; this bound covers a CLI that does not, which would
+ * otherwise leave the turn waiting on a stream with nothing more to send. Sized
+ * for the gap before a fresh command's first frame, not for a whole answer.
+ */
+const ESCAPE_RETRY_IDLE_MS = 60_000;
+
+/**
+ * How long an acknowledged interrupt waits for the turn to end before closing
+ * the stream. The reader ends on the interrupted command's `result`, and a CLI
+ * with nothing left running acknowledges and sends none.
+ */
+const INTERRUPT_SETTLE_MS = 3000;
+
 /** First wait before reopening a bridged stream whose process went away; doubles per failure. */
 const REMOTE_REOPEN_MS = 2000;
 const REMOTE_REOPEN_MAX_MS = 60_000;
@@ -174,6 +193,23 @@ function frameSessionId(msg: unknown): string | undefined {
     return msg.session_id || undefined;
   }
   return undefined;
+}
+
+/** Whether a `result` frame says it answered the message pushed with `uuid`. */
+function answers(msg: unknown, uuid: string | undefined): boolean {
+  const answered = (msg as { user_message_uuids?: unknown }).user_message_uuids;
+  return uuid !== undefined && Array.isArray(answered) && answered.includes(uuid);
+}
+
+/**
+ * Whether a frame is the escape correction running as a command of its own:
+ * model output, or the CLI announcing it started `uuid`. Status frames between
+ * commands are neither, and must not cancel the held terminal.
+ */
+function startsCorrection(msg: unknown, uuid: string | undefined): boolean {
+  const f = msg as { type?: string; state?: string; command_uuid?: string };
+  if (f.type === 'command_lifecycle') return f.state === 'started' && f.command_uuid === uuid;
+  return f.type === 'stream_event' || f.type === 'assistant' || f.type === 'result';
 }
 
 /**
@@ -545,6 +581,13 @@ export class ClaudeSessionProvider implements AITransport {
     // Set between "we interrupted" and "the interrupted turn's terminal arrived",
     // which is the one result message this turn must swallow rather than yield.
     let awaitingEscapeRetry = false;
+    // The correction's uuid: a `result` naming it answered the retry as well.
+    let correctionUuid: string | undefined;
+    // The swallowed terminal, kept until the correction's own answer begins —
+    // if it never does, this was the turn's end after all. See ESCAPE_RETRY_IDLE_MS.
+    let heldTerminal: StreamMessage | null = null;
+    let heldUntil = 0;
+    let pendingNext: Promise<IteratorResult<unknown, void>> | null = null;
     let inbox: InputChannel<unknown> | null = null;
     try {
       await session.mcpReady;
@@ -556,7 +599,24 @@ export class ClaudeSessionProvider implements AITransport {
       turn.start();
 
       for (;;) {
-        const { value: msg, done } = await inbox.iterable.next();
+        const next = pendingNext ?? inbox.iterable.next();
+        pendingNext = null;
+        if (heldTerminal) {
+          const arrived = await withDeadline(next, Math.max(0, heldUntil - Date.now())).then(
+            () => true,
+            () => false,
+          );
+          if (!arrived) {
+            log.warn('escape retry: the correction never started; ending on the held terminal', {
+              type: heldTerminal.type,
+            });
+            if (heldTerminal.type === 'error') logResultError(heldTerminal);
+            yield heldTerminal;
+            log.info('turn finished', { messages: messageCount });
+            return;
+          }
+        }
+        const { value: msg, done } = await next;
         if (done) {
           if (session.pumpError !== undefined) throw session.pumpError;
           // Process exited (crash or abort) — the stream is gone.
@@ -565,7 +625,7 @@ export class ClaudeSessionProvider implements AITransport {
           // terminal swallowed, so returning here would leave the caller with
           // no completion at all. Resend on a fresh stream instead: the
           // original message is still the one that needs answering.
-          if (awaitingEscapeRetry && !session.abortController.signal.aborted) {
+          if ((awaitingEscapeRetry || heldTerminal) && !session.abortController.signal.aborted) {
             log.warn('stream ended during escape retry; resending fresh');
             yield* this.executeQuery(messageContent, this.sessionId ?? undefined, options);
             return;
@@ -579,6 +639,7 @@ export class ClaudeSessionProvider implements AITransport {
         }
         messageCount++;
         if (session.abortController.signal.aborted) break;
+        if (heldTerminal && startsCorrection(msg, correctionUuid)) heldTerminal = null;
 
         // Anything the repair hook fixed since the last pass. Drained here
         // rather than at the trip site because the hook fires on its own
@@ -620,7 +681,8 @@ export class ClaudeSessionProvider implements AITransport {
               // correction queued; the turn either ends on its own or the outer
               // abort path takes it. Nothing useful to do here.
             });
-            this.send(session, escapeCorrection(tripped, [...unanswered.values()]));
+            correctionUuid = randomUUID();
+            this.send(session, escapeCorrection(tripped, [...unanswered.values()]), correctionUuid);
             continue;
           }
         }
@@ -639,12 +701,21 @@ export class ClaudeSessionProvider implements AITransport {
 
         // The interrupted turn's own terminal. Yielding it would end the turn
         // in the UI while the correction we already pushed is about to start
-        // answering on the same stream.
+        // answering on the same stream — unless the CLI folded the correction
+        // into the interrupted command, when this one result answered both and
+        // nothing else is coming.
         if (awaitingEscapeRetry && (mapped.type === 'complete' || mapped.type === 'error')) {
           awaitingEscapeRetry = false;
           tripwire.reset();
-          log.info('escape retry: dropped the interrupted turn terminal', { type: mapped.type });
-          continue;
+          if (!answers(msg, correctionUuid)) {
+            heldTerminal = mapped;
+            heldUntil = Date.now() + ESCAPE_RETRY_IDLE_MS;
+            log.info('escape retry: held the interrupted turn terminal', { type: mapped.type });
+            continue;
+          }
+          log.info('escape retry: correction folded into the interrupted turn', {
+            type: mapped.type,
+          });
         }
 
         if (mapped.type === 'tool_use' && mapped.toolUseId) {
@@ -1001,7 +1072,15 @@ export class ClaudeSessionProvider implements AITransport {
     try {
       const receipt = await withDeadline(session.stream.interrupt(), INTERRUPT_ACK_MS);
       const stillQueued = receipt?.still_queued ?? [];
-      if (stillQueued.length === 0) return { outcome: 'acknowledged' };
+      if (stillQueued.length === 0) {
+        // Acknowledged is not stopped: a turn waiting on a `result` the CLI
+        // will never send (it had already answered) would hold its agent, and
+        // every message queued behind it, for good.
+        if (await session.turns.waitForEnd(INTERRUPT_SETTLE_MS)) return { outcome: 'acknowledged' };
+        log.warn('interrupt acknowledged but the turn did not end; closing the stream');
+        await this.closePersistentSession();
+        return { outcome: 'escalated' };
+      }
       log.warn('interrupt left messages queued; closing the stream', {
         stillQueued: stillQueued.length,
       });

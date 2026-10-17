@@ -28,6 +28,9 @@ interface TurnRecord<T> {
   /** Settles on start or end, whichever comes first. Never rejects. */
   settled: Promise<void>;
   settle: () => void;
+  /** Settles on end only. Never rejects. */
+  finished: Promise<void>;
+  markFinished: () => void;
 }
 
 /** One turn's side of the gate, held by the code running that turn. */
@@ -70,12 +73,18 @@ export class TurnGate<T = void> {
     const settled = new Promise<void>((resolve) => {
       settle = resolve;
     });
+    let markFinished!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      markFinished = resolve;
+    });
     const record: TurnRecord<T> = {
       started: false,
       ended: false,
       value: undefined,
       settled,
       settle,
+      finished,
+      markFinished,
     };
     this.turn = record;
     return {
@@ -113,9 +122,25 @@ export class TurnGate<T = void> {
     return { ok: true, value: turn.value as T };
   }
 
+  /**
+   * Wait (at most `ms`) for the in-flight turn to end. True once it has, or when
+   * none was in flight; false when it is still running at the deadline.
+   */
+  async waitForEnd(ms: number): Promise<boolean> {
+    const turn = this.turn;
+    if (!turn) return true;
+    try {
+      await withDeadline(turn.finished, ms);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private finish(record: TurnRecord<T>): void {
     record.ended = true;
     if (this.turn === record) this.turn = null;
     record.settle();
+    record.markFinished();
   }
 }
