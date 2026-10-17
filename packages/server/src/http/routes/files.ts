@@ -26,6 +26,7 @@ import {
   type Principal,
 } from '../access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
+import { notifyStorageChange } from '../subscriptions.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -279,7 +280,13 @@ async function handleApps(
   return serveStaticFile(req, normalizedPath, parsed.path);
 }
 
-/** Storage API — GET (read/list), POST (write), DELETE. */
+/**
+ * Storage API — GET (read/list), POST (write), DELETE.
+ *
+ * A successful write or delete wakes `yaar://storage/…` subscribers just as the verb
+ * door's does: the iframe storage SDK writes through here, so an app publishing to
+ * `shared/` for another app to watch reaches it by this route, not that one.
+ */
 async function handleStorage(
   req: Request,
   url: URL,
@@ -342,6 +349,7 @@ async function handleStorage(
       const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
       const result = await storageAppend(filePath, buf);
       if (!result.success) return errorResponse(result.error ?? 'Append failed');
+      notifyStorageChange(filePath);
       return jsonResponse({ ok: true, path: result.path, size: result.bytes });
     } catch (err) {
       if (err instanceof BodyTooLargeError) {
@@ -359,6 +367,7 @@ async function handleStorage(
     if (resolved.readOnly) return errorResponse('Mount is read-only', 403);
     const result = await storageDelete(filePath);
     if (!result.success) return errorResponse(result.error ?? 'Delete failed');
+    notifyStorageChange(filePath);
     return jsonResponse({ ok: true, path: result.path });
   }
 
@@ -427,6 +436,7 @@ async function writeBodyToStorage(req: Request, filePath: string): Promise<Respo
 
   const result = await stream.commit();
   if (!result.success) return errorResponse(result.error ?? 'Write failed');
+  notifyStorageChange(filePath);
   return jsonResponse({ ok: true, path: result.path });
 }
 

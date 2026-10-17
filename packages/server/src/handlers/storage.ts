@@ -46,6 +46,7 @@ import { defineActions } from './define-actions.js';
 import { STORAGE_ACTION_DOCS } from './storage-actions.js';
 import { invokeArchiveAction } from './storage-archive.js';
 import { describeStoragePath } from './storage-describe.js';
+import { notifyStorageChange } from '../http/subscriptions.js';
 
 // ── Helpers ──
 
@@ -59,6 +60,17 @@ async function readStorageRaw(path: string): Promise<{ content: string } | { err
   } catch {
     return { error: `File not found: ${path}` };
   }
+}
+
+/**
+ * Wake subscribers of `path` when `result` succeeded, and pass it through — the same
+ * contract as app storage's `notified`. `/api/verb/subscribe` hands out subscriptions on
+ * `yaar://storage/…` (the `shared/` commons especially, where one app publishes for
+ * another); without this, a write here never reached them.
+ */
+function notified(path: string, result: VerbResult): VerbResult {
+  if (!result.isError) notifyStorageChange(path);
+  return result;
 }
 
 interface StorageActionCtx {
@@ -76,7 +88,7 @@ const storageActions = defineActions<StorageActionCtx>({
       if ('error' in decoded) return error(decoded.error);
       const result = await storageWrite(path, decoded.content);
       if (!result.success) return error(result.error!);
-      return ok(`Written to yaar://storage/${path}`);
+      return notified(path, ok(`Written to yaar://storage/${path}`));
     },
   },
   [COPY_ACTION]: {
@@ -89,7 +101,7 @@ const storageActions = defineActions<StorageActionCtx>({
       if (from === null) return error(COPY_FROM_REQUIRED);
       const copied = await copyStorageBytes(from, path);
       if ('error' in copied) return error(copied.error);
-      return ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`);
+      return notified(path, ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`));
     },
   },
   edit: {
@@ -104,7 +116,7 @@ const storageActions = defineActions<StorageActionCtx>({
 
       const writeResult = await storageWrite(path, edited.result);
       if (!writeResult.success) return error(writeResult.error!);
-      return ok(`Edited yaar://storage/${path}`);
+      return notified(path, ok(`Edited yaar://storage/${path}`));
     },
   },
   grep: {
@@ -124,13 +136,19 @@ const storageActions = defineActions<StorageActionCtx>({
   // Same shape as copy: this URI is written, `from` is read.
   [EXTRACT_ACTION]: {
     description: STORAGE_ACTION_DOCS.extract,
-    run: ({ path, payload }) =>
-      invokeArchiveAction(EXTRACT_ACTION, payload, path, `yaar://storage/${path}`),
+    run: async ({ path, payload }) =>
+      notified(
+        path,
+        await invokeArchiveAction(EXTRACT_ACTION, payload, path, `yaar://storage/${path}`),
+      ),
   },
   [COMPRESS_ACTION]: {
     description: STORAGE_ACTION_DOCS.compress,
-    run: ({ path, payload }) =>
-      invokeArchiveAction(COMPRESS_ACTION, payload, path, `yaar://storage/${path}`),
+    run: async ({ path, payload }) =>
+      notified(
+        path,
+        await invokeArchiveAction(COMPRESS_ACTION, payload, path, `yaar://storage/${path}`),
+      ),
   },
   // Android's share sheet for one file. Declared only where there can be a sheet — a
   // server running on the phone itself (Termux). Anywhere else it would hand every agent
@@ -359,6 +377,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       if (!path) return error('Provide a file path to delete.');
       const result = await storageDelete(path);
       if (!result.success) return error(result.error!);
+      notifyStorageChange(path);
       return ok(`Deleted yaar://storage/${path}`);
     },
   });

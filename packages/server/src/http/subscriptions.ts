@@ -12,7 +12,8 @@
 
 import { ServerEventType, type StreamFrame } from '@yaar/shared';
 import { actionEmitter } from '../session/action-emitter.js';
-import { namesSelf } from './access.js';
+import { namesSelf, storageUriForPath } from './access.js';
+import { canonicalStorageUri } from './uri-match.js';
 import { recordDeliveredFrame } from '../streams/stream-diagnostics.js';
 import { createLogger } from '../observability/log.js';
 
@@ -249,9 +250,12 @@ class SubscriptionRegistry {
    */
   getSubscribers(uri: string): Subscription[] {
     const results: Subscription[] = [];
+    // A URI ending in `/` is its own first prefix, so the walk below reaches the exact
+    // key twice — and a subscriber was pinged twice for one change.
+    const seen = new Set<string>();
 
     // Check exact match
-    this.collectFromIndex(uri, results);
+    this.collectFromIndex(uri, results, seen);
 
     // Walk up the URI path to find prefix subscriptions
     let pos = uri.length;
@@ -259,22 +263,26 @@ class SubscriptionRegistry {
       pos = uri.lastIndexOf('/', pos - 1);
       if (pos < 0) break;
       const prefix = uri.slice(0, pos + 1);
-      this.collectFromIndex(prefix, results);
+      this.collectFromIndex(prefix, results, seen);
       // Also check without trailing slash
       if (prefix.length > 1) {
-        this.collectFromIndex(prefix.slice(0, -1), results);
+        this.collectFromIndex(prefix.slice(0, -1), results, seen);
       }
     }
 
     return results;
   }
 
-  private collectFromIndex(uri: string, results: Subscription[]): void {
+  private collectFromIndex(uri: string, results: Subscription[], seen: Set<string>): void {
     const ids = this.uriIndex.get(uri);
     if (!ids) return;
     for (const id of ids) {
+      if (seen.has(id)) continue;
       const sub = this.subscriptions.get(id);
-      if (sub) results.push(sub);
+      if (sub) {
+        seen.add(id);
+        results.push(sub);
+      }
     }
   }
 
@@ -450,4 +458,30 @@ export const AGENTS_URI = 'yaar://session/agents';
  */
 export function notifyAgentsChanged(sessionId: string): void {
   subscriptionRegistry.notifyChange(AGENTS_URI, sessionId);
+}
+
+/**
+ * Notify subscribers that the file or folder at `path` (relative to the storage root,
+ * `self` already expanded) was written, replaced or removed.
+ *
+ * Subscriptions are keyed by literal string, and an app's private storage has two
+ * spellings — `yaar://apps/{id}/storage/x` and `yaar://storage/apps/{id}/x` — so a write
+ * through one door used to wake only the subscribers who spelled it the same way. Firing
+ * both lets each subscriber hear the URI it subscribed under; outside `apps/` there is
+ * one spelling and one notification.
+ *
+ * Not session-scoped: storage is one tree on disk shared by every session, so a write in
+ * session A changes what a subscriber in session B would read. The ping carries only the
+ * URI, and the subscriber already passed the read gate for it when it subscribed.
+ */
+export function notifyStorageChange(path: string): void {
+  // `storageUriForPath` drops the slash off a bare `apps/{id}/` (it names the namespace
+  // root as `yaar://apps/{id}/storage`), and a subscriber to the slashed prefix would
+  // then never match — so put it back.
+  let named = storageUriForPath(path);
+  if (!named) return; // a traversing path names nothing, and its write was refused anyway
+  if (path.endsWith('/') && !named.endsWith('/')) named += '/';
+  subscriptionRegistry.notifyChange(named);
+  const flat = canonicalStorageUri(named);
+  if (flat && flat !== named) subscriptionRegistry.notifyChange(flat);
 }

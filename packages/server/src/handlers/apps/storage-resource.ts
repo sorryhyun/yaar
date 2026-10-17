@@ -30,7 +30,7 @@ import {
   storageDelete,
   storageGrep,
 } from '../../storage/storage-manager.js';
-import { subscriptionRegistry } from '../../http/subscriptions.js';
+import { notifyStorageChange } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
 import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
 import {
@@ -180,11 +180,11 @@ export async function listStorage(resolved: ResolvedUri): Promise<VerbResult | n
 
 interface AppStorageCtx {
   appId: string;
-  /** The URI invoked — what subscribers are notified on. */
+  /** The URI invoked. */
   uri: string;
   /** Path relative to the app's storage root; `''` for the root itself. */
   path: string;
-  /** The same path under `STORAGE_DIR` (`apps/{appId}/…`). */
+  /** The same path under `STORAGE_DIR` (`apps/{appId}/…`) — what subscribers are notified on. */
   prefixedPath: string;
   payload: Record<string, unknown>;
 }
@@ -195,9 +195,13 @@ function onFile(run: (ctx: AppStorageCtx) => Promise<VerbResult>) {
     ctx.path ? run(ctx) : Promise.resolve(error('Provide a file path under /storage/.'));
 }
 
-/** Notify subscribers of `uri` when `result` succeeded, and pass it through. */
-function notified(uri: string, result: VerbResult): VerbResult {
-  if (!result.isError) subscriptionRegistry.notifyChange(uri);
+/**
+ * Notify subscribers of `prefixedPath` when `result` succeeded, and pass it through.
+ * Named by path rather than by the invoked URI so both spellings of the file are woken —
+ * see `notifyStorageChange`.
+ */
+function notified(prefixedPath: string, result: VerbResult): VerbResult {
+  if (!result.isError) notifyStorageChange(prefixedPath);
   return result;
 }
 
@@ -210,12 +214,12 @@ export const appStorageActions = defineActions<AppStorageCtx>(
   {
     write: {
       description: STORAGE_ACTION_DOCS.write,
-      run: onFile(async ({ appId, path, uri, prefixedPath, payload }) => {
+      run: onFile(async ({ appId, path, prefixedPath, payload }) => {
         const decoded = decodeWriteContent(payload);
         if ('error' in decoded) return error(decoded.error);
         const result = await storageWrite(prefixedPath, decoded.content);
         if (!result.success) return error(result.error!);
-        return notified(uri, ok(`Written to yaar://apps/${appId}/storage/${path}`));
+        return notified(prefixedPath, ok(`Written to yaar://apps/${appId}/storage/${path}`));
       }),
     },
     // `copy` is how a file crosses between this app's storage and the shared tree
@@ -228,7 +232,7 @@ export const appStorageActions = defineActions<AppStorageCtx>(
         if (from === null) return error(COPY_FROM_REQUIRED);
         const copied = await copyStorageBytes(from, prefixedPath);
         if ('error' in copied) return error(copied.error);
-        return notified(uri, ok(`Copied ${from} → ${uri} (${copied.bytes} bytes)`));
+        return notified(prefixedPath, ok(`Copied ${from} → ${uri} (${copied.bytes} bytes)`));
       }),
     },
     grep: {
@@ -253,13 +257,19 @@ export const appStorageActions = defineActions<AppStorageCtx>(
     [EXTRACT_ACTION]: {
       description: STORAGE_ACTION_DOCS.extract,
       run: onFile(async ({ uri, prefixedPath, payload }) =>
-        notified(uri, await invokeArchiveAction(EXTRACT_ACTION, payload, prefixedPath, uri)),
+        notified(
+          prefixedPath,
+          await invokeArchiveAction(EXTRACT_ACTION, payload, prefixedPath, uri),
+        ),
       ),
     },
     [COMPRESS_ACTION]: {
       description: STORAGE_ACTION_DOCS.compress,
       run: onFile(async ({ uri, prefixedPath, payload }) =>
-        notified(uri, await invokeArchiveAction(COMPRESS_ACTION, payload, prefixedPath, uri)),
+        notified(
+          prefixedPath,
+          await invokeArchiveAction(COMPRESS_ACTION, payload, prefixedPath, uri),
+        ),
       ),
     },
   },
@@ -309,6 +319,6 @@ export async function deleteStorage(resolved: ResolvedUri): Promise<VerbResult |
   const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
   const result = await storageDelete(prefixedPath);
   if (!result.success) return error(result.error!);
-  subscriptionRegistry.notifyChange(resolved.sourceUri);
+  notifyStorageChange(prefixedPath);
   return ok(`Deleted yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
 }
