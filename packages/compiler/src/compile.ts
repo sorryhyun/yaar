@@ -13,6 +13,7 @@ import { readThreeRenderer, type ThreeRenderer } from './bundled/three-renderer.
 import { getOrtVersion } from './bundled/ort-version.js';
 import { formatProtocolError } from './protocol/extract-protocol-ast.js';
 import { extractProtocolFromDir } from './protocol/extract-protocol-dir.js';
+import { replayRiskWarning } from './protocol/replay-risk.js';
 import { getCompilerConfig } from './config.js';
 import {
   computeSourceHash,
@@ -103,8 +104,9 @@ export interface CompileResult {
   /** Key names written to dist/protocol.json, when the app registers a protocol. */
   protocol?: { commands: string[]; state: string[] };
   /**
-   * Findings worth an author's attention that did not fail the build — today, `y-*`
-   * classes no stylesheet defines (`guards/design-class-guard.ts`). Absent when clean.
+   * Findings worth an author's attention that did not fail the build: `y-*` classes no
+   * stylesheet defines (`guards/design-class-guard.ts`), and one-shot-sounding commands
+   * left to replay by default (`protocol/replay-risk.ts`). Absent when clean.
    */
   warnings?: string[];
 }
@@ -320,6 +322,9 @@ export async function compileTypeScript(
         ],
       };
     }
+    const replayWarning = extraction.protocol ? replayRiskWarning(extraction.protocol) : null;
+    if (replayWarning) warnings.push(replayWarning);
+
     // Get SDK scripts (minified when minify is enabled)
     const sdkCode = getSdkScripts(minify);
 

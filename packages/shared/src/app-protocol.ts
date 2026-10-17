@@ -190,6 +190,40 @@ export function listKeybindingIssues(
   return issues;
 }
 
+// ── Replay risk ─────────────────────────────────────────────────────
+
+/**
+ * Leading verbs that name a command which appends, removes, or sends — an effect a replay
+ * applies a second time. `set*` and `update*` are left out on purpose: they are the
+ * commands `'always'` exists for (`setDeck`, `setAppearance` — see
+ * `AppCommandReplayPolicy`), and warning on them would bury the real findings.
+ */
+const ONE_SHOT_COMMAND_VERB =
+  /^(add|append|insert|push|create|duplicate|clone|import|upload|delete|remove|accept|reject|approve|send|post|submit|publish|install|uninstall|increment|decrement)(?=[A-Z0-9_:-]|$)/;
+
+/**
+ * Commands whose name reads as one-shot but which say nothing about replay — so they
+ * replay, because an omitted policy means `'always'`. That default is right for
+ * restoring a view and wrong for an app that persists the command's effect itself: every
+ * remount (reload, reconnect, a second browser) re-runs the recorded `addNode` and
+ * persists it again, and the copies outlive the session.
+ *
+ * Reads the manifest as `dist/protocol.json` has it, where an app-level
+ * `defineApp({ replay })` is already folded into each command — so either level
+ * answers the question, and an explicit `replay: 'always'` silences it. A name
+ * heuristic, used for warnings only: the handler's body is not looked at.
+ */
+export function listReplayRisks<C extends { replay?: unknown }>(
+  commands: Record<string, C>,
+): string[] {
+  return Object.entries(commands)
+    .filter(([name, descriptor]) => {
+      if (descriptor?.replay !== undefined) return false;
+      return ONE_SHOT_COMMAND_VERB.test(name.charAt(0).toLowerCase() + name.slice(1));
+    })
+    .map(([name]) => name);
+}
+
 // ── PostMessage types (parent ↔ iframe) ─────────────────────────────
 
 /**

@@ -352,7 +352,8 @@ the agent. An app never calls `render()` itself, never registers from `onMount`,
   Set on `defineApp` itself, it is the default for every command that declares none — for an app
   whose state a remount reads back anyway (`createSharedSignal`, `createPersistedSignal`,
   `appDb`), where a replay only re-runs commands on top of state already restored. A command
-  that does rebuild something then says `replay: 'always'`.
+  that does rebuild something then says `replay: 'always'`. The compile warns about a command
+  named like `addNode`/`deleteGraph` that declares neither (`listReplayRisks` in `@yaar/shared`).
 - **`view`** is a Solid component, or `{ mount(el) { … } }` for an app that owns its DOM; a
   returned function runs on window close, after `onClose`.
 - **`keybindings`**: `{ ArrowRight: 'nextPage', 'Ctrl+s': 'save' }` maps a combo to a declared

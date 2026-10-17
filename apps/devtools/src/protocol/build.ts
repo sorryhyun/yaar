@@ -1,5 +1,12 @@
 import { wait, defineAppCommand, AppCommandError } from '@bundled/yaar';
-import { diagnostics, bundleStatus, compileErrors, previewWindowId, staticProtocol } from '../core';
+import {
+  diagnostics,
+  bundleStatus,
+  compileErrors,
+  compileWarnings,
+  previewWindowId,
+  staticProtocol,
+} from '../core';
 import { resolveCompileStatus } from '../lib';
 import {
   compile,
@@ -25,6 +32,8 @@ export const buildCommands = {
       'differ, and the `compileState` state key reports the same combined verdict. ' +
       "Failures come back as `bundler` (the bundler's errors, only when it did not build) " +
       'and `typecheck` (type diagnostics), the same split `compileState` uses. ' +
+      '`warnings` are findings that did not fail the build: an unknown y-* class, or ' +
+      'commands named like add*/delete* that declare no `replay` — a remount re-runs them. ' +
       'Refreshing the preview remounts the iframe, so in-app state resets to a cold start; ' +
       'pass `refreshPreview: false` to keep that state and leave the window on the old ' +
       'build. Slow: pass timeoutMs (e.g. 60000).',
@@ -117,6 +126,7 @@ export const buildCommands = {
         ...(previewRefreshed && previewFaultsNote() ? { previewFaults: previewFaultsNote() } : {}),
         ...(typeErrors > 0 ? { typeErrors } : {}),
         ...(!built && errors.length > 0 ? { bundler: errors } : {}),
+        ...(built && compileWarnings().length > 0 ? { warnings: [...compileWarnings()] } : {}),
         ...(diags.length > 0 ? { typecheck: diags } : {}),
         ...(manifestDrift
           ? {

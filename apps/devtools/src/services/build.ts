@@ -10,6 +10,7 @@ import {
   activeProject,
   setBundleStatus,
   setCompileErrors,
+  setCompileWarnings,
   setStatusText,
   setPreviewUrl,
   setConsoleLogs,
@@ -41,6 +42,7 @@ export async function compile(): Promise<void> {
   if (!proj) return;
   setBundleStatus('compiling');
   setCompileErrors([]);
+  setCompileWarnings([]);
   setStaticProtocol(null);
   setStatusText('Compiling...');
   try {
@@ -55,6 +57,7 @@ export async function compile(): Promise<void> {
       batch(() => {
         setBundleStatus('success');
         setCompileErrors([]);
+        setCompileWarnings(relativizeProjectPaths(result.warnings ?? [], proj.id));
         setPreviewUrl(result.previewUrl ?? null);
         setConsoleLogs([]);
         setStatusText('Compilation successful');

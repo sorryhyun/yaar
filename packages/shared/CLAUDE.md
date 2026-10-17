@@ -9,7 +9,7 @@ Shared types between frontend and server.
 - `component-types.ts` - The Zod-free half of the Component DSL: enum value lists (`GAP_VALUES`, `BUTTON_VARIANTS`, …), the narrow renderer-facing types, `isComponent`. This is what the barrel exports.
 - `components.ts` - The Zod half: `componentSchema`, `componentLayoutSchema`, `displayContentSchema`, and the inferred `ComponentLayout` / `DisplayContent`
 - `schemas.ts` - The `@yaar/shared/schemas` entry point: every Zod-bearing export (component schemas + the whole bridge contract), kept off the barrel so the frontend does not bundle Zod
-- `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`), plus `listKeybindingIssues` — the one exported keybinding entry point, shared by both protocol readers (combo normalization and the reserved-combo set are internal to it)
+- `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`), plus `listKeybindingIssues` — the one exported keybinding entry point, shared by both protocol readers (combo normalization and the reserved-combo set are internal to it) — and `listReplayRisks`, the name heuristic behind the compile's and `check:apps`' warning about one-shot commands left to replay
   - Five request kinds: `manifest`, `query`, `command`, `eval`, and `describe`. The last documents
     **one** state key or command (`AppDescribeRequest`/`AppDescribeResponse`, `APP_MSG.describe*`)
     from an optional `describe()` the app attaches to that entry. `doc: null` is a real answer —

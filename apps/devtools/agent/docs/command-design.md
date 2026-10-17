@@ -116,4 +116,5 @@ market-apps `src/actions/update-all.ts`.
 `replay: 'never'` is decided by *"does re-running this on remount duplicate or wrong an
 effect?"*, not by category: a read that re-shows a file replays harmlessly, while its
 sibling `storage:write` must not. Undo, redo, play, "reload textures" and anything that
-starts a job are `'never'` too.
+starts a job are `'never'` too. `compile` returns a `warnings` entry for every add*/delete*-style
+command left to the default; an explicit `replay` either way answers it.

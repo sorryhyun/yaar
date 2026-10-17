@@ -29,6 +29,9 @@ import { basename, join, relative, resolve } from 'path';
 // The chrome the platform injects, parsed once so `local-chrome-clone` can compare
 // an app's rule blocks against the real y-* declarations rather than a hand-kept list.
 import { YAAR_APP_TOKENS_CSS } from '../../packages/shared/src/design/app-css.ts';
+// The same name heuristic the compile warns with, so this lint and a devtools build
+// cannot disagree about which commands are at risk.
+import { listReplayRisks } from '../../packages/shared/src/app-protocol.ts';
 import {
   AGENT_DOCS_DIR,
   DOC_SLUG_RE,
@@ -1053,6 +1056,31 @@ function scanProtocolDescriptions(appDir: string, appId: string): Violation[] {
   return violations;
 }
 
+/**
+ * `protocol-replay-policy` — a command named like `addNode`/`deleteGraph` that declares no
+ * `replay`, so a remount re-sends it; one whose effect the app persists itself is applied
+ * again on every reload or reconnect. Read from dist/protocol.json, where a
+ * `defineApp({ replay })` default is already folded into each command.
+ */
+const PROTOCOL_REPLAY_RULE_ID = 'protocol-replay-policy';
+
+function scanReplayPolicy(appDir: string, appId: string): Violation[] {
+  let protocol: { commands?: Record<string, { replay?: unknown }> };
+  try {
+    protocol = JSON.parse(readFileSync(join(appDir, 'dist', 'protocol.json'), 'utf8'));
+  } catch {
+    return []; // Nothing compiled to check.
+  }
+  const file = relative(REPO_ROOT, join(appDir, 'dist', 'protocol.json'));
+  return listReplayRisks(protocol.commands ?? {}).map((name) => ({
+    file,
+    line: 1,
+    message:
+      `${appId}: command "${name}" declares no \`replay\`, so a remount re-runs it — ` +
+      `declare 'never' if that applies it twice, or 'always' if it only restores the view.`,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Rule: app.json says what it means
 // ---------------------------------------------------------------------------
@@ -1203,6 +1231,7 @@ function main(): void {
   const chromeViolations: Violation[] = [];
   const cloneViolations: Violation[] = [];
   const descriptionViolations: Violation[] = [];
+  const replayViolations: Violation[] = [];
   const manifestViolations: Violation[] = [];
   for (const appDir of appDirsFor(targets)) {
     const app = basename(appDir);
@@ -1214,6 +1243,7 @@ function main(): void {
     chromeViolations.push(...scanChromeShadow(appDir));
     cloneViolations.push(...scanChromeClones(appDir));
     descriptionViolations.push(...scanProtocolDescriptions(appDir, app));
+    replayViolations.push(...scanReplayPolicy(appDir, app));
     manifestViolations.push(...scanManifest(appDir, app));
   }
 
@@ -1265,6 +1295,12 @@ function main(): void {
       severity: 'ADVISORY',
       title: 'protocol command descriptions lead with the effect, not boilerplate',
       found: descriptionViolations,
+    },
+    {
+      id: PROTOCOL_REPLAY_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'one-shot-sounding commands declare a replay policy',
+      found: replayViolations,
     },
   ];
 

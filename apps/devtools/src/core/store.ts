@@ -78,6 +78,15 @@ export const [typecheckState, setTypecheckState] = createSharedSignal<
   'unknown' | 'clean' | 'errors'
 >('typecheck', 'unknown');
 export const [compileErrors, setCompileErrors] = createSharedSignal<string[]>('compile-errors', []);
+/**
+ * The compiler's findings that did not fail the last build (an unknown `y-*` class, a
+ * one-shot-sounding command left to replay). Empty after a failed build: those had no
+ * protocol to read.
+ */
+export const [compileWarnings, setCompileWarnings] = createSharedSignal<string[]>(
+  'compile-warnings',
+  [],
+);
 export const [previewUrl, setPreviewUrl] = createSharedSignal<string | null>('preview-url', null);
 export const [statusText, setStatusText] = createSharedSignal('status', 'Ready');
 

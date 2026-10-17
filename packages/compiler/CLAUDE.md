@@ -54,7 +54,8 @@ src/
 │   ├── protocol-extractor.ts     # The reader: resolve a name, unwrap a value, flatten an object literal
 │   ├── protocol-module-graph.ts  # Specifier resolution + per-module binding index (ModuleScope), ProtocolError
 │   ├── fold-schemas.ts    # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
-│   └── dedupe-schemas.ts  # Post-pass: repeated subschemas → one protocol-level `$defs` (content-neutral, idempotent)
+│   ├── dedupe-schemas.ts  # Post-pass: repeated subschemas → one protocol-level `$defs` (content-neutral, idempotent)
+│   └── replay-risk.ts     # Warns on add*/delete*-style commands that declare no `replay` (CompileResult.warnings)
 ├── bundled-types/
 │   └── index.d.ts         # Type declarations for all @bundled/* imports
 └── shims/
@@ -104,7 +105,7 @@ src/
 2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve. `scanClasses()` reads the same files for `y-*` classes nothing defines and returns them as `warnings` (never a failure)
 3. **Bundle:** `Bun.build()` with 4 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
 4. **SDK injection:** 13 iframe SDK scripts (ime-guard, autofill-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, device, text-selection, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame (an origin-isolated app would otherwise forward none of the shell's reserved shortcuts)
-5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable
+5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable. `protocol/replay-risk.ts` adds a `warnings` entry for add*/delete*-style commands that declare no `replay`
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + `window.__yaar_links__` + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`. The links block is app.json's `"links"` (an origin relative hrefs in this app's content resolve against) and is emitted **for every app, empty or not** — its presence is also how the link guard tells a compiled app from a plain HTML document shown in a window
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, SDK hash, compiler version
 
