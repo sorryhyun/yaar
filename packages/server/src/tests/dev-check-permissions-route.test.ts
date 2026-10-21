@@ -105,6 +105,8 @@ describe('POST /api/dev/check-permissions', () => {
 });
 
 describe('POST /api/dev/type-at', () => {
+  // A cold references worker builds a whole TypeScript program first: ~2.5s alone, past
+  // bun's 5s default when CI runs the other packages' suites alongside.
   it("answers the checker's hover text for a named symbol", async () => {
     const { status, body } = await post('type-at', { file: 'src/main.ts', symbol: 'total' });
     expect(status).toBe(200);
@@ -113,5 +115,5 @@ describe('POST /api/dev/type-at', () => {
       kind: 'function',
       type: 'function total(xs: number[]): number',
     });
-  });
+  }, 20_000);
 });
