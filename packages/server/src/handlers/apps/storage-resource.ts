@@ -30,7 +30,7 @@ import {
   storageDelete,
   storageGrep,
 } from '../../storage/storage-manager.js';
-import { notifyStorageChange } from '../../http/subscriptions.js';
+import { notifiedStorageChange, notifyStorageChange } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
 import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
 import {
@@ -196,16 +196,6 @@ function onFile(run: (ctx: AppStorageCtx) => Promise<VerbResult>) {
 }
 
 /**
- * Notify subscribers of `prefixedPath` when `result` succeeded, and pass it through.
- * Named by path rather than by the invoked URI so both spellings of the file are woken —
- * see `notifyStorageChange`.
- */
-function notified(prefixedPath: string, result: VerbResult): VerbResult {
-  if (!result.isError) notifyStorageChange(prefixedPath);
-  return result;
-}
-
-/**
  * The actions on `yaar://apps/{id}/storage/…`, and the one list of them: the composite
  * `yaar://apps/*` schema enum (register.ts) and the root's `describe` prose both come off
  * this table, so neither can offer an action with no case here.
@@ -219,7 +209,10 @@ export const appStorageActions = defineActions<AppStorageCtx>(
         if ('error' in decoded) return error(decoded.error);
         const result = await storageWrite(prefixedPath, decoded.content);
         if (!result.success) return error(result.error!);
-        return notified(prefixedPath, ok(`Written to yaar://apps/${appId}/storage/${path}`));
+        return notifiedStorageChange(
+          prefixedPath,
+          ok(`Written to yaar://apps/${appId}/storage/${path}`),
+        );
       }),
     },
     // `copy` is how a file crosses between this app's storage and the shared tree
@@ -232,7 +225,10 @@ export const appStorageActions = defineActions<AppStorageCtx>(
         if (from === null) return error(COPY_FROM_REQUIRED);
         const copied = await copyStorageBytes(from, prefixedPath);
         if ('error' in copied) return error(copied.error);
-        return notified(prefixedPath, ok(`Copied ${from} → ${uri} (${copied.bytes} bytes)`));
+        return notifiedStorageChange(
+          prefixedPath,
+          ok(`Copied ${from} → ${uri} (${copied.bytes} bytes)`),
+        );
       }),
     },
     grep: {
@@ -257,7 +253,7 @@ export const appStorageActions = defineActions<AppStorageCtx>(
     [EXTRACT_ACTION]: {
       description: STORAGE_ACTION_DOCS.extract,
       run: onFile(async ({ uri, prefixedPath, payload }) =>
-        notified(
+        notifiedStorageChange(
           prefixedPath,
           await invokeArchiveAction(EXTRACT_ACTION, payload, prefixedPath, uri),
         ),
@@ -266,7 +262,7 @@ export const appStorageActions = defineActions<AppStorageCtx>(
     [COMPRESS_ACTION]: {
       description: STORAGE_ACTION_DOCS.compress,
       run: onFile(async ({ uri, prefixedPath, payload }) =>
-        notified(
+        notifiedStorageChange(
           prefixedPath,
           await invokeArchiveAction(COMPRESS_ACTION, payload, prefixedPath, uri),
         ),

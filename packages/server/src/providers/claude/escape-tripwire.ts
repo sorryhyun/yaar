@@ -66,19 +66,32 @@ const THRESHOLD = 3;
 const HEAD = 512;
 
 /**
- * The argument that says what a watched call was aimed at. A tool name alone
- * does not: nearly every monitor call is `mcp__verbs__invoke`, so a correction
- * naming only the tool reads as cancelling whichever invoke the model remembers
- * last — in practice a message it had already sent, which it then sent again.
+ * The arguments that say what a watched call was aimed at, most specific first.
+ * A tool name alone does not: nearly every monitor call is `mcp__verbs__invoke`,
+ * so a correction naming only the tool reads as cancelling whichever invoke the
+ * model remembers last — in practice a message it had already sent, which it
+ * then sent again. Read off the raw head here and off the parsed input by
+ * `callTargets`.
  */
-const TARGET_KEY = /"(?:uri|file_path|notebook_path)"\s*:\s*"([^"\\]{1,200})"/;
+const TARGET_KEYS = ['uri', 'file_path', 'notebook_path'] as const;
+
+/** A raw-JSON `"<key>": "<value>"` pair for any of `keys`, capturing an unescaped value. */
+function rawKeyPattern(keys: readonly string[]): RegExp {
+  return new RegExp(`"(?:${keys.join('|')})"\\s*:\\s*"([^"\\\\]{1,200})"`);
+}
+
+/**
+ * The first of `TARGET_KEYS` written in the raw head — first by position, not by
+ * the list's order: the head is a prefix of JSON, read as it arrived.
+ */
+const TARGET_KEY = rawKeyPattern(TARGET_KEYS);
 
 /**
  * The fallback when none of those is written: an app command names its file in
  * `params.path`. A bare `"path"` key is only read when nothing better is there,
  * since the raw head is a prefix of JSON and the key's nesting cannot be checked.
  */
-const PATH_KEY = /"path"\s*:\s*"([^"\\]{1,200})"/;
+const PATH_KEY = rawKeyPattern(['path']);
 
 /**
  * Whether a raw-JSON fragment carries a run of escapes that are mostly text.
@@ -227,9 +240,7 @@ export function callTargets(input: unknown): string[] {
   const record = input as Record<string, unknown>;
   const params = record.params;
   const values = [
-    record.uri,
-    record.file_path,
-    record.notebook_path,
+    ...TARGET_KEYS.map((key) => record[key]),
     params && typeof params === 'object' ? (params as Record<string, unknown>).path : undefined,
   ];
   return values.filter((v): v is string => typeof v === 'string' && v.length > 0);

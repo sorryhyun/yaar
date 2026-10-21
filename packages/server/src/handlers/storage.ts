@@ -46,7 +46,7 @@ import { defineActions } from './define-actions.js';
 import { STORAGE_ACTION_DOCS } from './storage-actions.js';
 import { invokeArchiveAction } from './storage-archive.js';
 import { describeStoragePath } from './storage-describe.js';
-import { notifyStorageChange } from '../http/subscriptions.js';
+import { notifiedStorageChange, notifyStorageChange } from '../http/subscriptions.js';
 
 // ── Helpers ──
 
@@ -60,17 +60,6 @@ async function readStorageRaw(path: string): Promise<{ content: string } | { err
   } catch {
     return { error: `File not found: ${path}` };
   }
-}
-
-/**
- * Wake subscribers of `path` when `result` succeeded, and pass it through — the same
- * contract as app storage's `notified`. `/api/verb/subscribe` hands out subscriptions on
- * `yaar://storage/…` (the `shared/` commons especially, where one app publishes for
- * another); without this, a write here never reached them.
- */
-function notified(path: string, result: VerbResult): VerbResult {
-  if (!result.isError) notifyStorageChange(path);
-  return result;
 }
 
 interface StorageActionCtx {
@@ -88,7 +77,7 @@ const storageActions = defineActions<StorageActionCtx>({
       if ('error' in decoded) return error(decoded.error);
       const result = await storageWrite(path, decoded.content);
       if (!result.success) return error(result.error!);
-      return notified(path, ok(`Written to yaar://storage/${path}`));
+      return notifiedStorageChange(path, ok(`Written to yaar://storage/${path}`));
     },
   },
   [COPY_ACTION]: {
@@ -101,7 +90,10 @@ const storageActions = defineActions<StorageActionCtx>({
       if (from === null) return error(COPY_FROM_REQUIRED);
       const copied = await copyStorageBytes(from, path);
       if ('error' in copied) return error(copied.error);
-      return notified(path, ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`));
+      return notifiedStorageChange(
+        path,
+        ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`),
+      );
     },
   },
   edit: {
@@ -116,7 +108,7 @@ const storageActions = defineActions<StorageActionCtx>({
 
       const writeResult = await storageWrite(path, edited.result);
       if (!writeResult.success) return error(writeResult.error!);
-      return notified(path, ok(`Edited yaar://storage/${path}`));
+      return notifiedStorageChange(path, ok(`Edited yaar://storage/${path}`));
     },
   },
   grep: {
@@ -137,7 +129,7 @@ const storageActions = defineActions<StorageActionCtx>({
   [EXTRACT_ACTION]: {
     description: STORAGE_ACTION_DOCS.extract,
     run: async ({ path, payload }) =>
-      notified(
+      notifiedStorageChange(
         path,
         await invokeArchiveAction(EXTRACT_ACTION, payload, path, `yaar://storage/${path}`),
       ),
@@ -145,7 +137,7 @@ const storageActions = defineActions<StorageActionCtx>({
   [COMPRESS_ACTION]: {
     description: STORAGE_ACTION_DOCS.compress,
     run: async ({ path, payload }) =>
-      notified(
+      notifiedStorageChange(
         path,
         await invokeArchiveAction(COMPRESS_ACTION, payload, path, `yaar://storage/${path}`),
       ),

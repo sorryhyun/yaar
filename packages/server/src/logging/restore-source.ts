@@ -10,6 +10,7 @@ import { DEFAULT_MONITOR_ID, type OSAction } from '@yaar/shared';
 import { listSessions, readSessionMessages, parseSessionMessages } from './session-reader.js';
 import type { ParsedMessage, SessionInfo } from './types.js';
 import { isSubAgentRole } from '../agents/profiles/sub-agent.js';
+import { monitorIdOfRole } from '../agents/roles.js';
 import { MAX_MONITOR_MESSAGES, extractMonitorId, extractWindowId } from '../agents/context.js';
 import { scopedWindowId } from './window-restore.js';
 
@@ -73,8 +74,7 @@ function entryMonitor(msg: ParsedMessage): string {
     if (monitorId) return monitorId;
   }
   if (msg.monitorId) return msg.monitorId;
-  const fromAgent = /^monitor-(\d+)(?:-|$)/.exec(msg.agentId ?? '');
-  return fromAgent ? fromAgent[1] : DEFAULT_MONITOR_ID;
+  return monitorIdOfRole(msg.agentId) ?? DEFAULT_MONITOR_ID;
 }
 
 /**

@@ -5,6 +5,7 @@
  * - Reload context assembly (windowSnapshot -> fingerprint -> reloadPrefix)
  * - Agent turn lifecycle (role setup -> MESSAGE_ACCEPTED -> handleMessage -> record actions -> cleanup)
  * - Budget output callback creation
+ * - Steering a task into a running turn (frame -> steer -> tape -> MESSAGE_ACCEPTED)
  */
 
 import { ServerEventType } from '@yaar/shared';
@@ -15,6 +16,7 @@ import type { TurnContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-roster.js';
 import type { Fingerprint } from '../reload/types.js';
 import type { ExternalTurn } from '../providers/types.js';
+import { frameSteeredMessage } from './steer-framing.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('TurnHelpers');
@@ -138,6 +140,52 @@ export async function runAgentTurn(ctx: TurnContext, opts: AgentTurnOptions): Pr
     agent.currentRole = null;
     await opts.onFinally?.();
   }
+}
+
+// ── Steering ────────────────────────────────────────────────────────────────
+
+export interface SteerIntoTurnOptions {
+  /** Where the steered message is filed: the steer's source, and its context-tape branch. */
+  source: ContextSource;
+  /** The window the task came in through, as a handle — the agent is shown its raw id. */
+  windowHandle?: string;
+  /** The monitor it came from (for a relay, the sender's). */
+  monitorId?: string;
+  /** Inject the framed message into the running turn; `false` when it could not be. */
+  steer: (framed: string, source: ContextSource) => Promise<boolean>;
+  /** Runs once the steer has landed, before it is recorded and acknowledged. */
+  onSteered?: () => void;
+  /** The agent the acknowledgement names — read after the steer has landed. */
+  ackAgentId: () => string;
+}
+
+/**
+ * Steer `task` into a running turn, framed as a message that arrived mid-turn
+ * (`steer-framing.ts`). When it lands, the framed message goes on the context tape and
+ * the client gets the `MESSAGE_ACCEPTED` that `runAgentTurn` would have sent for a turn
+ * of its own. Returns whether it landed; the caller falls back (queue, ephemeral) if not.
+ */
+export async function steerIntoTurn(
+  ctx: TurnContext,
+  task: Task,
+  opts: SteerIntoTurnOptions,
+): Promise<boolean> {
+  const framed = frameSteeredMessage(task.content, {
+    kind: task.kind,
+    windowId: opts.windowHandle
+      ? ctx.windowState.handleMap.getRawWindowId(opts.windowHandle)
+      : undefined,
+    monitorId: opts.monitorId,
+  });
+  if (!(await opts.steer(framed, opts.source))) return false;
+  opts.onSteered?.();
+  ctx.contextAssembly.appendUserMessage(ctx.contextTape, framed, opts.source);
+  await ctx.sendEvent({
+    type: ServerEventType.MESSAGE_ACCEPTED,
+    messageId: task.messageId,
+    agentId: opts.ackAgentId(),
+  });
+  return true;
 }
 
 // ── Budget output callback ──────────────────────────────────────────────────

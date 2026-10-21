@@ -15,6 +15,7 @@ import { actionEmitter } from '../session/action-emitter.js';
 import { namesSelf, storageUriForPath } from './access.js';
 import { canonicalStorageUri } from './uri-match.js';
 import { recordDeliveredFrame } from '../streams/stream-diagnostics.js';
+import type { VerbResult } from '../lib/verb-result.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('subscriptions');
@@ -484,4 +485,17 @@ export function notifyStorageChange(path: string): void {
   subscriptionRegistry.notifyChange(named);
   const flat = canonicalStorageUri(named);
   if (flat && flat !== named) subscriptionRegistry.notifyChange(flat);
+}
+
+/**
+ * `notifyStorageChange(path)` when `result` succeeded, and pass it through — how both
+ * storage doors (`yaar://storage/…`, `yaar://apps/{id}/storage/…`) wrap a write's result.
+ * Named by path rather than by the invoked URI so both spellings of an app's file are
+ * woken. `/api/verb/subscribe` hands out subscriptions on `yaar://storage/…` (the
+ * `shared/` commons especially, where one app publishes for another), so a write through
+ * either door must reach them.
+ */
+export function notifiedStorageChange(path: string, result: VerbResult): VerbResult {
+  if (!result.isError) notifyStorageChange(path);
+  return result;
 }

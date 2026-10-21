@@ -13,12 +13,11 @@ import { ServerEventType } from '@yaar/shared';
 import type { AppPoolContext, QueuedTask, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
 import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
-import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
+import { buildReloadContext, runAgentTurn, steerIntoTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { agentLogKey, appRolePrefix, monitorRole } from './roles.js';
 import { appAgentKey } from './agent-roster.js';
 import { enqueueOrReject } from './queue-refusal.js';
-import { frameSteeredMessage } from './steer-framing.js';
 import {
   AppStateHandoffStore,
   formatAppStateHandoffNotice,
@@ -186,26 +185,21 @@ export class AppTaskProcessor {
     // flag says the *next* request needs no history, not that the running one should
     // be abandoned.
     if (!isParallel && slot.turn) {
-      const source = windowSource(windowId);
-      const framed = frameSteeredMessage(task.content, {
-        kind: task.kind,
-        windowId: this.ctx.windowState.handleMap.getRawWindowId(windowId),
-        monitorId: task.monitorId ?? monitorId,
-      });
       const steered =
-        !task.fresh && (await this.ctx.agentPool.appAgents.steer(monitorId, appId, framed, source));
-      if (steered) {
-        log.info('steered task into running app agent', { messageId: task.messageId, appId });
-        this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, framed, source);
-        await this.ctx.sendEvent({
-          type: ServerEventType.MESSAGE_ACCEPTED,
-          messageId: task.messageId,
-          agentId:
+        !task.fresh &&
+        (await steerIntoTurn(this.ctx, task, {
+          source: windowSource(windowId),
+          windowHandle: windowId,
+          monitorId: task.monitorId ?? monitorId,
+          steer: (framed, source) =>
+            this.ctx.agentPool.appAgents.steer(monitorId, appId, framed, source),
+          onSteered: () =>
+            log.info('steered task into running app agent', { messageId: task.messageId, appId }),
+          ackAgentId: () =>
             this.ctx.agentPool.appAgents.get(monitorId, appId)?.currentRole ??
             appRolePrefix(monitorId, appId),
-        });
-        return;
-      }
+        }));
+      if (steered) return;
 
       // Fallback: queue if steering not supported (e.g. Codex provider). Bounded, and
       // refused out loud when the bound is reached — a wedged app agent used to collect

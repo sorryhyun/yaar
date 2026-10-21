@@ -19,6 +19,7 @@
 
 import { basename, dirname, join } from 'path';
 import { existsSync, readdirSync, renameSync, rmSync } from 'fs';
+import { isProcessAlive } from '@yaar/lib/process';
 
 /** Sibling of `dist` (same volume, so `renameSync` is atomic) a build is staged in. Git-ignored. */
 export function stagingDirFor(dist: string, pid: number = process.pid): string {
@@ -86,16 +87,6 @@ export function swapIntoPlace(
   throw lastErr;
 }
 
-/** `kill(pid, 0)` probes without signalling; `EPERM` means it exists but isn't ours. */
-export function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
 /**
  * Delete staging/aside dirs left beside `dist` by processes that are no longer
  * running (a crash or kill mid-build). A live owner's dirs, ours included, are
@@ -103,7 +94,7 @@ export function isPidAlive(pid: number): boolean {
  */
 export function removeStaleBuildDirs(
   dist: string,
-  isAlive: (pid: number) => boolean = isPidAlive,
+  isAlive: (pid: number) => boolean = isProcessAlive,
 ): string[] {
   const name = basename(dist);
   const pattern = new RegExp(

@@ -5,16 +5,19 @@
  * Extracted from ContextPool to separate monitor task orchestration concerns.
  */
 
-import { ServerEventType } from '@yaar/shared';
 import type { MonitorPoolContext, Task } from './pool-types.js';
 import type { ExternalTurn } from '../providers/types.js';
 import type { PooledAgent } from './agent-roster.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
-import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
+import {
+  buildReloadContext,
+  runAgentTurn,
+  createBudgetOutputCallback,
+  steerIntoTurn,
+} from './turn-helpers.js';
 import { monitorSource } from './context.js';
 import { agentLogKey, monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
 import { enqueueOrReject } from './queue-refusal.js';
-import { frameSteeredMessage } from './steer-framing.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 import { createLogger } from '../observability/log.js';
 
@@ -201,26 +204,15 @@ export class MonitorTaskProcessor {
 
     // Non-relay: try to steer the active turn (Codex mid-turn injection), framed as a
     // message that arrived mid-turn (`steer-framing.ts`).
-    const source = monitorSource(monitorId);
-    const framed = frameSteeredMessage(task.content, {
-      kind: task.kind,
-      windowId: task.windowId
-        ? this.ctx.windowState.handleMap.getRawWindowId(task.windowId)
-        : undefined,
+    const steered = await steerIntoTurn(this.ctx, task, {
+      source: monitorSource(monitorId),
+      windowHandle: task.windowId,
       monitorId,
+      steer: (framed, source) => this.ctx.agentPool.steerMonitorAgent(monitorId, framed, source),
+      onSteered: () => log.info('steered active turn', { monitorId, messageId: task.messageId }),
+      ackAgentId: () => this.ctx.agentPool.getMonitorAgent(monitorId)!.currentRole!,
     });
-    const steered = await this.ctx.agentPool.steerMonitorAgent(monitorId, framed, source);
-    if (steered) {
-      log.info('steered active turn', { monitorId, messageId: task.messageId });
-      this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, framed, source);
-      const agent = this.ctx.agentPool.getMonitorAgent(monitorId)!;
-      await this.ctx.sendEvent({
-        type: ServerEventType.MESSAGE_ACCEPTED,
-        messageId: task.messageId,
-        agentId: agent.currentRole!,
-      });
-      return;
-    }
+    if (steered) return;
 
     // Steer not supported or failed → try ephemeral, but not for the user. Their follow-up
     // is about the turn they are watching, and an ephemeral answers it cold, without that

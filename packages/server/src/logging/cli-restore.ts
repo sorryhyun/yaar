@@ -7,19 +7,9 @@
 
 import type { ParsedMessage } from './types.js';
 import type { CliRestoreEntry } from '@yaar/shared';
+import { monitorIdOfRole } from '../agents/roles.js';
 
 const MAX_CLI_RESTORE_ENTRIES = 200;
-
-/**
- * Extract the monitor ID from a monitor agent's role: "monitor-0", or a turn's
- * "monitor-0-{messageId}" (`monitorTurnRole`, what a turn's messages are logged under) → "0".
- * Returns null for non-monitor agents (window agents, app agents).
- */
-function getMonitorIdFromAgent(agentId: string | null): string | null {
-  if (!agentId) return null;
-  const match = agentId.match(/^monitor-(\d+)(?:-.+)?$/);
-  return match ? match[1] : null;
-}
 
 /**
  * Convert session log messages into CLI restore entries.
@@ -29,7 +19,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
   const entries: CliRestoreEntry[] = [];
 
   for (const msg of messages) {
-    const monitorId = getMonitorIdFromAgent(msg.agentId);
+    const monitorId = monitorIdOfRole(msg.agentId);
     if (monitorId === null) continue; // Skip window/app agent messages
 
     const timestamp = new Date(msg.timestamp).getTime();

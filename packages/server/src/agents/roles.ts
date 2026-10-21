@@ -51,6 +51,18 @@ export function monitorTurnRole(monitorId: string, messageId: string): string {
   return `${MONITOR_ROLE_PREFIX}${monitorId}-${messageId}`;
 }
 
+/** `monitorRole` or `monitorTurnRole`, capturing the (numeric) monitor id. */
+const MONITOR_ROLE = new RegExp(`^${MONITOR_ROLE_PREFIX}(\\d+)(?:-|$)`);
+
+/**
+ * The monitor a {@link monitorRole} or {@link monitorTurnRole} names (`monitor-0`,
+ * `monitor-0-{messageId}` → `0`), else `null` — for an app, ephemeral or session role,
+ * or none at all. How a session log's `agentId` is read back as a monitor.
+ */
+export function monitorIdOfRole(role: string | null | undefined): string | null {
+  return MONITOR_ROLE.exec(role ?? '')?.[1] ?? null;
+}
+
 /** One ephemeral-agent turn. */
 export function ephemeralRole(monitorId: string, messageId: string): string {
   return `${EPHEMERAL_ROLE_PREFIX}${monitorId}-${messageId}`;
