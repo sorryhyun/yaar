@@ -22,7 +22,7 @@
  * segment is YAAR's syntax, not a name from the app's data.
  */
 
-import { compilePattern } from './regex-pattern.js';
+import { compilePattern } from '@yaar/lib/regex-pattern';
 
 /** The segment that makes the next one a position rather than a name. */
 export const INDEX_SEGMENT = '__idx';

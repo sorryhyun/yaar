@@ -18,10 +18,17 @@ import { BUNDLED_LIBRARIES, getAvailableBundledLibraries } from './registry.js';
 import {
   loadUpstreamModule,
   upstreamSpecifiers,
-  UPSTREAM_TYPE_KINDS,
   type UpstreamExport,
   type UpstreamModule,
 } from './describe-upstream.js';
+import {
+  clip,
+  firstSentence,
+  nameList,
+  SUMMARY_MAX_CHARS,
+  TYPE_KINDS,
+  withoutExportKeyword,
+} from './describe-summary.js';
 
 // Lazily cached .d.ts content
 let _dtsContent: string | null = null;
@@ -219,8 +226,6 @@ interface Section {
 const HEADER = /^ {2}\/\/ ── (.+?) ─*\s*$/;
 const EXPORT =
   /^ {2}export (?:declare )?(?:async )?(function|const|let|class|type|interface|namespace|enum)\s+(\w+)/;
-/** Listed as `types:` in the index; a class is a value you throw or construct, so it gets a bullet. */
-const TYPE_KINDS = new Set(['type', 'interface', 'enum']);
 /** Pulled in when a slice names them. */
 const REF_KINDS = new Set(['type', 'interface', 'class', 'enum']);
 
@@ -306,22 +311,16 @@ function parseSections(block: string): Section[] {
 
 /** The first sentence of a JSDoc block, or the collapsed declaration when there is none. */
 function summarize(doc: string[], declaration: string[]): string {
-  const prose = doc
-    .filter((l) => !/^\s*\/\/\s/.test(l))
-    .map((l) => l.replace(/^\s*(\/\*\*|\*\/|\*)\s?/, '').replace(/\*\/\s*$/, ''))
-    .join('\n')
-    .split(/\n\s*\n/)[0]
-    .replace(/\s+/g, ' ')
-    .trim();
-  const text = prose
-    ? (/^(.+?[.!?])(\s|$)/.exec(prose)?.[1] ?? prose)
-    : declaration
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/^export (declare )?/, '')
-        .replace(/;$/, '');
-  return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+  const sentence = firstSentence(
+    doc
+      .filter((l) => !/^\s*\/\/\s/.test(l))
+      .map((l) => l.replace(/^\s*(\/\*\*|\*\/|\*)\s?/, '').replace(/\*\/\s*$/, ''))
+      .join('\n'),
+  );
+  const text =
+    sentence ||
+    withoutExportKeyword(declaration.join(' ').replace(/\s+/g, ' ').trim()).replace(/;$/, '');
+  return clip(text, SUMMARY_MAX_CHARS);
 }
 
 function renderIndex(library: string, sections: Section[], upstream: Upstream[]): string {
@@ -342,10 +341,11 @@ function renderIndex(library: string, sections: Section[], upstream: Upstream[])
     for (const m of s.members) {
       if (seen.has(m.name)) continue;
       seen.add(m.name);
+      // A class is a value you throw or construct, so it gets a bullet of its own.
       if (TYPE_KINDS.has(m.kind)) types.push(m.name);
       else out.push(`- \`${m.name}\` — ${m.summary}`);
     }
-    if (types.length) out.push(`- types: ${types.map((t) => `\`${t}\``).join(', ')}`);
+    if (types.length) out.push(nameList('types', types));
   }
   if (upstream.length > 0) out.push('', renderUpstream(upstream));
   return out.join('\n');
@@ -406,7 +406,10 @@ function renderUpstream(upstream: Upstream[]): string {
   const out: string[] = [];
   let budget = UPSTREAM_INDEX_BUDGET;
   const list = (label: string, of: UpstreamExport[], plural: string) => {
-    const line = `- ${label}: ${of.map((e) => `\`${e.name}\``).join(', ')}`;
+    const line = nameList(
+      label,
+      of.map((e) => e.name),
+    );
     if (line.length <= budget) {
       out.push(line);
       budget -= line.length;
@@ -432,7 +435,7 @@ function renderUpstream(upstream: Upstream[]): string {
     if (module.exports.length <= UPSTREAM_SUMMARY_LIMIT) {
       const types: UpstreamExport[] = [];
       for (const e of module.exports) {
-        if (UPSTREAM_TYPE_KINDS.has(e.kind)) types.push(e);
+        if (TYPE_KINDS.has(e.kind)) types.push(e);
         else out.push(`- \`${e.name}\` (${e.kind}) — ${e.summary}`);
       }
       if (types.length) list('types', types, 'types');
@@ -455,24 +458,9 @@ function upstreamSlice(upstream: Upstream[], symbol: string): string | null {
     const hit = module?.exports.find((e) => e.name === symbol);
     if (!module || !hit) continue;
     const types = new Map(
-      module.exports.filter((e) => UPSTREAM_TYPE_KINDS.has(e.kind)).map((e) => [e.name, e]),
+      module.exports.filter((e) => TYPE_KINDS.has(e.kind)).map((e) => [e.name, e.text]),
     );
-    const included = new Set([hit.name]);
-    const refs: string[] = [];
-    let frontier = [hit.text];
-    while (frontier.length && refs.length < MAX_UPSTREAM_REFS) {
-      const next: string[] = [];
-      for (const text of frontier) {
-        for (const [, id] of text.matchAll(/\b([A-Z]\w*)\b/g)) {
-          const ref = types.get(id);
-          if (!ref || included.has(id) || refs.length >= MAX_UPSTREAM_REFS) continue;
-          included.add(id);
-          refs.push(ref.text);
-          next.push(ref.text);
-        }
-      }
-      frontier = next;
-    }
+    const refs = closeOverRefs(hit.text, types, new Set([hit.name]), MAX_UPSTREAM_REFS);
     const head = `// ${via} — re-exported from '${module.specifier}'\n\n${hit.text}`;
     return refs.length ? `${head}\n\n// Referenced types\n\n${refs.join('\n\n')}` : head;
   }
@@ -497,23 +485,40 @@ function withReferences(head: string, body: string, sections: Section[], content
     /^(?:export )?(?:declare )?(?:type|interface|class|enum)\s+(\w+)/gm,
   ))
     included.add(m[1]);
+  const refs = closeOverRefs(body, local, included);
+  const topLevel = resolveTopLevelRefs(content, [body, ...refs].join('\n\n'), new Set(included));
+  const all = [...refs, ...topLevel];
+  return all.length ? `${head}\n\n// Referenced types\n\n${all.join('\n\n')}` : head;
+}
+
+/**
+ * The declarations `start` references, transitively, breadth-first: each capitalized
+ * identifier `known` has a declaration for and `included` does not yet hold — then the
+ * same over what that pulled in. Adds every name it takes to `included`; stops taking
+ * at `max` declarations when given.
+ */
+function closeOverRefs(
+  start: string,
+  known: ReadonlyMap<string, string>,
+  included: Set<string>,
+  max = Infinity,
+): string[] {
   const refs: string[] = [];
-  let frontier = [body];
-  while (frontier.length) {
+  let frontier = [start];
+  while (frontier.length && refs.length < max) {
     const next: string[] = [];
     for (const text of frontier) {
       for (const [, id] of text.matchAll(/\b([A-Z]\w*)\b/g)) {
-        if (included.has(id) || !local.has(id)) continue;
+        const ref = known.get(id);
+        if (ref === undefined || included.has(id) || refs.length >= max) continue;
         included.add(id);
-        refs.push(local.get(id)!);
-        next.push(local.get(id)!);
+        refs.push(ref);
+        next.push(ref);
       }
     }
     frontier = next;
   }
-  const topLevel = resolveTopLevelRefs(content, [body, ...refs].join('\n\n'), new Set(included));
-  const all = [...refs, ...topLevel];
-  return all.length ? `${head}\n\n// Referenced types\n\n${all.join('\n\n')}` : head;
+  return refs;
 }
 
 /** Slice a brace-delimited declaration starting at `start`, balancing nesting. */

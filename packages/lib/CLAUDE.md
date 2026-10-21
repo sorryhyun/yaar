@@ -43,6 +43,7 @@ Two live examples: `pdf/poppler-pdf.ts` takes `binDir` (`IS_BUNDLED_EXE` is the 
 | `paths.ts` | `containedPath`/`isContained`/`isPathWithin`/`containedRealPath` — path containment, the `isAbsolute(rel)` form (a substring `includes('..')` check wrongly rejects a name like `a..b`) |
 | `pick-directory.ts` | Native directory picker. Windows uses the Explorer dialog in a helper process when the caller passes `helperArgv` (the server's `features/pick-directory.ts`), PowerShell otherwise |
 | `process.ts` | `isProcessAlive` (EPERM means alive), `readProcessStartTime` (Linux procfs, for a PID-reuse guard) |
+| `regex-pattern.ts` | `compilePattern` — a search regex with a leading PCRE flag group (`(?i)`, `(?ms)`) lifted into RegExp flags. Dependency-free, so the `@bundled/yaar-dev` shim bundles it for the browser too |
 | `ssrf.ts` | URL validation and `safeFetch` with redirect following |
 
 `ssrf.ts` and `freedpi/` import each other on purpose: the guard that keeps the bypass from

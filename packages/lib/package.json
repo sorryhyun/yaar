@@ -63,6 +63,10 @@
       "types": "./dist/ssrf.d.ts",
       "import": "./dist/ssrf.js"
     },
+    "./regex-pattern": {
+      "types": "./dist/regex-pattern.d.ts",
+      "import": "./dist/regex-pattern.js"
+    },
     "./paths": {
       "types": "./dist/paths.d.ts",
       "import": "./dist/paths.js"

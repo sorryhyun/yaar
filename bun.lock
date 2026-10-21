@@ -20,6 +20,7 @@
       "name": "@yaar/compiler",
       "version": "0.25.4",
       "dependencies": {
+        "@yaar/lib": "workspace:*",
         "@yaar/shared": "workspace:*",
       },
       "devDependencies": {

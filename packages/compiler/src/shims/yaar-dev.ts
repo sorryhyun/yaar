@@ -292,3 +292,8 @@ export async function bundledLibraries(
   const res = await fetch(url, { headers: devHeaders() });
   return res.json();
 }
+
+// ── Search patterns ────────────────────────────────────────────────────────
+// The server's rule for a search regex (a leading `(?i)` becomes a RegExp flag),
+// bundled in, so an app's own in-memory search reads a pattern the way grep does.
+export { compilePattern } from '@yaar/lib/regex-pattern';

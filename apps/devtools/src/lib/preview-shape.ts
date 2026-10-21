@@ -1,5 +1,5 @@
 export {};
-import { compileSearchPattern } from './search-pattern';
+import { compilePattern } from '@bundled/yaar-dev';
 
 // Shaping what preview and search reads hand back to the agent: pure, so the cuts can be
 // pinned by the lib suite without a running preview.
@@ -19,14 +19,12 @@ export function clipMatchLine(content: string, pattern: string, max = GREP_LINE_
   if (content.length <= max) return content;
   let start = 0;
   let end = 0;
-  try {
-    const m = compileSearchPattern(pattern).exec(content);
-    if (m) {
-      start = m.index;
-      end = m.index + m[0].length;
-    }
-  } catch {
-    /* not a JS regex — clip from the head */
+  const compiled = compilePattern(pattern);
+  // Not a JS regex — clip from the head.
+  const m = 'regex' in compiled ? compiled.regex.exec(content) : null;
+  if (m) {
+    start = m.index;
+    end = m.index + m[0].length;
   }
   // Centre on the match; a match longer than the window shows its own head.
   let from = Math.max(0, Math.floor((start + Math.min(end, start + max)) / 2 - max / 2));

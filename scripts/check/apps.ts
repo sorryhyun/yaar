@@ -527,6 +527,20 @@ function skillDocPath(appDir: string): string {
   return 'agent/SKILL.md';
 }
 
+/**
+ * `dist/protocol.json` and its repo-relative path, or null when the app has not been
+ * compiled (or the file is unreadable) — every rule that reads it has nothing to say then.
+ * `P` is the part of the manifest the caller reads; the file is trusted as compiler output.
+ */
+function readCompiledProtocol<P>(appDir: string): { protocol: P; file: string } | null {
+  const path = join(appDir, 'dist', 'protocol.json');
+  try {
+    return { protocol: JSON.parse(readFileSync(path, 'utf8')), file: relative(REPO_ROOT, path) };
+  } catch {
+    return null;
+  }
+}
+
 function scanSkillDoc(appDir: string, appId: string): Violation[] {
   let skill: string;
   try {
@@ -535,12 +549,12 @@ function scanSkillDoc(appDir: string, appId: string): Violation[] {
     return []; // No SKILL.md — the common case.
   }
 
-  let protocol: { state?: Record<string, unknown>; commands?: Record<string, unknown> };
-  try {
-    protocol = JSON.parse(readFileSync(join(appDir, 'dist', 'protocol.json'), 'utf8'));
-  } catch {
-    return []; // Nothing compiled to compare against.
-  }
+  const compiled = readCompiledProtocol<{
+    state?: Record<string, unknown>;
+    commands?: Record<string, unknown>;
+  }>(appDir);
+  if (!compiled) return []; // Nothing compiled to compare against.
+  const { protocol } = compiled;
 
   const names = [...Object.keys(protocol.state ?? {}), ...Object.keys(protocol.commands ?? {})];
   const lines = skill.split('\n');
@@ -1026,14 +1040,10 @@ const DESCRIPTION_BOILERPLATE =
   /^(this (command|state key|key)\b|allows? (the agent|you|an agent)\b|(is )?used (to|for)\b)/i;
 
 function scanProtocolDescriptions(appDir: string, appId: string): Violation[] {
-  let protocol: { commands?: Record<string, unknown> };
-  try {
-    protocol = JSON.parse(readFileSync(join(appDir, 'dist', 'protocol.json'), 'utf8'));
-  } catch {
-    return []; // Nothing compiled to check.
-  }
+  const compiled = readCompiledProtocol<{ commands?: Record<string, unknown> }>(appDir);
+  if (!compiled) return []; // Nothing compiled to check.
+  const { protocol, file } = compiled;
 
-  const file = relative(REPO_ROOT, join(appDir, 'dist', 'protocol.json'));
   const violations: Violation[] = [];
   for (const [name, entry] of Object.entries(protocol.commands ?? {})) {
     const description =
@@ -1065,13 +1075,11 @@ function scanProtocolDescriptions(appDir: string, appId: string): Violation[] {
 const PROTOCOL_REPLAY_RULE_ID = 'protocol-replay-policy';
 
 function scanReplayPolicy(appDir: string, appId: string): Violation[] {
-  let protocol: { commands?: Record<string, { replay?: unknown }> };
-  try {
-    protocol = JSON.parse(readFileSync(join(appDir, 'dist', 'protocol.json'), 'utf8'));
-  } catch {
-    return []; // Nothing compiled to check.
-  }
-  const file = relative(REPO_ROOT, join(appDir, 'dist', 'protocol.json'));
+  const compiled = readCompiledProtocol<{ commands?: Record<string, { replay?: unknown }> }>(
+    appDir,
+  );
+  if (!compiled) return []; // Nothing compiled to check.
+  const { protocol, file } = compiled;
   return listReplayRisks(protocol.commands ?? {}).map((name) => ({
     file,
     line: 1,

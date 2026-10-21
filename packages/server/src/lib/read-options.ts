@@ -7,8 +7,8 @@
  */
 
 import type { GltfSummaryOptions } from '@yaar/lib/gltf';
+import { compilePattern } from '@yaar/lib/regex-pattern';
 import { searchValuePaths } from './state-path.js';
-import { compilePattern } from './regex-pattern.js';
 
 /**
  * glTF/GLB only. A model read returns a structural summary (node tree, bounds, materials,

@@ -1,7 +1,7 @@
 /**
  * Run the source guards over a project directory, ahead of a build.
  *
- * The guards themselves live in the bundler plugin (`bundled/plugins.ts`), inside
+ * The guards themselves run in the bundler plugin (`bundled/plugins.ts`), inside
  * `build.onLoad` — which only fires when Bun actually bundles a file, i.e. during
  * `compile`. That is late: an agent writes two files, saves both, and only then
  * learns that both broke the same rule, so it re-opens both and re-reasons about
@@ -9,7 +9,8 @@
  * template, the id passed to `render` — so it needs no type information and no
  * bundle, and it can run against the files as they sit on disk.
  *
- * This is that run, shaped for `typecheckSandbox`: the same findings, rendered in
+ * This is that run, shaped for `typecheckSandbox`: the same pipeline
+ * (`scanAppGuards`) and so the same findings, rendered in
  * tsc's `path(line,col): error CODE: message` form so every existing consumer of
  * a diagnostics list (devtools' diagnostics panel, deploy's refusal, the agent
  * reading `typecheck()`) shows them without new plumbing.
@@ -18,10 +19,8 @@
 import { readdir, readFile } from 'fs/promises';
 import { join, relative, sep } from 'path';
 import { loadTypeScript } from '../load-typescript.js';
-import { createAppSourceFile } from './guard-report.js';
-import { rewriteHtmlClosingTags } from './html-closing-tags.js';
-import { scanSourceFile } from './solid-html-guard.js';
-import { scanMountTargetsIn, APP_MOUNT_ID } from './mount-guard.js';
+import { scanAppGuards } from './app-guards.js';
+import { APP_MOUNT_ID } from './mount-guard.js';
 
 /** Diagnostic codes, in tsc's `error <CODE>:` slot. `\w+` only — consumers parse it. */
 const SOLID_HTML_CODE = 'YAAR_HTML';
@@ -74,33 +73,18 @@ export async function scanProjectGuards(sandboxPath: string): Promise<string[]> 
     } catch {
       continue;
     }
-    // The same cheap text gates the plugin uses, so the parser only runs on files
-    // that could possibly match.
-    const mayHaveTemplates = text.includes('html`');
-    const mayMount = text.includes('render(');
-    if (!mayHaveTemplates && !mayMount) continue;
-
-    // The plugin rewrites `</${Component}>` to `</>` before parsing; without the
-    // same rewrite (html templates only) a legal closing tag parses as junk and reports a finding the
-    // build never raises.
-    const rewritten = rewriteHtmlClosingTags(ts, file, text);
     const rel = relative(sandboxPath, file).split(sep).join('/');
-    const sf = createAppSourceFile(ts, rel, rewritten);
-
-    if (mayHaveTemplates) {
-      for (const f of scanSourceFile(ts, sf)) {
-        diagnostics.push(
-          `${rel}(${f.line},${f.column}): error ${SOLID_HTML_CODE}: ${f.problem}. Fix: ${f.fix}`,
-        );
-      }
+    const { templates, mounts } = await scanAppGuards(rel, text);
+    for (const f of templates) {
+      diagnostics.push(
+        `${rel}(${f.line},${f.column}): error ${SOLID_HTML_CODE}: ${f.problem}. Fix: ${f.fix}`,
+      );
     }
-    if (mayMount) {
-      for (const f of scanMountTargetsIn(ts, sf)) {
-        diagnostics.push(
-          `${rel}(${f.line},${f.column}): error ${MOUNT_CODE}: ${f.snippet} mounts into "${f.id}", ` +
-            `which the app wrapper never emits. Fix: render into "${APP_MOUNT_ID}".`,
-        );
-      }
+    for (const f of mounts) {
+      diagnostics.push(
+        `${rel}(${f.line},${f.column}): error ${MOUNT_CODE}: ${f.snippet} mounts into "${f.id}", ` +
+          `which the app wrapper never emits. Fix: render into "${APP_MOUNT_ID}".`,
+      );
     }
   }
 

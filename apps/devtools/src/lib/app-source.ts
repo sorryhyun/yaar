@@ -1,7 +1,7 @@
 export {};
+import { compilePattern } from '@bundled/yaar-dev';
 import { globToRegExp } from './paths';
 import { clipMatchLine } from './preview-shape';
-import { compileSearchPattern } from './search-pattern';
 
 // Pure: reading an installed app's source as it arrives from the server's clone verb —
 // a flat list of files held in memory, never written into a project.
@@ -56,7 +56,9 @@ export function searchSources(
   glob?: string,
   cap = SOURCE_MATCH_CAP,
 ): { matches: SourceMatch[]; total: number } {
-  const re = compileSearchPattern(pattern);
+  const compiled = compilePattern(pattern);
+  if ('error' in compiled) throw new Error(compiled.error);
+  const re = compiled.regex;
   const only = glob ? globToRegExp(glob) : null;
   const matches: SourceMatch[] = [];
   let total = 0;

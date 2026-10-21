@@ -1,5 +1,5 @@
 /**
- * Compile a caller's search pattern (grep, `read { pattern }`).
+ * Compile a caller's search pattern (a grep, a `read { pattern }`, an in-browser search).
  *
  * Agents write regexes in the PCRE / ripgrep / Python dialect, where a leading
  * `(?i)` turns on case-insensitivity for the whole pattern. JavaScript has no such
@@ -10,6 +10,9 @@
  * pattern and passed as RegExp flags. Anything else after `(?` is left to the engine,
  * so lookarounds, named groups and `(?i:…)` keep their meaning; an unsupported inline
  * flag (`(?x)`) gets an error naming the flags that do work.
+ *
+ * Pure and dependency-free on purpose: the server imports it, and the `@bundled/yaar-dev`
+ * shim bundles it into the browser so an app's search follows the same rule.
  */
 
 const LEADING_FLAGS = /^\(\?([a-zA-Z]+)\)/;

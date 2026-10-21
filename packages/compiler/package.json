@@ -12,16 +12,17 @@
     }
   },
   "scripts": {
-    "prebuild": "bun run ../../scripts/build/ensure-deps-built.ts shared",
+    "prebuild": "bun run ../../scripts/build/ensure-deps-built.ts shared lib",
     "build": "tsc",
-    "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared",
+    "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared lib",
     "test": "bun test --isolate src/tests",
-    "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared",
+    "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared lib",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "dev": "tsc --watch"
   },
   "dependencies": {
+    "@yaar/lib": "workspace:*",
     "@yaar/shared": "workspace:*"
   },
   "devDependencies": {

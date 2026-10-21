@@ -3,6 +3,9 @@
  * the server route. Lines and columns are 1-based; paths are sandbox-relative.
  */
 
+/** The refusal for a query that names no position — the host's check and the service's agree. */
+export const POSITION_REQUIRED = 'Give "symbol", "line" + "column", or "line" + "symbol"';
+
 export interface FindReferencesQuery {
   /** The file the symbol is declared (or used) in, sandbox-relative — `src/main.ts`. */
   file: string;

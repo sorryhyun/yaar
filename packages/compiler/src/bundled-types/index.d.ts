@@ -3027,6 +3027,16 @@ declare module '@bundled/yaar-dev' {
     appId?: string,
     opts?: { message?: string },
   ): Promise<YaarDevHistoryResult>;
+
+  // -- Search patterns --
+
+  /**
+   * Compile a search regex the way the server's grep and `read { pattern }` do: a leading
+   * PCRE flag group of `i`, `m`, `s` (`(?i)foo`) becomes RegExp flags; any other `(?`
+   * construct is left to the engine. Never throws — an invalid pattern, or an inline flag
+   * JavaScript lacks (`(?x)`), comes back as `{ error }`.
+   */
+  export function compilePattern(pattern: string): { regex: RegExp } | { error: string };
 }
 
 declare module '@bundled/yaar-ml' {

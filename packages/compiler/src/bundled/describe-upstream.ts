@@ -19,6 +19,13 @@ import type TS from 'typescript';
 type TsModule = typeof import('typescript');
 import { loadTypeScript } from '../load-typescript.js';
 import { PACKAGE_ROOT } from '../paths.js';
+import {
+  clip,
+  firstSentence,
+  SIGNATURE_MAX_CHARS,
+  SUMMARY_MAX_CHARS,
+  withoutExportKeyword,
+} from './describe-summary.js';
 
 export type UpstreamKind =
   | 'function'
@@ -45,12 +52,6 @@ export interface UpstreamModule {
   ofDefault: boolean;
   exports: UpstreamExport[];
 }
-
-export const UPSTREAM_TYPE_KINDS: ReadonlySet<UpstreamKind> = new Set([
-  'interface',
-  'type',
-  'enum',
-]);
 
 /** One export's declaration past this is cut — `Object3D` alone is ~40KB. */
 const MAX_DECLARATION_CHARS = 12_000;
@@ -149,7 +150,7 @@ function readUpstream(ts: TsModule, specifier: string): UpstreamModule | null {
     exports.push({
       name: symbol.name,
       kind,
-      summary: doc.trim() ? firstSentence(doc) : signatureLine(text),
+      summary: doc.trim() ? clip(firstSentence(doc), SUMMARY_MAX_CHARS) : signatureLine(text),
       text,
     });
   }
@@ -208,19 +209,8 @@ function capText(text: string): string {
 /** An undocumented export's index line: its declaration, collapsed. */
 function signatureLine(text: string): string {
   const line = text.split('\n').find((l) => l.trim() && !/^\s*(\/\/|\/\*|\*)/.test(l));
-  const collapsed = (line ?? '')
-    .trim()
-    .replace(/^export (declare )?/, '')
+  const collapsed = withoutExportKeyword((line ?? '').trim())
     .replace(/[;{]\s*$/, '')
     .trim();
-  return collapsed.length > 120 ? `${collapsed.slice(0, 117)}…` : collapsed;
-}
-
-function firstSentence(doc: string): string {
-  const prose = doc
-    .split(/\n\s*\n/)[0]
-    .replace(/\s+/g, ' ')
-    .trim();
-  const text = /^(.+?[.!?])(\s|$)/.exec(prose)?.[1] ?? prose;
-  return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+  return clip(collapsed, SIGNATURE_MAX_CHARS);
 }

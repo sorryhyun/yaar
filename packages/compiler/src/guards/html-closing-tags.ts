@@ -7,7 +7,7 @@
  * ordinary user text and rewriting it corrupts the output.
  */
 
-import { createAppSourceFile, type TsModule } from './guard-report.js';
+import { createAppSourceFile, type TsModule, type TsSourceFile } from './guard-report.js';
 
 const CLOSING_TAG = /<\/\$\{([^}]+)\}>/g;
 
@@ -24,8 +24,28 @@ export function rewriteHtmlClosingTags(
   fileName: string,
   text: string,
 ): string {
-  if (!text.includes('html`')) return text;
-  if (!ts) return text.replace(CLOSING_TAG, '</>');
+  return rewriteHtmlClosingTagsParsed(ts, fileName, text).text;
+}
+
+/** The rewritten text, plus the `SourceFile` parsed on the way when it still matches. */
+export interface HtmlClosingTagRewrite {
+  text: string;
+  /**
+   * The parse of `text`, when the rewrite parsed the file and changed nothing — a
+   * caller that scans the result reuses it instead of parsing the same text again.
+   * Null when no parse happened or the text changed.
+   */
+  sourceFile: TsSourceFile | null;
+}
+
+/** `rewriteHtmlClosingTags`, keeping the parse for a caller that scans the result. */
+export function rewriteHtmlClosingTagsParsed(
+  ts: TsModule | null,
+  fileName: string,
+  text: string,
+): HtmlClosingTagRewrite {
+  if (!text.includes('html`')) return { text, sourceFile: null };
+  if (!ts) return { text: text.replace(CLOSING_TAG, '</>'), sourceFile: null };
 
   const sf = createAppSourceFile(ts, fileName, text);
   const spans: Array<[number, number]> = [];
@@ -49,5 +69,5 @@ export function rewriteHtmlClosingTags(
     const [start, end] = spans[i];
     out = out.slice(0, start) + out.slice(start, end).replace(CLOSING_TAG, '</>') + out.slice(end);
   }
-  return out;
+  return { text: out, sourceFile: out === text ? sf : null };
 }

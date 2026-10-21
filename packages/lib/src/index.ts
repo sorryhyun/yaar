@@ -18,6 +18,7 @@ export * from './open-url.js';
 export * from './paths.js';
 export * from './pick-directory.js';
 export * from './process.js';
+export * from './regex-pattern.js';
 export * from './ssrf.js';
 export * from './archive/index.js';
 export * from './download/index.js';

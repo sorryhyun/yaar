@@ -61,7 +61,6 @@ import {
   countLines,
   sliceLines,
   searchSources,
-  compileSearchPattern,
   verbUsesIn,
   collectVerbUses,
   storagePollsIn,
@@ -1229,11 +1228,6 @@ const appSource = suite('app-source', {
     eq(countLines('a'), 1);
     eq(countLines('a\nb\n'), 2);
     eq(countLines('a\nb'), 2);
-  },
-
-  'compileSearchPattern lifts leading i, m, s into RegExp flags'() {
-    eq(compileSearchPattern('(?is)a.b').flags, 'is');
-    eq(compileSearchPattern('(?is)a.b').source, 'a.b');
   },
 
   'sliceLines is 1-based, inclusive, and clamped to the file'() {

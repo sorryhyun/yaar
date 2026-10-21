@@ -13,11 +13,9 @@
 
 import { dirname, join } from 'path';
 import { MODULE_ROOT, SHIMS_DIR } from '../paths.js';
-import { scanSourceFile, formatFindings } from '../guards/solid-html-guard.js';
-import { scanMountTargetsIn, formatMountFindings } from '../guards/mount-guard.js';
-import { loadTypeScript } from '../load-typescript.js';
-import { rewriteHtmlClosingTags } from '../guards/html-closing-tags.js';
-import { createAppSourceFile } from '../guards/guard-report.js';
+import { formatFindings } from '../guards/solid-html-guard.js';
+import { formatMountFindings } from '../guards/mount-guard.js';
+import { scanAppGuards } from '../guards/app-guards.js';
 import { readThrough, type AppSourceCache } from '../build/source-cache.js';
 import {
   BUNDLED_LIBRARIES,
@@ -479,8 +477,6 @@ export function assetDataUrlPlugin(): Bun.BunPlugin {
  * the closing-tag rewrite still runs.
  */
 export function solidHtmlSourcePlugin(sources?: AppSourceCache): Bun.BunPlugin {
-  const loadTs = loadTypeScript;
-
   return {
     name: 'solid-html-source',
     setup(build: Bun.PluginBuilder) {
@@ -490,27 +486,9 @@ export function solidHtmlSourcePlugin(sources?: AppSourceCache): Bun.BunPlugin {
         // most of these files already, and this hook must still return the
         // (possibly rewritten) contents either way.
         const text = await readThrough(sources, filePath);
-        // Cheap text gates so the TS parser only runs on files that could match.
-        const mayHaveTemplates = text.includes('html`');
-        const mayMount = text.includes('render(');
-        const ts = mayHaveTemplates || mayMount ? await loadTs() : null;
-        const rewritten = rewriteHtmlClosingTags(ts, filePath, text);
-
-        if (mayHaveTemplates || mayMount) {
-          if (ts) {
-            // One parse for both guards — a file that matches both gates used to
-            // be handed to `ts.createSourceFile` twice over identical text.
-            const sourceFile = createAppSourceFile(ts, filePath, rewritten);
-            if (mayHaveTemplates) {
-              const findings = scanSourceFile(ts, sourceFile);
-              if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
-            }
-            if (mayMount) {
-              const mounts = scanMountTargetsIn(ts, sourceFile);
-              if (mounts.length > 0) throw new Error(formatMountFindings(filePath, mounts));
-            }
-          }
-        }
+        const { text: rewritten, templates, mounts } = await scanAppGuards(filePath, text);
+        if (templates.length > 0) throw new Error(formatFindings(filePath, templates));
+        if (mounts.length > 0) throw new Error(formatMountFindings(filePath, mounts));
 
         if (rewritten === text) return undefined;
         return {

@@ -123,7 +123,7 @@ yaar/
 @yaar/frontend ──────┐
                       ├──> @yaar/shared (Zod v4 schemas, types)
 @yaar/server ──┬─────┘
-               ├──> @yaar/compiler ──> @yaar/shared
+               ├──> @yaar/compiler ──> @yaar/shared, @yaar/lib (shims bundle its browser-safe modules)
                └──> @yaar/lib ──────> @yaar/shared
 ```
 

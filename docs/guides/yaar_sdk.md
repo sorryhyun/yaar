@@ -150,7 +150,7 @@ import without it. The bundle is the grant, so there is no `permissions` entry t
 
 | Import | `bundles` | For |
 |---|---|---|
-| `@bundled/yaar-dev` | `yaar-dev` | `compile`, `typecheck`, `findReferences`, `typeAt`, `checkPermissions`, `deploy`, `bundledLibraries`, and per-app version history (`gitHistory`/`gitDiff`/`gitRestore`/`gitCheckpoint`) |
+| `@bundled/yaar-dev` | `yaar-dev` | `compile`, `typecheck`, `findReferences`, `typeAt`, `checkPermissions`, `deploy`, `bundledLibraries`, per-app version history (`gitHistory`/`gitDiff`/`gitRestore`/`gitCheckpoint`), and `compilePattern` (a search regex read the way the server's grep reads it) |
 | `@bundled/yaar-web` | `yaar-web` | Headless browser automation: `open`, `click`, `type`, `extract` |
 | `@bundled/yaar-ml` | `yaar-ml` | In-browser model inference; see [`yaar_ml_runtime.md`](./yaar_ml_runtime.md) |
 | `@bundled/yaar-media` | `yaar-media` | `mediaUrl(url, { referer? })` streams big media through the server with Range passthrough; optional yt-dlp audio download into `shared/media/`; camera/microphone capture — `openCamera`, `capturePhoto`, and `recordToStorage(stream, path)`, which appends each recorded chunk to a storage file as it is captured (no size cap, nothing held in memory) |

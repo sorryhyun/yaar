@@ -19,7 +19,9 @@ import { isAbsolute, join, normalize, relative, resolve } from 'path';
 import type TS from 'typescript';
 import { BUNDLED_TYPES_DTS, PACKAGE_ROOT } from '../paths.js';
 import { SANDBOX_INCLUDE, sandboxCompilerOptions, sliceBundledTypes } from '../sandbox-tsconfig.js';
+import { toForwardSlash as fwd } from '../bundled/registry.js';
 import type { ThreeRenderer } from '../bundled/three-renderer.js';
+import { POSITION_REQUIRED } from './types.js';
 import type {
   CallerHit,
   FindReferencesQuery,
@@ -45,8 +47,6 @@ const TOP_LEVEL = '(top level)';
  */
 const SLICED_TYPES_PATH = join(PACKAGE_ROOT, '.yaar-bundled-types.references.d.ts');
 
-const fwd = (p: string): string => p.replace(/\\/g, '/');
-
 /**
  * A test file by the conventions apps use: `*.test.ts` (what `compileTests` builds) or
  * anything under a `test/` or `__tests__/` directory (devtools' own suites). Takes a
@@ -55,6 +55,19 @@ const fwd = (p: string): string => p.replace(/\\/g, '/');
 function isTestFile(path: string): boolean {
   const p = fwd(path);
   return /\.test\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(test|__tests__)\//.test(p);
+}
+
+/** The answer when the position resolved but the checker has no symbol there. */
+function noSymbolAt(at: SourceLocation): {
+  success: false;
+  kind: 'not-found';
+  error: string;
+} {
+  return {
+    success: false,
+    kind: 'not-found',
+    error: `No symbol at ${at.file}:${at.line}:${at.column}`,
+  };
 }
 
 function mtimeVersion(file: string): string {
@@ -160,6 +173,25 @@ export class SandboxReferences {
     return { program, sourceFile, absFile };
   }
 
+  /** `openFile`, then the query's position in it — the prelude `typeAt` and `find` share. */
+  private openAt(query: TypeAtQuery):
+    | {
+        program: TS.Program;
+        sourceFile: TS.SourceFile;
+        absFile: string;
+        position: number;
+        ambiguous: SourceLocation[];
+        at: SourceLocation;
+      }
+    | { success: false; kind: 'invalid' | 'not-found'; error: string } {
+    const opened = this.openFile(query.file);
+    if ('success' in opened) return opened;
+    const resolved = this.resolvePosition(opened.sourceFile, query);
+    if ('error' in resolved) return { success: false, kind: resolved.kind, error: resolved.error };
+    const { position, ambiguous } = resolved;
+    return { ...opened, position, ambiguous, at: this.location(opened.sourceFile, position) };
+  }
+
   /**
    * The checker's hover text at one position — the type an editor would show, without
    * a typecheck of the whole program. Resolution is `find`'s, so a query that names a
@@ -167,23 +199,12 @@ export class SandboxReferences {
    */
   typeAt(query: TypeAtQuery): TypeAtResult {
     const { ts } = this;
-    const opened = this.openFile(query.file);
+    const opened = this.openAt(query);
     if ('success' in opened) return opened;
-    const { sourceFile, absFile } = opened;
-
-    const resolved = this.resolvePosition(sourceFile, query);
-    if ('error' in resolved) return { success: false, kind: resolved.kind, error: resolved.error };
-    const { position, ambiguous } = resolved;
-    const at = this.location(sourceFile, position);
+    const { sourceFile, absFile, position, ambiguous, at } = opened;
 
     const info = this.service.getQuickInfoAtPosition(absFile, position);
-    if (!info) {
-      return {
-        success: false,
-        kind: 'not-found',
-        error: `No symbol at ${at.file}:${at.line}:${at.column}`,
-      };
-    }
+    if (!info) return noSymbolAt(at);
     let type = ts.displayPartsToString(info.displayParts);
     const truncated = type.length > TYPE_CLIP;
     if (truncated) type = `${type.slice(0, TYPE_CLIP)}…`;
@@ -214,23 +235,12 @@ export class SandboxReferences {
 
   find(query: FindReferencesQuery): FindReferencesResult {
     const { ts } = this;
-    const opened = this.openFile(query.file);
+    const opened = this.openAt(query);
     if ('success' in opened) return opened;
-    const { program, sourceFile, absFile } = opened;
-
-    const resolved = this.resolvePosition(sourceFile, query);
-    if ('error' in resolved) return { success: false, kind: resolved.kind, error: resolved.error };
-    const { position, ambiguous } = resolved;
-    const at = this.location(sourceFile, position);
+    const { program, sourceFile, absFile, position, ambiguous, at } = opened;
 
     let groups = this.service.findReferences(absFile, position);
-    if (!groups?.length) {
-      return {
-        success: false,
-        kind: 'not-found',
-        error: `No symbol at ${at.file}:${at.line}:${at.column}`,
-      };
-    }
+    if (!groups?.length) return noSymbolAt(at);
 
     // Starting from the renamed end of `export { a as b }` finds only the alias side:
     // references do not cross a rename backwards, though they do forwards. Query from
@@ -420,7 +430,7 @@ export class SandboxReferences {
 
     const symbol = query.symbol?.trim();
     if (!symbol) {
-      return { kind: 'invalid', error: 'Give "symbol", "line" + "column", or "line" + "symbol"' };
+      return { kind: 'invalid', error: POSITION_REQUIRED };
     }
     const segments = symbol.split('.');
     const name = segments[segments.length - 1];

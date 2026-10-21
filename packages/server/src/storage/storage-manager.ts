@@ -20,6 +20,7 @@ import {
 import { toWebPForModel } from '@yaar/lib/image';
 import { GltfError, formatSummaryJson, summarizeGltf } from '@yaar/lib/gltf';
 import { containedPath, containedRealPath } from '@yaar/lib/paths';
+import { compilePattern } from '@yaar/lib/regex-pattern';
 import {
   STORAGE_DIR,
   getConfigDir,
@@ -38,7 +39,6 @@ import type {
 import { resolveMountPath, mountRootAlias, loadMounts, type ResolvedPath } from './mounts.js';
 // A leaf, shared with window content inlining — see text-extensions.ts for why not here.
 import { isTextFile } from './text-extensions.js';
-import { compilePattern } from '../lib/regex-pattern.js';
 import {
   GLTF_READ_OPTION_HINTS,
   pickGltfOptions,

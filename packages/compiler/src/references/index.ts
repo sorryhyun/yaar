@@ -18,6 +18,7 @@ import { join } from 'path';
 import { getCompilerConfig } from '../config.js';
 import { loadTypeScript } from '../load-typescript.js';
 import { MODULE_ROOT } from '../paths.js';
+import { POSITION_REQUIRED } from './types.js';
 import type {
   FindReferencesQuery,
   FindReferencesResult,
@@ -118,7 +119,7 @@ function validate(query: FindReferencesQuery | TypeAtQuery): string | null {
   }
   if (query.column !== undefined && query.line === undefined) return '"column" needs "line"';
   if (!query.symbol && query.column === undefined) {
-    return 'Give "symbol", "line" + "column", or "line" + "symbol"';
+    return POSITION_REQUIRED;
   }
   return null;
 }

@@ -40,10 +40,12 @@ src/
 │   ├── three-renderer.ts  # app.json `"three": "webgpu"` — which three build `@bundled/three` means (readThreeRenderer)
 │   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent: index / symbol / section / full (+ design-tokens pseudo-library)
 │   ├── describe-upstream.ts # the export list of an npm package a block forwards (`export * from 'diff'`), read with the TS checker
+│   ├── describe-summary.ts # an index line's summary (first sentence, clip caps) and `types:` list — shared by the two above
 │   ├── ort-version.ts     # getOrtVersion() + the `define` that stamps it into yaar-ml's `?v=` runtime URLs
 │   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
 ├── guards/
 │   ├── guard-report.ts    # createAppSourceFile/walk/snippet/format — the shape all three guards share (ASCII rule lives here)
+│   ├── app-guards.ts      # scanAppGuards — closing-tag rewrite + solid-html + mount scan over one file, one parse (plugin and typecheck format it)
 │   ├── solid-html-guard.ts # Classifies broken solid-js/html templates (AST-based, fails the build)
 │   ├── mount-guard.ts     # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
 │   ├── design-token-guard.ts # Rejects var(--yaar-*) names that can never resolve
@@ -80,7 +82,7 @@ src/
     │   ├── protocol-context.ts # createProtocolContext — runtime context for statically-declared handlers
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createSharedSignal, createCollapsiblePanel, createAutosave
-    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, findReferences, typeAt, checkPermissions, deploy, per-app git history (requires bundles: ["yaar-dev"])
+    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, findReferences, typeAt, checkPermissions, deploy, per-app git history, compilePattern (from @yaar/lib) (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── yaar-media.ts      # Gated SDK: mediaUrl() streaming via /api/media-proxy + yt-dlp audio download (requires bundles: ["yaar-media"])
@@ -245,6 +247,9 @@ each derives its expectation from the compiler's own output so it cannot drift.
   path that mangles non-ASCII bytes (an em dash arrives as `â`). The rule, the walk, the
   snippet, and the `path:line:col` / `problem:` / `fix:` rendering live once in
   `guards/guard-report.ts`. Each guard keeps its own headline — parameterized, not unified.
+- **One pipeline, two formatters:** the closing-tag rewrite and the solid-html + mount scans
+  run through `scanAppGuards` (`guards/app-guards.ts`); the bundler plugin throws its
+  findings, `scanProjectGuards` (`typecheck`) renders them as tsc-style diagnostic lines.
 
 ## Bun Plugins (`bundled/plugins.ts`)
 
