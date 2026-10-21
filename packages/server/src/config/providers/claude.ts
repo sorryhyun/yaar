@@ -70,7 +70,7 @@ export function getClaudeSpawnArgs(): string[] {
  * runs inside another Claude Code harness (e.g. a cloud sandbox) they must be
  * stripped so the child starts clean — this scrub is what makes YAAR-in-Claude
  * work; without it the inner `claude` inherits the outer's FD-based auth and
- * exits with code 1.
+ * exits with code 1. Stripped always, harness detected or not.
  */
 const PARENT_HARNESS_ENV_VARS = [
   'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
@@ -81,7 +81,54 @@ const PARENT_HARNESS_ENV_VARS = [
   'CLAUDE_CODE_CONTAINER_ID',
   'CLAUDE_CODE_REMOTE',
   'CLAUDECODE',
+  // Not the parent's resource but YAAR's contract: a tool call the CLI moves to the
+  // background at 120s returns to the model without its result, so a user prompt is
+  // answered into a turn that already ended. YAAR's waits are sized to finish inside the
+  // call (`config/deadlines.ts`). Removed rather than set to "0" — the CLI tests the raw
+  // string, so any value at all turns it on.
+  'CLAUDE_AUTO_BACKGROUND_TASKS',
 ] as const;
+
+/**
+ * Inside a parent harness, every `CLAUDE*` / `CCR_*` var is the parent's unless it is
+ * on this list — the ones a person sets to make `claude` authenticate or reach its API.
+ *
+ * A denylist of eight was not enough (issue #187, item 2): a cloud session hands its
+ * children some seventy of these, and the ones that got through changed the inner CLI's
+ * behavior — `CLAUDE_AUTO_BACKGROUND_TASKS` moved a 240s user prompt to the background at
+ * 120s, so the prompt was cut off — or opened a channel to the outer session
+ * (`CLAUDE_CODE_MESSAGING_SOCKET`/`_TOKEN`, `CLAUDE_SESSION_INGRESS_TOKEN_FILE`). New ones
+ * appear with every CLI release, so the list that has to be kept is the short one.
+ *
+ * `ANTHROPIC_*` and the proxy/CA vars are not in the scrubbed namespace at all, so a
+ * sandbox's API route survives. Measured in a cloud session: with only these left, the
+ * inner `claude -p` still authenticates and answers.
+ */
+const HARNESS_KEPT_ENV_VARS = new Set([
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_CODE_PATH',
+  'CLAUDE_CONFIG_DIR',
+  'CLAUDE_CODE_GIT_BASH_PATH',
+]);
+/** Kept by prefix: `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/…, and their `CLAUDE_CODE_SKIP_*_AUTH`. */
+const HARNESS_KEPT_ENV_PREFIXES = ['CLAUDE_CODE_USE_', 'CLAUDE_CODE_SKIP_'] as const;
+
+/**
+ * Whether this process was started by a Claude Code harness. `CLAUDECODE` is what the CLI
+ * sets for everything it spawns; the session id covers a host that launched us directly.
+ *
+ * Outside one, a `CLAUDE_*` var is the person's own setting and passes through — only
+ * inside one does the namespace belong to someone else.
+ */
+function insideParentHarness(env: NodeJS.ProcessEnv): boolean {
+  return !!env.CLAUDECODE || !!env.CLAUDE_CODE_SESSION_ID;
+}
+
+function isHarnessOwned(key: string): boolean {
+  if (!key.startsWith('CLAUDE') && !key.startsWith('CCR_')) return false;
+  if (HARNESS_KEPT_ENV_VARS.has(key)) return false;
+  return !HARNESS_KEPT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
 
 /**
  * YAAR overrides layered onto the scrubbed parent env. Disable the CLI's built-in
@@ -142,10 +189,15 @@ const CLAUDE_ENV_OVERRIDES = {
 /**
  * Environment for the spawned `claude` CLI: the current process env with
  * parent-harness vars scrubbed and YAAR's overrides applied. Computed per spawn
- * so a mutated `process.env` is reflected.
+ * so a mutated `process.env` is reflected. `source` is for tests.
  */
-export function buildClaudeEnv(): Record<string, string | undefined> {
-  const env = { ...process.env };
+export function buildClaudeEnv(
+  source: NodeJS.ProcessEnv = process.env,
+): Record<string, string | undefined> {
+  const env = { ...source };
+  if (insideParentHarness(source)) {
+    for (const k of Object.keys(env)) if (isHarnessOwned(k)) delete env[k];
+  }
   for (const k of PARENT_HARNESS_ENV_VARS) delete env[k];
   return { ...env, ...CLAUDE_ENV_OVERRIDES };
 }

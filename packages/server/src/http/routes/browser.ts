@@ -12,6 +12,7 @@ import { errMessage } from '@yaar/lib/errors';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp, type AppPrincipal } from '../access.js';
 import { getHeadlessBrowser, type BrowserSessionUpdate } from '../../lib/browser/index.js';
+import { tabScopeFor, type TabScope } from '../../lib/browser/tab-scope.js';
 import { enforceBrowserGuards, isYaarOriginUrl } from '../../features/browser/guards.js';
 import { getSessionId, runWithAgentContext } from '../../agents/agent-context.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -56,11 +57,23 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
 ];
 
-/** Convert a VerbResult to an HTTP Response. */
-function verbResultToResponse(result: {
-  content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-  isError?: boolean;
-}): Response {
+/**
+ * Convert a VerbResult to an HTTP Response. Every pool id in its text is put back in the
+ * caller's own terms first (`TabScope.toAppText`).
+ */
+function verbResultToResponse(
+  raw: {
+    content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+    isError?: boolean;
+  },
+  scope: TabScope,
+): Response {
+  const result = {
+    ...raw,
+    content: raw.content.map((c) =>
+      c.type === 'text' && c.text ? { ...c, text: scope.toAppText(c.text) } : c,
+    ),
+  };
   if (result.isError) {
     const text = result.content.find((c) => c.type === 'text')?.text ?? 'Unknown error';
     return jsonResponse({ ok: false, error: text }, 400);
@@ -120,11 +133,12 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
 
-    const browsers = pool.getAllSessions();
-    if (browsers.size === 0) return jsonResponse({ ok: true, data: [] });
+    const scope = tabScopeFor(auth);
+    const browsers = [...pool.getAllSessions()].filter(([bid]) => scope.owns(bid));
+    if (browsers.length === 0) return jsonResponse({ ok: true, data: [] });
 
-    const items = [...browsers.entries()].map(([bid, s]) => ({
-      id: bid,
+    const items = browsers.map(([bid, s]) => ({
+      id: scope.toApp(bid),
       url: s.currentUrl,
       title: s.currentTitle || '(no title)',
     }));
@@ -132,14 +146,15 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
   }
 
   if (req.method === 'DELETE' && url.pathname.startsWith('/api/browser/')) {
-    const id = url.pathname.slice('/api/browser/'.length);
-    if (!id) return null;
+    const appId = url.pathname.slice('/api/browser/'.length);
+    if (!appId) return null;
 
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
 
+    const id = tabScopeFor(auth).toPool(appId);
     const session = pool.getSession(id);
-    if (!session) return jsonResponse({ ok: false, error: `No browser with ID ${id}` }, 404);
+    if (!session) return jsonResponse({ ok: false, error: `No browser with ID ${appId}` }, 404);
 
     if (session.windowId) {
       // The token names the desktop this window is on. There is no agent context on an
@@ -151,14 +166,14 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
       );
     }
     await pool.closeSession(id);
-    return jsonResponse({ ok: true, data: `Browser ${id} closed.` });
+    return jsonResponse({ ok: true, data: `Browser ${appId} closed.` });
   }
 
   const screenshotMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/screenshot$/);
   if (screenshotMatch && req.method === 'GET') {
-    const browserId = decodeURIComponent(screenshotMatch[1]);
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
+    const browserId = tabScopeFor(auth).toPool(decodeURIComponent(screenshotMatch[1]));
     try {
       const session = pool.getSession(browserId);
       if (!session) return errorResponse('Browser not found', 404);
@@ -179,9 +194,10 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
 
   const eventsMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/events$/);
   if (eventsMatch && req.method === 'GET') {
-    const browserId = decodeURIComponent(eventsMatch[1]);
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
+    const scope = tabScopeFor(auth);
+    const browserId = scope.toPool(decodeURIComponent(eventsMatch[1]));
     try {
       // The browser app opens this the moment its window mounts, so it is the other
       // place — beside the screencast socket — where a `browserId` shows up asking to
@@ -269,7 +285,11 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             write(
               `data: ${JSON.stringify({
                 ...snapshot(),
-                popup: { browserId: event.browserId, url: event.url, openerBrowserId: browserId },
+                popup: {
+                  browserId: scope.toApp(event.browserId),
+                  url: event.url,
+                  openerBrowserId: scope.toApp(browserId),
+                },
               })}\n\n`,
             );
           });
@@ -312,7 +332,8 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const action = body.action as string;
     if (!action) return errorResponse('"action" is required', 400);
 
-    const browserId = (body.browserId as string) ?? '0';
+    const scope = tabScopeFor(auth);
+    const browserId = scope.toPool((body.browserId as string) ?? '0');
 
     // Phase 3 consent + self-target guards (no-ops for sandboxed headless tabs).
     const guardedSession = await sessionForAction(pool, action, browserId);
@@ -345,9 +366,9 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
           windowId: auth.windowId,
           appId: auth.appId,
         },
-        () => runBrowserAction(pool, action, browserId, body),
+        () => runBrowserAction(pool, action, browserId, body, scope),
       );
-      return verbResultToResponse(result);
+      return verbResultToResponse(result, scope);
     } catch (err) {
       return jsonResponse({ ok: false, error: `Browser error: ${errMessage(err)}` }, 500);
     } finally {

@@ -139,8 +139,9 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
           monitorId,
         })
         .catch((err: unknown) => log.error('monitor route failed', { monitorId, err }));
-      // So the sender's response hook, if its turn has one, knows the monitor already has
-      // this reply and does not deliver it again (AppTaskProcessor, `repliedDirectly`).
+      // So the sender's response hook, if its turn has one and this message ends it, knows
+      // the monitor already has the reply and does not deliver it again (AppTaskProcessor,
+      // `repliedDirectly`).
       const senderAgentId = getAgentId();
       if (senderAgentId) pool.agentPool.noteMonitorMessaged(senderAgentId, monitorId);
       return {

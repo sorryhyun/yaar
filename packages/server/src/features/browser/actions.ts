@@ -8,6 +8,7 @@
  */
 
 import type { BrowserProvider, BrowserSession } from '../../lib/browser/index.js';
+import { ownedBy, tabScopeFor, type TabScope } from '../../lib/browser/tab-scope.js';
 import { ok, okJson, okWithImages, error, type VerbResult } from '../../lib/verb-result.js';
 import { getActiveSessionId } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
@@ -119,10 +120,15 @@ async function handleCreate(
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}] Created (about:blank)`);
 }
 
-async function handleListTabs(pool: BrowserProvider): Promise<VerbResult> {
-  const browsers = pool.getAllSessions();
-  if (browsers.size === 0) return okJson([]);
-  const items: BrowserTabSummary[] = [...browsers.entries()].map(([bid, s]) => ({
+async function handleListTabs(
+  pool: BrowserProvider,
+  _browserId: string,
+  _p: Payload,
+  scope: TabScope,
+): Promise<VerbResult> {
+  const browsers = [...pool.getAllSessions()].filter(([bid]) => scope.owns(bid));
+  if (browsers.length === 0) return okJson([]);
+  const items: BrowserTabSummary[] = browsers.map(([bid, s]) => ({
     id: bid,
     url: s.currentUrl,
     title: s.currentTitle || '(no title)',
@@ -852,6 +858,7 @@ type BrowserRunner = (
   pool: BrowserProvider,
   browserId: string,
   body: Payload,
+  scope: TabScope,
 ) => Promise<VerbResult>;
 
 /**
@@ -926,7 +933,8 @@ export function isMutatingAction(action: string): boolean {
 /**
  * Shared action dispatcher — what both browser doors run. The caller passes the provider
  * instance (headless for `/api/browser`, the user's real Chrome for
- * `yaar://session/browser`) plus the parsed action payload. Consent / self-target guards
+ * `yaar://session/browser`) plus the parsed action payload, and the calling app's tab
+ * scope (`lib/browser/tab-scope.ts`; unscoped for the agent door). Consent / self-target guards
  * and the "driving" indicator are applied by the caller around this (see
  * `runGuardedBrowserAction`).
  */
@@ -935,10 +943,11 @@ export async function runBrowserAction(
   action: string,
   browserId: string,
   body: Payload,
+  scope: TabScope = tabScopeFor({}),
 ): Promise<VerbResult> {
   if (!isBrowserAction(action)) return error(`Unknown action "${action}".`);
   const run: BrowserRunner = BROWSER_ACTION_TABLE[action].run;
-  return run(pool, browserId, body);
+  return run(pool, browserId, body, scope);
 }
 
 /**
@@ -976,6 +985,29 @@ export async function sessionForAction(
   const live = pool.getSession(browserId);
   if (live || !isBrowserAction(action) || DOES_NOT_ADDRESS_A_TAB.has(action)) return live;
   return (await pool.reviveSession(browserId)) ?? undefined;
+}
+
+/**
+ * Close every sandbox tab an app owns, suspended ones included, and the Browser windows
+ * showing them. For a Dev Tools preview whose last window just closed: what it opened was
+ * scratch, and nothing else can address it to clean it up (issue #187, item 4).
+ */
+export async function closeAppTabs(
+  pool: BrowserProvider,
+  appId: string,
+  sessionId: string,
+): Promise<number> {
+  const infos = await pool.listSessionInfo();
+  const ids = ownedBy(
+    appId,
+    infos.map((i) => i.id),
+  );
+  for (const id of ids) {
+    const windowId = pool.getSession(id)?.windowId;
+    if (windowId) actionEmitter.emitAction({ type: 'window.close', windowId }, sessionId);
+    await pool.closeSession(id);
+  }
+  return ids.length;
 }
 
 /**

@@ -70,6 +70,11 @@ export interface WsData {
   companion?: boolean;
   /** `kind: 'screencast'` only — which browser session's pixels this socket carries. */
   browserId?: string;
+  /**
+   * `kind: 'screencast'` only — the app whose tab scope the socket runs in, so an `attach`
+   * can only reach that app's tabs (`lib/browser/tab-scope.ts`). Absent: unscoped.
+   */
+  tabScope?: { appId?: string; systemApp?: boolean };
   /** `kind: 'screencast'` only — JPEG quality and long-edge cap for this stream. */
   screencastQuality?: number;
   screencastMaxWidth?: number;

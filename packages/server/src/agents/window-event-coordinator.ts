@@ -16,6 +16,9 @@ import { frameAppEvent, type WindowChangeEvent } from './context-pool-policies/i
 import type { AppTaskProcessor } from './app-task-processor.js';
 import type { WindowEventPoolContext, Task } from './pool-types.js';
 import { createLogger } from '../observability/log.js';
+import { isPreviewAppId } from '@yaar/shared';
+import { getHeadlessBrowser } from '../lib/browser/index.js';
+import { closeAppTabs } from '../features/browser/actions.js';
 
 const log = createLogger('WindowEventCoordinator');
 
@@ -181,7 +184,29 @@ export class WindowEventCoordinator {
         log.error('tearing down app agent on window close failed', { appId, windowId, err });
       });
       if (lastWindow) this.disposePersonas(appId, monitorId!);
+      if (
+        isPreviewAppId(appId) &&
+        !this.ctx.windowState.listWindows().some((w) => w.appId === appId)
+      ) {
+        this.closePreviewTabs(appId);
+      }
     }
+  }
+
+  /**
+   * A Dev Tools preview has no window left anywhere: close the sandbox tabs it opened.
+   *
+   * Its tabs live in its own scope (`lib/browser/tab-scope.ts`), so nothing else can reach
+   * them, and the next preview mount is a fresh start anyway. Left behind they were
+   * invisible tabs no one owned, holding slots of the pool's tab cap (issue #187, item 4).
+   * Every monitor, not just this one: the browser pool is not per-monitor.
+   */
+  private closePreviewTabs(appId: string): void {
+    closeAppTabs(getHeadlessBrowser(), appId, this.ctx.sessionId)
+      .then((closed) => {
+        if (closed > 0) log.info('closed preview browser tabs', { appId, closed });
+      })
+      .catch((err: unknown) => log.warn('closing preview browser tabs failed', { appId, err }));
   }
 
   /**

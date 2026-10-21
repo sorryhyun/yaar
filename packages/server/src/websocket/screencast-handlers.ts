@@ -37,6 +37,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { WsData } from './server.js';
 import { getHeadlessBrowser } from '../lib/browser/index.js';
+import { tabScopeFor } from '../lib/browser/tab-scope.js';
 import type {
   BrowserSession,
   ScreencastFrame,
@@ -571,7 +572,7 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
     // — input, IME, viewport — follows `state.session`, so nothing else changes.
     case 'attach': {
       if (typeof msg.browserId === 'string' && msg.browserId) {
-        switchTab(ws, state, msg.browserId);
+        switchTab(ws, state, tabScopeFor(ws.data.tabScope ?? {}).toPool(msg.browserId));
       }
       return;
     }

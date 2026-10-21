@@ -2,16 +2,22 @@
 
 YAAR can be launched and driven by an external agent — including from inside another Claude Code
 session. The Claude provider spawns the `claude` CLI as a subprocess; the harness scrubs
-nested-Claude env vars before the spawn (`buildClaudeEnv` / `PARENT_HARNESS_ENV_VARS` in
+nested-Claude env vars before the spawn (`buildClaudeEnv` in
 `packages/server/src/config/providers/claude.ts`, wired in via
 `packages/server/src/providers/claude/sdk-options.ts`), so it works inside cloud sandboxes
-without IPC clashes.
+without IPC clashes. Inside a parent harness every `CLAUDE*`/`CCR_*` var is dropped except auth
+and API routing (`CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_USE_*`, …);
+`ANTHROPIC_*` and proxy vars pass through.
+
+If the server log says `no Chrome/Chromium found` at startup, the Browser app, `yaar-web` and
+screenshots will fail: set `CHROME_PATH`.
 
 ## Launch (cloud / headless)
 
 ```bash
 export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...   # required if not already logged in
 export CLAUDE_CODE_PATH=/path/to/claude           # optional; only if not in ~/.local/bin or PATH
+export CHROME_PATH=/path/to/chrome                # optional; system Chrome, Playwright's Chromium and PATH are found
 make claude-dev                                   # PROVIDER=claude, MCP_SKIP_AUTH=1, port 8000
 # server is ready when you see "YAAR server running at http://..."
 ```

@@ -283,9 +283,9 @@ export class AppTaskProcessor {
       // Capture the app-agent's response text for relaying to the monitor
       let appResponseText = '';
       // How many `direct_message`s this agent had sent the asking monitor before the turn;
-      // a higher count after it means the turn answered the monitor itself.
+      // a higher count after it means the turn messaged the monitor itself.
       const messagedBefore = task.monitorId
-        ? (agent.monitorMessageCount?.get(task.monitorId) ?? 0)
+        ? (agent.monitorMessages?.get(task.monitorId)?.count ?? 0)
         : 0;
 
       const turnOptions = turnOptionsFor(profile, this.ctx.providerType ?? '');
@@ -323,17 +323,22 @@ export class AppTaskProcessor {
           // the user just asked to stop.
           //
           // Nor when the agent already answered that monitor itself, with `direct_message`
-          // during this turn. That message woke the monitor (a relay interrupts and
-          // queues), so the hook was a second delivery of the same reply and a second
+          // as the turn's last tool call. That message woke the monitor (a relay interrupts
+          // and queues), so the hook was a second delivery of the same reply and a second
           // interrupt of whatever the monitor had started on the first (issue #182, gap 11).
+          // A message followed by more tool calls was a question or a progress note sent
+          // mid-work, not the answer: skipping the hook then dropped the turn's final
+          // report, and the monitor waited on a reply that never came (issue #187, item 1).
+          const mark = task.monitorId ? agent.monitorMessages?.get(task.monitorId) : undefined;
           const repliedDirectly =
-            !!task.monitorId &&
-            (agent.monitorMessageCount?.get(task.monitorId) ?? 0) > messagedBefore;
+            !!mark &&
+            mark.count > messagedBefore &&
+            agent.session.toolCallCount() <= mark.toolCallsAt;
           const hookRequested =
             task.hook === 'response' && !!task.monitorId && !agent.session.wasInterrupted();
           const hookWillFire = hookRequested && !repliedDirectly;
           if (hookRequested && repliedDirectly) {
-            log.info('response hook skipped — the agent already messaged the monitor', {
+            log.info('response hook skipped — the agent ended its turn messaging the monitor', {
               messageId: task.messageId,
               appId,
               monitorId: task.monitorId,

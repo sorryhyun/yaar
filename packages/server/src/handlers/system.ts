@@ -193,14 +193,21 @@ function registerBrowserHandlers(registry: ResourceRegistry): void {
       'an idle-swept tab, a restarted server — reviving it restores the page and its ' +
       'logins), or "crashed" when the tab died and could not be brought back. Tabs YAAR ' +
       'keeps for itself (the companion desktop, remote ML compute) are `pinned: true`; ' +
-      'they are counted in `internalSessions` and do not take any of the `maxSessions` slots.',
+      'they are counted in `internalSessions` and do not take any of the `maxSessions` slots. ' +
+      '`chromeFound: false` means there is no browser binary at all: every session will fail ' +
+      'until CHROME_PATH names one.',
     verbs: ['describe', 'list', 'read'],
 
     async list(): Promise<VerbResult> {
       const provider = getHeadlessBrowser();
       const sessions = await provider.listSessionInfo();
       const stats = provider.getStats();
+      const chromeFound = await provider.isAvailable();
       return okJson({
+        chromeFound,
+        ...(chromeFound
+          ? {}
+          : { hint: 'No Chrome/Chromium binary was found. Set CHROME_PATH and restart YAAR.' }),
         chromeRunning: stats.chromeRunning,
         maxSessions: stats.maxSessions,
         liveSessions: sessions.filter((s) => s.state === 'live' && !s.pinned).length,

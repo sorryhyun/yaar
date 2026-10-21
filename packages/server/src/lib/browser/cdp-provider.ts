@@ -37,6 +37,7 @@ import {
   isEphemeralBrowserProfile,
 } from '../../config.js';
 import { createLogger } from '../../observability/log.js';
+import { popupBrowserId } from './tab-scope.js';
 
 const log = createLogger('browser');
 
@@ -631,7 +632,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     // is driving the page live.
     const openerBrowserId = targetInfo.openerId ? this.ownerOf(targetInfo.openerId) : undefined;
 
-    const browserId = String(this.nextId++);
+    // In the opener's app scope, so the app whose page opened it can address it.
+    const browserId = popupBrowserId(openerBrowserId, this.nextId++);
     const rec = this.claim(browserId, targetInfo.targetId);
     let tracked = false;
 

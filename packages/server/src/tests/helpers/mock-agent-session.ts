@@ -44,6 +44,7 @@ export interface MockAgentSessionOverrides {
   cleanup?: () => Promise<void>;
   wasInterrupted?: () => boolean;
   steer?: () => Promise<boolean>;
+  toolCallCount?: () => number;
   /** `agents/agent-context.js`'s `getMonitorId`, not the class's own state. */
   getMonitorId?: () => string | undefined;
 }
@@ -66,6 +67,7 @@ export function installMockAgentSession(overrides: MockAgentSessionOverrides = {
       }));
       wasInterrupted = mock(overrides.wasInterrupted ?? (() => false));
       steer = mock(overrides.steer ?? (async () => false));
+      toolCallCount = mock(overrides.toolCallCount ?? (() => 0));
       prewarm = mock(async () => {});
     }
     return {

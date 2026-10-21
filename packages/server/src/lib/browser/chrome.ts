@@ -6,7 +6,8 @@
  * works anywhere Chrome is installed (including Windows .exe builds).
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
+import { homedir } from 'os';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { basename, dirname, join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
@@ -93,15 +94,68 @@ const CHROME_PATHS: Record<string, string[]> = {
 
 const WHICH_CANDIDATES = ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium'];
 
+/** Where a Playwright install keeps a Chromium build's binary, below `chromium-<rev>/`. */
+const PLAYWRIGHT_CHROME_BINARIES: Record<string, string[]> = {
+  linux: ['chrome-linux/chrome', 'chrome-linux64/chrome'],
+  win32: ['chrome-win/chrome.exe', 'chrome-win64/chrome.exe'],
+  darwin: [
+    'chrome-mac/Chromium.app/Contents/MacOS/Chromium',
+    'chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium',
+  ],
+};
+
+/** Playwright's browser cache: `$PLAYWRIGHT_BROWSERS_PATH`, else its per-platform default. */
+function playwrightCacheDirs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const dirs: string[] = [];
+  const configured = env.PLAYWRIGHT_BROWSERS_PATH;
+  // "0" means "next to the playwright package", which a server has no way to find.
+  if (configured && configured !== '0') dirs.push(configured);
+  if (process.platform === 'win32') {
+    if (env.LOCALAPPDATA) dirs.push(join(env.LOCALAPPDATA, 'ms-playwright'));
+  } else if (process.platform === 'darwin') {
+    dirs.push(join(homedir(), 'Library', 'Caches', 'ms-playwright'));
+  } else {
+    dirs.push(join(env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'ms-playwright'));
+  }
+  return dirs;
+}
+
+/**
+ * Chromium builds a Playwright install left behind, newest revision first.
+ *
+ * Cloud sandboxes and CI images ship Chromium this way and nothing else — no system
+ * Chrome, nothing on PATH — so without this every browser feature was "deployed but
+ * dead" there, discovered only on the first call (issue #187, item 3). Only full
+ * `chromium-<rev>` builds: `chromium_headless_shell-<rev>` cannot show a live tab.
+ */
+export function playwrightChromeCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+  const binaries = PLAYWRIGHT_CHROME_BINARIES[process.platform] ?? [];
+  const found: string[] = [];
+  for (const dir of playwrightCacheDirs(env)) {
+    let builds: string[];
+    try {
+      builds = readdirSync(dir).filter((name) => /^chromium-\d+$/.test(name));
+    } catch {
+      continue;
+    }
+    builds.sort((a, b) => Number(b.slice(9)) - Number(a.slice(9)));
+    for (const build of builds) {
+      for (const bin of binaries) found.push(join(dir, build, bin));
+    }
+  }
+  return found;
+}
+
 /**
  * Find a Chrome or Edge binary on the system.
- * Checks CHROME_PATH env var first, then platform-specific known paths.
+ * Checks CHROME_PATH env var first, then platform-specific known paths, then a
+ * Playwright install's Chromium, then PATH.
  */
 export async function findChrome(): Promise<string | null> {
   const envPath = process.env.CHROME_PATH;
   if (envPath && existsSync(envPath)) return envPath;
 
-  const candidates = CHROME_PATHS[process.platform] || [];
+  const candidates = [...(CHROME_PATHS[process.platform] || []), ...playwrightChromeCandidates()];
   for (const p of candidates) {
     if (p && existsSync(p)) return p;
   }

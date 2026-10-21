@@ -33,12 +33,14 @@ export interface PooledAgent {
   lastUsed: number;
   currentRole: string | null; // 'monitor-{messageId}' or 'app-{id}' when active
   /**
-   * How many `direct_message`s this agent has sent each monitor, by monitor id. The app
-   * tier compares it across a turn to tell whether the turn already answered its monitor
-   * itself, so its response hook does not deliver the same reply a second time
-   * (`AppTaskProcessor`). A count rather than a timestamp so that nothing can tie.
+   * The `direct_message`s this agent has sent each monitor, by monitor id: how many, and
+   * the session's {@link AgentSession.toolCallCount} when the latest one was sent. The app
+   * tier reads it across a turn to tell whether the turn's *last* tool call answered its
+   * monitor, so its response hook does not deliver the same reply a second time — while a
+   * question or progress note sent mid-work leaves the hook to carry the final answer
+   * (`AppTaskProcessor`). Counts rather than timestamps so that nothing can tie.
    */
-  monitorMessageCount?: Map<string, number>;
+  monitorMessages?: Map<string, { count: number; toolCallsAt: number }>;
 }
 
 /**

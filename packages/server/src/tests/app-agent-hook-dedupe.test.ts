@@ -1,12 +1,17 @@
 /**
- * An app agent's reply reaches the monitor once, not twice (issue #182, gap 11).
+ * An app agent's reply reaches the monitor once, not twice (issue #182, gap 11) — and not
+ * zero times (issue #187, item 1).
  *
  * The monitor asked an app agent something with `hook: "response"`. The app agent answered
- * with `direct_message` to the monitor mid-turn — which wakes the monitor (a relay
- * interrupts and queues) — and then the hook delivered the turn's final text again two
- * seconds later, interrupting the turn the first delivery had started. A turn that already
+ * with `direct_message` to the monitor — which wakes the monitor (a relay interrupts and
+ * queues) — and then the hook delivered the turn's final text again two seconds later,
+ * interrupting the turn the first delivery had started. A turn whose last tool call
  * messaged the monitor that asked now fires no hook, and leaves no copy of its reply on
  * the monitor's timeline either.
+ *
+ * But a message sent mid-work (a question, a progress note) is not the answer: a turn that
+ * kept calling tools after it still owes the monitor its final report, and the hook carries
+ * it. Skipping it there left the monitor waiting on a reply that never came.
  */
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
@@ -65,8 +70,11 @@ const REPLY = 'pins reviewed: 3 approved, 1 rejected';
 
 /** What the app agent's next turn does besides answering: message the monitor, or not. */
 let duringTurn: () => void = () => {};
+/** The agent's work-tool-call count, as `AgentSession.toolCallCount` reports it. */
+let toolCalls = 0;
 
 installMockAgentSession({
+  toolCallCount: () => toolCalls,
   handleMessage: async (_prompt, opts) => {
     duringTurn();
     const { onContextMessage } = opts as {
@@ -117,6 +125,7 @@ describe('a hooked app agent turn that already messaged its monitor', () => {
       hookResponses.push(text);
     };
     duringTurn = () => {};
+    toolCalls = 0;
   });
 
   afterEach(async () => {
@@ -148,6 +157,28 @@ describe('a hooked app agent turn that already messaged its monitor', () => {
 
     expect(hookResponses).toEqual([]);
     expect(pool.timelineFor(MONITOR).drainAndFormat()).not.toContain(REPLY);
+  });
+
+  it('still fires the hook when the turn kept working after messaging the monitor', async () => {
+    duringTurn = () => {
+      toolCalls++; // starts the work
+      appAgentMessagesMonitor(); // asks the monitor a question
+      toolCalls += 3; // and carries on to the deploy
+    };
+    await ask('m1', 'response');
+
+    expect(hookResponses).toEqual([REPLY]);
+  });
+
+  it('fires no hook when the last of several messages ends the turn', async () => {
+    duringTurn = () => {
+      appAgentMessagesMonitor(); // a progress note
+      toolCalls += 2;
+      appAgentMessagesMonitor(); // the answer
+    };
+    await ask('m1', 'response');
+
+    expect(hookResponses).toEqual([]);
   });
 
   it('still fires the hook when the turn did not message the monitor', async () => {

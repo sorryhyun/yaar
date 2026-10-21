@@ -52,6 +52,14 @@ function isDeadlineError(err: unknown): boolean {
 }
 
 /**
+ * Whether a `tool_use` frame is the agent messaging another agent: the Claude name
+ * (`mcp__messaging__direct_message`) or Codex's `server:tool` form.
+ */
+function isMonitorMessageTool(toolName: string | undefined): boolean {
+  return toolName === 'mcp__messaging__direct_message' || toolName === 'messaging:direct_message';
+}
+
+/**
  * Options for handling a message with dynamic role assignment.
  */
 export interface HandleMessageOptions {
@@ -114,6 +122,14 @@ export class AgentSession {
    * post-turn side effects (response hooks, relays) check this instead.
    */
   private interrupted = false;
+  /**
+   * Tool calls this agent has started, over its lifetime, not counting its own messages to
+   * a monitor. The app tier reads it on either side of a `direct_message` to tell a reply
+   * that ended the turn from one sent mid-work (`AppTaskProcessor`, `repliedDirectly`).
+   * The message itself is left out because its stream frame and its handler race: the
+   * handler can run before this loop has seen the frame that announced it.
+   */
+  private workToolCalls = 0;
   /** True while the running turn is one claude.ai started (`HandleMessageOptions.external`). */
   private followingExternal = false;
   /**
@@ -277,6 +293,11 @@ export class AgentSession {
    */
   hasConversation(): boolean {
     return this.hasProcessedFirstUserTurn && this.sessionId !== null;
+  }
+
+  /** See {@link workToolCalls}. */
+  toolCallCount(): number {
+    return this.workToolCalls;
   }
 
   /** True if the most recent turn was interrupted (stays true through the post-turn callbacks). */
@@ -564,6 +585,9 @@ export class AgentSession {
             options.external?.messages ?? this.provider!.query(fullContent, transportOptions);
           for await (const message of messages) {
             if (!this.running) break;
+            if (message.type === 'tool_use' && !isMonitorMessageTool(message.toolName)) {
+              this.workToolCalls++;
+            }
             await turnMapper.map(message);
           }
         },

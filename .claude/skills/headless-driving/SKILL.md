@@ -14,6 +14,7 @@ plumbing.
 ```bash
 export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...   # required if not already logged in
 export CLAUDE_CODE_PATH=/path/to/claude           # optional, only if claude isn't in ~/.local/bin or PATH
+export CHROME_PATH=/path/to/chrome                # optional; system Chrome, Playwright's Chromium and PATH are found
 make claude-dev                                   # PROVIDER=claude, MCP_SKIP_AUTH=1, port 8000
 # ready when you see "YAAR server running at http://..."
 ```

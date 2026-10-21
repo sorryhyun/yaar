@@ -62,6 +62,7 @@ import {
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { extractIframeToken, requireBundledApp } from './access.js';
+import { tabScopeFor } from '../lib/browser/tab-scope.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
 import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from './routes/auth.js';
 import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from './routes/bridge.js';
@@ -200,7 +201,8 @@ function createFetchHandlerInner() {
         connectionId: generateConnectionId(),
         sessionId: auth.sessionId,
         monitorId: auth.monitorId ?? null,
-        browserId: decodeURIComponent(screencastMatch[1]),
+        browserId: tabScopeFor(auth).toPool(decodeURIComponent(screencastMatch[1])),
+        tabScope: { appId: auth.appId, systemApp: auth.systemApp },
         ...clampedStreamParams(url),
       };
       const success = server.upgrade(req, { data });

@@ -241,6 +241,7 @@ export interface SessionPoolContext extends TurnContext {
  * state, so it never assembles a prompt or sends a turn event.
  */
 export interface WindowEventPoolContext extends TimelineAccess {
+  readonly sessionId: SessionId;
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
