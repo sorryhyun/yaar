@@ -2,6 +2,7 @@ export {};
 import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import {
   activeProject,
+  requireProject,
   bundleStatus,
   compileErrors,
   diagnostics,
@@ -448,8 +449,7 @@ export const workerCommands = {
     replay: 'never',
     run: (p) =>
       serializeAccept(async () => {
-        if (!activeProject())
-          throw new AppCommandError('No active project. Open or create one first.');
+        requireProject(AppCommandError);
         const many = Array.isArray(p.id);
         const ids = (many ? (p.id as unknown[]) : [p.id]).map(Number);
         const tokens = (Array.isArray(p.token) ? (p.token as unknown[]) : [p.token]).map((t) =>

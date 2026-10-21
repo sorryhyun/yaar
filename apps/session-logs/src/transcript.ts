@@ -1,7 +1,7 @@
 import html from '@bundled/solid-js/html';
 import { createMemo, For } from '@bundled/solid-js';
 import type { ParsedMessage } from './types';
-import { state, setState } from './store';
+import { state, setState, currentScope } from './store';
 import { inScope } from './select';
 import { formatTime } from './utils';
 import {
@@ -223,10 +223,7 @@ export const MessageCard = (m: ParsedMessage) => {
  */
 const turns = createMemo((): ParsedMessage[] => {
   if (!Array.isArray(state.messages)) return [];
-  const scope = {
-    monitor: state.selectedMonitor === 'all' ? null : state.selectedMonitor,
-    conversation: state.selectedConversation,
-  };
+  const scope = currentScope();
   const restored = state.showRestored;
   return state.messages.filter((m) => m && inScope(m, scope, restored));
 });

@@ -4,10 +4,10 @@ import { setStatusText } from '../core';
 import {
   base64ByteLength,
   countLines,
-  groupByFile,
+  protocolMap,
   searchSources,
   sliceLines,
-  type ProtocolSourceLocation,
+  type ProtocolSources,
   type SourceFile,
 } from '../lib';
 import { writeBinaryCopy, writeFile } from './files';
@@ -17,12 +17,20 @@ import { writeBinaryCopy, writeFile } from './files';
 // one file of another app, and the session logs show it used that way (clone, read,
 // deleteProject). This answers from the same server verb and writes nothing.
 
-interface ClonePayload {
+/** What `invoke('yaar://apps/<id>', { action: 'clone' })` answers with. */
+export interface ClonePayload {
+  // `encoding` is set for files whose bytes are not valid UTF-8 (images, fonts,
+  // wasm). Writing those with the default utf-8 encoding re-encodes the base64
+  // payload as text and corrupts the asset — see cloneAppSource.
   files: SourceFile[];
-  protocolSources?: {
-    commands?: Record<string, ProtocolSourceLocation>;
-    state?: Record<string, ProtocolSourceLocation>;
-  };
+  /** The server's display triple (name, icon, description). */
+  meta?: Record<string, unknown>;
+  protocolSources?: ProtocolSources;
+}
+
+/** One fresh clone payload. `cloneApp` writes it into a project, so it is never cached. */
+export function fetchClonePayload(appId: string): Promise<ClonePayload> {
+  return invoke<ClonePayload>('yaar://apps/' + appId, { action: 'clone' });
 }
 
 /**
@@ -36,7 +44,7 @@ const cache = new Map<string, { at: number; payload: ClonePayload }>();
 async function fetchSource(appId: string): Promise<ClonePayload> {
   const hit = cache.get(appId);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.payload;
-  const result = await invoke<ClonePayload>(`yaar://apps/${appId}`, { action: 'clone' });
+  const result = await fetchClonePayload(appId);
   const payload: ClonePayload = {
     files: result?.files ?? [],
     protocolSources: result?.protocolSources,
@@ -148,13 +156,6 @@ export async function readAppSource(q: AppSourceQuery): Promise<Record<string, u
             `"yaar://apps/${q.appId}/<path>" copies one into the project byte for byte.`,
         }
       : {}),
-    ...(protocolSources
-      ? {
-          protocol: {
-            commands: groupByFile(protocolSources.commands ?? {}),
-            state: groupByFile(protocolSources.state ?? {}),
-          },
-        }
-      : {}),
+    ...(protocolSources ? { protocol: protocolMap(protocolSources) } : {}),
   };
 }

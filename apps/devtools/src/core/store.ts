@@ -21,6 +21,21 @@ import type {
 // rule (ui -> services -> lib -> core) enforceable by grep.
 
 export const [activeProject, setActiveProject] = createSignal<ProjectMeta | null>(null);
+
+/** The refusal every project-scoped call gives when nothing is open. */
+export const NO_PROJECT_REFUSAL = 'No active project. Open or create one first.';
+
+/**
+ * The active project, or a throw of `NO_PROJECT_REFUSAL`. `ErrorType` is the class each
+ * caller has always thrown — a plain `Error` from a service, an `AppCommandError` where
+ * the refusal is the command's own.
+ */
+export function requireProject(ErrorType: new (message: string) => Error = Error): ProjectMeta {
+  const proj = activeProject();
+  if (!proj) throw new ErrorType(NO_PROJECT_REFUSAL);
+  return proj;
+}
+
 export const [projects, setProjects] = createSignal<ProjectMeta[]>([]);
 export const [files, setFiles] = createSignal<FileEntry[]>([]);
 export const [openFilePath, setOpenFilePath] = createSignal<string | null>(null);

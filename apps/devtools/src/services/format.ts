@@ -1,7 +1,7 @@
 export {};
 import { appStorage, errMsg } from '@bundled/yaar';
 import { format as devFormat } from '@bundled/yaar-dev';
-import { activeProject, fileChanges, files, setStatusText } from '../core';
+import { requireProject, fileChanges, files, setStatusText } from '../core';
 import { projectPath, isBinaryPath } from '../lib/paths';
 import { applyHunksWithin, changedLineRanges, formatLineRanges, diffStats } from '../lib/diff';
 import { refreshFiles, writeFile } from './files';
@@ -79,8 +79,7 @@ export async function formatFiles(
   paths?: string[],
   { onlyChanged = false }: { onlyChanged?: boolean } = {},
 ): Promise<FormatOutcome> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
 
   if (files().length === 0) await refreshFiles(proj.id);
 

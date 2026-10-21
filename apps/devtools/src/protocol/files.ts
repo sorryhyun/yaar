@@ -1,5 +1,5 @@
 import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
-import { activeProject } from '../core';
+import { activeProject, requireProject } from '../core';
 import {
   appSourceRef,
   assetImportLine,
@@ -97,6 +97,127 @@ function projectRelative(raw: string, role: 'Source' | 'Destination' = 'Destinat
 
 const projectDestination = (raw: string): string => projectRelative(raw);
 
+/** A service failure as the agent reads it; an `AppCommandError` already is one. */
+function asCommandError(err: unknown): AppCommandError {
+  return err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
+}
+
+// copyFile's four doors, one function each. `run` only picks the door.
+
+/**
+ * `recompress` is refused rather than ignored outside a storage import — silently
+ * dropping it would report a WebP conversion that did not happen. `why` says what
+ * the door does instead.
+ */
+function rejectRecompress(recompress: unknown, why: string): void {
+  if (recompress !== undefined)
+    throw new AppCommandError(`\`recompress\` applies only to a yaar://storage/... import; ${why}`);
+}
+
+/** An import's result: the import line when `to` is a src/ asset, and the inlining warning. */
+function importResult<T extends object>(result: T, to: string, bytes: number) {
+  const importLine = assetImportLine(to);
+  return {
+    ...result,
+    ...(importLine ? { importLine } : {}),
+    ...(bytes > SIZE_WARN_BYTES ? { warning: inlineSizeWarning(to, bytes) } : {}),
+  };
+}
+
+/**
+ * Another app's source is read-only and arrives in the clone payload, so it can only
+ * go into this project, and only as the bytes the app ships.
+ */
+async function importFromApp(
+  appRef: { appId: string; path: string },
+  toRef: string | undefined,
+  recompress: unknown,
+) {
+  if (toRef !== undefined && isStorageRef(toRef))
+    throw new AppCommandError(
+      "An installed app's file can only be copied into the project. Copy it here " +
+        'first, then export that copy to storage.',
+    );
+  rejectRecompress(recompress, "an app's file is copied byte for byte.");
+  const to = projectDestination(toRef ?? defaultAssetPath(appRef.path));
+  try {
+    const copied = await copyFromApp(appRef.appId, appRef.path, to);
+    return importResult({ from: copied.from, to, bytes: copied.bytes }, to, copied.bytes);
+  } catch (err) {
+    throw asCommandError(err);
+  }
+}
+
+/**
+ * The export door: a project file out to storage, so another app can open it.
+ * Refused when `from` is itself a storage URI — that is a storage-to-storage copy,
+ * which the storage app does directly and this project has no part in.
+ */
+async function exportFromProject(from: string, toRef: string, recompress: unknown) {
+  if (isStorageRef(from))
+    throw new AppCommandError(
+      'Both `from` and `to` name storage. A storage-to-storage copy does not involve ' +
+        'the project — invoke it on yaar://storage/... directly.',
+    );
+  rejectRecompress(recompress, 'an export is byte for byte.');
+  const destination = resolveStorageSource(toRef);
+  if (!destination) throw new AppCommandError('`to` names the storage root, not a file.');
+  try {
+    const exported = await exportToStorage(projectRelative(from, 'Source'), destination);
+    return { from, ...exported };
+  } catch (err) {
+    throw new AppCommandError(errMsg(err));
+  }
+}
+
+/** A copy within the project: unchanged behaviour, and deliberately never re-encoded. */
+async function copyWithinProject(from: string, toRef: string | undefined, recompress: unknown) {
+  if (toRef === undefined)
+    throw new AppCommandError(
+      '`to` is required when copying within the project. Only a yaar://storage/... ' +
+        'or yaar://apps/... source defaults to src/assets/.',
+    );
+  rejectRecompress(recompress, 'a copy within the project is byte for byte.');
+  const to = projectDestination(toRef);
+  if (from === to) throw new AppCommandError('Source and destination are the same path');
+  try {
+    const { bytes } = await copyFile(from, to);
+    return { from, to, bytes };
+  } catch (err) {
+    throw new AppCommandError(errMsg(err));
+  }
+}
+
+/** The import door: a storage file into the project, re-encoded as `planAssetImport` decides. */
+async function importFromStorage(from: string, toRef: string | undefined, recompress: unknown) {
+  const requested = toRef !== undefined;
+  try {
+    const sourcePath = resolveStorageSource(from);
+    const result = await copyFromStorage(
+      sourcePath,
+      projectDestination(requested ? toRef : defaultAssetPath(sourcePath)),
+      {
+        ...(recompress !== undefined ? { recompress: Boolean(recompress) } : {}),
+        // An explicit `to` is honoured as written, extension included; only a
+        // defaulted path follows the bytes to .webp.
+        renameToWebP: !requested,
+      },
+    );
+    return importResult(
+      {
+        from: `yaar://storage/${sourcePath}`,
+        to: result.path,
+        bytes: result.bytes,
+        recompressed: result.recompressed,
+      },
+      result.path,
+      result.bytes,
+    );
+  } catch (err) {
+    throw asCommandError(err);
+  }
+}
+
 const textOrLines = (description: string) => ({
   oneOf: [
     { type: 'string' },
@@ -147,8 +268,7 @@ export const fileCommands = {
     },
     run: async (p) => {
       const rawPaths = Array.isArray(p.path) ? p.path.map(String) : [String(p.path)];
-      if (!activeProject())
-        throw new AppCommandError('No active project. Open or create one first.');
+      requireProject(AppCommandError);
       let paths: string[];
       try {
         paths = rawPaths.map(resolveProjectPath);
@@ -356,7 +476,7 @@ export const fileCommands = {
       try {
         return await editFile(String(p.path), edits);
       } catch (err) {
-        throw err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
+        throw asCommandError(err);
       }
     },
   }),
@@ -428,118 +548,15 @@ export const fileCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      if (!activeProject())
-        throw new AppCommandError('No active project. Open or create one first.');
+      requireProject(AppCommandError);
       const from = String(p.from);
       const toRef = p.to === undefined ? undefined : String(p.to);
-
-      // Another app's source is read-only and arrives in the clone payload, so it can
-      // only go into this project, and only as the bytes the app ships.
       const appRef = appSourceRef(from);
-      if (appRef) {
-        if (toRef !== undefined && isStorageRef(toRef))
-          throw new AppCommandError(
-            "An installed app's file can only be copied into the project. Copy it here " +
-              'first, then export that copy to storage.',
-          );
-        if (p.recompress !== undefined)
-          throw new AppCommandError(
-            "`recompress` applies only to a yaar://storage/... import; an app's file is " +
-              'copied byte for byte.',
-          );
-        const to = projectDestination(toRef ?? defaultAssetPath(appRef.path));
-        try {
-          const copied = await copyFromApp(appRef.appId, appRef.path, to);
-          const importLine = assetImportLine(to);
-          return {
-            from: copied.from,
-            to,
-            bytes: copied.bytes,
-            ...(importLine ? { importLine } : {}),
-            ...(copied.bytes > SIZE_WARN_BYTES
-              ? { warning: inlineSizeWarning(to, copied.bytes) }
-              : {}),
-          };
-        } catch (err) {
-          throw err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
-        }
-      }
-
-      // The export door: a project file out to storage, so another app can open it.
-      // Refused when `from` is itself a storage URI — that is a storage-to-storage
-      // copy, which the storage app does directly and this project has no part in.
-      if (toRef !== undefined && isStorageRef(toRef)) {
-        if (isStorageRef(from))
-          throw new AppCommandError(
-            'Both `from` and `to` name storage. A storage-to-storage copy does not involve ' +
-              'the project — invoke it on yaar://storage/... directly.',
-          );
-        if (p.recompress !== undefined)
-          throw new AppCommandError(
-            '`recompress` applies only to a yaar://storage/... import; an export is byte ' +
-              'for byte.',
-          );
-        const destination = resolveStorageSource(toRef);
-        if (!destination) throw new AppCommandError('`to` names the storage root, not a file.');
-        try {
-          const exported = await exportToStorage(projectRelative(from, 'Source'), destination);
-          return { from, ...exported };
-        } catch (err) {
-          throw new AppCommandError(errMsg(err));
-        }
-      }
-
-      // A copy within the project: unchanged behaviour, and deliberately never
-      // re-encoded. `recompress` is refused rather than ignored here — silently
-      // dropping it would report a WebP conversion that did not happen.
-      if (!isStorageRef(from)) {
-        if (toRef === undefined)
-          throw new AppCommandError(
-            '`to` is required when copying within the project. Only a yaar://storage/... ' +
-              'or yaar://apps/... source defaults to src/assets/.',
-          );
-        if (p.recompress !== undefined)
-          throw new AppCommandError(
-            '`recompress` applies only to a yaar://storage/... import; a copy within the ' +
-              'project is byte for byte.',
-          );
-        const to = projectDestination(toRef);
-        if (from === to) throw new AppCommandError('Source and destination are the same path');
-        try {
-          const { bytes } = await copyFile(from, to);
-          return { from, to, bytes };
-        } catch (err) {
-          throw new AppCommandError(errMsg(err));
-        }
-      }
-
-      const requested = toRef !== undefined;
-      try {
-        const sourcePath = resolveStorageSource(from);
-        const result = await copyFromStorage(
-          sourcePath,
-          projectDestination(requested ? toRef : defaultAssetPath(sourcePath)),
-          {
-            ...(p.recompress !== undefined ? { recompress: Boolean(p.recompress) } : {}),
-            // An explicit `to` is honoured as written, extension included; only a
-            // defaulted path follows the bytes to .webp.
-            renameToWebP: !requested,
-          },
-        );
-        const importLine = assetImportLine(result.path);
-        return {
-          from: `yaar://storage/${sourcePath}`,
-          to: result.path,
-          bytes: result.bytes,
-          recompressed: result.recompressed,
-          ...(importLine ? { importLine } : {}),
-          ...(result.bytes > SIZE_WARN_BYTES
-            ? { warning: inlineSizeWarning(result.path, result.bytes) }
-            : {}),
-        };
-      } catch (err) {
-        throw err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
-      }
+      if (appRef) return importFromApp(appRef, toRef, p.recompress);
+      if (toRef !== undefined && isStorageRef(toRef))
+        return exportFromProject(from, toRef, p.recompress);
+      if (!isStorageRef(from)) return copyWithinProject(from, toRef, p.recompress);
+      return importFromStorage(from, toRef, p.recompress);
     },
   }),
   listFiles: defineAppCommand({

@@ -13,7 +13,7 @@ import {
   type StreamFrame,
 } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import { activeProject, files } from '../core';
+import { activeProject, NO_PROJECT_REFUSAL, files } from '../core';
 import { applyEdits, type EditSpec } from '../lib/edits';
 import { filesNamedInTask } from '../lib/source-scan';
 import { PersonaHandleSchema, WorkerEditListSchema, WorkerFrameDataSchema } from '../schema';
@@ -1272,8 +1272,8 @@ export async function startWorkerTask(
   const content = task.trim();
   if (!content) return { error: 'Empty task.' };
   if (!activeProject()) {
-    appendEntry(workerSlots[0], 'error', 'No active project. Open or create one first.');
-    return { error: 'No active project. Open or create one first.' };
+    appendEntry(workerSlots[0], 'error', NO_PROJECT_REFUSAL);
+    return { error: NO_PROJECT_REFUSAL };
   }
   const picked = pickSlot(opts.worker);
   if (!picked.slot) return { error: picked.error };

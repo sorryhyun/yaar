@@ -2,7 +2,7 @@ import html from '@bundled/solid-js/html';
 import { onCleanup } from '@bundled/solid-js';
 import { downloadBlob } from '@bundled/yaar';
 import type { SessionSummary } from './types';
-import { state } from './store';
+import { state, currentScope } from './store';
 import { selectConversation, selectMonitor, requestMonitorBadge } from './api';
 import { ALL, conversationsOf, type Conversation } from './conversations';
 import { monitorLabel } from './monitor';
@@ -38,9 +38,10 @@ function rowObserver(): IntersectionObserver {
  */
 function inView(c: Conversation): boolean {
   if (state.selectedId !== c.sessionId) return false;
-  if (state.selectedMonitor === ALL || c.monitor === ALL) return true;
-  if (state.selectedMonitor !== c.monitor) return false;
-  return state.selectedConversation == null || state.selectedConversation === c.epoch;
+  const { monitor, conversation } = currentScope();
+  if (monitor == null || c.monitor === ALL) return true;
+  if (monitor !== c.monitor) return false;
+  return conversation == null || conversation === c.epoch;
 }
 
 /** One row of the session list: a monitor's conversation, or a whole log too old to split. */
@@ -105,14 +106,11 @@ export const ConversationItem = (c: Conversation, s: SessionSummary) => {
 
 /** The conversation the transcript is scoped to, when it is exactly one. */
 function scopedConversation(): Conversation | null {
-  if (state.selectedMonitor === ALL || state.selectedConversation == null) return null;
+  const { monitor, conversation } = currentScope();
+  if (monitor == null || conversation == null) return null;
   const s = state.sessions.find((x) => x.sessionId === state.selectedId);
   if (!s) return null;
-  return (
-    conversationsOf(s).find(
-      (c) => c.monitor === state.selectedMonitor && c.epoch === state.selectedConversation,
-    ) ?? null
-  );
+  return conversationsOf(s).find((c) => c.monitor === monitor && c.epoch === conversation) ?? null;
 }
 
 /** What the transcript holds, and the way back out to the whole log. */

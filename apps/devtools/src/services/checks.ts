@@ -1,7 +1,7 @@
 export {};
 import { errMsg } from '@bundled/yaar';
 import { bundledLibraries, checkPermissions } from '@bundled/yaar-dev';
-import { activeProject, files } from '../core';
+import { requireProject, files } from '../core';
 import { isGeneratedPath, projectPath } from '../lib/paths';
 import { collectVerbUses, type VerbUse } from '../lib/permission-uses';
 import { findStoragePolling, type StoragePoll } from '../lib/storage-polling';
@@ -89,25 +89,17 @@ async function permissionReport(
 }
 
 export async function checkProject(): Promise<ProjectCheck> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
   const entries = files().filter((f) => !f.isDirectory && !isGeneratedPath(f.path));
   const paths = entries.map((f) => f.path);
   const wanted = paths.filter((p) => SOURCE_EXT.test(p) || p.endsWith('.css') || p.endsWith('.md'));
   const texts = await Promise.all(
     wanted.map(async (path) => ({ path, text: (await readFileText(path)) ?? '' })),
   );
-  const [sdk, perms] = await Promise.all([
-    sdkClasses(),
-    permissionReport(
-      proj.id,
-      texts.filter((t) => SOURCE_EXT.test(t.path) && !TEST_FILE.test(t.path)),
-    ),
-  ]);
+  const shipped = texts.filter((t) => SOURCE_EXT.test(t.path) && !TEST_FILE.test(t.path));
+  const [sdk, perms] = await Promise.all([sdkClasses(), permissionReport(proj.id, shipped)]);
   const staleFileRefs = findStaleFileRefs(texts, paths);
-  const storagePolling = findStoragePolling(
-    texts.filter((t) => SOURCE_EXT.test(t.path) && !TEST_FILE.test(t.path)),
-  );
+  const storagePolling = findStoragePolling(shipped);
   const css = cssClassReport(
     texts.filter((t) => t.path.endsWith('.css')),
     texts.filter((t) => SOURCE_EXT.test(t.path)),

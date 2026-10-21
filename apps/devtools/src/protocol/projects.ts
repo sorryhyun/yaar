@@ -1,7 +1,7 @@
 import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import { activeProject, files } from '../core';
 import { createProject, openProject, deleteProject, cloneApp, readAppSource } from '../services';
-import { groupByFile, markdownOutline, summarizeFiles } from '../lib';
+import { markdownOutline, protocolMap, summarizeFiles } from '../lib';
 
 export const projectCommands = {
   createProject: defineAppCommand({
@@ -132,14 +132,7 @@ export const projectCommands = {
         ...(previous ? { previousProject: previous } : {}),
         size,
         tree,
-        ...(protocolSources
-          ? {
-              protocol: {
-                commands: groupByFile(protocolSources.commands),
-                state: groupByFile(protocolSources.state),
-              },
-            }
-          : {}),
+        ...(protocolSources ? { protocol: protocolMap(protocolSources) } : {}),
         agentsMd:
           agentsMd === null
             ? null

@@ -173,3 +173,24 @@ export function groupByFile(
   for (const [name, loc] of sorted) (out[loc.file] ??= {})[name] = loc.line;
   return out;
 }
+
+/**
+ * Where each command and state key is declared, as the server's clone verb reports it
+ * (`locateProtocolSources`). Both keys are read as optional: a map missing one is still
+ * a map of the other.
+ */
+export interface ProtocolSources {
+  commands?: Record<string, ProtocolSourceLocation>;
+  state?: Record<string, ProtocolSourceLocation>;
+}
+
+/** The `protocol` map a clone or a source read answers with: each key, grouped by file. */
+export function protocolMap(sources: ProtocolSources): {
+  commands: Record<string, Record<string, number>>;
+  state: Record<string, Record<string, number>>;
+} {
+  return {
+    commands: groupByFile(sources.commands ?? {}),
+    state: groupByFile(sources.state ?? {}),
+  };
+}

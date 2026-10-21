@@ -1,6 +1,6 @@
 export {};
 import { appStorage, errMsg, invoke, storage, storagePath, toWebP } from '@bundled/yaar';
-import { activeProject, setStatusText, setTypecheckState } from '../core';
+import { requireProject, setStatusText, setTypecheckState } from '../core';
 import { planAssetImport, projectPath } from '../lib';
 import { recordChange } from './changes';
 import { refreshFiles } from './files';
@@ -133,8 +133,7 @@ export async function exportToStorage(
   sourcePath: string,
   destination: string,
 ): Promise<{ uri: string; bytes: number }> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
 
   const uri = `yaar://storage/${destination}`;
   let result: string;
@@ -172,8 +171,7 @@ export async function copyFromStorage(
   destination: string,
   opts: { recompress?: boolean; renameToWebP?: boolean } = {},
 ): Promise<StorageImport> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
 
   const plan = planAssetImport(sourcePath, destination, {
     ...(opts.recompress !== undefined ? { recompress: opts.recompress } : {}),

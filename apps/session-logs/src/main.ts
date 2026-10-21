@@ -22,6 +22,11 @@ const CHARS_MAX = 40000;
 /** How much of the transcript the `transcript` state key answers with before pointing at the command. */
 const TRANSCRIPT_PEEK = 4000;
 
+/** Monitor ids the loaded session has turns for, restored history included. */
+function availableMonitors(): string[] {
+  return countByMonitor(state.messages, true).map((c) => c.monitor);
+}
+
 /** A `conversation` argument → its index, or null when absent or not a number. */
 function conversationParam(v: unknown): number | null {
   if (v == null) return null;
@@ -278,7 +283,7 @@ export default defineApp({
           ? {
               selected: state.selectedMonitor,
               conversation: state.selectedConversation,
-              available: countByMonitor(state.messages, true).map((c) => c.monitor),
+              available: availableMonitors(),
               conversations: Object.fromEntries(epochCounts(state.messages)),
             }
           : null,
@@ -328,7 +333,7 @@ export default defineApp({
         const id = normalizeMonitor(params.monitor) ?? ALL;
         const conversation = id === ALL ? null : conversationParam(params.conversation);
         if (id !== ALL && state.messages) {
-          const available = countByMonitor(state.messages, true).map((c) => c.monitor);
+          const available = availableMonitors();
           if (!available.includes(id)) {
             throw new Error(
               `No monitor "${id}" in this session. Available: all, ${sortMonitors(available).join(', ')}.`,

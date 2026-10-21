@@ -34,7 +34,9 @@ import {
 import { previewWindowIdFor, projectPath } from '../lib/paths';
 import { appIdFromName, scaffoldMain } from '../lib/scaffold';
 import { installedVersionOf } from '../lib/app-manifest';
+import type { ProtocolSources } from '../lib/clone-summary';
 import { refreshFiles, openFile } from './files';
+import { fetchClonePayload } from './app-source';
 
 // Project lifecycle: discovery, creation, cloning, switching, deletion, tabs.
 // Depends on ./files one-way (opening a project lists its files and opens
@@ -433,10 +435,7 @@ export interface CloneAppResult {
    * Where each command and state key is declared, from the server's static read of the
    * installed source. Absent when it could not say (see `locateProtocolSources`).
    */
-  protocolSources?: {
-    commands: Record<string, { file: string; line: number }>;
-    state: Record<string, { file: string; line: number }>;
-  };
+  protocolSources?: ProtocolSources;
   /** True when `reuse` reopened an existing clone instead of making one. */
   reused?: true;
 }
@@ -539,14 +538,7 @@ export async function cloneApp(
     if (newest) return await reopenClone(appId, newest, previous, installedVersion);
   }
   setStatusText(`Cloning "${appId}"...`);
-  const result = await invoke<{
-    // `encoding` is set for files whose bytes are not valid UTF-8 (images, fonts,
-    // wasm). Writing those with the default utf-8 encoding re-encodes the base64
-    // payload as text and corrupts the asset — see cloneAppSource.
-    files: { path: string; content: string; encoding?: 'base64' }[];
-    meta: Record<string, unknown>;
-    protocolSources?: CloneAppResult['protocolSources'];
-  }>('yaar://apps/' + appId, { action: 'clone' });
+  const result = await fetchClonePayload(appId);
   const meta = result?.meta ?? {};
   const name = typeof meta.name === 'string' ? meta.name : appId;
   // `meta` is the server's display triple (name, icon, description) — no version, no

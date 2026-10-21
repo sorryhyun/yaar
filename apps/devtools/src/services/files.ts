@@ -3,6 +3,7 @@ import { batch } from '@bundled/solid-js';
 import { appStorage, blobToDataUrl, errMsg, read } from '@bundled/yaar';
 import {
   activeProject,
+  requireProject,
   setActiveProject,
   files,
   setFiles,
@@ -42,7 +43,7 @@ export async function refreshFiles(projectId?: string): Promise<void> {
   const basePath = projectPath(id);
   try {
     const mapped = pruneEmptyDirectories(await listAllFiles(basePath, basePath));
-    await countLines(id, mapped);
+    await fillLineCounts(id, mapped);
     setFiles(mapped);
     touchProjectModified(id, mapped);
   } catch {
@@ -59,7 +60,7 @@ export async function refreshFiles(projectId?: string): Promise<void> {
  * handful of source files, so reading them in parallel is cheap; a file that cannot be
  * read stays uncounted.
  */
-async function countLines(projectId: string, entries: FileEntry[]): Promise<void> {
+async function fillLineCounts(projectId: string, entries: FileEntry[]): Promise<void> {
   await Promise.all(
     entries.map(async (entry) => {
       if (entry.isDirectory || isBinaryPath(entry.path)) return;
@@ -147,8 +148,7 @@ export async function listProjectFiles(opts: {
   glob?: string;
   includeBuilt?: boolean;
 }): Promise<{ dir: string; files: ListedFile[]; excluded: number }> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
   const dir = opts.dir === undefined ? '' : normalizeProjectPath(opts.dir);
   if (dir === null) throw new Error(`refused: path escapes the project: ${opts.dir}`);
   const matcher = opts.glob ? globToRegExp(opts.glob) : null;
@@ -172,7 +172,7 @@ export async function listProjectFiles(opts: {
     (e) => (!dir || e.path.startsWith(`${dir}/`)) && (!matcher || matcher.test(e.path)),
   );
   const kept = opts.includeBuilt ? inScope : inScope.filter((e) => !isGeneratedEntry(e));
-  await countLines(proj.id, kept);
+  await fillLineCounts(proj.id, kept);
   return {
     dir: dir || '.',
     files: kept.map((e) => ({
@@ -214,8 +214,7 @@ export async function readModelSummary(
 ): Promise<string> {
   let uri = ref;
   if (!ref.startsWith('yaar://')) {
-    const proj = activeProject();
-    if (!proj) throw new Error('No active project. Open or create one first.');
+    const proj = requireProject();
     uri = `yaar://apps/self/storage/${projectPath(proj.id, resolveProjectPath(ref))}`;
   }
   return formatModelSummary(await read(uri, { gltf: opts }));
@@ -456,8 +455,7 @@ export async function writeFile(
     deferRefresh?: boolean;
   },
 ): Promise<WriteReceipt> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
   const before = change?.before !== undefined ? change.before : await currentText(proj.id, path);
   await appStorage.save(projectPath(proj.id, path), content);
   recordChange({
@@ -484,8 +482,7 @@ export async function editFile(
   path: string,
   edits: EditSpec[],
 ): Promise<{ editsApplied: number; lines: number; removed: string }> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
   if (edits.length === 0) throw new Error('No edits given');
   const raw = await appStorage.read(projectPath(proj.id, path));
   // JSON files can come back parsed — render them the way readFile does, so a
@@ -576,8 +573,7 @@ async function saveCopyBase64(
  * uses to report removing one.
  */
 export async function writeBinaryCopy(to: string, base64: string, from: string): Promise<void> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
   await saveCopyBase64(proj.id, from, to, base64);
   recordChange({
     path: to,
@@ -658,8 +654,7 @@ export async function readFileContent(
   path: string,
   opts?: { startLine?: number; endLine?: number; lineNum?: boolean },
 ): Promise<ReadFileResult> {
-  const proj = activeProject();
-  if (!proj) throw new Error('No active project. Open or create one first.');
+  const proj = requireProject();
   path = resolveProjectPath(path);
   // Bytes that are not text decode to mojibake, which reads like a corrupt file
   // rather than the wrong tool. Say what the file is; the caller turns an image

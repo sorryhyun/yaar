@@ -1,7 +1,7 @@
 export {};
 import { AppCommandError, errMsg } from '@bundled/yaar';
 import { findReferences as devFindReferences, typeAt as devTypeAt } from '@bundled/yaar-dev';
-import { activeProject, setStatusText } from '../core';
+import { requireProject, setStatusText } from '../core';
 import { projectPath } from '../lib/paths';
 
 export type ReferencesQuery = Parameters<typeof devFindReferences>[1];
@@ -15,8 +15,7 @@ export type ReferencesResult = Awaited<ReturnType<typeof devFindReferences>>;
 export async function findReferences(
   query: ReferencesQuery,
 ): Promise<Omit<ReferencesResult, 'success'>> {
-  const proj = activeProject();
-  if (!proj) throw new AppCommandError('No active project. Open or create one first.');
+  const proj = requireProject(AppCommandError);
   setStatusText('Finding references...');
   let result: ReferencesResult;
   try {
@@ -53,8 +52,7 @@ export type TypeAtResult = Awaited<ReturnType<typeof devTypeAt>>;
  * the server's `kind` on failure, for the same reason.
  */
 export async function typeAt(query: TypeAtQuery): Promise<Omit<TypeAtResult, 'success'>> {
-  const proj = activeProject();
-  if (!proj) throw new AppCommandError('No active project. Open or create one first.');
+  const proj = requireProject(AppCommandError);
   let result: TypeAtResult;
   try {
     result = await devTypeAt(projectPath(proj.id), query);

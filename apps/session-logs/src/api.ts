@@ -9,7 +9,7 @@ import {
   setSharedSelectedMonitor,
 } from './store';
 import type { SessionSummary, SessionDetail, ParsedMessage } from './types';
-import { annotateEpochs, type Conversation } from './conversations';
+import { ALL, annotateEpochs, type Conversation } from './conversations';
 import {
   annotateMonitors,
   hasMonitorMeta,
@@ -62,7 +62,7 @@ onRemoteSessions((next) => {
  */
 export async function loadDetail(sessionId: string): Promise<void> {
   setState('selectedId', sessionId);
-  setState('selectedMonitor', 'all');
+  setState('selectedMonitor', ALL);
   setState('selectedConversation', null);
   setState('detail', null);
   setState('transcript', null);
@@ -281,7 +281,7 @@ export function applyMessages(sessionId: string, data: unknown): void {
  * one of its conversations — and share it with other copies.
  */
 export function selectMonitor(monitor: string, conversation: number | null = null): void {
-  const scoped = monitor === 'all' ? null : conversation;
+  const scoped = monitor === ALL ? null : conversation;
   setState('selectedMonitor', monitor);
   setState('selectedConversation', scoped);
   if (state.selectedId) {

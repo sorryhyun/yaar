@@ -8,6 +8,8 @@ import {
 } from '@bundled/yaar-dev';
 import {
   activeProject,
+  NO_PROJECT_REFUSAL,
+  requireProject,
   setBundleStatus,
   setCompileErrors,
   setCompileWarnings,
@@ -97,7 +99,7 @@ export async function compile(): Promise<void> {
  */
 export async function typecheck(): Promise<string | null> {
   const proj = activeProject();
-  if (!proj) return 'No active project. Open or create one first.';
+  if (!proj) return NO_PROJECT_REFUSAL;
   setStatusText('Type checking...');
   try {
     const result = await devTypecheck(projectPath(proj.id));
@@ -169,8 +171,7 @@ export async function deploy(opts: {
   staleWindow?: string;
   agentModel?: string;
 }> {
-  const proj = activeProject();
-  if (!proj) throw new AppCommandError('No active project. Open or create one first.');
+  const proj = requireProject(AppCommandError);
   const { bump, ...serverOpts } = opts;
   const appJsonBefore = await readFileText('app.json');
   const installed: { version: string | null; error?: string } =

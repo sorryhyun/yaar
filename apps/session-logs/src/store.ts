@@ -1,6 +1,8 @@
 import { createStore } from '@bundled/solid-js/store';
 import { createSharedSignal } from '@bundled/yaar';
 import type { SessionSummary, SessionDetail, ParsedMessage } from './types';
+import { ALL } from './conversations';
+import type { Scope } from './select';
 
 export const [state, setState] = createStore({
   sessions: [] as SessionSummary[],
@@ -15,8 +17,8 @@ export const [state, setState] = createStore({
   search: '',
   totalCount: 0,
   loadError: null as string | null,
-  /** 'all', or a monitor id as stamped on the turns ('0', 'unknown'). Reset per session. */
-  selectedMonitor: 'all',
+  /** {@link ALL}, or a monitor id as stamped on the turns ('0', 'unknown'). Reset per session. */
+  selectedMonitor: ALL,
   /**
    * With a monitor selected: which of its conversations (its `epoch` — one per reset), or
    * null for all of them. A session-list row is one monitor's one conversation.
@@ -27,6 +29,17 @@ export const [state, setState] = createStore({
   /** sessionId → monitor ids, for the session-list badge. Filled lazily per row. */
   monitorBadges: {} as Record<string, string[]>,
 });
+
+/**
+ * The selection as a {@link Scope} — what `inScope` and every "is this in view" test
+ * read, so none of them re-derives it. {@link ALL} is no monitor at all.
+ */
+export function currentScope(): Scope {
+  return {
+    monitor: state.selectedMonitor === ALL ? null : state.selectedMonitor,
+    conversation: state.selectedConversation,
+  };
+}
 
 const remoteSessionsListeners: ((next: SharedSessionList) => void)[] = [];
 const remoteSelectedSessionListeners: ((sessionId: string) => void)[] = [];
