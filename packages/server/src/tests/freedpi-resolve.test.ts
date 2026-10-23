@@ -19,7 +19,13 @@
 
 import { describe, it, expect } from 'bun:test';
 import { IS_FREEDPI } from '../config.js';
-import { DohResolver, isIpLiteral, refusalForAddress, DEFAULT_DOH_URL } from '@yaar/lib/freedpi';
+import {
+  DohResolver,
+  isInvalidName,
+  isIpLiteral,
+  refusalForAddress,
+  DEFAULT_DOH_URL,
+} from '@yaar/lib/freedpi';
 
 /** A `fetch` that fails the way an unreachable DoH endpoint does. */
 function deadDoh(calls = { n: 0 }) {
@@ -111,6 +117,17 @@ describe('isIpLiteral', () => {
   });
 });
 
+describe('isInvalidName', () => {
+  it('matches the .invalid TLD and nothing that merely contains the word', () => {
+    for (const h of ['ua-probe.invalid', 'a.b.INVALID', 'x.invalid.', 'invalid']) {
+      expect(isInvalidName(h)).toBe(true);
+    }
+    for (const h of ['invalid.com', 'notinvalid', 'example.invalidx']) {
+      expect(isInvalidName(h)).toBe(false);
+    }
+  });
+});
+
 describe('DohResolver', () => {
   it('returns the A record', async () => {
     const { impl } = fakeDoh({ Answer: [{ type: 1, data: '66.254.114.41' }] });
@@ -181,6 +198,20 @@ describe('DohResolver', () => {
       throw new Error('getaddrinfo ENOTFOUND');
     });
     expect(resolver.resolve('nowhere.example')).rejects.toThrow('ENOTFOUND');
+  });
+
+  it('refuses a .invalid name without asking DoH or the system', async () => {
+    // RFC 6761: such a name never resolves, so asking only leaks it.
+    const calls = { n: 0 };
+    let systemAsked = false;
+    const { impl } = fakeDoh({ Answer: [{ type: 1, data: '1.2.3.4' }] }, calls);
+    const resolver = new DohResolver(DEFAULT_DOH_URL, 512, impl, async () => {
+      systemAsked = true;
+      return '1.2.3.4';
+    });
+    expect(resolver.resolve('ua-probe.invalid')).rejects.toThrow('.invalid');
+    expect(calls.n).toBe(0);
+    expect(systemAsked).toBe(false);
   });
 
   it('bounds the cache', async () => {

@@ -17,7 +17,7 @@
 
 import { connect, listen, type Socket, type TCPSocketListener } from 'bun';
 import { canReplay, escalate, HostPolicy } from './policy.js';
-import { DohResolver, refusalForAddress, type Resolver } from './resolve.js';
+import { DohResolver, isInvalidName, refusalForAddress, type Resolver } from './resolve.js';
 import { planSplit, recordsFor, segmentsFor } from './split.js';
 import type { FreeDpiConfig, FreeDpiProxy, Outcome, Route } from './types.js';
 
@@ -202,7 +202,9 @@ export function createFreeDpiProxy(config: FreeDpiConfig = {}): FreeDpiProxy {
     try {
       address = await resolver.resolve(st.host);
     } catch (err) {
-      console.warn(`${TAG} could not resolve ${st.host}: ${String(err)}`);
+      // A `.invalid` name failing is the expected answer, not news.
+      if (!isInvalidName(st.host))
+        console.warn(`${TAG} could not resolve ${st.host}: ${String(err)}`);
       endClient(client, 'HTTP/1.1 502 Bad Gateway\r\n\r\n');
       return;
     }

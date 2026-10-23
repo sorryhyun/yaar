@@ -73,6 +73,18 @@ export function refusalForAddress(address: string): string | null {
   return null;
 }
 
+/**
+ * A name under `.invalid`, which RFC 6761 reserves so that it never resolves: name
+ * resolution APIs "SHOULD always return immediately with a negative response". Asking
+ * DoH and then the system resolver for one only puts it on the wire to learn what is
+ * already known — and something does ask: a CDP-answered probe page such as
+ * `ua-probe.invalid` still reaches this proxy as a CONNECT.
+ */
+export function isInvalidName(host: string): boolean {
+  const name = host.toLowerCase().replace(/\.$/, '');
+  return name === 'invalid' || name.endsWith('.invalid');
+}
+
 /** An already-literal IPv4/IPv6 address needs no resolution. */
 export function isIpLiteral(host: string): boolean {
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
@@ -107,6 +119,7 @@ export class DohResolver implements Resolver {
 
   async resolve(host: string): Promise<string> {
     if (isIpLiteral(host)) return host;
+    if (isInvalidName(host)) throw new Error(`${host} is under .invalid and never resolves`);
 
     const cached = this.cache.get(host);
     if (cached) return cached;
