@@ -138,7 +138,4 @@ export interface JsonRpcServerRequest<T = unknown> {
  * Union type for any JSON-RPC message from the server.
  */
 export type JsonRpcMessage =
-  | JsonRpcResponse
-  | JsonRpcErrorResponse
-  | JsonRpcNotification
-  | JsonRpcServerRequest;
+  JsonRpcResponse | JsonRpcErrorResponse | JsonRpcNotification | JsonRpcServerRequest;

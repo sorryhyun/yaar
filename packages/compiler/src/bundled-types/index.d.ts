@@ -1034,8 +1034,7 @@ interface YaarAppDefinition<
 interface YaarApp {
   sendInteraction(
     description:
-      | string
-      | (Record<string, unknown> & { instructions?: string; toMonitor?: boolean }),
+      string | (Record<string, unknown> & { instructions?: string; toMonitor?: boolean }),
   ): void;
   /**
    * Emit a fire-and-forget event on a declared channel. Delivered only to
@@ -3047,15 +3046,7 @@ declare module '@bundled/yaar-ml' {
 
   /** A numeric type ORT tensors can hold. */
   export type MlTensorType =
-    | 'float32'
-    | 'float16'
-    | 'int64'
-    | 'int32'
-    | 'int16'
-    | 'int8'
-    | 'uint8'
-    | 'bool'
-    | 'string';
+    'float32' | 'float16' | 'int64' | 'int32' | 'int16' | 'int8' | 'uint8' | 'bool' | 'string';
 
   /** A minimal onnxruntime-web Tensor. Construct with `new Tensor(...)`. */
   export interface MlTensor {

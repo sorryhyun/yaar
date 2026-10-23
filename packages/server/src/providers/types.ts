@@ -227,9 +227,7 @@ export interface StreamMessage {
  *   with `thread/resume`, and falls back to a fresh thread if that fails.
  */
 export type Conversation =
-  | { kind: 'new' }
-  | { kind: 'continue'; sessionId: string }
-  | { kind: 'resume'; sessionId: string };
+  { kind: 'new' } | { kind: 'continue'; sessionId: string } | { kind: 'resume'; sessionId: string };
 
 /** The conversation id a turn names, or undefined for a `new` one. */
 export function namedSessionId(conversation: Conversation): string | undefined {

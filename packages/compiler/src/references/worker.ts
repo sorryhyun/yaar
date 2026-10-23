@@ -21,8 +21,7 @@ declare const self: Worker;
 
 /** One question about a sandbox. Both ops share the warm program for that sandbox. */
 export type WorkerQuery =
-  | { op: 'references'; query: FindReferencesQuery }
-  | { op: 'typeAt'; query: TypeAtQuery };
+  { op: 'references'; query: FindReferencesQuery } | { op: 'typeAt'; query: TypeAtQuery };
 
 export type WorkerRequest = WorkerQuery & {
   id: number;

@@ -26,8 +26,7 @@ const text = (r: VerbResult) => (r.content[0] as { type: 'text'; text: string })
 /** The `invokeSchema.properties.action` the handler registered for `uri` advertises. */
 function advertisedActions(uri: string): { enum: string[]; description?: string } {
   const schema = initRegistry().findHandler(uri)?.invokeSchema as
-    | { properties: { action: { enum: string[]; description?: string } } }
-    | undefined;
+    { properties: { action: { enum: string[]; description?: string } } } | undefined;
   if (!schema) throw new Error(`no invokeSchema registered for ${uri}`);
   return schema.properties.action;
 }

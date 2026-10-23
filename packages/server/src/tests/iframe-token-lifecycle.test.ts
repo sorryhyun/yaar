@@ -86,8 +86,7 @@ async function openAppWindow(): Promise<string> {
     watch.stop();
   }
   const create = watch.actions.find((a) => a.type === 'window.create') as
-    | (OSAction & { iframeToken?: string })
-    | undefined;
+    (OSAction & { iframeToken?: string }) | undefined;
   if (typeof create?.iframeToken !== 'string') throw new Error('no token on the create action');
   return create.iframeToken;
 }

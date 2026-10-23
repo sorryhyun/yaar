@@ -53,8 +53,7 @@ describe('reset — held until the server acknowledges it', () => {
     reset('0');
 
     const frame = framesOf(ws).find((f) => f.type === ClientEventType.RESET) as
-      | { monitorId?: string; messageId?: string }
-      | undefined;
+      { monitorId?: string; messageId?: string } | undefined;
     expect(frame).toBeDefined();
     expect(frame!.monitorId).toBe('0');
     // The id is the whole mechanism: without one there is nothing for the server to ack

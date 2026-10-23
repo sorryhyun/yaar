@@ -365,27 +365,23 @@ export function DesktopSurface() {
           const appIds = new Set<string>();
           document.querySelectorAll<HTMLElement>('[data-app-id]').forEach((el) => {
             const b = el.getBoundingClientRect();
-            if (
-              !(
-                rect.x > b.right ||
-                rect.x + rect.w < b.left ||
-                rect.y > b.bottom ||
-                rect.y + rect.h < b.top
-              )
-            ) {
+            if (!(
+              rect.x > b.right ||
+              rect.x + rect.w < b.left ||
+              rect.y > b.bottom ||
+              rect.y + rect.h < b.top
+            )) {
               appIds.add(el.dataset.appId!);
             }
           });
           document.querySelectorAll<HTMLElement>('[data-shortcut-id]').forEach((el) => {
             const b = el.getBoundingClientRect();
-            if (
-              !(
-                rect.x > b.right ||
-                rect.x + rect.w < b.left ||
-                rect.y > b.bottom ||
-                rect.y + rect.h < b.top
-              )
-            ) {
+            if (!(
+              rect.x > b.right ||
+              rect.x + rect.w < b.left ||
+              rect.y > b.bottom ||
+              rect.y + rect.h < b.top
+            )) {
               appIds.add(el.dataset.shortcutId!);
             }
           });

@@ -13,8 +13,7 @@ import { COMPONENT_TYPES, type ComponentLayout } from '@yaar/shared';
 import { componentLayoutSchema } from '@yaar/shared/schemas';
 
 export type ComponentLayoutResult =
-  | { ok: true; layout: ComponentLayout }
-  | { ok: false; message: string };
+  { ok: true; layout: ComponentLayout } | { ok: false; message: string };
 
 /** Types an agent reaches for that the DSL deliberately lacks, with what to do instead. */
 const ALTERNATIVES: Record<string, string> = {

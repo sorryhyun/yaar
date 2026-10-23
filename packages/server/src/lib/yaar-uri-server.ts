@@ -13,8 +13,7 @@ import { parseYaarUri, parseBareWindowUri } from '@yaar/shared';
 // ============ Content Path Parsing ============
 
 export type ParsedContentPath =
-  | { authority: 'storage'; path: string }
-  | { authority: 'apps'; appId: string; path: string };
+  { authority: 'storage'; path: string } | { authority: 'apps'; appId: string; path: string };
 
 /** App IDs are kebab-case: starts with lowercase letter, then lowercase letters, digits, or hyphens. */
 const APP_ID_RE = /^[a-z][a-z0-9-]*$/;
@@ -98,13 +97,7 @@ function extractResourceFromSubPath(
 // ============ Config URIs ============
 
 export type ConfigSection =
-  | 'settings'
-  | 'hooks'
-  | 'shortcuts'
-  | 'mounts'
-  | 'app'
-  | 'domains'
-  | 'mcp';
+  'settings' | 'hooks' | 'shortcuts' | 'mounts' | 'app' | 'domains' | 'mcp';
 
 export interface ParsedConfigUri {
   section: ConfigSection;
@@ -155,13 +148,7 @@ export function buildConfigUri(section: ConfigSection, id?: string): string {
 // ============ Session URIs ============
 
 export type SessionSubKind =
-  | 'agents'
-  | 'monitors'
-  | 'logs'
-  | 'context'
-  | 'transcript'
-  | 'messages'
-  | 'browser';
+  'agents' | 'monitors' | 'logs' | 'context' | 'transcript' | 'messages' | 'browser';
 
 export interface ParsedSessionUri {
   subKind?: SessionSubKind;

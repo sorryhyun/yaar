@@ -1050,8 +1050,7 @@ export async function summarizeGltf(
     : (
         ((
           json.extensions?.KHR_lights_punctual as
-            | { lights?: Array<Record<string, unknown>> }
-            | undefined
+            { lights?: Array<Record<string, unknown>> } | undefined
         )?.lights ?? []) as Array<Record<string, unknown>>
       ).map((l, i) => ({ i, ...l }));
 

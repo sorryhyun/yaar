@@ -31,8 +31,7 @@ export interface BridgeSocket {
 
 /** Outcome of a T2 command sent down the bridge (never throws — always resolves). */
 export type CommandOutcome =
-  | { ok: true; data?: Record<string, unknown> }
-  | { ok: false; error: string };
+  { ok: true; data?: Record<string, unknown> } | { ok: false; error: string };
 
 /** How long to wait for a `command-result` before giving up on a bridge command. */
 const COMMAND_TIMEOUT_MS = 10_000;

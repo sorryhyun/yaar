@@ -118,10 +118,7 @@ const NEW_MONITOR_WAIT_MS = 2000;
  * opened from.
  */
 type PanTarget =
-  | { kind: 'monitor'; id: string }
-  | { kind: 'new' }
-  | { kind: 'cli' }
-  | { kind: 'desktop' };
+  { kind: 'monitor'; id: string } | { kind: 'new' } | { kind: 'cli' } | { kind: 'desktop' };
 
 /** The surface a pan is heading for, and enough of it to put on screen behind the drag. */
 interface Peek {

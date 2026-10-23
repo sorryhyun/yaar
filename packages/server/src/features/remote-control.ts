@@ -31,8 +31,7 @@ export interface RemoteControlStatus {
 }
 
 export type StartOutcome =
-  | { ok: true; status: RemoteControlStatus }
-  | { ok: false; status: number; error: string };
+  { ok: true; status: RemoteControlStatus } | { ok: false; status: number; error: string };
 
 export function remoteControlStatus(pool: ContextPool | null): RemoteControlStatus {
   const current = pool?.listRemoteControl()[0];

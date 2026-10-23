@@ -13,8 +13,7 @@
 
 /** The envelope every `/api/browser` action answers with. */
 export type BrowserActionResponse<T = string> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+  { ok: true; data: T } | { ok: false; error: string };
 
 /** The envelope of an action that returns a picture (`screenshot`, `extract_images`). */
 export type BrowserImageResponse =

@@ -34,8 +34,7 @@
  * timeoutMs". That advice is wrong in a way that costs the caller the deadline again.
  */
 export type PendingOutcome<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: 'timeout' | 'cancelled' | 'closed' };
+  { ok: true; value: T } | { ok: false; reason: 'timeout' | 'cancelled' | 'closed' };
 
 /** The value of a settled entry, or `undefined` if it timed out or was cancelled. */
 export function valueOf<T>(outcome: PendingOutcome<T>): T | undefined {

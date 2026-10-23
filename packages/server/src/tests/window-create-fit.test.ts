@@ -33,8 +33,7 @@ async function create(payload: Record<string, unknown>) {
       () => handleCreate('', { renderer: 'markdown', content: '# hi', ...payload }),
     );
     const action = seen.find((e) => e.action.type === 'window.create')?.action as
-      | (OSAction & { bounds: WindowBounds })
-      | undefined;
+      (OSAction & { bounds: WindowBounds }) | undefined;
     const text = result.content.map((c) => ('text' in c ? c.text : '')).join('\n');
     return { result, bounds: action?.bounds, text };
   } finally {

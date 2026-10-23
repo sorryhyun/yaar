@@ -52,8 +52,7 @@ function debugBundledLibrary(message: string): void {
  */
 function getEmbeddedLibs(): Record<string, string> | undefined {
   return (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-    | Record<string, string>
-    | undefined;
+    Record<string, string> | undefined;
 }
 
 /** True inside the standalone exe, where shim `.ts` sources are not on disk. */

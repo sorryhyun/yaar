@@ -64,8 +64,7 @@ type Protocol = {
 
 /** A parsed, validated protocol address, or the refusal that explains why it isn't one. */
 type Target =
-  | { ok: true; appId: string; section?: Section; key?: string }
-  | { ok: false; result: VerbResult };
+  { ok: true; appId: string; section?: Section; key?: string } | { ok: false; result: VerbResult };
 
 function parseTarget(uri: string): Target | null {
   const parsed = parseAppProtocolPath(uri);

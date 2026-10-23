@@ -10,14 +10,7 @@ import type { ComponentLayout } from './components.js';
 // ============ Window Actions ============
 
 export type WindowChangeEvent =
-  | 'content'
-  | 'interaction'
-  | 'close'
-  | 'lock'
-  | 'unlock'
-  | 'move'
-  | 'resize'
-  | 'title';
+  'content' | 'interaction' | 'close' | 'lock' | 'unlock' | 'move' | 'resize' | 'title';
 
 export const WINDOW_CHANGE_EVENTS = [
   'content',

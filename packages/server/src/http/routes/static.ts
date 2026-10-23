@@ -192,8 +192,7 @@ function getEmbeddedAssets(): Map<string, string> {
   embeddedAssets = new Map();
 
   const frontend = (globalThis as Record<string, unknown>).__YAAR_EMBEDDED_FRONTEND as
-    | Record<string, string>
-    | undefined;
+    Record<string, string> | undefined;
   if (frontend) {
     for (const [urlPath, filePath] of Object.entries(frontend)) {
       embeddedAssets.set(urlPath, filePath);

@@ -61,8 +61,7 @@ export type ActionHandler<Ctx> = (ctx: Ctx) => VerbResult | Promise<VerbResult>;
  * stays as it is until its actions are worth documenting.
  */
 export type ActionEntry<Ctx> =
-  | ActionHandler<Ctx>
-  | { description: string; run: ActionHandler<Ctx> };
+  ActionHandler<Ctx> | { description: string; run: ActionHandler<Ctx> };
 
 function runnerOf<Ctx>(entry: ActionEntry<Ctx>): ActionHandler<Ctx> {
   return typeof entry === 'function' ? entry : entry.run;

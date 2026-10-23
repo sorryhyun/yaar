@@ -19,13 +19,7 @@ function viewportHeight(): number {
 }
 
 export type SnapZone =
-  | 'left'
-  | 'right'
-  | 'top'
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right';
+  'left' | 'right' | 'top' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 const EDGE_THRESHOLD = 8;
 

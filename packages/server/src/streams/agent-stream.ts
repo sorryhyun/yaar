@@ -30,14 +30,7 @@
  * both providers and guarantees the pair even when the provider stream doesn't.
  */
 export type AgentStreamKind =
-  | 'start'
-  | 'text'
-  | 'thinking'
-  | 'tool'
-  | 'usage'
-  | 'notice'
-  | 'done'
-  | 'error';
+  'start' | 'text' | 'thinking' | 'tool' | 'usage' | 'notice' | 'done' | 'error';
 
 export type AgentTurnStatus = 'completed' | 'interrupted';
 

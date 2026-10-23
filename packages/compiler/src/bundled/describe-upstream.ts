@@ -28,13 +28,7 @@ import {
 } from './describe-summary.js';
 
 export type UpstreamKind =
-  | 'function'
-  | 'class'
-  | 'const'
-  | 'namespace'
-  | 'interface'
-  | 'type'
-  | 'enum';
+  'function' | 'class' | 'const' | 'namespace' | 'interface' | 'type' | 'enum';
 
 export interface UpstreamExport {
   name: string;

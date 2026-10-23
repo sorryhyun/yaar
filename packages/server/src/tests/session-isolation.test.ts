@@ -115,8 +115,7 @@ describe('0A — an app protocol request reaches only the session that made it',
     await settle();
 
     const request = f.a.events.find((e) => e.type === ServerEventType.APP_PROTOCOL_REQUEST) as
-      | { requestId: string }
-      | undefined;
+      { requestId: string } | undefined;
     expect(request).toBeDefined();
 
     // B never saw the request, so it has no id to answer with. The nearest thing it *could*

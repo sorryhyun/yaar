@@ -610,8 +610,7 @@ export class BrowserSession extends EventEmitter {
    */
   private async readHistory(): Promise<{ currentIndex: number; entries: HistoryEntry[] }> {
     const res = (await this.sendToActivePage('Page.getNavigationHistory')) as
-      | { currentIndex?: number; entries?: HistoryEntry[] }
-      | undefined;
+      { currentIndex?: number; entries?: HistoryEntry[] } | undefined;
     if (!res || !Array.isArray(res.entries) || typeof res.currentIndex !== 'number') {
       throw new Error('The tab did not report its navigation history.');
     }

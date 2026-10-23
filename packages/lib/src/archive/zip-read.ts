@@ -177,7 +177,7 @@ export async function openZip(
 
     // ZIP64 extended information holds only the fields whose 32-bit slots are saturated, in
     // this order.
-    for (let q = nameStart + nameLength; q + 4 <= extraEnd; ) {
+    for (let q = nameStart + nameLength; q + 4 <= extraEnd;) {
       const id = view.getUint16(q, true);
       const length = view.getUint16(q + 2, true);
       if (id === EXTRA_ZIP64) {

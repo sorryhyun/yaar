@@ -61,8 +61,7 @@ describe('iframe-emitted actions awaiting feedback', () => {
     } as OSAction);
 
     const capture = actions.find((a) => a.type === 'window.capture') as
-      | (OSAction & { requestId?: string; windowId?: string })
-      | undefined;
+      (OSAction & { requestId?: string; windowId?: string }) | undefined;
 
     expect(capture).toBeDefined();
     // Without this the frontend drops the capture on the floor and the read times out
@@ -91,8 +90,7 @@ describe('iframe-emitted actions awaiting feedback', () => {
     } as OSAction);
 
     const create = actions.find((a) => a.type === 'window.create') as
-      | (OSAction & { windowId?: string })
-      | undefined;
+      (OSAction & { windowId?: string }) | undefined;
 
     expect(create).toBeDefined();
     expect(create?.windowId).toBe('0/devtools-preview-1752345678902');

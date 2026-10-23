@@ -24,13 +24,7 @@ export type YaarHostPlatform = 'windows' | 'macos' | 'linux' | 'android';
 
 /** What a host can do. A caller checks `caps` before relying on an optional member. */
 export type YaarHostCap =
-  | 'download'
-  | 'clipboard'
-  | 'share'
-  | 'openExternal'
-  | 'insets'
-  | 'back'
-  | 'attention';
+  'download' | 'clipboard' | 'share' | 'openExternal' | 'insets' | 'back' | 'attention';
 
 export interface YaarHostFile {
   name: string;
