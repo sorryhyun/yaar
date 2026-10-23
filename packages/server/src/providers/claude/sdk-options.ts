@@ -87,6 +87,12 @@ export function buildSDKOptions({
   if (!allowedTools || allowedTools.includes('Task')) {
     builtinTools.push('Task');
   }
+  if (!allowedTools || allowedTools.includes('Artifact')) {
+    builtinTools.push('Artifact');
+  }
+  if (!allowedTools || allowedTools.includes('Read')) {
+    builtinTools.push('Read');
+  }
 
   const claudeBin = resolveClaudeBinPath();
 

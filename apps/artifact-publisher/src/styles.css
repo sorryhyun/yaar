@@ -1,0 +1,80 @@
+/* Two panes side by side, stacked when narrow. Grid rather than flex: 1 (Solid gotcha). */
+.ap-root {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.ap-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+@media (max-width: 640px) {
+  .ap-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.ap-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+  border-right: 1px solid var(--yaar-border);
+}
+
+.ap-pane:last-child {
+  border-right: none;
+}
+
+.ap-pane-head {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+}
+
+.ap-pane-body {
+  min-height: 0;
+}
+
+.ap-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+}
+
+.ap-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ap-failure {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  color: var(--yaar-error);
+}
+
+.ap-failure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+}
+
+.ap-failure-body {
+  margin: var(--yaar-sp-1) 0 0;
+  max-height: 160px;
+  font-size: var(--yaar-text-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ap-history-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+}
+
+.ap-link {
+  color: var(--yaar-accent);
+}

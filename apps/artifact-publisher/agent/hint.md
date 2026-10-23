@@ -1,0 +1,1 @@
+To publish an installed app as a private claude.ai Artifact page, open Artifact Publisher and hand the request ("publish app X") to its window's agent; it builds the app and publishes the compiled page. Claude provider only.

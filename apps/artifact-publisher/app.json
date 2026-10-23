@@ -1,0 +1,26 @@
+{
+  "appId": "artifact-publisher",
+  "name": "Artifact Publisher",
+  "icon": "📤",
+  "description": "Build an installed app and publish its compiled page as a private claude.ai Artifact, with a history of the links",
+  "bundles": [
+    "yaar-dev"
+  ],
+  "permissions": [
+    {
+      "uri": "yaar://apps",
+      "verbs": [
+        "list"
+      ]
+    },
+    {
+      "uri": "yaar://apps/",
+      "verbs": [
+        "invoke"
+      ]
+    }
+  ],
+  "run": "dist/index.html",
+  "version": "0.1.0",
+  "author": "YAAR"
+}

@@ -20,6 +20,8 @@ import { loadAppPrompt, listApps } from '../../../features/apps/discovery.js';
 import { loadAppDocs, runtimeDocs } from '../../../features/apps/docs.js';
 import { APP_MOUNT_ID, describeDesignTokensBrief } from '@yaar/compiler';
 import { resolveAgentModel } from '../model-tiers.js';
+import { join } from 'node:path';
+import { getStorageDir } from '../../../config/paths.js';
 // The door this section documents, asked for the grant it is rendered from — so a prompt
 // that promises the shared tree and a tool call that reaches it read the same app.json.
 import { sharedStorageGrants } from '../../../mcp/app-agent/shared-storage.js';
@@ -195,6 +197,18 @@ missing.`;
 }
 
 /**
+ * Claude Code builtin tools a specific bundled app's agent holds beyond
+ * `APP_AGENT_TOOL_NAMES`. Kept here, not in app.json: `Read` is not confined to
+ * storage (any absolute host path reads), so a manifest field would hand that to any
+ * user-app that declares it. Bundled-only, like `controls`. `buildSDKOptions` turns a
+ * builtin on only when the profile's `allowedTools` names it. Claude-only — Codex has
+ * no `Artifact`.
+ */
+const APP_BUILTIN_TOOLS: Record<string, readonly string[]> = {
+  'artifact-publisher': ['Artifact', 'Read'],
+};
+
+/**
  * Build a dynamic agent profile for a specific app.
  * The intro always comes first, then `agent/prompt.md` if the app ships one. Protocol
  * manifest from app.json is appended in both cases.
@@ -320,11 +334,19 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
       'and the result says so. Do not check whether it is open first, and do not `relay` to have one opened.\n';
   }
 
+  // A string `systemPrompt` replaces Claude Code's default, environment block included, so
+  // an agent holding path-taking builtins (`Read` needs an absolute path) is never told
+  // where its files are. State the one directory it is meant to work in.
+  const builtinTools = appInfo?.source === 'bundled' ? (APP_BUILTIN_TOOLS[appId] ?? []) : [];
+  if (builtinTools.length > 0) {
+    systemPrompt += `\n## Files on disk\n\nYour app storage tree is the directory \`${join(getStorageDir(), 'apps', appId)}\` — \`storage/{path}\` and \`app/{path}\` name files under it. Pass that absolute path to ${builtinTools.map((t) => `\`${t}\``).join(', ')}.\n`;
+  }
+
   return {
     id: `app-agent-${appId}`,
     description: `App agent for ${appName}`,
     systemPrompt,
-    allowedTools: [...APP_AGENT_TOOL_NAMES],
+    allowedTools: [...APP_AGENT_TOOL_NAMES, ...builtinTools],
     model: resolveAgentModel(appInfo?.agentType),
     appStateKeys: protocol?.state ? Object.keys(protocol.state).sort() : [],
   };
