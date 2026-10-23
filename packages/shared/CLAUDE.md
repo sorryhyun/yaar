@@ -19,6 +19,11 @@ Shared types between frontend and server.
   - An `eval` request (devtools previews only — the server's gate) first installs a `__debug`
     getter on `window`, serving the registration's `debug` (`defineApp({ debug })`). Lazy on
     purpose: a window that is never evaluated never gets the global.
+  - Outside YAAR — the top window, or a claude.ai Artifact viewer's frame (`window.claude`) —
+    the script also installs `window.yaarApp` (`manifest`, `state`, `command`, `describe`,
+    Promise-returning, same lookups and params checks as the bridge), so an agent driving a
+    published page in its own headless browser calls the protocol instead of clicking. Never
+    installed inside a YAAR window, where the server-gated bridge stays the only door.
   - `AppManifest.$defs` carries subschemas more than one descriptor shares; every
     `{"$ref": "#/$defs/name"}` inside a `params`/`returns`/state `schema` resolves against it,
     so **the manifest is the schema document**. Filled by the compiler

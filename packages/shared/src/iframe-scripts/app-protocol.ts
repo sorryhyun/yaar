@@ -600,6 +600,110 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     }
   }
 
+  // Strip handlers, expose only descriptions + schemas. Call only once registered.
+  function buildManifest() {
+    var manifest = {
+      appId: registration.appId,
+      name: registration.name,
+      state: {},
+      commands: {}
+    };
+    if (registration.events) {
+      manifest.events = {};
+      for (var evKey in registration.events) {
+        manifest.events[evKey] = { description: registration.events[evKey].description };
+      }
+    }
+    if (registration.keybindings) manifest.keybindings = registration.keybindings;
+    // The table every \`{"$ref": "#/$defs/x"}\` in the schemas below resolves against.
+    // This builder copies field by field, so a manifest served without it would hand
+    // agents schemas full of pointers into nothing.
+    if (registration.$defs) manifest.$defs = registration.$defs;
+    if (registration.state) {
+      for (var key in registration.state) {
+        var s = registration.state[key];
+        manifest.state[key] = { description: s.description };
+        if (s.schema) manifest.state[key].schema = s.schema;
+      }
+    }
+    if (registration.commands) {
+      for (var key in registration.commands) {
+        var c = registration.commands[key];
+        manifest.commands[key] = { description: c.description };
+        if (c.aliases) manifest.commands[key].aliases = c.aliases;
+        if (c.params) manifest.commands[key].params = c.params;
+        if (c.returns) manifest.commands[key].returns = c.returns;
+        if (c.replay) manifest.commands[key].replay = c.replay;
+      }
+    }
+    return manifest;
+  }
+
+  /**
+   * The protocol without a desktop: \`window.yaarApp\`, for a page running outside YAAR.
+   *
+   * Every request below arrives by postMessage from YAAR's desktop, and every answer goes
+   * back up to it. A page published as a claude.ai Artifact (Artifact Publisher) has no
+   * desktop, and the agent in a claude.ai conversation gets the page's HTML and runs it in
+   * its own headless browser, where the page is the top window and nothing sends those
+   * requests. With no way in, it clicked through the UI and got lost in it.
+   *
+   * Same lookups and params checks as the bridge, so a mistake is named the same way.
+   * Each call returns a Promise and rejects with the message the bridge would have sent
+   * as \`error\`. Installed only outside YAAR (the top window, or a claude.ai viewer's
+   * frame), so an app inside YAAR keeps the one door the server gates.
+   */
+  function direct(produce) {
+    return new Promise(function(resolve) { resolve(produce()); });
+  }
+  function rejectWith(message) {
+    return Promise.reject(new Error(message));
+  }
+  var standalone = window.parent === window ||
+    !!(window.claude && typeof window.claude.use === 'function');
+  if (standalone && !Object.prototype.hasOwnProperty.call(window, 'yaarApp')) {
+    window.yaarApp = {
+      /** Every state key and command with its JSON schemas, or null before registration. */
+      manifest: function() {
+        return registration ? buildManifest() : null;
+      },
+      state: function(key) {
+        if (key === '__console') return Promise.resolve(window.__YAAR_CONSOLE || []);
+        if (!registration || !registration.state || !registration.state[key]) {
+          return rejectWith(memberError('state', key));
+        }
+        return direct(function() { return registration.state[key].handler(); });
+      },
+      command: function(name, params) {
+        var cmdName = aliasMap[name] || name;
+        if (!registration || !registration.commands || !registration.commands[cmdName]) {
+          return rejectWith(memberError('command', name));
+        }
+        var cmdParams = params || {};
+        var badParams = paramsError(cmdName, registration.commands[cmdName], cmdParams);
+        if (badParams) return rejectWith(badParams);
+        return direct(function() {
+          return registration.commands[cmdName].handler(cmdParams, { replayed: false });
+        }).then(function(v) { return v === undefined ? null : v; });
+      },
+      /**
+       * The app's own doc for one command or state key (a command wins a shared name),
+       * falling back to its manifest description when it defines no describe().
+       */
+      describe: function(key) {
+        if (!registration) return rejectWith('No app is registered in this window.');
+        var cmdName = aliasMap[key] || key;
+        var entry = (registration.commands && registration.commands[cmdName]) ||
+          (registration.state && registration.state[key]);
+        if (!entry) return rejectWith(memberError('command', key));
+        if (typeof entry.describe !== 'function') return Promise.resolve(entry.description || null);
+        return direct(function() { return entry.describe(); }).then(function(v) {
+          return v == null ? entry.description || null : String(v);
+        });
+      }
+    };
+  }
+
   window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
     var msg = e.data;
@@ -666,42 +770,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         reply('${APP_MSG.manifestResponse}', requestId, { manifest: null, error: 'No app registered' });
         return;
       }
-      // Build manifest: strip handlers, expose only descriptions + schemas
-      var manifest = {
-        appId: registration.appId,
-        name: registration.name,
-        state: {},
-        commands: {}
-      };
-      if (registration.events) {
-        manifest.events = {};
-        for (var evKey in registration.events) {
-          manifest.events[evKey] = { description: registration.events[evKey].description };
-        }
-      }
-      if (registration.keybindings) manifest.keybindings = registration.keybindings;
-      // The table every \`{"$ref": "#/$defs/x"}\` in the schemas below resolves against.
-      // This builder copies field by field, so a manifest served without it would hand
-      // agents schemas full of pointers into nothing.
-      if (registration.$defs) manifest.$defs = registration.$defs;
-      if (registration.state) {
-        for (var key in registration.state) {
-          var s = registration.state[key];
-          manifest.state[key] = { description: s.description };
-          if (s.schema) manifest.state[key].schema = s.schema;
-        }
-      }
-      if (registration.commands) {
-        for (var key in registration.commands) {
-          var c = registration.commands[key];
-          manifest.commands[key] = { description: c.description };
-          if (c.aliases) manifest.commands[key].aliases = c.aliases;
-          if (c.params) manifest.commands[key].params = c.params;
-          if (c.returns) manifest.commands[key].returns = c.returns;
-          if (c.replay) manifest.commands[key].replay = c.replay;
-        }
-      }
-      reply('${APP_MSG.manifestResponse}', requestId, { manifest: manifest });
+      reply('${APP_MSG.manifestResponse}', requestId, { manifest: buildManifest() });
       return;
     }
 

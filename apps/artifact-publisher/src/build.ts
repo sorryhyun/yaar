@@ -72,6 +72,37 @@ async function bundleRootFonts(appId: string): Promise<PageAsset[]> {
   return assets;
 }
 
+/**
+ * Tell an agent reading the page how to drive it. In a claude.ai conversation about the
+ * Artifact, Claude gets this HTML and runs it in its own headless browser, where the app
+ * protocol has no desktop to answer and nothing else in a multi-megabyte bundle says it
+ * exists, so it clicked through the UI instead. `window.yaarApp` is installed outside
+ * YAAR by the protocol script (shared/iframe-scripts/app-protocol.ts).
+ */
+async function annotateForAgents(appId: string): Promise<void> {
+  const page = outputPath(appId);
+  const html = await appStorage.read(page);
+  let name = appId;
+  try {
+    const meta = JSON.parse(await appStorage.read(`${projectDir(appId)}/app.json`));
+    if (typeof meta.name === 'string' && meta.name.trim()) name = meta.name.trim();
+  } catch {
+    // No readable app.json: the id names the app well enough.
+  }
+  // `--` cannot appear inside an HTML comment.
+  const safe = (s: string) => s.replace(/-{2,}/g, '-');
+  const note =
+    `<!-- YAAR app "${safe(appId)}" (${safe(name)}). Agents: drive this page through ` +
+    `window.yaarApp instead of clicking. yaarApp.manifest() lists every state key and ` +
+    `command with its JSON schema; await yaarApp.state(key) reads one, await ` +
+    `yaarApp.command(name, params) runs one, await yaarApp.describe(name) explains one. ` +
+    `It is installed when the page is the top window or runs in the claude.ai viewer. -->`;
+  const at = html.indexOf('<head>');
+  if (at < 0) return;
+  const end = at + '<head>'.length;
+  await appStorage.save(page, `${html.slice(0, end)}\n${note}${html.slice(end)}`);
+}
+
 /** Drop a previous clone so files the app has since deleted do not linger in the build. */
 async function clearProject(appId: string): Promise<void> {
   let entries: Awaited<ReturnType<typeof appStorage.list>>;
@@ -122,6 +153,7 @@ export async function buildApp(
       );
     }
     const assets = await bundleRootFonts(appId);
+    await annotateForAgents(appId);
     setActivity(null);
     return { path: outputPath(appId), assets, warnings: result.warnings ?? [] };
   } catch (e) {

@@ -60,3 +60,8 @@ page) works; an app that reads YAAR data or talks to its agent does not. Say so 
 picks an app like that. Downloads are the exception: `downloadBlob` asks the viewer to save the
 file, though claude.ai accepts only some extensions (no `wav`/`flac`/`mp3`; `webm` and `zip`
 are fine).
+
+The app protocol survives in the page itself. Outside YAAR the page exposes `window.yaarApp`
+(`manifest()`, `state(key)`, `command(name, params)`, `describe(name)`), and the build puts a
+comment saying so at the top of `<head>`, so Claude in a claude.ai conversation about the
+Artifact can drive the app instead of clicking through it.
