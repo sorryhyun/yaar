@@ -12,6 +12,7 @@ import {
   activity,
   apps,
   failure,
+  forgetPublished,
   history,
   publishedFor,
   refreshApps,
@@ -60,6 +61,18 @@ async function buildAndPublish(appId: string): Promise<void> {
     ...(assets.length ? { assets } : {}),
     ...(prior ? { previousUrl: prior.url } : {}),
   });
+}
+
+/** Only the agent holds the Artifact tool, so it is the one that can tell a deleted link. */
+function verifyLinks(): void {
+  const links = history().map((h) => ({ appId: h.appId, url: h.url }));
+  if (!links.length) return;
+  app.sendInteraction({
+    instructions:
+      'Check that each published Artifact link still exists on claude.ai, and call forgetPublished for each one that was deleted.',
+    links,
+  });
+  showToast('Asked the agent to check the links', 'info');
 }
 
 function App() {
@@ -146,7 +159,17 @@ function App() {
         </section>
 
         <section class="ap-pane">
-          <div class="y-label ap-pane-head">Published</div>
+          <div class="ap-pane-head ap-pane-head-row">
+            <span class="y-label ap-grow">Published</span>
+            <button
+              class="y-btn y-btn-sm y-btn-ghost"
+              disabled=${() => !history().length}
+              title="Ask the agent which links were deleted on claude.ai"
+              onClick=${verifyLinks}
+            >
+              Verify
+            </button>
+          </div>
           <div class="y-scroll ap-pane-body">
             <${For}
               each=${history}
@@ -154,7 +177,19 @@ function App() {
             >
               ${(h: Published) => html`
                 <div class="ap-history-row y-border-b">
-                  <div class="y-font-bold y-truncate">${h.title}</div>
+                  <div class="ap-history-head">
+                    <span class="ap-grow y-font-bold y-truncate">${h.title}</span>
+                    <button
+                      class="y-btn y-btn-sm y-btn-ghost"
+                      title="Drop this row, e.g. after deleting the Artifact on claude.ai. Deletes nothing there"
+                      onClick=${() =>
+                        void forgetPublished(h.appId).catch((e) =>
+                          showToast(`Could not forget ${h.appId}: ${errMsg(e)}`, 'error'),
+                        )}
+                    >
+                      Forget
+                    </button>
+                  </div>
                   <a class="ap-link y-text-sm y-truncate" href=${h.url}>${h.url}</a>
                   <div class="y-text-xs y-text-muted y-truncate">
                     <span class="y-font-mono">${h.appId}</span> · ${formatTime(h.publishedAt)}
@@ -246,6 +281,12 @@ export default defineApp({
         showToast(result.updated ? `Updated ${p.appId}` : `Published ${p.appId}`, 'success');
         return result;
       },
+    },
+    forgetPublished: {
+      description:
+        "Drop the history row for `appId`, for an Artifact deleted on claude.ai: the app shows as unpublished again and its next publish creates a new Artifact. Deletes nothing on claude.ai",
+      params: z.object({ appId: z.string() }),
+      run: async (p) => ({ removed: await forgetPublished(p.appId) }),
     },
     publishFailed: {
       description:

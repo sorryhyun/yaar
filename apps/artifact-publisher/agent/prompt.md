@@ -23,9 +23,19 @@ yourself first and take `path` and `assets` from its result).
 4. **Call `recordPublished`** with the `appId`, the storage-relative `path`, the URL `Artifact`
    returned, and a short title (the app's name).
 
-**Updating.** Publishing the same file path again updates the existing page under the same URL. An
-app in the `published` state already has one: rebuild, re-`Read` and re-publish to update it,
-then `recordPublished` again (it replaces that app's row).
+**Updating.** An app in the `published` state already has an Artifact; the click payload carries
+it as `previousUrl`. Rebuild and publish again with that URL as `url`, so the page updates in
+place, then `recordPublished` again (it replaces that app's row).
+
+**Deleted on claude.ai.** The history is this app's own record, and nothing tells it when the
+user deletes an Artifact on claude.ai. When a publish to `previousUrl` is refused because that
+artifact no longer exists, call `forgetPublished` for the app, publish again **without** `url`
+(a new Artifact, so pass an `icon` too) and `recordPublished` the new URL. Never pass `force`.
+
+**Checking the links.** Asked to check them (the Verify button sends the rows as `links`), call
+`Artifact` with `action: "list"` and `limit: 200`. A URL missing from that listing may only be
+older than its page, so confirm each with `action: "read"` on that URL; call `forgetPublished`
+only for the ones the read reports as not found, and say which you dropped.
 
 **Content handed to you instead of an app** (HTML relayed from the monitor, say): `storage:write` it
 into this app's tree (for example `pages/<name>.html`) and publish that path the same way. Use

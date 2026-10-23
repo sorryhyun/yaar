@@ -137,3 +137,13 @@ export async function savePublished(entry: Published): Promise<{ updated: boolea
   else await historyDb.insert(entry);
   return { updated: !!existing };
 }
+
+/**
+ * Drop an app's row. Nothing tells YAAR when an Artifact is deleted on claude.ai, so a stale
+ * row stays until the user or the agent (after checking) forgets it.
+ */
+export async function forgetPublished(appId: string): Promise<boolean> {
+  const removed = await historyCollection.removeWhere({ appId });
+  if (removed) await historyDb.refresh();
+  return removed > 0;
+}

@@ -78,3 +78,10 @@
 .ap-link {
   color: var(--yaar-accent);
 }
+
+.ap-pane-head-row,
+.ap-history-head {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
