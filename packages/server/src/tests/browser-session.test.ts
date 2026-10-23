@@ -11,6 +11,8 @@ import { makePng } from './helpers/png.js';
 // ── Mock CDP ────────────────────────────────────────────────────────────────
 
 const FAKE_IMAGE_BASE64 = Buffer.from('fake-image').toString('base64');
+const HEADLESS_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36';
 
 /**
  * The settle wait is an implementation detail of navigate/click/type/scroll, not
@@ -51,6 +53,8 @@ function defaultSendHandler(method: string) {
       return Promise.resolve({
         result: { value: { url: 'https://example.com', title: 'Test Page' } },
       });
+    case 'Browser.getVersion':
+      return Promise.resolve({ userAgent: HEADLESS_UA });
     default:
       return Promise.resolve({});
   }
@@ -81,21 +85,20 @@ describe('BrowserSession', () => {
     expect(mockSend).toHaveBeenCalledWith('Page.enable');
     expect(mockSend).toHaveBeenCalledWith('Runtime.enable');
 
-    // Viewport was configured
+    // Viewport was configured, on a screen no smaller than the page
     expect(mockSend).toHaveBeenCalledWith('Emulation.setDeviceMetricsOverride', {
       width: 1280,
       height: 800,
       deviceScaleFactor: 1,
       mobile: false,
+      screenWidth: 1920,
+      screenHeight: 1080,
     });
 
-    // User agent was set
-    expect(mockSend).toHaveBeenCalledWith(
-      'Emulation.setUserAgentOverride',
-      expect.objectContaining({
-        userAgent: expect.stringContaining('Chrome'),
-      }),
-    );
+    // Without an identity, the browser's own UA minus "Headless"
+    expect(mockSend).toHaveBeenCalledWith('Emulation.setUserAgentOverride', {
+      userAgent: HEADLESS_UA.replace('HeadlessChrome/', 'Chrome/'),
+    });
 
     expect(session.id).toBe('sess-1');
     expect(session.currentUrl).toBe('about:blank');
@@ -377,6 +380,8 @@ describe('BrowserSession', () => {
       height: 700,
       deviceScaleFactor: 3,
       mobile: true,
+      screenWidth: 500,
+      screenHeight: 700,
     });
 
     await session.setViewport(600, 800, 2);
@@ -386,7 +391,20 @@ describe('BrowserSession', () => {
       height: 820,
       deviceScaleFactor: 2,
       mobile: true,
+      screenWidth: 640,
+      screenHeight: 820,
     });
+  });
+
+  it('a desktop viewport larger than the default screen gets a screen to match', async () => {
+    const session = await BrowserSession.create('vp-2', 'ws://localhost:9222/devtools/page/vp2');
+    mockSend.mockClear();
+
+    await session.setViewport(2560, 900);
+    expect(mockSend).toHaveBeenCalledWith(
+      'Emulation.setDeviceMetricsOverride',
+      expect.objectContaining({ screenWidth: 2560, screenHeight: 1080 }),
+    );
   });
 });
 

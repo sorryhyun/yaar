@@ -12,6 +12,7 @@ import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
 import { DownloadCapture, type CapturedDownload, type DownloadHub } from './downloads.js';
 import { NetworkLog, type NetworkLogQuery, type NetworkLogResult } from './network-log.js';
+import { userAgentOverride, type BrowserIdentity } from './ua-identity.js';
 import type {
   BrowserAnnotatedElement,
   BrowserCookie,
@@ -47,6 +48,9 @@ const DESKTOP_WIDTH = 1280;
 const DESKTOP_HEIGHT = 800;
 const MOBILE_WIDTH = 390;
 const MOBILE_HEIGHT = 844;
+/** The display a desktop session's page sits on, when the page itself is no bigger. */
+const DESKTOP_SCREEN_WIDTH = 1920;
+const DESKTOP_SCREEN_HEIGHT = 1080;
 const SCREENSHOT_QUALITY = 95;
 /**
  * Long-edge cap for model-bound screenshots. Anthropic downsizes images past
@@ -122,11 +126,6 @@ async function downscaleForModel(webp: Buffer, cssWidth: number | undefined): Pr
     return webp;
   }
 }
-
-const DESKTOP_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const MOBILE_UA =
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
 export interface BrowserSessionUpdate {
   url: string;
@@ -302,6 +301,7 @@ export class BrowserSession extends EventEmitter {
     mobile: boolean,
     adopted: boolean,
     downloadHub: DownloadHub | null,
+    private identity: BrowserIdentity | null,
   ) {
     super();
     this.id = id;
@@ -311,16 +311,28 @@ export class BrowserSession extends EventEmitter {
     this.downloads = new DownloadCapture(downloadHub, (d) => this.emit('download', d));
   }
 
-  /** `downloadHub` is the provider's; without one this tab captures no downloads. */
+  /**
+   * `downloadHub` and `identity` are the provider's; without a hub this tab captures no
+   * downloads, and without an identity its user agent is worked out from the UA string
+   * alone (`ua-identity.ts`).
+   */
   static async create(
     id: string,
     debuggerUrl: string,
     options?: BrowserSessionOptions,
     downloadHub: DownloadHub | null = null,
+    identity: BrowserIdentity | null = null,
   ): Promise<BrowserSession> {
     const mobile = options?.mobile ?? false;
     const cdp = await CDPClient.connect(debuggerUrl);
-    const session = new BrowserSession(id, cdp, mobile, options?.adopt === true, downloadHub);
+    const session = new BrowserSession(
+      id,
+      cdp,
+      mobile,
+      options?.adopt === true,
+      downloadHub,
+      identity,
+    );
     session.pinned = options?.pinned === true;
     await session.initTarget(cdp);
     return session;
@@ -436,12 +448,7 @@ export class BrowserSession extends EventEmitter {
     const height = this.viewport?.height ?? (this.mobile ? MOBILE_HEIGHT : DESKTOP_HEIGHT);
     const deviceScaleFactor = this.viewport?.deviceScaleFactor ?? (this.mobile ? 3 : 1);
     this.viewport = { width, height, deviceScaleFactor };
-    await cdp.send('Emulation.setDeviceMetricsOverride', {
-      width,
-      height,
-      deviceScaleFactor,
-      mobile: this.mobile,
-    });
+    await cdp.send('Emulation.setDeviceMetricsOverride', this.deviceMetrics());
 
     // Enable touch emulation for mobile
     if (this.mobile) {
@@ -451,10 +458,24 @@ export class BrowserSession extends EventEmitter {
       });
     }
 
-    // Set user agent
-    await cdp.send('Emulation.setUserAgentOverride', {
-      userAgent: this.mobile ? MOBILE_UA : DESKTOP_UA,
-    });
+    const userAgent = await userAgentOverride(cdp, this.identity, this.mobile);
+    if (userAgent) await cdp.send('Emulation.setUserAgentOverride', { ...userAgent });
+  }
+
+  /**
+   * `Emulation.setDeviceMetricsOverride` params for {@link viewport}, with a screen at
+   * least as big as the page. Left alone, headless Chrome reports an 800×600 screen
+   * behind a 1280×800 page — a page larger than the display it is on, which only a
+   * headless browser shows. A phone's screen is its viewport.
+   */
+  private deviceMetrics(): Record<string, unknown> {
+    const { width, height } = this.viewport!;
+    return {
+      ...this.viewport,
+      mobile: this.mobile,
+      screenWidth: this.mobile ? width : Math.max(DESKTOP_SCREEN_WIDTH, width),
+      screenHeight: this.mobile ? height : Math.max(DESKTOP_SCREEN_HEIGHT, height),
+    };
   }
 
   /**
@@ -494,10 +515,16 @@ export class BrowserSession extends EventEmitter {
    * the app and the agent hold on to.
    *
    * `replayUrl` is re-navigated after the swap, so a crashed tab returns to the page
-   * it was on rather than to `about:blank`.
+   * it was on rather than to `about:blank`. `identity` is the user agent of the Chrome
+   * the new target lives in, which after a relaunch may be a newer version.
    */
-  async reattach(debuggerUrl: string, replayUrl?: string): Promise<void> {
+  async reattach(
+    debuggerUrl: string,
+    replayUrl?: string,
+    identity: BrowserIdentity | null = this.identity,
+  ): Promise<void> {
     if (this.closed) throw new Error(`Browser session ${this.id} is closed`);
+    this.identity = identity;
 
     const previous = this.cdp;
     const cdp = await CDPClient.connect(debuggerUrl);
@@ -1939,10 +1966,7 @@ export class BrowserSession extends EventEmitter {
       height: Math.max(1, Math.round(height)),
       deviceScaleFactor,
     };
-    await this.cdp.send('Emulation.setDeviceMetricsOverride', {
-      ...this.viewport,
-      mobile: this.mobile,
-    });
+    await this.cdp.send('Emulation.setDeviceMetricsOverride', this.deviceMetrics());
   }
 
   async close(): Promise<void> {

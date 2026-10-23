@@ -38,6 +38,7 @@ import {
 } from '../../config.js';
 import { createLogger } from '../../observability/log.js';
 import { popupBrowserId } from './tab-scope.js';
+import { readBrowserIdentity, type BrowserIdentity } from './ua-identity.js';
 
 const log = createLogger('browser');
 
@@ -141,6 +142,11 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   protected pendingPinned = 0;
   protected cleanupTimer: ReturnType<typeof setInterval> | null = null;
   protected browserCdp: CDPClient | null = null;
+  /**
+   * The user agent this Chrome's tabs present, read once per browser socket — a
+   * relaunched Chrome may be a newer version. See `ua-identity.ts`.
+   */
+  private identity: Promise<BrowserIdentity | null> | null = null;
   /**
    * Where this Chrome's downloads land, and which tab each one is. One per Chrome rather
    * than per tab: Chrome has one download behavior for every tab YAAR opens (see
@@ -439,8 +445,9 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const port = await this.restartPort();
       if (port == null) return;
       await this.ensureDiscovery(port);
+      const identity = await this.browserIdentity(port);
       const target = await this.openTarget(port);
-      await session.reattach(target.webSocketDebuggerUrl, session.currentUrl);
+      await session.reattach(target.webSocketDebuggerUrl, session.currentUrl, identity);
       if (rec.session !== session || this.records.get(browserId) !== rec) {
         // Closed while it was coming back. The fresh tab is nobody's.
         this.targets.set(target.id, null);
@@ -568,6 +575,26 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     return (await resp.json()) as { id: string; webSocketDebuggerUrl: string };
   }
 
+  /**
+   * This Chrome's own user agent, read from a scratch tab the first time a session needs
+   * it. Only for a Chrome YAAR owns: on the user's own, the scratch tab would flash up in
+   * their window, and a real window's UA needs nothing removed anyway.
+   */
+  private browserIdentity(port: number): Promise<BrowserIdentity | null> {
+    if (!this.ownsChrome) return Promise.resolve(null);
+    this.identity ??= (async () => {
+      // Over the browser socket rather than `openTarget`: the scratch tab is not a
+      // session's, and the HTTP door is the one that opens sessions' tabs.
+      const created = await this.browserCdp?.send('Target.createTarget', { url: 'about:blank' });
+      const targetId = (created as { targetId?: unknown } | undefined)?.targetId;
+      if (typeof targetId !== 'string') return null;
+      // Claimed by nobody, so discovery never adopts the probe page as a user's tab.
+      this.targets.set(targetId, null);
+      return readBrowserIdentity(`ws://127.0.0.1:${port}/devtools/page/${targetId}`);
+    })().catch(() => null);
+    return this.identity;
+  }
+
   /** Set up browser-level CDP target discovery once. Idempotent. */
   protected ensureDiscovery(port: number): Promise<void> {
     if (this.browserCdp) return Promise.resolve();
@@ -594,6 +621,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
         if (expected || this.browserCdp !== client) return;
         this.browserCdp = null;
         this.discoveryPromise = null;
+        this.identity = null;
         this.browserSocketLost();
       });
       // Before any tab exists on this socket's Chrome, so the first download is captured.
@@ -896,6 +924,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       this.browserCdp = null;
     }
     this.discoveryPromise = null;
+    this.identity = null;
     this.targets.clear();
   }
 
@@ -962,12 +991,14 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       await this.ensureDiscovery(port);
       if (this.ownsChrome) this.startCleanup();
 
+      const identity = await this.browserIdentity(port);
       const target = await this.openTarget(port);
       const session = await BrowserSession.create(
         browserId,
         target.webSocketDebuggerUrl,
         options,
         this.downloadHub,
+        identity,
       );
       // Updated in place, not replaced: a revive waiting on this id holds the record.
       const rec = this.recordFor(browserId);

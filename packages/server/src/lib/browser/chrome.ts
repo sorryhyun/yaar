@@ -236,10 +236,12 @@ export async function launchChrome(
   const userDataDir = options.userDataDir ?? (await mkdtemp(instanceTempPrefix('profile')));
   if (!ephemeral) await mkdir(userDataDir, { recursive: true });
 
-  // Use a fixed debugging port on Windows: Chrome on Windows may fork a child process
-  // and exit the parent immediately (code 0) without printing the DevTools URL. With a
-  // known port we can poll for the endpoint instead of relying solely on stderr parsing.
-  const debugPort = process.platform === 'win32' ? await findFreePort() : 0;
+  // Always a concrete port, never 0. Chrome reads `--remote-debugging-port=0` as
+  // automation and sets `navigator.webdriver` to true on every page — which sites read
+  // as "headless bot" (measured on Chrome 155; a named port leaves it false). It also
+  // serves Windows, where Chrome may fork a child and exit the parent (code 0) without
+  // printing the DevTools URL: with a known port we can poll for the endpoint instead.
+  const debugPort = await findFreePort();
 
   // Null unless the bypass is live, in which case this is the loopback CONNECT proxy.
   const freeDpiProxyUrl = getFreeDpiProxyUrl();
@@ -283,6 +285,10 @@ export async function launchChrome(
     // window as a blank frame on the desktop. Park it far offscreen so it can
     // never become visible.
     '--window-position=-2400,-2400',
+    // The default headless window is 800×600, smaller than the 1280×800 page every
+    // session emulates, so `outerWidth` came out below `innerWidth` — a window
+    // smaller than its own page, which only a headless browser reports.
+    '--window-size=1920,1080',
     'about:blank',
   ];
 
