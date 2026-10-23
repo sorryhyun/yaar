@@ -103,7 +103,7 @@
     "build:exe:bundle:macos": "bun scripts/build/exe-bundle.js --target macos",
     "set-version": "bun scripts/release/set-version.ts",
     "release:prepare": "bun scripts/release/prepare.ts",
-    "generate:openapi": "bun run scripts/codegen/openapi.ts && prettier --write docs/reference/openapi.yaml",
+    "generate:openapi": "bun run scripts/codegen/openapi.ts && bun fmt docs/reference/openapi.yaml",
     "check:openapi": "bun run generate:openapi && git diff --exit-code -- docs/reference/openapi.yaml",
     "check:apps": "bun run scripts/check/apps.ts",
     "check:apps:strict": "bun run scripts/check/apps.ts --strict",
@@ -111,8 +111,8 @@
     "check:scripts": "bun run scripts/check/scripts-parse.ts",
     "check:docs": "bun run scripts/check/doc-freshness.ts",
     "check:docs:strict": "bun run scripts/check/doc-freshness.ts --strict",
-    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
-    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
+    "format": "bun fmt \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
+    "format:check": "bun fmt --check \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "prepare": "husky"
   },
   "engines": {
@@ -123,7 +123,7 @@
   ],
   "lint-staged": {
     "packages/server/src/**/*.{ts,js}": [
-      "prettier --write",
+      "bun fmt",
       "eslint --fix"
     ],
     "packages/server/src/http/routes/*.ts": [
@@ -131,23 +131,23 @@
       "git add docs/reference/openapi.yaml"
     ],
     "packages/frontend/src/**/*.{ts,tsx,js,jsx}": [
-      "prettier --write",
+      "bun fmt",
       "eslint --fix"
     ],
     "packages/shared/src/**/*.{ts,js}": [
-      "prettier --write",
+      "bun fmt",
       "eslint --fix"
     ],
     "packages/compiler/src/**/*.{ts,js}": [
-      "prettier --write",
+      "bun fmt",
       "eslint --fix"
     ],
     "packages/lib/src/**/*.{ts,js}": [
-      "prettier --write",
+      "bun fmt",
       "eslint --fix"
     ],
     "*.{json,yaml,yml,css}": [
-      "prettier --write"
+      "bun fmt"
     ]
   },
   "devDependencies": {

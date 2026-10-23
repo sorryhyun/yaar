@@ -1,8 +1,8 @@
 /**
  * Prettier, as a pure function over one file's text.
  *
- * Dev Tools projects live under `storage/`, which `.prettierignore` excludes and no
- * repo script globs — so code an agent writes there is formatted by nothing, and
+ * Dev Tools projects live under `storage/`, which `bun fmt`'s `ignorePatterns` excludes
+ * and no repo script globs — so code an agent writes there is formatted by nothing, and
  * deploys it into `apps/` exactly as the model emitted it. This is the server half
  * of closing that: text in, text out.
  *
@@ -43,7 +43,9 @@ const PARSERS: Record<string, string> = {
 export const FORMATTABLE_EXTENSIONS = Object.keys(PARSERS);
 
 /**
- * The repo's own `.prettierrc`, read once, falling back to its current values.
+ * The repo's own style — the `[fmt]` table in the root `bunfig.toml`, which `bun fmt`
+ * formats the repo with — read once, falling back to its current values. `[fmt]` keys
+ * carry Prettier's names and meanings; `ignorePatterns` is the one that is not a style.
  *
  * The fallback is not a second style — it is what a standalone exe (which carries no
  * repo) has to use, and a project formatted there must come out matching a project
@@ -62,8 +64,10 @@ let configCache: Options | undefined;
 async function repoOptions(): Promise<Options> {
   if (configCache !== undefined) return configCache;
   try {
-    const text = await Bun.file(join(PROJECT_ROOT, '.prettierrc')).text();
-    configCache = { ...FALLBACK_OPTIONS, ...(JSON.parse(text) as Options) };
+    const text = await Bun.file(join(PROJECT_ROOT, 'bunfig.toml')).text();
+    const { fmt } = Bun.TOML.parse(text) as { fmt?: Options & { ignorePatterns?: unknown } };
+    const { ignorePatterns: _ignorePatterns, ...style } = fmt ?? {};
+    configCache = { ...FALLBACK_OPTIONS, ...style };
   } catch {
     configCache = FALLBACK_OPTIONS;
   }

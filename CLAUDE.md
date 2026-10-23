@@ -32,7 +32,7 @@ make clean                       # Clean generated files
 make mobile-bench                # Phone-shell perf: mock agent, N monitors × M windows (bench/mobile/report.md)
 make screencast-bench            # Live-browser stream: JPEG vs WebCodecs on a recorded scroll (bench/screencast/)
 make codex-types                 # Regenerate Codex protocol types (requires codex CLI >= CODEX_MIN_VERSION)
-bun run format                   # Format all files with Prettier
+bun run format                   # Format all files with bun fmt (config: bunfig.toml [fmt])
 bun run format:check             # Check formatting without writing
 
 # Run individual packages
@@ -181,7 +181,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 
 - `make dev` runs `scripts/dev/start.sh` which: builds shared package first → starts server (serves both API and frontend on single port)
 - Git branches: `dev` is where work lands; `main` is the stable, clone-default branch and only receives merges from `dev`. Open PRs against `dev` unless the change is a release promotion.
-- **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
+- **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies `bun fmt` + ESLint fix to staged files automatically
 - **CI & release**: `.github/workflows/checks.yml` is the one definition of "is this tree good?" (three escalating tiers). Its job id must stay `check`, and `ci.yml`'s must stay `ci` (branch protection requires `ci / check`). Release flow and tiers: the `release` skill and [`docs/reference/release_process.md`](./docs/reference/release_process.md).
 
 ### Subagent Model Selection
@@ -199,7 +199,7 @@ When the main agent is **Fable**, always pass an explicit `model` to the `Agent`
 - Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
 - Server imports use `.js` extensions (ESM requirement)
 - ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
-- Prettier: semi, singleQuote, trailingComma all, tabWidth 2, printWidth 100
+- Formatting (`bun fmt`, configured in `bunfig.toml` `[fmt]`): semi, singleQuote, trailingComma all, tabWidth 2, printWidth 100
 
 ## Design System
 

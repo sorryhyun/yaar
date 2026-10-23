@@ -166,7 +166,7 @@ change, small, worth naming in the commit message.
 
 ```bash
 bun run --filter @yaar/server test    # the suites covering the touched files
-bunx prettier --write <changed files>
+bun fmt <changed files>
 ```
 
 Confirm any pre-existing failures also fail on the base commit before blaming your

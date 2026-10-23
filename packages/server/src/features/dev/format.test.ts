@@ -7,7 +7,7 @@
  * that cannot tell "no formatter for .md" from "your code does not parse" reports the
  * second as the first.
  *
- * It reads the real `.prettierrc` and the real prettier, and needs nothing pinned for a
+ * It reads the real `bunfig.toml` `[fmt]` and the real prettier, and needs nothing pinned for a
  * whole process, so it belongs to the shared `units` partition. See
  * `scripts/test/partitions.ts`.
  */
@@ -32,7 +32,7 @@ describe('formatSource', () => {
   test("applies the repo's own style, not prettier's defaults", async () => {
     const result = await formatSource('const   x=1\nlet y = "a"\n', 'src/main.ts');
     if (!result.ok) throw new Error(`expected a format, got ${result.kind}: ${result.reason}`);
-    // singleQuote and semi are the two `.prettierrc` settings that differ visibly from
+    // singleQuote and semi are the two `[fmt]` settings that differ visibly from
     // the defaults — if config resolution silently fell back, the quotes stay double.
     expect(result.formatted).toBe("const x = 1;\nlet y = 'a';\n");
     expect(result.changed).toBe(true);

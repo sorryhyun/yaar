@@ -136,13 +136,13 @@ Before pushing:
 ```bash
 bun run typecheck
 make lint
-bun run format:check     # Prettier — bun run format to fix
+bun run format:check     # bun fmt — bun run format to fix
 ```
 
 CI (`.github/workflows/ci.yml`) runs `bun install` → build shared → typecheck →
 test on every push and PR to `dev` or `main`. Merging into `main` additionally
 runs lint, formatting, and the app rules, since `main` is the branch people
-clone. A pre-commit hook (Husky + lint-staged) auto-applies Prettier and ESLint
+clone. A pre-commit hook (Husky + lint-staged) auto-applies `bun fmt` and ESLint
 fixes to staged files, so those extra checks should already be satisfied.
 
 ## Conventions
