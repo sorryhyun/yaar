@@ -32,7 +32,7 @@
       "@typescript-eslint/eslint-plugin": "^8.54.0",
       "@typescript-eslint/parser": "^8.0.0",
       "animejs": "^4.3.6",
-      "bun-types": "^1.4.2",
+      "bun-types": "^1.4.4",
       "cannon-es": "^0.20.0",
       "chart.js": "^4.5.1",
       "d3": "^7.9.0",
