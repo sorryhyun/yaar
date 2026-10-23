@@ -7,7 +7,7 @@ import { For, Show, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { AppCommandError, app, defineApp, errMsg, showToast } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import { BuildError, buildApp } from './build';
+import { BuildError, buildApp, type PageAsset } from './build';
 import {
   activity,
   apps,
@@ -42,8 +42,9 @@ function formatTime(iso: string): string {
 /** The button: build here, then hand the compiled file to the agent to publish. */
 async function buildAndPublish(appId: string): Promise<void> {
   let path: string;
+  let assets: PageAsset[];
   try {
-    ({ path } = await buildApp(appId));
+    ({ path, assets } = await buildApp(appId));
   } catch {
     // buildApp has already put the messages in `failure`, which the view shows.
     return;
@@ -56,6 +57,7 @@ async function buildAndPublish(appId: string): Promise<void> {
       : `Publish the compiled "${appId}" at "${path}" (this app's storage) as a Claude Artifact, then call recordPublished.`,
     appId,
     path,
+    ...(assets.length ? { assets } : {}),
     ...(prior ? { previousUrl: prior.url } : {}),
   });
 }
@@ -206,7 +208,7 @@ export default defineApp({
     },
     build: {
       description:
-        "Clone an installed app's source into this app's storage and compile it. Returns { path, warnings }: the compiled page, relative to this app's storage root. Compile errors are thrown and shown to the user",
+        "Clone an installed app's source into this app's storage and compile it. Returns { path, assets, warnings }: the compiled page and the files to publish beside it (assets: [{ path, publishedAs, contentType }]), paths relative to this app's storage root. Compile errors are thrown and shown to the user",
       params: z.object({ appId: z.string() }),
       run: async (p) => {
         setSelected(p.appId);

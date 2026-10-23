@@ -22,13 +22,24 @@
  */
 
 /**
- * Trigger a browser download of `blob`, named `filename`.
+ * True when the page runs as a published claude.ai Artifact (Artifact Publisher's output)
+ * instead of inside YAAR. The claude.ai viewer defines `window.claude` before any page
+ * script runs; YAAR never does. There is no YAAR backend there, so storage, verb and agent
+ * calls fail, while in-browser work and `downloadBlob` still do.
+ */
+function isPublishedArtifact(): boolean {
+  return typeof globalThis.window?.claude?.use === 'function';
+}
+
+/**
+ * Trigger a browser download of `blob`, named `filename`. Resolves `true` once the file is
+ * handed off and `false` when the viewer declined it.
  *
  * The revoke is deferred a tick rather than run right after `click()`: the click
  * only *schedules* the download, and revoking the object URL synchronously races
  * the fetch of the very URL that was just handed to the browser.
  */
-export function downloadBlob(blob: Blob, filename: string): void {
+export async function downloadBlob(blob: Blob, filename: string): Promise<boolean> {
   // In YAAR's own window the frame's `<a download>` goes nowhere, and the native host is
   // main-frame only: the shell (which the device state says can save) does it for us.
   const host = globalThis.yaar?.device?.get?.().host;
@@ -42,7 +53,26 @@ export function downloadBlob(blob: Blob, filename: string): void {
           [bytes],
         ),
       );
-    return;
+    return true;
+  }
+  // A claude.ai Artifact frame is sandboxed past `<a download>`: the viewer saves the file,
+  // after a confirmation, when the publish declared the `downloads` capability.
+  if (isPublishedArtifact()) {
+    const downloads = await window.claude.use('downloads');
+    if (downloads) {
+      try {
+        await downloads.save({ filename, data: blob });
+        return true;
+      } catch (e) {
+        if (e?.code === 'declined') return false;
+        const err = new Error(
+          `${filename} was not saved (${e?.code ?? 'unavailable'})${e?.message ? `: ${e.message}` : ''}`,
+        );
+        err.code = e?.code ?? 'unavailable';
+        throw err;
+      }
+    }
+    // null: the publish did not declare `downloads`; the anchor below is all that is left.
   }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -55,6 +85,7 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
 }
 
 /**

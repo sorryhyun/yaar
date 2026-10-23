@@ -4,16 +4,22 @@ you publish the compiled page with the `Artifact` tool and record the link.
 
 ## Publishing an app
 
-A request arrives either as a user click (the build already ran; the payload carries `appId` and
-`path`) or as a message asking you to publish app X (run the `build` command yourself first and
-take `path` from its result).
+A request arrives either as a user click (the build already ran; the payload carries `appId`,
+`path` and any `assets`) or as a message asking you to publish app X (run the `build` command
+yourself first and take `path` and `assets` from its result).
 
 1. **Resolve the file.** `path` is relative to this app's storage tree; join it onto the
    directory named under "Files on disk" below. Pass that absolute path to both tools below.
 2. **You don't have to `Read` the whole file.** Apps in yaar are already read and verified multiple
    times by agents; reading them again is waste of token.
-3. **Call `Artifact`** with that `file_path`, a one-sentence `description` of the app, and on a
-   first publish an `icon` word that fits it.
+3. **Call `Artifact`** with that `file_path`, a one-sentence `description` of the app,
+   `capabilities: {"downloads": true}`, and on a first publish an `icon` word that fits it.
+   Pass the capabilities on every publish, updates included: an app's `downloadBlob` saves
+   files through it, and a page published without it cannot save anything.
+   When there are `assets` (the fonts the page links, copied beside it), also pass
+   `files`, one entry per asset: `{"<publishedAs>": {"from": "<absolute path>",
+   "contentType": "<contentType>"}}`, the absolute path joined the same way as `path`. Without
+   them the page falls back to the system font, Korean text included.
 4. **Call `recordPublished`** with the `appId`, the storage-relative `path`, the URL `Artifact`
    returned, and a short title (the app's name).
 
@@ -41,4 +47,6 @@ Never publish content that impersonates a real person or organization.
 The published page is the app's compiled HTML as YAAR serves it. Outside YAAR it has no backend,
 so storage, agent and verb calls fail there. A self-contained app (a game, a calculator, a static
 page) works; an app that reads YAAR data or talks to its agent does not. Say so when the user
-picks an app like that.
+picks an app like that. Downloads are the exception: `downloadBlob` asks the viewer to save the
+file, though claude.ai accepts only some extensions (no `wav`/`flac`/`mp3`; `webm` and `zip`
+are fine).

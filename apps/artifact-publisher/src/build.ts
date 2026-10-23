@@ -2,7 +2,7 @@
 // dist/index.html sits under the agent's working directory where the Artifact tool can
 // reach it. Same clone payload and binary handling as devtools' cloneApp.
 
-import { appStorage, errMsg, invoke } from '@bundled/yaar';
+import { appStorage, bytesToBase64, errMsg, invoke } from '@bundled/yaar';
 import { compile } from '@bundled/yaar-dev';
 import { setActivity, setFailure, startStep } from './store';
 
@@ -32,6 +32,46 @@ export function outputPath(appId: string): string {
   return `${projectDir(appId)}/dist/index.html`;
 }
 
+/** A file published beside the page through the Artifact tool's `files`. */
+export interface PageAsset {
+  /** Where it sits, relative to this app's storage root. */
+  path: string;
+  /** The path the page links it by, relative to the page. */
+  publishedAs: string;
+  contentType: string;
+}
+
+/**
+ * A font the page links from YAAR's web root, such as the design tokens'
+ * `url('/NanumSquareNeoOTF-Rg.otf')`. The Artifact host serves none of them, so a
+ * published page would fall back to the system font, Hangul included.
+ */
+const ROOT_FONT = /url\((['"]?)\/([\w.-]+\.(otf|ttf|woff2?))\1\)/g;
+const FONT_TYPES: Record<string, string> = {
+  otf: 'font/otf',
+  ttf: 'font/ttf',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+};
+
+/** Copy each root-linked font next to the compiled page and link it relatively. */
+async function bundleRootFonts(appId: string): Promise<PageAsset[]> {
+  const page = outputPath(appId);
+  const html = await appStorage.read(page);
+  const fonts = new Map<string, string>();
+  for (const m of html.matchAll(ROOT_FONT)) fonts.set(m[2], FONT_TYPES[m[3]]);
+  const assets: PageAsset[] = [];
+  for (const [file, contentType] of fonts) {
+    const res = await fetch(`/${file}`);
+    if (!res.ok) throw new BuildError([`Could not copy /${file} for the page: HTTP ${res.status}`]);
+    const path = `${projectDir(appId)}/dist/${file}`;
+    await appStorage.save(path, bytesToBase64(await res.arrayBuffer()), { encoding: 'base64' });
+    assets.push({ path, publishedAs: file, contentType });
+  }
+  if (assets.length) await appStorage.save(page, html.replace(ROOT_FONT, 'url($1$2$1)'));
+  return assets;
+}
+
 /** Drop a previous clone so files the app has since deleted do not linger in the build. */
 async function clearProject(appId: string): Promise<void> {
   let entries: Awaited<ReturnType<typeof appStorage.list>>;
@@ -50,10 +90,12 @@ async function clearProject(appId: string): Promise<void> {
 
 /**
  * Clone and compile `appId`. Resolves with the storage-relative path of the compiled
- * page; throws BuildError with the compiler's messages. Leaves `activity` cleared and,
- * on failure, `failure` set.
+ * page and the files to publish beside it; throws BuildError with the compiler's
+ * messages. Leaves `activity` cleared and, on failure, `failure` set.
  */
-export async function buildApp(appId: string): Promise<{ path: string; warnings: string[] }> {
+export async function buildApp(
+  appId: string,
+): Promise<{ path: string; assets: PageAsset[]; warnings: string[] }> {
   if (!/^[a-z][a-z0-9-]*$/.test(appId)) throw new BuildError([`Invalid app id: ${appId}`]);
   setFailure(null);
   try {
@@ -79,8 +121,9 @@ export async function buildApp(appId: string): Promise<{ path: string; warnings:
         result.errors?.length ? result.errors : [result.error ?? 'Compile failed'],
       );
     }
+    const assets = await bundleRootFonts(appId);
     setActivity(null);
-    return { path: outputPath(appId), warnings: result.warnings ?? [] };
+    return { path: outputPath(appId), assets, warnings: result.warnings ?? [] };
   } catch (e) {
     const messages = e instanceof BuildError ? e.messages : [errMsg(e)];
     setActivity(null);

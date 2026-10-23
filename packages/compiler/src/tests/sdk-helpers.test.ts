@@ -291,6 +291,56 @@ describe('downloadBlob inside the native window', () => {
   });
 });
 
+describe('downloadBlob in a published claude.ai Artifact', () => {
+  async function inArtifact(downloads: unknown, run: () => Promise<unknown>) {
+    const g = globalThis as any;
+    const savedWindow = g.window;
+    g.window = {
+      parent: {},
+      claude: { use: async (n: string) => (n === 'downloads' ? downloads : null) },
+    };
+    try {
+      return await run();
+    } finally {
+      g.window = savedWindow;
+      if (savedWindow === undefined) delete g.window;
+    }
+  }
+
+  test('hands the blob to the viewer instead of clicking an anchor', async () => {
+    const saves: any[] = [];
+    const blob = new Blob(['hi']);
+    const ok = await inArtifact({ save: async (r: any) => void saves.push(r) }, () =>
+      downloadBlob(blob, 'song.webm'),
+    );
+    expect(ok).toBe(true);
+    expect(saves).toEqual([{ filename: 'song.webm', data: blob }]);
+    expect(anchors).toBeEmpty();
+  });
+
+  test('a declined save resolves false; any other refusal rejects with its code', async () => {
+    const refuse = (code: string) => ({
+      save: async () => {
+        throw { code, message: 'nope' };
+      },
+    });
+    expect(await inArtifact(refuse('declined'), () => downloadBlob(new Blob(['x']), 'a.zip'))).toBe(
+      false,
+    );
+    const err: any = await inArtifact(refuse('extension_not_enabled'), () =>
+      downloadBlob(new Blob(['x']), 'a.zip').catch((e) => e),
+    );
+    expect(err.code).toBe('extension_not_enabled');
+    expect(err.message).toContain('a.zip');
+  });
+
+  test('without the downloads capability it falls back to the anchor', async () => {
+    const ok = await inArtifact(null, () => downloadBlob(new Blob(['x']), 'notes.txt'));
+    expect(ok).toBe(true);
+    expect(anchors).toHaveLength(1);
+  });
+});
+
 describe('blobToDataUrl', () => {
   test('reads a blob into a data: URL carrying its MIME type', async () => {
     const url = await blobToDataUrl(new Blob(['hi'], { type: 'text/plain' }));

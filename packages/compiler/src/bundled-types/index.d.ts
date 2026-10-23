@@ -2333,9 +2333,16 @@ declare module '@bundled/yaar' {
    * `<a download>` / click / revoke dance, with the revoke deferred a tick so it
    * cannot race the download it just scheduled. Inside YAAR's own desktop window, where
    * an `<a download>` in an app frame saves nothing, the blob is handed to the shell to
-   * save instead (a toast says where it landed).
+   * save instead (a toast says where it landed). In an app published as a claude.ai
+   * Artifact, the viewer saves it after a confirmation; there only a few extensions are
+   * accepted (images, `mp4`/`webm`, `txt`/`json`/`md`/`csv`/`html`/`svg`/`pdf`, office
+   * files, `zip`), so audio goes out as `webm` or inside a `zip`.
+   *
+   * Resolves `true` once the file is handed off and `false` when the viewer declined it.
+   * Rejects, with the reason as `code`, when a claude.ai viewer refuses the file (such as
+   * `rejected_extension`); inside YAAR it never rejects, so a call need not be awaited.
    */
-  export function downloadBlob(blob: Blob, filename: string): void;
+  export function downloadBlob(blob: Blob, filename: string): Promise<boolean>;
 
   /**
    * Read a Blob or File into a `data:` URL (base64, with the MIME prefix).
