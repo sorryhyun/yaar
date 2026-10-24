@@ -14,12 +14,21 @@ interface YaarApp {
   state(key: string): Promise<unknown>;
   command(name: string, params?: Record<string, unknown>): Promise<unknown>;
   describe(key: string): Promise<string | null>;
+  docs(name?: string): Promise<unknown>;
 }
 
 type StubWindow = Record<string, unknown> & { yaarApp?: YaarApp };
 
-/** Evaluate the script over a stub window; `top` makes it its own parent, as a top window is. */
-function install(opts: { top?: boolean; claude?: boolean }): StubWindow {
+/**
+ * Evaluate the script over a stub window; `top` makes it its own parent, as a top window is.
+ * `docs` is what Artifact Publisher embeds in `<script id="yaar-app-agent-docs">`.
+ */
+function install(opts: {
+  top?: boolean;
+  claude?: boolean;
+  token?: string;
+  docs?: unknown;
+}): StubWindow {
   const window: StubWindow = {
     __yaarAppProtocolInstalled: false,
     addEventListener: () => {},
@@ -27,7 +36,14 @@ function install(opts: { top?: boolean; claude?: boolean }): StubWindow {
   };
   window.parent = opts.top ? window : { postMessage: () => {} };
   if (opts.claude) window.claude = { use: async () => null };
-  new Function('window', IFRAME_APP_PROTOCOL_SCRIPT)(window);
+  if (opts.token) window.__YAAR_TOKEN__ = opts.token;
+  const document = {
+    getElementById: (id: string) =>
+      id === 'yaar-app-agent-docs' && opts.docs !== undefined
+        ? { textContent: JSON.stringify(opts.docs) }
+        : null,
+  };
+  new Function('window', 'document', IFRAME_APP_PROTOCOL_SCRIPT)(window, document);
   return window;
 }
 
@@ -68,6 +84,29 @@ describe('window.yaarApp', () => {
   it('is installed in a top window and in a claude.ai viewer frame', () => {
     expect(install({ top: true }).yaarApp).toBeDefined();
     expect(install({ claude: true }).yaarApp).toBeDefined();
+  });
+
+  it('is not installed in a top window that carries an iframe token', () => {
+    expect(install({ top: true, token: 'tok' }).yaarApp).toBeUndefined();
+  });
+
+  it('serves the embedded manual, its topic index and each topic', async () => {
+    const app = install({
+      top: true,
+      docs: {
+        skill: '# Demo',
+        prompt: 'Drive it.',
+        topics: [{ name: 'tempo', description: 'Read before changing tempo', body: '## Tempo' }],
+      },
+    }).yaarApp!;
+    expect(await app.docs()).toEqual({
+      skill: '# Demo',
+      prompt: 'Drive it.',
+      topics: [{ name: 'tempo', description: 'Read before changing tempo' }],
+    });
+    expect(await app.docs('tempo')).toBe('## Tempo');
+    await expect(app.docs('drums')).rejects.toThrow('Topics: tempo.');
+    expect(await install({ top: true }).yaarApp!.docs()).toBeNull();
   });
 
   it('serves the manifest, state and commands, aliases included', async () => {

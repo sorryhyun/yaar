@@ -12,7 +12,7 @@
  * message naming `defineApp` rather than a bare "not a function".
  */
 import { APP_MSG } from '../app-protocol.js';
-import { installGuard, YAAR_NAMESPACE } from './prelude.js';
+import { installGuard, OUTSIDE_YAAR, YAAR_NAMESPACE } from './prelude.js';
 
 export const IFRAME_APP_PROTOCOL_SCRIPT = `
 (function() {
@@ -650,8 +650,13 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
    *
    * Same lookups and params checks as the bridge, so a mistake is named the same way.
    * Each call returns a Promise and rejects with the message the bridge would have sent
-   * as \`error\`. Installed only outside YAAR (the top window, or a claude.ai viewer's
-   * frame), so an app inside YAAR keeps the one door the server gates.
+   * as \`error\`. Installed only outside YAAR (\`outsideYaar()\`: a claude.ai viewer's
+   * frame, or a top window with no iframe token), so an app inside YAAR keeps the one door
+   * the server gates.
+   *
+   * \`docs()\` serves the manual YAAR's app agent reads (agent/SKILL.md, agent/prompt.md,
+   * agent/docs/*.md), which Artifact Publisher embeds as JSON in
+   * \`<script id="yaar-app-agent-docs">\`. Without it a page has only the manifest.
    */
   function direct(produce) {
     return new Promise(function(resolve) { resolve(produce()); });
@@ -659,9 +664,16 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   function rejectWith(message) {
     return Promise.reject(new Error(message));
   }
-  var standalone = window.parent === window ||
-    !!(window.claude && typeof window.claude.use === 'function');
-  if (standalone && !Object.prototype.hasOwnProperty.call(window, 'yaarApp')) {
+  ${OUTSIDE_YAAR}
+  function agentDocs() {
+    try {
+      var el = document.getElementById('yaar-app-agent-docs');
+      return el ? JSON.parse(el.textContent || 'null') : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  if (outsideYaar() && !Object.prototype.hasOwnProperty.call(window, 'yaarApp')) {
     window.yaarApp = {
       /** Every state key and command with its JSON schemas, or null before registration. */
       manifest: function() {
@@ -700,6 +712,27 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         return direct(function() { return entry.describe(); }).then(function(v) {
           return v == null ? entry.description || null : String(v);
         });
+      },
+      /**
+       * No name: { skill, prompt, topics: [{ name, description }] }, the manual and the
+       * index of its topics. A name: that topic's markdown. Null when nothing is embedded.
+       */
+      docs: function(name) {
+        var d = agentDocs();
+        if (!d) return Promise.resolve(null);
+        var topics = d.topics || [];
+        if (name === undefined || name === null || name === '') {
+          return Promise.resolve({
+            skill: d.skill || null,
+            prompt: d.prompt || null,
+            topics: topics.map(function(t) { return { name: t.name, description: t.description }; })
+          });
+        }
+        for (var i = 0; i < topics.length; i++) {
+          if (topics[i].name === name) return Promise.resolve(topics[i].body);
+        }
+        return rejectWith('No docs topic "' + name + '". Topics: ' +
+          (topics.map(function(t) { return t.name; }).join(', ') || '(none)') + '.');
       }
     };
   }

@@ -3,14 +3,16 @@
  *
  * Overrides window.fetch so cross-origin requests are routed through
  * POST /api/fetch, which enforces the domain allowlist.
- * Same-origin and relative URLs pass through to the real fetch.
+ * Same-origin and relative URLs pass through to the real fetch, and so does everything
+ * outside YAAR (a published claude.ai Artifact), where no /api/fetch exists to proxy through.
  */
-import { API_BOOTSTRAP, installGuard, RESPONSE_FROM_PROXY } from './prelude.js';
+import { API_BOOTSTRAP, installGuard, OUTSIDE_YAAR, RESPONSE_FROM_PROXY } from './prelude.js';
 
 export const IFRAME_FETCH_PROXY_SCRIPT = `
 (function() {
   ${installGuard('__yaarFetchProxyInstalled')}
   ${API_BOOTSTRAP}
+  ${OUTSIDE_YAAR}
   ${RESPONSE_FROM_PROXY}
 
   var realFetch = window.fetch.bind(window);
@@ -34,6 +36,10 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
   }
 
   window.fetch = function(input, init) {
+    // A published page's host serves its own HTML for /api/fetch, so the proxy could only
+    // fail there. The browser's own fetch is all there is: CORS and the host's CSP decide.
+    if (outsideYaar()) return realFetch(input, init);
+
     var url;
     if (input instanceof Request) {
       url = input.url;

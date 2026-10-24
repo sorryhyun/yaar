@@ -19,11 +19,15 @@ Shared types between frontend and server.
   - An `eval` request (devtools previews only — the server's gate) first installs a `__debug`
     getter on `window`, serving the registration's `debug` (`defineApp({ debug })`). Lazy on
     purpose: a window that is never evaluated never gets the global.
-  - Outside YAAR — the top window, or a claude.ai Artifact viewer's frame (`window.claude`) —
-    the script also installs `window.yaarApp` (`manifest`, `state`, `command`, `describe`,
-    Promise-returning, same lookups and params checks as the bridge), so an agent driving a
-    published page in its own headless browser calls the protocol instead of clicking. Never
-    installed inside a YAAR window, where the server-gated bridge stays the only door.
+  - Outside YAAR — `OUTSIDE_YAAR` in `iframe-scripts/prelude.ts`: a claude.ai Artifact viewer's
+    frame (`window.claude`), or a top window holding no iframe token — the script also installs
+    `window.yaarApp` (`manifest`, `state`, `command`, `describe`, Promise-returning, same lookups
+    and params checks as the bridge), so an agent driving a published page in its own headless
+    browser calls the protocol instead of clicking. Its `docs(name?)` serves the app's agent
+    manual, which Artifact Publisher embeds as JSON in `<script id="yaar-app-agent-docs">`.
+    Never installed inside a YAAR window, where the server-gated bridge stays the only door. The
+    fetch proxy uses the same test to fetch directly there, and the `@bundled/yaar` shim
+    restates it (`artifact-storage.ts`) for its storage fallback.
   - `AppManifest.$defs` carries subschemas more than one descriptor shares; every
     `{"$ref": "#/$defs/name"}` inside a `params`/`returns`/state `schema` resolves against it,
     so **the manifest is the schema document**. Filled by the compiler
@@ -42,7 +46,7 @@ Shared types between frontend and server.
   - `ime-guard.ts` - swallows the composing-IME keydowns (notably Enter) a capture-phase `window` listener sees before any app handler, so a submit-on-Enter app doesn't fire early and double on commit
   - `text-selection.ts` - the phone's own text selection inside an app (#123): on `data-form-factor="mobile"` app content is `user-select: none` (fields excepted), a long-press selects a word as a `::highlight`, and the range is reported to the desktop (`APP_MSG.textSelection`), which draws the handles and menu and answers with `APP_MSG.textSelectionCommand`. Its behaviour is tested from the frontend (`tests/lib/frameTextSelectionScript.test.ts`), since it needs a DOM
   - `console-capture.ts` - overrides `console.log`/`warn`/`error`/`info` to post captured entries to the parent frame, for devtools to read as a preview app's console output
-  - `prelude.ts` - shared source fragments (`API_BOOTSTRAP`, `installGuard`, `RESPONSE_FROM_PROXY`) string-interpolated into the other injected scripts, which have no module system of their own on the iframe side
+  - `prelude.ts` - shared source fragments (`API_BOOTSTRAP`, `installGuard`, `OUTSIDE_YAAR`, `RESPONSE_FROM_PROXY`) string-interpolated into the other injected scripts, which have no module system of their own on the iframe side
   - `windows-sdk.ts` owns **everything about a link leaving an app**: `openUrl`, the
     `window.open` override, the click guard that keeps an anchor from navigating the app's own
     document, and the `yaar.links` surface (`open`/`onOpen`/`resolve`) an app configures all

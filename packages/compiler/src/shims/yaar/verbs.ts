@@ -7,6 +7,8 @@
  * functions already return parsed data. The typed helpers just pass through.
  */
 
+import { storageWithLocalFallback } from './artifact-storage.js';
+
 export const y = (window as any).yaar;
 
 export function asText(data: any): string {
@@ -171,7 +173,8 @@ export async function stream(
 
 // ── Sub-object re-exports ────────────────────────────────────────
 
-export const storage = y.storage;
+/** The injected storage SDK, with the browser-side fallback for a page outside YAAR. */
+export const storage = storageWithLocalFallback(() => y.storage);
 
 /**
  * Any spelling of a stored file, reduced to a storage-root-relative path — or `null`

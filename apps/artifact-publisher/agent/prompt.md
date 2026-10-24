@@ -54,14 +54,21 @@ Never publish content that impersonates a real person or organization.
 
 ## Known limitation
 
-The published page is the app's compiled HTML as YAAR serves it. Outside YAAR it has no backend,
-so storage, agent and verb calls fail there. A self-contained app (a game, a calculator, a static
-page) works; an app that reads YAAR data or talks to its agent does not. Say so when the user
-picks an app like that. Downloads are the exception: `downloadBlob` asks the viewer to save the
-file, though claude.ai accepts only some extensions (no `wav`/`flac`/`mp3`; `webm` and `zip`
-are fine).
+The published page is the app's compiled HTML as YAAR serves it, with no backend behind it.
+Outside YAAR the SDK falls back where it can: `appStorage` and `storage` (the app's own tree and
+`shared/`) keep files in the viewer's browser (IndexedDB: they survive a refresh, but belong to
+that viewer and browser, and never reach YAAR), `fetch` goes out directly instead of through
+YAAR's proxy (so a host that refuses cross-origin reads, or claude.ai's own CSP, can still block
+it), and `createSharedSignal` is a plain signal. Verbs, agents, sub-agents and server routes
+(PDF rendering, `yaar://` reads of other apps) have nothing to answer them. So a self-contained
+app works, and an app that keeps its work in its own storage mostly does; one that reads YAAR
+data or talks to its agent does not. Say so when the user picks an app like that.
+`downloadBlob` asks the viewer to save the file, though claude.ai accepts only some extensions
+(no `wav`/`flac`/`mp3`; `webm` and `zip` are fine).
 
 The app protocol survives in the page itself. Outside YAAR the page exposes `window.yaarApp`
-(`manifest()`, `state(key)`, `command(name, params)`, `describe(name)`), and the build puts a
-comment saying so at the top of `<head>`, so Claude in a claude.ai conversation about the
-Artifact can drive the app instead of clicking through it.
+(`manifest()`, `state(key)`, `command(name, params)`, `describe(name)`, `docs(name?)`), and the
+build puts a comment saying so at the top of `<head>`, followed by the app's agent manual
+(`agent/SKILL.md`, `agent/prompt.md` and the non-dev `agent/docs/` topics) as JSON, so Claude in
+a claude.ai conversation about the Artifact can read how to use the app and drive it instead of
+clicking through it.

@@ -10,6 +10,7 @@ import { createSignal } from 'solid-js';
 import { appStorage } from './app-storage.js';
 import { y, subscribe } from './verbs.js';
 import { showToast } from './ui.js';
+import { outsideYaar } from './artifact-storage.js';
 
 /**
  * Create a Solid.js signal that auto-persists to appStorage.
@@ -172,6 +173,9 @@ export function createSharedSignal<T>(
   options?: { onRemote?: (value: T, prev: T) => void },
 ): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>] {
   const [value, setValue] = createSignal<T>(initial);
+  // Outside YAAR there is no window-shared store to mirror, only this one copy: a plain
+  // signal, rather than a read, a watch and a write per set that each fail into the console.
+  if (outsideYaar()) return [value, (v) => void setValue(v as any), Promise.resolve(initial)];
   // The newest server rev this copy holds. Reads and pings can arrive out of order;
   // anything at or below this is already reflected, or superseded.
   let rev = 0;

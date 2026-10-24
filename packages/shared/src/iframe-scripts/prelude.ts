@@ -86,6 +86,29 @@ export const TOKEN_HEADERS = `
 `;
 
 /**
+ * Declares `outsideYaar()`: true when no YAAR desktop hosts this page, so nothing
+ * answers its `/api` calls or protocol requests. That is a claude.ai Artifact viewer's
+ * frame (`window.claude`), or a top window that holds no iframe token, which is where
+ * an agent's headless browser loads a published page's HTML. A YAAR window is an iframe
+ * of the desktop, and a dev preview opened on its own carries a token.
+ *
+ * Read per call, like `yaarToken()`: a token injected after install still counts. The
+ * `@bundled/yaar` shim restates this test (`compiler/src/shims/yaar/artifact-storage.ts`);
+ * keep the two the same.
+ */
+export const OUTSIDE_YAAR = `
+  function outsideYaar() {
+    if (window.claude && typeof window.claude.use === 'function') return true;
+    if (window.parent !== window || window.__YAAR_TOKEN__) return false;
+    try {
+      return !new URLSearchParams(location.search).get('__yaar_token');
+    } catch (e) {
+      return true;
+    }
+  }
+`;
+
+/**
  * Declares `responseFromProxyPayload(data)` — rebuilds a real `Response` from
  * the JSON envelope `/api/fetch` and `yaar://http` both answer with, decoding a
  * base64 body back to bytes.

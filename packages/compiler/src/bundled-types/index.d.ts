@@ -1950,8 +1950,8 @@ declare module '@bundled/yaar' {
    * installed app can reach it. It is still a plain subtree of YAAR storage
    * (`yaar://storage/apps/{appId}/`), visible to the user, the Storage app and agents.
    *
-   * In an app published as a claude.ai Artifact the same calls keep the files in the
-   * viewer's browser (IndexedDB): they survive a refresh, but belong to that one viewer and
+   * Outside YAAR (an app published as a claude.ai Artifact) the same calls keep the files in
+   * the viewer's browser (IndexedDB): they survive a refresh, but belong to that one viewer and
    * browser, can come back empty (a private window, cleared site data), and never reach YAAR.
    */
   export const appStorage: YaarAppStorage;
@@ -1973,7 +1973,12 @@ declare module '@bundled/yaar' {
    */
   export const appDb: YaarAppDb;
 
-  /** Files by storage-root-relative path — `save`, `read`, `list`, `remove`, `url`; reach is the commons plus what app.json declares. */
+  /**
+   * Files by storage-root-relative path — `save`, `read`, `list`, `remove`, `url`; reach is the commons plus what app.json declares.
+   *
+   * Outside YAAR (a published claude.ai Artifact) they keep files in the viewer's browser like
+   * `appStorage`, which an `apps/self/…` path reaches; `url()` still names the server's copy.
+   */
   export const storage: YaarStorage;
 
   /**

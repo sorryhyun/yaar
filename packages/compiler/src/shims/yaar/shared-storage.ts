@@ -61,7 +61,7 @@
  * works in, since it advertises files it has written.
  */
 
-import { y } from './verbs.js';
+import { storage, y } from './verbs.js';
 import { getAppId } from './app-identity.js';
 
 /** Fold any spelling of a reference onto a root-relative path. Null if it is not storage. */
@@ -234,14 +234,14 @@ export const sharedStorage = {
    * which a subresource fetch has no way to attach as a header.
    */
   url(name) {
-    return y.storage.url(resolve(name, 'url'));
+    return storage.url(resolve(name, 'url'));
   },
 
   /** Write a file into this app's commons directory. */
   async save(name, data) {
     // The write reports back the path it landed on, with `self` already expanded — the
     // cheapest place to learn this app's real directory, and one every app reaches.
-    const result = await y.storage.save(resolve(name, 'save'), data);
+    const result = await storage.save(resolve(name, 'save'), data);
     if (result) learnDir(result.path);
   },
 
@@ -250,12 +250,12 @@ export const sharedStorage = {
    * `arraybuffer`); the default follows the response's content type.
    */
   async read(name, options?) {
-    return y.storage.read(resolve(name, 'read'), options);
+    return storage.read(resolve(name, 'read'), options);
   },
 
   /** Read a file as a Blob — the form an `<img>`, a canvas or `mediabunny` wants. */
   async readBlob(name) {
-    return y.storage.read(resolve(name, 'readBlob'), { as: 'blob' });
+    return storage.read(resolve(name, 'readBlob'), { as: 'blob' });
   },
 
   /**
@@ -263,7 +263,7 @@ export const sharedStorage = {
    * sorted for you — entries come back in the order the server read them.
    */
   async list(subdir?) {
-    const result = await y.storage.list(resolve(subdir, 'list'));
+    const result = await storage.list(resolve(subdir, 'list'));
     if (!Array.isArray(result)) return [];
     // Entries come back with `self` expanded, so a listing names this app's real
     // directory even when nothing has been written through this SDK yet.
@@ -273,7 +273,7 @@ export const sharedStorage = {
 
   /** Delete a file from this app's commons directory. */
   async remove(name) {
-    await y.storage.remove(resolve(name, 'remove'));
+    await storage.remove(resolve(name, 'remove'));
   },
 
   /**
@@ -315,7 +315,7 @@ export const sharedStorage = {
     // extra request per app: the file was just written, so the listing cannot be empty.
     if (!knownDir) {
       try {
-        const entries = await y.storage.list(SELF_DIR);
+        const entries = await storage.list(SELF_DIR);
         if (Array.isArray(entries) && entries.length > 0) learnDir(entries[0].path);
       } catch {
         /* best effort — the pronoun still names the right file to every YAAR door */

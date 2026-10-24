@@ -284,7 +284,7 @@ export default defineApp({
     },
     forgetPublished: {
       description:
-        "Drop the history row for `appId`, for an Artifact deleted on claude.ai: the app shows as unpublished again and its next publish creates a new Artifact. Deletes nothing on claude.ai",
+        'Drop the history row for `appId`, for an Artifact deleted on claude.ai: the app shows as unpublished again and its next publish creates a new Artifact. Deletes nothing on claude.ai',
       params: z.object({ appId: z.string() }),
       run: async (p) => ({ removed: await forgetPublished(p.appId) }),
     },

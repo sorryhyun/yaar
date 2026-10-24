@@ -72,23 +72,87 @@ async function bundleRootFonts(appId: string): Promise<PageAsset[]> {
   return assets;
 }
 
+interface AgentDocs {
+  skill: string | null;
+  prompt: string | null;
+  topics: { name: string; description: string; body: string }[];
+}
+
+/** A doc's `key: value` frontmatter and the body after it; no frontmatter is all body. */
+function splitFrontmatter(text: string): { fields: Record<string, string>; body: string } {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+  if (!m) return { fields: {}, body: text };
+  const fields: Record<string, string> = {};
+  for (const line of m[1].split(/\r?\n/)) {
+    const kv = /^([a-z]+):\s*(.*)$/.exec(line);
+    if (kv) fields[kv[1]] = kv[2].replace(/^(['"])(.*)\1$/, '$2').trim();
+  }
+  return { fields, body: text.slice(m[0].length).trim() };
+}
+
+async function readOr(path: string): Promise<string | null> {
+  try {
+    return await appStorage.read(path);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Tell an agent reading the page how to drive it. In a claude.ai conversation about the
- * Artifact, Claude gets this HTML and runs it in its own headless browser, where the app
- * protocol has no desktop to answer and nothing else in a multi-megabyte bundle says it
- * exists, so it clicked through the UI instead. `window.yaarApp` is installed outside
- * YAAR by the protocol script (shared/iframe-scripts/app-protocol.ts).
+ * The manual YAAR's app agent reads, from the clone: the skill, the prompt, and the
+ * `agent/docs/` topics a runtime caller is indexed (`audience: agent|both`, as the server's
+ * `runtimeDocs` filters). Null when the app ships none of it.
+ */
+async function readAgentDocs(appId: string, meta: { agent?: Record<string, unknown> }) {
+  const dir = projectDir(appId);
+  const at = (key: string, fallback: string) => {
+    const p = meta.agent?.[key];
+    return `${dir}/${typeof p === 'string' && p ? p : fallback}`;
+  };
+  const docs: AgentDocs = {
+    skill: await readOr(at('skill', 'agent/SKILL.md')),
+    prompt: await readOr(at('prompt', 'agent/prompt.md')),
+    topics: [],
+  };
+  const entries = await appStorage.list(`${dir}/agent/docs`).catch(() => []);
+  for (const e of entries) {
+    // A listing's `path` may be the bare name or the full path; the name is all it needs.
+    const file = e.path.replace(/\/$/, '').split('/').pop() ?? '';
+    if (e.isDirectory || !file.endsWith('.md')) continue;
+    const text = await readOr(`${dir}/agent/docs/${file}`);
+    if (text === null) continue;
+    const { fields, body } = splitFrontmatter(text);
+    if (fields.audience === 'dev') continue;
+    const name = file.replace(/\.md$/, '');
+    const description =
+      fields.description || body.split('\n').find((l) => l.trim() && !l.startsWith('#')) || '';
+    docs.topics.push({ name, description: description.trim(), body });
+  }
+  docs.topics.sort((a, b) => a.name.localeCompare(b.name));
+  return docs.skill || docs.prompt || docs.topics.length ? docs : null;
+}
+
+/**
+ * Tell an agent reading the page how to drive it, and hand it the manual. In a claude.ai
+ * conversation about the Artifact, Claude gets this HTML and runs it in its own headless
+ * browser, where the app protocol has no desktop to answer and nothing else in a
+ * multi-megabyte bundle says it exists, so it clicked through the UI instead. Nor could it
+ * read the app's docs, which YAAR serves only through verbs. `window.yaarApp` is installed
+ * outside YAAR by the protocol script (shared/iframe-scripts/app-protocol.ts), and its
+ * `docs()` reads the JSON embedded here.
  */
 async function annotateForAgents(appId: string): Promise<void> {
   const page = outputPath(appId);
   const html = await appStorage.read(page);
   let name = appId;
+  let meta: { name?: unknown; agent?: Record<string, unknown> } = {};
   try {
-    const meta = JSON.parse(await appStorage.read(`${projectDir(appId)}/app.json`));
+    meta = JSON.parse(await appStorage.read(`${projectDir(appId)}/app.json`));
     if (typeof meta.name === 'string' && meta.name.trim()) name = meta.name.trim();
   } catch {
     // No readable app.json: the id names the app well enough.
   }
+  const docs = await readAgentDocs(appId, meta);
   // `--` cannot appear inside an HTML comment.
   const safe = (s: string) => s.replace(/-{2,}/g, '-');
   const note =
@@ -96,11 +160,22 @@ async function annotateForAgents(appId: string): Promise<void> {
     `window.yaarApp instead of clicking. yaarApp.manifest() lists every state key and ` +
     `command with its JSON schema; await yaarApp.state(key) reads one, await ` +
     `yaarApp.command(name, params) runs one, await yaarApp.describe(name) explains one. ` +
-    `It is installed when the page is the top window or runs in the claude.ai viewer. -->`;
+    (docs
+      ? `await yaarApp.docs() returns the app's manual { skill, prompt, topics } (also in ` +
+        `the yaar-app-agent-docs script below), and yaarApp.docs(name) one topic: where the ` +
+        `manual says read("yaar://apps/${safe(appId)}/docs/<name>") or ".../skill", use those. `
+      : '') +
+    `It is installed when the page runs outside YAAR (the claude.ai viewer, or a top window). ` +
+    `There, storage paths (app and shared/) are kept in this browser's IndexedDB, and YAAR ` +
+    `verbs, agents and server routes are not available. -->`;
+  // `<` escaped so no `</script>` or `<!--` in a doc can end the element early.
+  const embedded = docs
+    ? `\n<script type="application/json" id="yaar-app-agent-docs">${JSON.stringify(docs).replace(/</g, '\\u003c')}</script>`
+    : '';
   const at = html.indexOf('<head>');
   if (at < 0) return;
   const end = at + '<head>'.length;
-  await appStorage.save(page, `${html.slice(0, end)}\n${note}${html.slice(end)}`);
+  await appStorage.save(page, `${html.slice(0, end)}\n${note}${embedded}${html.slice(end)}`);
 }
 
 /** Drop a previous clone so files the app has since deleted do not linger in the build. */

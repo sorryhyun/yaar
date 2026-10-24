@@ -215,6 +215,7 @@ process.on('exit', () => {
  */
 const { appStorage } = await import('../shims/yaar/app-storage.js');
 const { sharedStorage } = await import('../shims/yaar/shared-storage.js');
+const { storage } = await import('../shims/yaar/verbs.js');
 const { createCollapsiblePanel, createPersistedSignal, createSharedSignal } =
   await import('../shims/yaar/reactive.js');
 const { createProtocolContext } = await import('../shims/yaar/protocol-context.js');
@@ -1071,28 +1072,32 @@ describe('sharedStorage under a devtools preview', () => {
 });
 
 /**
- * The few IndexedDB calls artifact-storage.ts makes, over a Map. Values are cloned on the
- * way in and out, as the real store does, so a caller mutating its buffer cannot reach it.
+ * The few IndexedDB calls artifact-storage.ts makes, over one Map per object store. Values
+ * are cloned on the way in and out, as the real store does, so a caller mutating its buffer
+ * cannot reach it. `rows` is appStorage's store, `root` the one the rest of `storage` uses.
  */
 function fakeIndexedDB() {
-  const rows = new Map<string, any>();
+  const stores = new Map<string, Map<string, any>>();
+  const storeOf = (name: string) => stores.get(name) ?? stores.set(name, new Map()).get(name)!;
   const request = (result?: unknown) => ({ result }) as any;
-  const objectStore = {
+  const objectStore = (rows: Map<string, any>) => ({
     put: (v: any) => request(void rows.set(v.path, structuredClone(v))),
     get: (k: string) => request(rows.has(k) ? structuredClone(rows.get(k)) : undefined),
     getAll: () => request([...rows.values()].map((v) => structuredClone(v))),
     delete: (k: string) => request(void rows.delete(k)),
-  };
+  });
   const db = {
-    createObjectStore: () => objectStore,
-    transaction: () => {
-      const tx: any = { objectStore: () => objectStore };
+    objectStoreNames: { contains: (name: string) => stores.has(name) },
+    createObjectStore: (name: string) => objectStore(storeOf(name)),
+    transaction: (name: string) => {
+      const tx: any = { objectStore: () => objectStore(storeOf(name)) };
       setTimeout(() => tx.oncomplete?.(), 0);
       return tx;
     },
   };
   return {
-    rows,
+    rows: storeOf('files'),
+    root: storeOf('storage'),
     open: () => {
       const req: any = { result: db };
       setTimeout(() => {
@@ -1104,9 +1109,11 @@ function fakeIndexedDB() {
   };
 }
 
+/** One for the file: artifact-storage.ts keeps the first database it opens. */
+const idb = fakeIndexedDB();
+
 describe('appStorage in a published claude.ai Artifact', () => {
   const g = globalThis as any;
-  const idb = fakeIndexedDB();
   const verbCalls: string[] = [];
 
   async function inArtifact<T>(run: () => Promise<T>): Promise<T> {
@@ -1158,5 +1165,78 @@ describe('appStorage in a published claude.ai Artifact', () => {
       expect(await appStorage.trySave('w.json', '1')).toBe(true);
     });
     expect(idb.rows.has('w.json')).toBe(true);
+  });
+});
+
+describe('storage outside YAAR', () => {
+  const g = globalThis as any;
+
+  /** A top window, as an agent's headless browser loads a published page's HTML. */
+  async function asTopWindow<T>(run: () => Promise<T>, search = ''): Promise<T> {
+    g.window.parent = g.window;
+    g.window.location = { search };
+    g.indexedDB = idb;
+    storageCalls.length = 0;
+    try {
+      return await run();
+    } finally {
+      delete g.window.parent;
+      delete g.window.location;
+      delete g.indexedDB;
+    }
+  }
+
+  test('a top window with no iframe token keeps appStorage in the browser', async () => {
+    await asTopWindow(() => appStorage.save('song.json', '{"bpm":90}'));
+    expect(idb.rows.has('song.json')).toBe(true);
+  });
+
+  test('the commons goes to its own store, read back in the shape asked for', async () => {
+    const out = await asTopWindow(async () => {
+      await storage.save('shared/music-maker/a.flac', new Uint8Array([1, 2, 3]));
+      expect((await storage.append('yaar://storage/shared/music-maker/a.flac', 'x')).size).toBe(4);
+      const bytes = new Uint8Array(
+        await storage.read('shared/music-maker/a.flac', { as: 'arraybuffer' }),
+      );
+      const listing = await storage.list('shared/music-maker');
+      return { bytes: [...bytes], listing: listing.map((e: any) => e.path) };
+    });
+    expect(out.bytes).toEqual([1, 2, 3, 120]);
+    expect(out.listing).toEqual(['shared/music-maker/a.flac']);
+    expect(idb.root.has('shared/music-maker/a.flac')).toBe(true);
+    expect(storageCalls).toEqual([]);
+  });
+
+  test("a path into the app's own tree reaches the files appStorage keeps", async () => {
+    const out = await asTopWindow(async () => {
+      await appStorage.save('mixes/r.txt', 'hi');
+      return {
+        viaSelf: await storage.read('apps/self/mixes/r.txt', { as: 'text' }),
+        viaUri: await storage.read('yaar://apps/anima/storage/mixes/r.txt', { as: 'text' }),
+        listing: (await storage.list('apps/self/mixes')).map((e: any) => e.path),
+      };
+    });
+    expect(out).toEqual({
+      viaSelf: 'hi',
+      viaUri: 'hi',
+      listing: ['apps/self/mixes/r.txt'],
+    });
+  });
+
+  test('a top window that carries an iframe token is still YAAR', async () => {
+    await asTopWindow(() => storage.save('shared/x.txt', 'y'), '?__yaar_token=t');
+    expect(storageCalls.map((c) => c.path)).toEqual(['shared/x.txt']);
+  });
+
+  test('createSharedSignal is a plain signal there, with no server round trip', async () => {
+    const before = sharedSets.length;
+    await asTopWindow(async () => {
+      const [get, set, ready] = createSharedSignal('standalone-key', 1);
+      expect(await ready).toBe(1);
+      set(2);
+      await Promise.resolve();
+      expect(get()).toBe(2);
+    });
+    expect(sharedSets.length).toBe(before);
   });
 });

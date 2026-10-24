@@ -1,31 +1,16 @@
 // @ts-nocheck — This file runs in browser iframes, not the server.
 // It is compiled by the Bun plugin for @bundled/yaar imports.
 /**
- * App-scoped storage — wraps the `yaar://apps/self/storage/` verbs. In a published claude.ai
- * Artifact there are no verbs to wrap, and the same calls keep files in the viewer's browser
- * instead (artifact-storage.ts).
+ * App-scoped storage — wraps the `yaar://apps/self/storage/` verbs. Outside YAAR (a published
+ * claude.ai Artifact) there are no verbs to wrap, and the same calls keep files in the
+ * viewer's browser instead (artifact-storage.ts).
  */
 
 import { y } from './verbs.js';
 import { errMsg, showToast } from './ui.js';
 import { base64FromBuffer } from './image.js';
 import { base64ToBytes } from './files.js';
-import {
-  isPublishedArtifact,
-  localAppend,
-  localList,
-  localRead,
-  localReadOr,
-  localRemove,
-  localWrite,
-} from './artifact-storage.js';
-
-async function toBytes(data: string | Blob | ArrayBuffer | Uint8Array): Promise<Uint8Array> {
-  if (typeof data === 'string') return new TextEncoder().encode(data);
-  if (data instanceof Uint8Array) return data;
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  return new Uint8Array(await data.arrayBuffer());
-}
+import { appLocal, outsideYaar, toBytes } from './artifact-storage.js';
 
 function appStorageUri(path: string): string {
   const clean = path.replace(/^\//, '');
@@ -65,10 +50,10 @@ export const appStorage = {
     content: string,
     options?: { encoding?: 'utf-8' | 'base64' },
   ): Promise<void> {
-    if (isPublishedArtifact()) {
+    if (outsideYaar()) {
       const bytes =
         options?.encoding === 'base64' ? base64ToBytes(content) : await toBytes(content);
-      return await localWrite(path, bytes);
+      return await appLocal.write(path, bytes);
     }
     const payload: Record<string, unknown> = { action: 'write', content };
     if (options?.encoding) payload.encoding = options.encoding;
@@ -108,12 +93,12 @@ export const appStorage = {
    * inside a verb payload — a recording's chunks are the case this exists for.
    */
   async append(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<number> {
-    if (isPublishedArtifact()) return await localAppend(path, await toBytes(data));
+    if (outsideYaar()) return await appLocal.append(path, await toBytes(data));
     const result = await y.storage.append(appStorageUri(path), data);
     return result.size;
   },
   async read(path: string): Promise<string> {
-    if (isPublishedArtifact()) return await (await localRead(path)).text();
+    if (outsideYaar()) return await (await appLocal.read(path)).text();
     // Through the raw storage door (an HTTP GET of the file), not the verb layer. A verb
     // read of a text file whose content happens to parse as JSON hands back the parsed
     // value, and re-serializing that flattens the file to one minified line — so every
@@ -123,7 +108,7 @@ export const appStorage = {
     return String(await y.storage.read(appStorageUri(path), { as: 'text' }));
   },
   async readJson<T = unknown>(path: string): Promise<T> {
-    if (isPublishedArtifact()) return JSON.parse(await (await localRead(path)).text());
+    if (outsideYaar()) return JSON.parse(await (await appLocal.read(path)).text());
     return y.read(appStorageUri(path));
   },
   /**
@@ -141,8 +126,8 @@ export const appStorage = {
    */
   async readJsonOr<T>(path: string, fallback: T): Promise<T> {
     try {
-      if (isPublishedArtifact()) {
-        const blob = await localReadOr(path);
+      if (outsideYaar()) {
+        const blob = await appLocal.readOr(path);
         const value = blob ? JSON.parse(await blob.text()) : null;
         return value === null || value === undefined ? fallback : (value as T);
       }
@@ -180,11 +165,11 @@ export const appStorage = {
   },
   /** A file's bytes as a Blob — the form an `<img>`, a canvas or a parser wants. */
   async readBlob(path: string): Promise<Blob> {
-    if (isPublishedArtifact()) return await localRead(path);
+    if (outsideYaar()) return await appLocal.read(path);
     return y.storage.read(appStorageUri(path), { as: 'blob' });
   },
   async list(dirPath?: string): Promise<YaarAppStorageEntry[]> {
-    if (isPublishedArtifact()) return await localList(dirPath ?? '');
+    if (outsideYaar()) return await appLocal.list(dirPath ?? '');
     const result = await y.list(appStorageUri(dirPath ?? ''));
     if (!Array.isArray(result)) return [];
     // Convert resource_link format to storage entry shape for backward compat
@@ -203,7 +188,7 @@ export const appStorage = {
     });
   },
   async remove(path: string): Promise<void> {
-    if (isPublishedArtifact()) return await localRemove(path);
+    if (outsideYaar()) return await appLocal.remove(path);
     await y.delete(appStorageUri(path));
   },
 };

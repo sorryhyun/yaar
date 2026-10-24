@@ -31,6 +31,7 @@ interface Call {
 function installProxy(
   href = 'http://localhost:8000/api/apps/ocr/dist/index.html',
   globalToken: string | null = 'tok-123',
+  opts: { top?: boolean; claude?: boolean } = {},
 ) {
   const real: Call[] = [];
   const window = {
@@ -44,6 +45,9 @@ function installProxy(
       );
     },
   } as Record<string, unknown>;
+  // Left undefined, `parent` differs from `window`: an iframe, as every YAAR window is.
+  if (opts.top) window.parent = window;
+  if (opts.claude) window.claude = { use: async () => null };
   const location = { search: new URL(href).search, origin: new URL(href).origin, href };
 
   // `window` and `location` are parameters, so they shadow Bun's globals inside.
@@ -151,5 +155,32 @@ describe('iframe fetch proxy — token discovery, standalone', () => {
     const p = installProxy(undefined, null);
     const call = await p.go('/api/storage/apps/self/x.json');
     expect(call.init?.headers).toBeUndefined();
+  });
+});
+
+/**
+ * Outside YAAR there is no /api/fetch: a published page's host answers that path with the
+ * page's own HTML, so every proxied request failed and an app's sample download with it.
+ */
+describe('iframe fetch proxy — outside YAAR', () => {
+  const PAGE = 'https://www.claudeusercontent.com/artifact/index.html';
+
+  it('fetches cross-origin directly in a top window with no token', async () => {
+    const p = installProxy(PAGE, null, { top: true });
+    expect((await p.go('https://raw.githubusercontent.com/x/a.flac')).url).toBe(
+      'https://raw.githubusercontent.com/x/a.flac',
+    );
+  });
+
+  it('fetches cross-origin directly in a claude.ai viewer frame', async () => {
+    const p = installProxy(PAGE, null, { claude: true });
+    expect((await p.go('https://example.com/thing.json')).url).toBe(
+      'https://example.com/thing.json',
+    );
+  });
+
+  it('still proxies in a top window that carries a token', async () => {
+    const p = installProxy(PAGE, 'tok-123', { top: true });
+    expect((await p.go('https://example.com/thing.json')).url).toBe('/api/fetch');
   });
 });
