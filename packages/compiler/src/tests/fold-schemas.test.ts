@@ -64,6 +64,35 @@ const HEAD = `import { defineApp } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 `;
 
+describe('the fold runs the app as a YAAR window', () => {
+  // Module scope sees the stub window. Its catch-all answered `window.claude.use` with a
+  // callable, so the SDK took the fold for a published claude.ai page and opened IndexedDB
+  // for every persisted signal, logging storage_unavailable on each server start.
+  test('the stub window has a parent and no claude.ai viewer', async () => {
+    const result = await compileApp({
+      'src/main.ts': `${HEAD}
+        const w = window as any;
+        const inside = w.parent !== w && typeof w.claude?.use !== 'function';
+        export default defineApp({
+          id: 'folder',
+          name: 'Folder',
+          commands: {
+            probe: {
+              description: 'Probe',
+              params: inside ? z.object({ inside: z.string() }) : z.object({ outside: z.string() }),
+              run: () => null,
+            },
+          },
+        });`,
+    });
+
+    expect(result.errors ?? []).toEqual([]);
+    expect(Object.keys((await readProtocol()).commands.probe.params.properties)).toEqual([
+      'inside',
+    ]);
+  });
+});
+
 describe('a Zod schema reaches the manifest', () => {
   test('params fold to JSON Schema, alongside literal params left untouched', async () => {
     const result = await compileApp({

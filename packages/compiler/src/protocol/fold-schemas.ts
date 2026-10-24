@@ -158,6 +158,11 @@ const __yaarWindow = __yaarStub({
   // __registerApp is defineApp's private entry — named explicitly so the fold
   // exercises the same call the iframe does, rather than the inert catch-all.
   yaar: __yaarStub({ app: __yaarStub({ __registerApp: () => {}, emit: () => {}, sendInteraction: () => {} }) }),
+  // Inside YAAR, as the iframe is (artifact-storage.ts outsideYaar): a parent that is not
+  // this window, and no claude.ai viewer. Left to the catch-all, \`claude.use\` reads as a
+  // function, and the SDK took the fold for a published page and opened IndexedDB.
+  parent: __yaarInert,
+  claude: undefined,
   document: __yaarDocument,
   location: { href: 'https://yaar.invalid/', origin: 'https://yaar.invalid', protocol: 'https:', host: 'yaar.invalid', hostname: 'yaar.invalid', pathname: '/', search: '', hash: '' },
   navigator: { userAgent: 'yaar-schema-fold', language: 'en-US', languages: ['en-US'] },
