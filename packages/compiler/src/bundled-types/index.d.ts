@@ -1949,6 +1949,10 @@ declare module '@bundled/yaar' {
    * App-scoped storage (wraps yaar://apps/self/storage/ verbs). Scoped to this app: no other
    * installed app can reach it. It is still a plain subtree of YAAR storage
    * (`yaar://storage/apps/{appId}/`), visible to the user, the Storage app and agents.
+   *
+   * In an app published as a claude.ai Artifact the same calls keep the files in the
+   * viewer's browser (IndexedDB): they survive a refresh, but belong to that one viewer and
+   * browser, can come back empty (a private window, cleared site data), and never reach YAAR.
    */
   export const appStorage: YaarAppStorage;
 

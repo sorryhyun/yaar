@@ -35,7 +35,7 @@ import { computeSdkHash } from '../sdk-scripts.js';
  * `git show f85e4670:packages/compiler/src/build/build-manifest.ts`. Put the reason for a
  * new bump in its commit message instead.
  */
-export const COMPILER_VERSION = '44';
+export const COMPILER_VERSION = '45';
 
 export interface BuildManifest {
   sourceHash: string;

@@ -65,6 +65,7 @@ src/
     │   ├── index.ts       # Barrel — the entire @bundled/yaar public surface
     │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch, + the app/notifications/windows/links pass-throughs
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
+    │   ├── artifact-storage.ts # isPublishedArtifact + the IndexedDB store appStorage uses in a claude.ai Artifact
     │   ├── shared-storage.ts # sharedStorage — the commons, scoped to shared/{appId}/ (+ publish, a server-side copy)
     │   ├── app-identity.ts # setAppId/getAppId — the app's own id, recorded by defineApp for shared-storage.ts
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)

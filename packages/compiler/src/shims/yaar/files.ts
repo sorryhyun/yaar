@@ -21,15 +21,7 @@
  * needed it, and is re-exported under that name from the barrel.
  */
 
-/**
- * True when the page runs as a published claude.ai Artifact (Artifact Publisher's output)
- * instead of inside YAAR. The claude.ai viewer defines `window.claude` before any page
- * script runs; YAAR never does. There is no YAAR backend there, so storage, verb and agent
- * calls fail, while in-browser work and `downloadBlob` still do.
- */
-function isPublishedArtifact(): boolean {
-  return typeof globalThis.window?.claude?.use === 'function';
-}
+import { isPublishedArtifact } from './artifact-storage.js';
 
 /**
  * Trigger a browser download of `blob`, named `filename`. Resolves `true` once the file is

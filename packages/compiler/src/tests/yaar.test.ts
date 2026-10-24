@@ -1069,3 +1069,94 @@ describe('sharedStorage under a devtools preview', () => {
     );
   });
 });
+
+/**
+ * The few IndexedDB calls artifact-storage.ts makes, over a Map. Values are cloned on the
+ * way in and out, as the real store does, so a caller mutating its buffer cannot reach it.
+ */
+function fakeIndexedDB() {
+  const rows = new Map<string, any>();
+  const request = (result?: unknown) => ({ result }) as any;
+  const objectStore = {
+    put: (v: any) => request(void rows.set(v.path, structuredClone(v))),
+    get: (k: string) => request(rows.has(k) ? structuredClone(rows.get(k)) : undefined),
+    getAll: () => request([...rows.values()].map((v) => structuredClone(v))),
+    delete: (k: string) => request(void rows.delete(k)),
+  };
+  const db = {
+    createObjectStore: () => objectStore,
+    transaction: () => {
+      const tx: any = { objectStore: () => objectStore };
+      setTimeout(() => tx.oncomplete?.(), 0);
+      return tx;
+    },
+  };
+  return {
+    rows,
+    open: () => {
+      const req: any = { result: db };
+      setTimeout(() => {
+        req.onupgradeneeded?.();
+        req.onsuccess?.();
+      }, 0);
+      return req;
+    },
+  };
+}
+
+describe('appStorage in a published claude.ai Artifact', () => {
+  const g = globalThis as any;
+  const idb = fakeIndexedDB();
+  const verbCalls: string[] = [];
+
+  async function inArtifact<T>(run: () => Promise<T>): Promise<T> {
+    g.window.claude = { use: async () => null };
+    g.indexedDB = idb;
+    invokeImpl = async (uri) => void verbCalls.push(uri);
+    readImpl = async (uri) => void verbCalls.push(uri);
+    try {
+      return await run();
+    } finally {
+      delete g.window.claude;
+      delete g.indexedDB;
+    }
+  }
+
+  test('keeps text and base64 files in the browser, never calling a verb', async () => {
+    await inArtifact(async () => {
+      await appStorage.save('scenes/a.scene.json', '{"name":"a"}');
+      await appStorage.save('renders/r.png', btoa('PNG!'), { encoding: 'base64' });
+      expect(await appStorage.read('scenes/a.scene.json')).toBe('{"name":"a"}');
+      expect(await appStorage.readJson('scenes/a.scene.json')).toEqual({ name: 'a' });
+      const png = await appStorage.readBlob('renders/r.png');
+      expect(png.type).toBe('image/png');
+      expect(await png.text()).toBe('PNG!');
+    });
+    expect(verbCalls).toEqual([]);
+  });
+
+  test('lists direct children with full paths, folders included', async () => {
+    const entries = await inArtifact(async () => {
+      await appStorage.save('scenes/deep/b.scene.json', '{}');
+      return await appStorage.list('scenes');
+    });
+    expect(entries.map((e) => [e.path, e.isDirectory])).toEqual([
+      ['scenes/a.scene.json', false],
+      ['scenes/deep', true],
+    ]);
+    expect(entries[0].size).toBe('{"name":"a"}'.length);
+  });
+
+  test('readJsonOr falls back on absence; remove and append behave like the server', async () => {
+    await inArtifact(async () => {
+      expect(await appStorage.readJsonOr('missing.json', 7)).toBe(7);
+      expect(await appStorage.append('log.txt', 'ab')).toBe(2);
+      expect(await appStorage.append('log.txt', new Uint8Array([99]))).toBe(3);
+      expect(await appStorage.read('log.txt')).toBe('abc');
+      await appStorage.remove('log.txt');
+      expect(await appStorage.remove('log.txt').catch((e) => e.message)).toContain('not found');
+      expect(await appStorage.trySave('w.json', '1')).toBe(true);
+    });
+    expect(idb.rows.has('w.json')).toBe(true);
+  });
+});
