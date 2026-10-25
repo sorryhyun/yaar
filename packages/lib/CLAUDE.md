@@ -25,7 +25,7 @@ Two live examples: `pdf/poppler-pdf.ts` takes `binDir` (`IS_BUNDLED_EXE` is the 
 | --- | --- |
 | `archive/` | zip (hand-written on `node:zlib`: CRC-checked, inflate capped at the declared size, ZIP64) and tar/tar.gz (`Bun.Archive` behind a bounded gunzip) — list, read one entry, build. Every limit is the caller's; nothing here writes entries to disk |
 | `download/` | Chunked, resumable HTTP download to a file |
-| `fonts/` | OpenType/CFF/glyf subsetting — the byte-level half. The catalog of served faces is the server's `features/fonts/` |
+| `fonts/` | OpenType/CFF/glyf subsetting — the byte-level half (glyph ids kept, `cmap` trimmed to the kept characters so the rest fall back) — and a null-transform WOFF2 wrapper over `node:zlib` brotli. The catalog of served faces is the server's `features/fonts/` |
 | `freedpi/` | Loopback CONNECT proxy that fragments TLS past SNI-matching DPI. On by default; `YAAR_FREEDPI=0` turns it off |
 | `gltf/` | glTF 2.0 / GLB inspection: node tree with TRS, local and world mesh bounds, materials, image sizes, animation channels and keyframes (windowed, resampled, as Euler degrees), and clips played — a world-space pose at a time, a node's world path, skinned bounds — as data, no renderer. Sidecar files come through a resolver the caller passes |
 | `pdf/` | PDF rasterization and text extraction via poppler |

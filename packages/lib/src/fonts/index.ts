@@ -13,3 +13,5 @@ export { subsetFace, faceMetrics, type FaceSubset, type FaceMetrics } from './su
 export { subsetCff, inspectCff, type CffSubset, type CffInfo } from './cff-subset.js';
 export { subsetGlyf, type GlyfSubset } from './glyf-subset.js';
 export { rebuildSfnt } from './sfnt.js';
+export { buildCmap } from './cmap.js';
+export { sfntToWoff2 } from './woff2.js';

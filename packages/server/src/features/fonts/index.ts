@@ -15,7 +15,7 @@
  */
 
 import type { FontSubsetFace, FontSubsetRequest, FontSubsetResult } from '@yaar/shared';
-import { subsetFace } from '@yaar/lib/fonts';
+import { sfntToWoff2, subsetFace } from '@yaar/lib/fonts';
 import { listFaces, listFamilies, loadFace, matchWeight, type ServedFace } from './catalog.js';
 
 export { listFaces, listFamilies, matchWeight, resetFontCatalogForTest } from './catalog.js';
@@ -138,15 +138,16 @@ export async function subsetForText(request: SubsetRequest): Promise<SubsetResul
     const subset = subsetFace(font, chars);
     for (const ch of Object.keys(subset.gids)) covered.add(ch);
 
-    const mime = subset.outlines === 'cff' ? 'font/otf' : 'font/ttf';
+    const bytes = request.woff2 ? sfntToWoff2(subset.bytes) : subset.bytes;
+    const mime = request.woff2 ? 'font/woff2' : subset.outlines === 'cff' ? 'font/otf' : 'font/ttf';
     const result: SubsetFaceResult = {
       family: served.family,
       weight,
       servedWeight: served.weight,
       style: served.style,
       baseFont: baseFontName(served),
-      dataUrl: `data:${mime};base64,${base64(subset.bytes)}`,
-      bytes: subset.bytes.length,
+      dataUrl: `data:${mime};base64,${base64(bytes)}`,
+      bytes: bytes.length,
       glyphs: subset.glyphs,
       outlines: subset.outlines,
       ...(request.outlineTable && subset.outlineTable
@@ -172,9 +173,9 @@ export async function subsetForText(request: SubsetRequest): Promise<SubsetResul
         face.family,
         face.weight,
         face.style,
-        // The format hint has to follow the outlines, not the family: a browser
-        // that trusts it will refuse a TrueType file announced as 'opentype'.
-        `url(${face.dataUrl}) format('${face.outlines === 'cff' ? 'opentype' : 'truetype'}')`,
+        // The format hint has to follow the container and outlines, not the family:
+        // a browser that trusts it will refuse a TrueType file announced as 'opentype'.
+        `url(${face.dataUrl}) format('${request.woff2 ? 'woff2' : face.outlines === 'cff' ? 'opentype' : 'truetype'}')`,
       ),
     )
     .join('');

@@ -16,7 +16,7 @@ yourself first and take `path` and `assets` from its result).
    `capabilities: {"downloads": true}`, and on a first publish an `icon` word that fits it.
    Pass the capabilities on every publish, updates included: an app's `downloadBlob` saves
    files through it, and a page published without it cannot save anything.
-   When there are `assets` (the fonts the page links, copied beside it), also pass
+   When there are `assets` (the page's fonts, subsetted to WOFF2 beside it), also pass
    `files`, one entry per asset: `{"<publishedAs>": {"from": "<absolute path>",
    "contentType": "<contentType>"}}`, the absolute path joined the same way as `path`. Without
    them the page falls back to the system font, Korean text included.

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { join } from 'path';
+import { brotliDecompressSync } from 'node:zlib';
 import { PROJECT_ROOT } from '../config/env.js';
 import { permissionsAllow } from '../http/access.js';
 import { initRegistry } from '../handlers/index.js';
@@ -170,6 +171,23 @@ describe('subsetting a served face', () => {
   });
 
   /**
+   * The subsetters keep every glyph index and empty the dropped outlines, so the
+   * original cmap would map a dropped character to an empty glyph: a browser
+   * would draw nothing for it instead of falling back to the next face.
+   */
+  it('maps only the characters it carries, so the rest fall back', async () => {
+    const result = await subsetForText({ text: 'A가', weights: [400] });
+    const bytes = Buffer.from(result.faces[0].dataUrl.split(',')[1], 'base64');
+    const round = parseOpenType(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    );
+    expect(round.gidFor('A'.codePointAt(0)!)).toBe(result.faces[0].gids['A']);
+    expect(round.gidFor('가'.codePointAt(0)!)).toBe(result.faces[0].gids['가']);
+    expect(round.gidFor('B'.codePointAt(0)!)).toBe(0);
+    expect(round.gidFor('각'.codePointAt(0)!)).toBe(0);
+  });
+
+  /**
    * Two requested weights can land on one file. Subsetting it twice would embed
    * the same bytes twice — in a data: URL, that is the whole subset paid again.
    */
@@ -209,6 +227,81 @@ describe('subsetting a served face', () => {
  * types would surface as an app getting `undefined` at runtime with every
  * unit test in this file still green.
  */
+/** Read a WOFF2 back to its tables: header, null-transform directory, one brotli stream. */
+function decodeWoff2(bytes: Uint8Array): { flavor: number; tables: Map<string, Uint8Array> } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  expect(view.getUint32(0)).toBe(0x774f4632);
+  expect(view.getUint32(8)).toBe(bytes.length);
+  const count = view.getUint16(12);
+  // The spec's known-tag table, restated here so the test checks the encoder against it.
+  const KNOWN = (
+    'cmap|head|hhea|hmtx|maxp|name|OS/2|post|cvt |fpgm|glyf|loca|prep|CFF |VORG|EBDT|' +
+    'EBLC|gasp|hdmx|kern|LTSH|PCLT|VDMX|vhea|vmtx|BASE|GDEF|GPOS|GSUB|EBSC|JSTF|MATH|' +
+    'CBDT|CBLC|COLR|CPAL|SVG |sbix|acnt|avar|bdat|bloc|bsln|cvar|fdsc|feat|fmtx|fvar|' +
+    'gvar|hsty|just|lcar|mort|morx|opbd|prop|trak|Zapf|Silf|Glat|Gloc|Feat|Sill'
+  ).split('|');
+  let at = 48;
+  const dir: [string, number][] = [];
+  for (let i = 0; i < count; i++) {
+    const flags = bytes[at++];
+    let tag = KNOWN[flags & 63] ?? '';
+    if ((flags & 63) === 63) {
+      tag = String.fromCharCode(...bytes.subarray(at, at + 4));
+      at += 4;
+    }
+    let length = 0;
+    for (let b = bytes[at++]; ; b = bytes[at++]) {
+      length = length * 128 + (b & 0x7f);
+      if (!(b & 0x80)) break;
+    }
+    dir.push([tag, length]);
+  }
+  const stream = brotliDecompressSync(bytes.subarray(at, at + view.getUint32(20)));
+  const tables = new Map<string, Uint8Array>();
+  let offset = 0;
+  for (const [tag, length] of dir) {
+    tables.set(tag, new Uint8Array(stream.subarray(offset, offset + length)));
+    offset += length;
+  }
+  expect(offset).toBe(stream.length);
+  return { flavor: view.getUint32(4), tables };
+}
+
+describe('subsetting to WOFF2', () => {
+  const text = 'Hello 안녕하세요 0123';
+
+  it('carries the same tables as the OpenType subset, in about a third of the bytes', async () => {
+    const otf = (await subsetForText({ text, weights: [400] })).faces[0];
+    const result = await subsetForText({ text, weights: [400], woff2: true });
+    const face = result.faces[0];
+    expect(face.dataUrl.startsWith('data:font/woff2;base64,')).toBe(true);
+    expect(result.css).toContain("format('woff2')");
+    expect(face.bytes).toBeLessThan(otf.bytes / 2);
+
+    const sfnt = Buffer.from(otf.dataUrl.split(',')[1], 'base64');
+    const font = parseOpenType(
+      sfnt.buffer.slice(sfnt.byteOffset, sfnt.byteOffset + sfnt.byteLength),
+    );
+    const { flavor, tables } = decodeWoff2(
+      new Uint8Array(Buffer.from(face.dataUrl.split(',')[1], 'base64')),
+    );
+    expect(flavor).toBe(0x4f54544f); // 'OTTO'
+    expect([...tables.keys()].sort()).toEqual([...font.tables.keys()].sort());
+    for (const [tag, rec] of font.tables) {
+      expect(tables.get(tag)).toEqual(font.bytes.subarray(rec.offset, rec.offset + rec.length));
+    }
+  });
+
+  it('wraps a TrueType face with glyf and loca null-transformed', async () => {
+    const result = await subsetForText({ text: 'A가', family: 'D2Coding', woff2: true });
+    const bytes = new Uint8Array(Buffer.from(result.faces[0].dataUrl.split(',')[1], 'base64'));
+    const { flavor, tables } = decodeWoff2(bytes);
+    expect(flavor).toBe(0x00010000);
+    expect(tables.has('glyf')).toBe(true);
+    expect(tables.has('loca')).toBe(true);
+  });
+});
+
 describe('the yaar://system/fonts door', () => {
   it('resolves and answers read with the catalog the SDK expects', async () => {
     const result = await initRegistry().execute('read', 'yaar://system/fonts');

@@ -78,6 +78,7 @@ export async function inline(
     ...(opts.family ? { family: opts.family } : {}),
     ...(opts.weights ? { weights: opts.weights } : {}),
     ...(opts.outlineTable ? { outlineTable: true } : {}),
+    ...(opts.woff2 ? { woff2: true } : {}),
   });
 }
 

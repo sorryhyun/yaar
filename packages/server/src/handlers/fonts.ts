@@ -56,6 +56,12 @@ const INVOKE_SCHEMA: Record<string, unknown> = {
         'Also return the raw CFF table, base64, for a PDF /FontFile3. Roughly doubles the response; ' +
         'only a caller embedding glyphs in a PDF needs it.',
     },
+    woff2: {
+      type: 'boolean',
+      description:
+        'Return each face as WOFF2 instead of a bare OpenType file, about a third of the size. ' +
+        'For a page that ships the font; a PDF writer wants the default.',
+    },
   },
   required: ['text'],
 };
@@ -99,6 +105,7 @@ export function registerFontHandlers(registry: ResourceRegistry): void {
         family?: string;
         weights?: number[];
         outlineTable?: boolean;
+        woff2?: boolean;
       };
       if (typeof request.text !== 'string') {
         return error('Provide `text`: the characters the subset must cover.');
@@ -110,6 +117,7 @@ export function registerFontHandlers(registry: ResourceRegistry): void {
             family: request.family,
             weights: request.weights,
             outlineTable: request.outlineTable === true,
+            woff2: request.woff2 === true,
           }),
         );
       } catch (err) {

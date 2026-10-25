@@ -8,11 +8,12 @@
  * and the system Hangul fallback are ~10% apart on Latin, which is several
  * lines' worth of drift down a page.
  *
- * So the subsetted outline table is swapped back into the original file and
- * everything else is carried over untouched. That only works because both
- * subsetters preserve glyph indices: `cmap`, `hmtx`, `GPOS` and `GSUB` all
- * address glyphs by index, and reusing them verbatim is what keeps a browser's
- * layout identical to the full font it was measured against.
+ * So the subsetted outline table (and a `cmap` trimmed to the kept characters)
+ * is swapped back into the original file and everything else is carried over
+ * untouched. That only works because both subsetters preserve glyph indices:
+ * `hmtx`, `GPOS` and `GSUB` all address glyphs by index, and reusing them
+ * verbatim is what keeps a browser's layout identical to the full font it was
+ * measured against.
  */
 
 import type { OpenTypeFont } from './otf.js';

@@ -2,7 +2,7 @@
 // dist/index.html sits under the agent's working directory where the Artifact tool can
 // reach it. Same clone payload and binary handling as devtools' cloneApp.
 
-import { appStorage, bytesToBase64, errMsg, invoke } from '@bundled/yaar';
+import { appStorage, bytesToBase64, errMsg, fonts, invoke } from '@bundled/yaar';
 import { compile } from '@bundled/yaar-dev';
 import { setActivity, setFailure, startStep } from './store';
 
@@ -43,10 +43,10 @@ export interface PageAsset {
 
 /**
  * A font the page links from YAAR's web root, such as the design tokens'
- * `url('/NanumSquareNeoOTF-Rg.otf')`. The Artifact host serves none of them, so a
- * published page would fall back to the system font, Hangul included.
+ * `url('/NanumSquareNeoOTF-Rg.otf') format('opentype')`. The Artifact host serves none of
+ * them, so a published page would fall back to the system font, Hangul included.
  */
-const ROOT_FONT = /url\((['"]?)\/([\w.-]+\.(otf|ttf|woff2?))\1\)/g;
+const ROOT_FONT = /url\((['"]?)\/([\w.-]+\.(otf|ttf|woff2?))\1\)(\s*format\((['"]?)[\w-]+\5\))?/g;
 const FONT_TYPES: Record<string, string> = {
   otf: 'font/otf',
   ttf: 'font/ttf',
@@ -54,22 +54,108 @@ const FONT_TYPES: Record<string, string> = {
   woff2: 'font/woff2',
 };
 
-/** Copy each root-linked font next to the compiled page and link it relatively. */
+/** The most distinct characters one `fonts.inline` call takes (the server's MAX_SUBSET_CHARS). */
+const MAX_SUBSET_CHARS = 5000;
+
+/**
+ * What the published fonts cover: the 2,350 Hangul syllables of KS X 1001 (the set
+ * nearly all Korean text stays within), its symbol and jamo rows, ASCII and Latin-1,
+ * then whatever else the page's own source spells, up to the subset limit. A character
+ * outside it falls back to the system font: the subset's cmap claims only these.
+ */
+function subsetText(html: string): string {
+  const chars = new Set<string>();
+  const euckr = new TextDecoder('euc-kr');
+  const rows = [0xa1, 0xa4];
+  for (let row = 0xb0; row <= 0xc8; row++) rows.push(row);
+  for (const row of rows) {
+    for (let cell = 0xa1; cell <= 0xfe; cell++) {
+      const ch = euckr.decode(new Uint8Array([row, cell]));
+      if (ch !== '\ufffd') chars.add(ch);
+    }
+  }
+  for (let cp = 0x20; cp <= 0xff; cp++) {
+    if (cp < 0x7f || cp > 0x9f) chars.add(String.fromCodePoint(cp));
+  }
+  for (const ch of html) {
+    if (chars.size >= MAX_SUBSET_CHARS) break;
+    if (/[\p{L}\p{N}\p{P}\p{S}]/u.test(ch)) chars.add(ch);
+  }
+  return [...chars].join('');
+}
+
+/**
+ * Publish the root-linked fonts beside the page as WOFF2 subsets, and link them relatively.
+ *
+ * A whole NanumSquareNeo face is ~1.6 MB and the tokens link four, so copying them made
+ * every publish carry 6.6 MB of fonts. Subsetted to `subsetText` and WOFF2'd, a face is
+ * ~130 KB. Light and Extra Bold are linked to the Regular and Bold subsets: apps barely
+ * use them, and two files instead of four halves what is left. A font the server's
+ * catalog does not serve is copied whole, as before.
+ */
 async function bundleRootFonts(appId: string): Promise<PageAsset[]> {
   const page = outputPath(appId);
   const html = await appStorage.read(page);
-  const fonts = new Map<string, string>();
-  for (const m of html.matchAll(ROOT_FONT)) fonts.set(m[2], FONT_TYPES[m[3]]);
-  const assets: PageAsset[] = [];
-  for (const [file, contentType] of fonts) {
+  const linked = new Map<string, string>();
+  for (const m of html.matchAll(ROOT_FONT)) linked.set(m[2], m[3]);
+  if (!linked.size) return [];
+
+  const catalog = await fonts.faces();
+  const text = subsetText(html);
+  const dist = `${projectDir(appId)}/dist`;
+  const assets = new Map<string, PageAsset>();
+  /** Root file name -> what the page links instead; a file copied whole keeps its link, made relative. */
+  const relink = new Map<string, string>();
+
+  const byFamily = new Map<string, Map<string, number>>();
+  for (const [file, ext] of linked) {
+    const face = catalog.faces.find((f) => f.url === `/${file}`);
+    if (face) {
+      const weights = byFamily.get(face.family) ?? new Map<string, number>();
+      weights.set(file, face.weight <= 500 ? 400 : 700);
+      byFamily.set(face.family, weights);
+      continue;
+    }
     const res = await fetch(`/${file}`);
     if (!res.ok) throw new BuildError([`Could not copy /${file} for the page: HTTP ${res.status}`]);
-    const path = `${projectDir(appId)}/dist/${file}`;
-    await appStorage.save(path, bytesToBase64(await res.arrayBuffer()), { encoding: 'base64' });
-    assets.push({ path, publishedAs: file, contentType });
+    await appStorage.save(`${dist}/${file}`, bytesToBase64(await res.arrayBuffer()), {
+      encoding: 'base64',
+    });
+    assets.set(file, { path: `${dist}/${file}`, publishedAs: file, contentType: FONT_TYPES[ext] });
   }
-  if (assets.length) await appStorage.save(page, html.replace(ROOT_FONT, 'url($1$2$1)'));
-  return assets;
+
+  for (const [family, files] of byFamily) {
+    const subset = await fonts.inline(text, {
+      family,
+      weights: [...new Set(files.values())],
+      woff2: true,
+    });
+    for (const [file, weight] of files) {
+      const face = subset.faces.find((f) => f.weight === weight);
+      if (!face) throw new BuildError([`Could not subset ${family} ${weight} for the page`]);
+      const name = `${family.replace(/[^\w-]/g, '')}-${face.servedWeight}.woff2`;
+      if (!assets.has(name)) {
+        await appStorage.save(
+          `${dist}/${name}`,
+          face.dataUrl.slice(face.dataUrl.indexOf(',') + 1),
+          {
+            encoding: 'base64',
+          },
+        );
+        assets.set(name, { path: `${dist}/${name}`, publishedAs: name, contentType: 'font/woff2' });
+      }
+      relink.set(file, `url('${name}') format('woff2')`);
+    }
+  }
+
+  await appStorage.save(
+    page,
+    html.replace(
+      ROOT_FONT,
+      (whole, _q, file: string) => relink.get(file) ?? whole.replace(`/${file}`, file),
+    ),
+  );
+  return [...assets.values()];
 }
 
 interface AgentDocs {

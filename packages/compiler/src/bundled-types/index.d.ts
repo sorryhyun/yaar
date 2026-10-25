@@ -2595,6 +2595,12 @@ declare module '@bundled/yaar' {
      * response; only a caller embedding glyphs in a PDF wants it.
      */
     outlineTable?: boolean;
+    /**
+     * Return each face as WOFF2 rather than a bare OpenType file: about a third
+     * of the size, for a caller that ships the bytes (a page's `@font-face`)
+     * rather than handing them to a PDF writer.
+     */
+    woff2?: boolean;
   }
 
   /**

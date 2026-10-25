@@ -66,6 +66,12 @@ export interface FontSubsetRequest {
    * doubles the response; only a caller embedding glyphs in a PDF wants it.
    */
   outlineTable?: boolean;
+  /**
+   * Return each face as WOFF2 rather than a bare OpenType file: about a third
+   * of the size, for a caller that ships the bytes (a page's `@font-face`)
+   * rather than handing them to a PDF writer.
+   */
+  woff2?: boolean;
 }
 
 /** One subsetted face in a {@link FontSubsetResult}. */
@@ -80,7 +86,7 @@ export interface FontSubsetFace {
   baseFont: string;
   /** The subsetted face as a `data:` URL — an `@font-face` `src`. */
   dataUrl: string;
-  /** Subset size in bytes, before base64. */
+  /** Size in bytes of what `dataUrl` carries (WOFF2 when asked for), before base64. */
   bytes: number;
   /** Glyphs carried, excluding `.notdef`. */
   glyphs: number;

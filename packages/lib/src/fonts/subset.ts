@@ -32,6 +32,7 @@ import type { FontMetrics } from '@yaar/shared';
 import type { OpenTypeFont, OutlineFormat } from './otf.js';
 import { subsetCff } from './cff-subset.js';
 import { subsetGlyf } from './glyf-subset.js';
+import { buildCmap } from './cmap.js';
 import { rebuildSfnt } from './sfnt.js';
 
 export { parseOpenType, type OpenTypeFont, type OutlineFormat } from './otf.js';
@@ -70,10 +71,12 @@ export function faceMetrics(font: OpenTypeFont): FaceMetrics {
 /**
  * Subset `font` down to the glyphs `chars` needs.
  *
- * Glyph indices are preserved in both formats, which is what lets `cmap`,
- * `hmtx`, `GPOS` and `GSUB` be carried over untouched — so the subset lays text
- * out identically to the full face a caller measured against, and a PDF can go
- * on addressing glyphs by the numbers it already has.
+ * Glyph indices are preserved in both formats, which is what lets `hmtx`,
+ * `GPOS` and `GSUB` be carried over untouched — so the subset lays text out
+ * identically to the full face a caller measured against, and a PDF can go on
+ * addressing glyphs by the numbers it already has. `cmap` is rewritten to the
+ * kept characters (see `cmap.ts`), so one outside the subset falls back to the
+ * next face instead of drawing as an empty glyph.
  *
  * A character the face has no glyph for is simply absent from `gids`; it is not
  * an error, because the caller's fallback for it (leave it in the raster, draw
@@ -83,6 +86,7 @@ export function subsetFace(font: OpenTypeFont, chars: Iterable<string>): FaceSub
   const gids: Record<string, number> = {};
   const advances: Record<string, number> = {};
   const wanted = new Set<number>();
+  const mapped = new Map<number, number>();
 
   for (const ch of chars) {
     const cp = ch.codePointAt(0);
@@ -92,14 +96,22 @@ export function subsetFace(font: OpenTypeFont, chars: Iterable<string>): FaceSub
     gids[ch] = gid;
     advances[ch] = font.advance(gid);
     wanted.add(gid);
+    mapped.set(cp, gid);
   }
+  const cmap = buildCmap(mapped);
 
   if (font.outlines === 'cff') {
     const cff = font.cff();
     if (!cff) throw new Error("Font claims CFF outlines but has no 'CFF ' table.");
     const subset = subsetCff(cff, wanted, { preserveIndices: true });
     return {
-      bytes: rebuildSfnt(font, new Map([['CFF ', subset.bytes]])),
+      bytes: rebuildSfnt(
+        font,
+        new Map([
+          ['CFF ', subset.bytes],
+          ['cmap', cmap],
+        ]),
+      ),
       outlineTable: subset.bytes,
       outlines: 'cff',
       glyphs: wanted.size,
@@ -130,6 +142,7 @@ export function subsetFace(font: OpenTypeFont, chars: Iterable<string>): FaceSub
         // `loca` is written long unconditionally, and `head.indexToLocFormat` is
         // what tells a reader so — a stale `head` would misread every offset.
         ['head', subset.head],
+        ['cmap', cmap],
       ]),
     ),
     outlineTable: null,
