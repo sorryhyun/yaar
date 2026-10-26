@@ -25,6 +25,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
 import android.webkit.RenderProcessGoneDetail;
@@ -69,6 +70,7 @@ public final class MainActivity extends Activity {
     private static final int REQ_FILES = 1;
     private static final int REQ_CAPTURE = 2;
     private static final int REQ_TERMUX = 3;
+    private static final int REQ_LOCATION = 4;
     private static final long PROBE_INTERVAL_MS = 1000;
     private static final int PROBE_TIMEOUT_MS = 800;
     private static final long WATCH_INTERVAL_MS = 3000;
@@ -107,6 +109,8 @@ public final class MainActivity extends Activity {
 
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingCapture;
+    private String pendingLocationOrigin;
+    private GeolocationPermissions.Callback pendingLocation;
     private Dialog popup;
     private WebView popupView;
 
@@ -197,6 +201,7 @@ public final class MainActivity extends Activity {
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
+        s.setGeolocationEnabled(true);
     }
 
     private static boolean isLoopback(Uri uri) {
@@ -315,6 +320,36 @@ public final class MainActivity extends Activity {
         @Override
         public void onPermissionRequestCanceled(PermissionRequest request) {
             if (pendingCapture == request) pendingCapture = null;
+        }
+
+        /**
+         * Location, on the same terms as the camera: loopback origins only, asking Android
+         * first. Never retained by the WebView, so a grant revoked in Android's settings is
+         * not shadowed by an old yes; once Android has said yes, asking again shows nothing.
+         */
+        @Override
+        public void onGeolocationPermissionsShowPrompt(String origin,
+                GeolocationPermissions.Callback callback) {
+            if (origin == null || !isLoopback(Uri.parse(origin))) {
+                callback.invoke(origin, false, false);
+                return;
+            }
+            if (hasLocationPermission()) {
+                callback.invoke(origin, true, false);
+                return;
+            }
+            if (pendingLocation != null) pendingLocation.invoke(pendingLocationOrigin, false, false);
+            pendingLocationOrigin = origin;
+            pendingLocation = callback;
+            requestPermissions(new String[] {
+                Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION
+            }, REQ_LOCATION);
+        }
+
+        @Override
+        public void onGeolocationPermissionsHidePrompt() {
+            pendingLocation = null;
+            pendingLocationOrigin = null;
         }
 
         /**
@@ -818,12 +853,28 @@ public final class MainActivity extends Activity {
         return null;
     }
 
+    /** Either precision will do: an approximate fix still answers getCurrentPosition. */
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED;
+    }
+
     /**
-     * All or nothing: getUserMedia for camera and microphone fails if either is missing, so a
-     * half grant would only move the failure from Android's dialog to the page.
+     * Capture is all or nothing: getUserMedia for camera and microphone fails if either is
+     * missing, so a half grant would only move the failure from Android's dialog to the page.
+     * Location takes either precision (Android 12+ lets the person pick approximate only).
      */
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        if (requestCode == REQ_LOCATION) {
+            if (pendingLocation == null) return;
+            pendingLocation.invoke(pendingLocationOrigin, hasLocationPermission(), false);
+            pendingLocation = null;
+            pendingLocationOrigin = null;
+            return;
+        }
         if (requestCode != REQ_CAPTURE || pendingCapture == null) return;
         boolean all = results.length == permissions.length && results.length > 0;
         for (int r : results) {

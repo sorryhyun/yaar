@@ -418,14 +418,15 @@ static void on_new_window(ICoreWebView2 *, ICoreWebView2NewWindowRequestedEventA
   if (is_http(o) || o.scheme == L"mailto") open_external(uri.p);
 }
 
-// Microphone and camera: granted to this machine's own pages only (the desktop on
+// Microphone, camera and location: granted to this machine's own pages only (the desktop on
 // localhost, isolated apps on 127.0.0.1), with no WebView2 prompt on top of Windows' own
 // privacy switch. Anything else, including a popup on someone else's site, is refused.
 static void on_permission(ICoreWebView2 *, ICoreWebView2PermissionRequestedEventArgs *a) {
   COREWEBVIEW2_PERMISSION_KIND kind;
   if (FAILED(a->get_PermissionKind(&kind))) return;
   if (kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE &&
-      kind != COREWEBVIEW2_PERMISSION_KIND_CAMERA) {
+      kind != COREWEBVIEW2_PERMISSION_KIND_CAMERA &&
+      kind != COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION) {
     return;
   }
   CoString uri;

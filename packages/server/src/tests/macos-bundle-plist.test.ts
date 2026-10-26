@@ -8,7 +8,8 @@
  *
  * The keys are not decoration. Without NSMicrophoneUsageDescription, WKWebView hides
  * `navigator.mediaDevices` from every frame and no app can record; without
- * NSCameraUsageDescription, a camera request is refused with no macOS prompt; the bundle id is what
+ * NSCameraUsageDescription, a camera request is refused with no macOS prompt (likewise
+ * NSLocationWhenInUseUsageDescription for location); the bundle id is what
  * macOS files the microphone grant under, so the two copies disagreeing would mean a
  * grant given to a dev build does not carry over. Only the templated values (executable
  * name, version) may differ in spelling.
@@ -45,5 +46,9 @@ describe('YAAR.app Info.plist', () => {
 
   it('asks for the camera, without which WebKit refuses video capture before macOS is asked', () => {
     expect(build.get('NSCameraUsageDescription')).toBeTruthy();
+  });
+
+  it('asks for location, without which CoreLocation refuses the window with no prompt', () => {
+    expect(build.get('NSLocationWhenInUseUsageDescription')).toBeTruthy();
   });
 });

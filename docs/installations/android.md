@@ -41,7 +41,7 @@ flowchart LR
 
   subgraph android["Android"]
     media["Download/YAAR<br/>(MediaStore)"]
-    clip["clipboard · default browser<br/>document picker · microphone · camera"]
+    clip["clipboard · default browser<br/>document picker · microphone · camera · location"]
   end
 
   you --> wait
@@ -281,6 +281,7 @@ The desktop is the same frontend Chrome would show. It learns that it is in YAAR
 | Clipboard read | Reads the Android clipboard directly. Android only lets the focused app do that, which Termux:API cannot do from the background on Android 10+ |
 | Links and popups | Off-machine http(s) opens in your default browser. Google's sign-in has to, because it refuses embedded WebViews. Blank, loopback and `blob:` popups open full-screen over the desktop, and Back closes them |
 | Microphone, camera | Allowed for `localhost` and `127.0.0.1` only. The first time a page asks for one, Android asks; after that, Settings → Apps → YAAR → Permissions decides. A request for both is granted only if both are |
+| Location | Same terms: loopback pages only, Android asks the first time, then its settings decide. Approximate is enough to grant it |
 | File upload | The system document picker, with multi-select |
 | Back | Puts one layer of the desktop away, as in Chrome. With nothing left, YAAR goes to the background instead of closing |
 | Screen edges and keyboard | The status bar is hidden (swipe down from the edge to see it); the desktop is laid out above the navigation bar and clear of the camera cutout, and the keyboard pushes it up |

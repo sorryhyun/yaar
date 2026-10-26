@@ -356,6 +356,7 @@ if (target === 'macos' && process.platform === 'darwin') {
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSCameraUsageDescription</key><string>YAAR apps use the camera when you ask them to, for example to take a photo or record a video.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>YAAR apps use your location when you ask them to, for example to show local weather or a map.</string>
   <key>NSMicrophoneUsageDescription</key><string>YAAR apps record audio when you ask them to, for example to transcribe speech.</string>
 ${iconKeys}</dict>
 </plist>
