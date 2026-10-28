@@ -72,15 +72,17 @@ const REPLY = 'pins reviewed: 3 approved, 1 rejected';
 let duringTurn: () => void = () => {};
 /** The agent's work-tool-call count, as `AgentSession.toolCallCount` reports it. */
 let toolCalls = 0;
+/** The text after the turn's last tool call, as the stream mapper reports it. */
+let finalBlock: string | undefined;
 
 installMockAgentSession({
   toolCallCount: () => toolCalls,
   handleMessage: async (_prompt, opts) => {
     duringTurn();
     const { onContextMessage } = opts as {
-      onContextMessage?: (role: string, content: string) => void;
+      onContextMessage?: (role: string, content: string, finalBlock?: string) => void;
     };
-    onContextMessage?.('assistant', REPLY);
+    onContextMessage?.('assistant', REPLY, finalBlock);
   },
 });
 
@@ -126,6 +128,7 @@ describe('a hooked app agent turn that already messaged its monitor', () => {
     };
     duringTurn = () => {};
     toolCalls = 0;
+    finalBlock = undefined;
   });
 
   afterEach(async () => {
@@ -201,5 +204,12 @@ describe('a hooked app agent turn that already messaged its monitor', () => {
     await ask('m1', 'response');
 
     expect(hookResponses).toEqual([REPLY]);
+  });
+
+  it('carries only the final block when the turn had one', async () => {
+    finalBlock = 'pins reviewed';
+    await ask('m1', 'response');
+
+    expect(hookResponses).toEqual(['pins reviewed']);
   });
 });

@@ -280,8 +280,12 @@ export class AppTaskProcessor {
 
       this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, prompt, source);
 
-      // Capture the app-agent's response text for relaying to the monitor
+      // Capture the app-agent's response text for relaying to the monitor. The hook carries
+      // only the text after the turn's last tool call: the text before it is narration
+      // ("Recompiled. Now checking…") that buried the report the monitor asked for. When
+      // the turn ended on a tool call, there is no such block and the whole text goes.
       let appResponseText = '';
+      let appAnswerText = '';
       // How many `direct_message`s this agent had sent the asking monitor before the turn;
       // a higher count after it means the turn messaged the monitor itself.
       const messagedBefore = task.monitorId
@@ -304,8 +308,9 @@ export class AppTaskProcessor {
         monitorId,
         systemPromptOverride: profile.systemPrompt,
         ...turnOptions,
-        onAssistantResponse: (text) => {
+        onAssistantResponse: (text, finalBlock) => {
           appResponseText = text;
+          appAnswerText = finalBlock ?? text;
         },
         onBeforeRun: async () => {
           const logger = this.ctx.getSessionLogger();
@@ -380,7 +385,7 @@ export class AppTaskProcessor {
           }
 
           if (hookWillFire) {
-            this.ctx.notifyHookResponse(appId, windowId, task.monitorId!, appResponseText);
+            this.ctx.notifyHookResponse(appId, windowId, task.monitorId!, appAnswerText);
           }
         },
         onFinally: async () => {

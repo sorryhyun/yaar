@@ -50,7 +50,7 @@ These platform features exist and are easy to miss — reinventing one costs the
 
 All file commands operate **only inside the active project's sandbox**, never the server filesystem. A glob like `apps/**/*.ts` means paths inside the project, not `apps/` on disk.
 
-`files/edit`'s line-range and multi-edit modes anchor on content from *this* turn — a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset, with `lineNum: true` before a line-range edit, and check `removed` in the edit result to confirm a splice hit what you meant — this turn, instead of at the next compile. `files/read` takes an array of paths, so read everything you are about to work on in one call.
+A line-range `files/edit` takes `startLine`, `endLine`, `anchor` (the current text of `startLine`; without it the edit is refused) and `replace` (not `content`); it and the multi-edit mode work from content read *this* turn — a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset, with `lineNum: true` before a line-range edit, and check `removed` in the edit result to confirm a splice hit what you meant — this turn, instead of at the next compile. `files/read` takes an array of paths, so read everything you are about to work on in one call.
 
 ## Writing Code and Docs
 

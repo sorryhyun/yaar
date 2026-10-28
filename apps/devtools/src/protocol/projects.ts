@@ -71,22 +71,13 @@ export const projectCommands = {
   }),
   'project/cloneApp': defineAppCommand({
     description:
-      'Clone an installed app source into a new project and open it — to change it; ' +
-      'project/readAppSource only reads it. The copy is a sandbox: ' +
-      'editing it changes nothing about the live app until you deploy. Answers with a map ' +
-      'to read from, not the contents: `appId` (from the cloned app.json — the id build/deploy ' +
-      'expects); `size` (file, line and byte totals, plus the five largest files); `tree` ' +
-      '(the same per directory, rolled up two levels); `protocol` — where each command and ' +
-      'state key is declared, as { commands: { file: { name: line } }, state: … }, the way ' +
-      'from a command name to its code; and `agentsMd` — the root AGENTS.md as { bytes, ' +
-      'lines, outline: [{ heading, line, lines }] } (null when the app has none). Read a ' +
-      'section with files/read({ path: "AGENTS.md", section }); `include` returns the full ' +
-      'text or file list instead. `previousProject` is the project the clone replaced in ' +
-      'front, which project/delete on the clone reopens. When clones of the same app were ' +
-      'already here, `existingClones` comes first, oldest first as { id, name, ' +
-      'lastModified, version?, stale } — `stale` meaning their version is not the installed ' +
-      'one. `reuse: true` reopens the newest non-stale one instead of cloning (`reused` says ' +
-      'it did); its edits, if any, come with it.',
+      'Clone an installed app into a new sandbox project and open it, to change it ' +
+      '(project/readAppSource only reads); nothing changes in the live app until you deploy. ' +
+      'Returns a map, not contents: `appId` (the id build/deploy expects), `size` and `tree` ' +
+      'totals, `protocol` (the file and line declaring each command and state key), and ' +
+      '`agentsMd` (an outline; read a section with files/read({ path: "AGENTS.md", section })). ' +
+      'Earlier clones of the same app come first as `existingClones` (`stale`: not the ' +
+      'installed version). project/delete on the clone reopens `previousProject`.',
     params: {
       type: 'object',
       properties: {

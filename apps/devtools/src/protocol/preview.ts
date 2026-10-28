@@ -1,4 +1,4 @@
-import { AppCommandError, errMsg, invoke, defineAppCommand } from '@bundled/yaar';
+import { AppCommandError, errMsg, invoke, defineAppCommand, wait } from '@bundled/yaar';
 import { previewWindowId, setPreviewWindowId } from '../core';
 import {
   captureFailureHint,
@@ -12,6 +12,7 @@ import {
   queryPreviewState,
   readPreview,
   readPreviewConsole,
+  previewMountErrors,
   runPreviewScript,
   samplePreviewState,
 } from '../services';
@@ -40,12 +41,20 @@ const asText = (value: unknown): string =>
 
 export const previewCommands = {
   'preview/open': defineAppCommand({
-    description: 'Open preview window for the compiled app.',
+    description:
+      'Open preview window for the compiled app. `previewErrors` ({ count, first }) is what ' +
+      'it logged as an error while mounting; absent means none so far.',
     params: { type: 'object', properties: {} },
     run: async () => {
       const opened = await openPreview();
       const faults = previewFaultsNote();
-      return faults ? { ...opened, faults } : opened;
+      await wait(800); // the mount, as build/compile waits for it
+      const previewErrors = await previewMountErrors();
+      return {
+        ...opened,
+        ...(faults ? { faults } : {}),
+        ...(previewErrors ? { previewErrors } : {}),
+      };
     },
   }),
   'preview/screenshot': defineAppCommand({
@@ -325,10 +334,10 @@ export const previewCommands = {
       'Console output from the preview app: { connected, logs, filtered? } — `filtered` ' +
       'counting the entries the filters dropped. `connected: false` means the preview ' +
       'buffer could not be read, and an empty `logs` then says nothing about whether the ' +
-      'app logged anything. Dev Tools audit entries (preview/eval inputs and results, ' +
-      'fault-rule changes; `source: "evaluation"`) stay collapsed to one line each unless ' +
-      '`full`. With no arguments this is the whole recent console; `preview/query` also ' +
-      'carries its tail.',
+      'app logged anything. Only the app\'s own output by default; `source: "all"` ' +
+      'interleaves the Dev Tools audit entries (preview/eval inputs and results, fault-rule ' +
+      'changes), collapsed to one line each unless `full`. `preview/query` also carries ' +
+      'the tail.',
     params: {
       type: 'object',
       properties: {
@@ -340,7 +349,8 @@ export const previewCommands = {
         source: {
           type: 'string',
           enum: ['app', 'devtools', 'all'],
-          description: "app: the preview's own output. devtools: the audit entries. Default all.",
+          description:
+            "app (default): the preview's own output. devtools: the audit entries. all: both.",
         },
         limit: { type: 'number', description: 'Newest N entries (default and max 200).' },
         full: { type: 'boolean', description: 'Return audit entries whole.' },

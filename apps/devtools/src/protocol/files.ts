@@ -494,29 +494,15 @@ export const fileCommands = {
   }),
   'files/copy': defineAppCommand({
     description:
-      'Copy a file, in any of three directions. Both `from` and `to` are project-relative ' +
-      'paths by default; a `yaar://storage/...` URI on either side names the storage tree ' +
-      'instead. So: project -> project is an internal copy, byte for byte; storage -> ' +
-      'project IMPORTS an artifact another app published under shared/ as a build-time ' +
-      'asset; project -> storage EXPORTS a project file so another app can open it (a ' +
-      'scene document, a generated dataset), which is the only way to hand one over — a ' +
-      'file read into this conversation and written back out is a corrupted binary and a ' +
-      'flooded transcript. Both storage directions are server-side and byte-exact: the ' +
-      'bytes never enter this app or your context. `from` may also be ' +
-      '`yaar://apps/{appId}/{path}` — a file of an installed app (src/, app.json, agent/; ' +
-      'the paths project/readAppSource lists) — to reuse its asset: copied byte for byte, never ' +
-      're-encoded, into the project only. ONLY a `yaar://` prefix means outside the ' +
-      'project, so a file in storage can never shadow one in the project. `to` is required ' +
-      'except for an import (storage or app), where it defaults to src/assets/<source ' +
-      'name>. On a storage import, JPEG and BMP are re-encoded to WebP by default (PNG only ' +
-      'with `recompress: true`, since it is lossless); a WebP is written only under a ' +
-      '.webp name — renamed when `to` was defaulted, otherwise the original is copied — ' +
-      'and a defaulted one is kept only if it came out smaller. The result carries the ' +
-      'import line when the destination is an asset under src/, since the bundler inlines ' +
-      'it as a data: URI instead of fetching it at runtime. For 3D models import a ' +
-      'self-contained .glb, not a .gltf with sidecar files (the static-assets topic). ' +
-      'Destination directories are created automatically. Does NOT delete the original — ' +
-      'pair with files/delete to move.',
+      'Copy a file. `from` and `to` are project-relative; ONLY a `yaar://` prefix names ' +
+      'something outside the project. A `yaar://storage/...` side imports an asset another ' +
+      'app published, or exports a project file for another app to open, server-side and ' +
+      'byte-exact; that is the only way to hand a file over, since one read into this ' +
+      'conversation and written back out is a corrupted binary. `from` may also be ' +
+      "`yaar://apps/{appId}/{path}`, an installed app's file, copied unchanged into the " +
+      'project. The result carries the import line for an asset under src/. 3D models: a ' +
+      'self-contained .glb, not a .gltf (the static-assets topic). Creates directories; ' +
+      'does not delete the original (pair with files/delete to move).',
     params: {
       type: 'object',
       properties: {

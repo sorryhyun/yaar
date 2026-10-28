@@ -22,6 +22,7 @@ import {
   checkProject,
   summarizeCheck,
   regressionWarning,
+  previewMountErrors,
 } from '../services';
 
 export const buildCommands = {
@@ -34,6 +35,8 @@ export const buildCommands = {
       'and `typecheck` (type diagnostics), the same split `compileState` uses. ' +
       '`warnings` are findings that did not fail the build: an unknown y-* class, or ' +
       'commands named like add*/delete* that declare no `replay` — a remount re-runs them. ' +
+      '`previewErrors` ({ count, first }) is what the refreshed preview logged as an error ' +
+      "while mounting; absent means none so far, and later ones are preview/console's. " +
       'Refreshing the preview remounts the iframe, so in-app state resets to a cold start; ' +
       'pass `refreshPreview: false` to keep that state and leave the window on the old ' +
       'build. Slow: pass timeoutMs (e.g. 60000).',
@@ -104,10 +107,11 @@ export const buildCommands = {
       // of staying latent until deploy. Any fetch failure drops the check
       // silently; it is advisory, never a reason to fail a compile.
       let manifestDrift: ReturnType<typeof diffManifestNames> | undefined;
+      let previewErrors: Awaited<ReturnType<typeof previewMountErrors>>;
       if (previewRefreshed) {
+        await wait(800); // the remounted iframe needs a beat to boot and register
         const statNames = staticProtocol()?.protocol;
         if (statNames) {
-          await wait(800); // the remounted iframe needs a beat to boot and register
           const runtime = await getRuntimeManifest();
           if (runtime.names) {
             const drift = diffManifestNames(statNames, runtime.names);
@@ -116,6 +120,8 @@ export const buildCommands = {
             }
           }
         }
+        // A build that throws on mount still reports `built`.
+        previewErrors = await previewMountErrors();
       }
 
       return {
@@ -124,6 +130,7 @@ export const buildCommands = {
         ...(previewRefreshed ? { previewRefreshed } : {}),
         ...(previewStale ? { previewStale } : {}),
         ...(previewRefreshed && previewFaultsNote() ? { previewFaults: previewFaultsNote() } : {}),
+        ...(previewErrors ? { previewErrors } : {}),
         ...(typeErrors > 0 ? { typeErrors } : {}),
         ...(!built && errors.length > 0 ? { bundler: errors } : {}),
         ...(built && compileWarnings().length > 0 ? { warnings: [...compileWarnings()] } : {}),

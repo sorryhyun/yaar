@@ -71,8 +71,12 @@ export interface HandleMessageOptions {
   interactions?: UserInteraction[];
   /** Message ID for tracking */
   messageId?: string;
-  /** Callback to record messages to context tape */
-  onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  /**
+   * Callback to record messages to context tape. For the assistant, `finalBlock` is the
+   * text after the turn's last tool call (absent when that was empty): the answer, without
+   * the narration written between tool calls.
+   */
+  onContextMessage?: (role: 'user' | 'assistant', content: string, finalBlock?: string) => void;
   /**
    * How the turn ended — completed, interrupted, or an error with its reason. Called
    * once per turn that reached the provider; not at all when there was no provider.

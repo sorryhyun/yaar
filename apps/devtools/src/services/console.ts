@@ -138,7 +138,9 @@ export async function readPreviewConsole(opts: ConsoleReadOptions = {}): Promise
       windowId: wid,
     };
   }
-  const source = opts.source ?? 'all';
+  // The app's own output by default: audit entries replay calls the reader made itself,
+  // and interleaved with the app's lines they read as noise when looking for its errors.
+  const source = opts.source ?? 'app';
   const levels = opts.levels?.length ? new Set(opts.levels) : null;
   const kept = all.filter(
     (e) =>
@@ -155,4 +157,22 @@ export async function readPreviewConsole(opts: ConsoleReadOptions = {}): Promise
     );
   const filtered = all.length - kept.length;
   return { ...head, logs, ...(filtered > 0 ? { filtered } : {}) };
+}
+
+/**
+ * What a preview mounted moments ago logged as an error: `{ count, first }`, or undefined
+ * when it logged none or its console could not be read. For the commands that mount one
+ * (`build/compile`'s refresh, `preview/open`), whose result otherwise reads the same for an
+ * app that threw on mount as for one that started. The caller waits for the mount first.
+ */
+export async function previewMountErrors(): Promise<{ count: number; first: string } | undefined> {
+  const read = await readPreviewConsole({ levels: ['error'] }).catch(() => null);
+  if (!read?.connected || read.logs.length === 0) return undefined;
+  // A stack frame names the preview URL with its session and token query, which says
+  // nothing about the error: keep the path and the line.
+  const first = read.logs[0].args
+    .map(String)
+    .join(' ')
+    .replace(/\?[^\s:]*(?=:\d+:\d+)/g, '');
+  return { count: read.logs.length, first: first.length > 300 ? `${first.slice(0, 300)}…` : first };
 }

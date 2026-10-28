@@ -46,17 +46,12 @@ export { audioCommands } from './audio';
 export const devtoolsState = {
   project: {
     description:
-      'Active project, with its whole file tree in `files`. For one directory, a glob, or ' +
-      'generated output included, call `files/list` instead. With no active project this is ' +
-      'null; files/grep and files/delete silently return empty in that state ' +
-      'rather than erroring. ' +
-      '`lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
-      'unknown). Files come with their size — { path, lines, bytes } for text, ' +
-      '{ path, bytes } for binary (images, fonts, wasm, .glb models: real bytes, no ' +
-      'line count), ' +
-      '{ path, isDirectory: true } for directories. Generated output (dist/) and ' +
-      'directories holding nothing are left out. Summing binary `bytes` is how to check ' +
-      'an app against the 5MB inlined-asset warning before the compiler raises it.',
+      'Active project with its whole file tree in `files`: { path, lines, bytes } per text ' +
+      'file, { path, bytes } per binary, { path, isDirectory: true } per directory; dist/ and ' +
+      'empty directories are left out (`files/list` for those, a glob, or one directory). ' +
+      'Null with no project open, and then files/grep and files/delete return empty instead ' +
+      'of erroring. Summing binary `bytes` checks the 5MB inlined-asset limit before the ' +
+      'compiler warns.',
     get: () => {
       const proj = activeProject();
       if (!proj) return null;
@@ -130,16 +125,12 @@ export const devtoolsState = {
   },
   previewOpen: {
     description:
-      'Whether a preview window is open right now, whether what it shows is current, and ' +
-      'the URL of the last successful compile: { open, stale, url }. ' +
-      '`build/manifest`, `preview/query`, `preview/command`, `preview/eval` and `preview/screenshot` ' +
-      'all require an open preview and fail after the fact without one — read this instead ' +
-      'of guessing, and instead of calling `preview/open` defensively, which remounts the iframe ' +
-      'and resets all in-app state. `stale: true` means a compile ran with ' +
-      '`refreshPreview: false`, so the window is rendering the *previous* build. `url` is ' +
-      'a *build* fact, not a window fact: it is set by compiling and survives the preview ' +
-      'being closed, so it answers "is there something to show" (null: nothing compiled ' +
-      'yet), never "is it on screen" — that is `open`.',
+      '{ open, stale, url }. build/manifest and preview/query, command, eval and screenshot ' +
+      'fail without an open preview: read this rather than calling `preview/open` ' +
+      'defensively, which remounts the iframe and resets in-app state. `stale`: the window ' +
+      'shows the previous build (a compile ran with `refreshPreview: false`). `url` is set ' +
+      'by compiling and survives the window closing, so it says whether there is anything ' +
+      'to show, not whether it is on screen.',
     // Asked of the server, not of our own signal: the user, a project delete or a deploy
     // can close the window without telling us.
     get: async () => {
@@ -191,20 +182,11 @@ export const devtoolsState = {
   },
   worker: {
     description:
-      'The worker sub-agents (see worker/task): overall `status` (offline | spawning | idle | ' +
-      'running | error — running if any is), `maxWorkers` (the concurrency cap, 1-3; ' +
-      'change it with worker/config), `workers` ({ worker, status, taskId } per worker within the cap), and ' +
-      'the tail of the shared transcript — tasks, tool calls, interim reports, answers, ' +
-      'errors, newest last, each tagged with its `worker`. `activeTasks` lists every task in ' +
-      'flight ({ taskId, worker, task, elapsedMs, reports }), empty when none — its `reports` are the ' +
-      'findings posted so far, which is how you see what a long task has turned up before ' +
-      'it ends; `lastResult` is the last one to finish ({ taskId, answer, error, reports, ' +
-      'elapsedMs }), always carrying an answer or an error. This is the poll-shaped read: ' +
-      'it never blocks, so use it to check on a task while you work. To *wait* for one, ' +
-      'call worker/wait instead of polling this in a loop. `proposals` are edits the worker ' +
-      'submitted with its edit_request tool and cannot apply, newest last, as summaries — ' +
-      'each already verified to apply cleanly, each waiting on you: worker/readEdit for the ' +
-      'body, then worker/acceptEdit or worker/rejectEdit.',
+      "The worker sub-agents (worker/task): `status`, `maxWorkers`, each worker's slot, " +
+      '`activeTasks` with the `reports` posted so far, `lastResult`, the transcript tail, and ' +
+      '`proposals` — edits waiting on you (worker/readEdit, then worker/acceptEdit or ' +
+      'worker/rejectEdit). Never blocks; to wait for a task, call worker/wait instead of ' +
+      'polling this.',
     get: () => {
       const entries = workerEntries();
       // Tool lines are one-liners; tasks and answers can be long. Cap per entry so a

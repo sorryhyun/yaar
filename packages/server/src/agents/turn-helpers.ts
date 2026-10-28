@@ -77,8 +77,11 @@ export interface AgentTurnOptions {
   onBeforeRun?: () => Promise<void> | void;
   onAfterRun?: (recordedActions: OSAction[]) => Promise<void> | void;
   onFinally?: () => Promise<void> | void;
-  /** Called with the assistant's response text when the turn completes. */
-  onAssistantResponse?: (responseText: string) => void;
+  /**
+   * Called with the assistant's response text when the turn completes, and the text after
+   * its last tool call (see `onContextMessage`).
+   */
+  onAssistantResponse?: (responseText: string, finalBlock?: string) => void;
   /** Follow a turn already running in the provider instead of starting one. */
   external?: ExternalTurn;
 }
@@ -122,10 +125,10 @@ export async function runAgentTurn(ctx: TurnContext, opts: AgentTurnOptions): Pr
       windowId: opts.windowId,
       appId: opts.appId,
       external: opts.external,
-      onContextMessage: (msgRole, content) => {
+      onContextMessage: (msgRole, content, finalBlock) => {
         if (msgRole === 'assistant') {
           ctx.contextAssembly.appendAssistantMessage(ctx.contextTape, content, source);
-          opts.onAssistantResponse?.(content);
+          opts.onAssistantResponse?.(content, finalBlock);
         }
       },
     });

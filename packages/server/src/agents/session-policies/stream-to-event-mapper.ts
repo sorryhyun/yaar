@@ -94,7 +94,7 @@ export interface StreamMapperOptions {
   sendEvent: (event: ServerEvent) => Promise<void>;
   logger: SessionLogger | null;
   source: ContextSource;
-  onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  onContextMessage?: (role: 'user' | 'assistant', content: string, finalBlock?: string) => void;
   onSessionId?: (sessionId: string) => Promise<void>;
   monitorId?: string;
   /** The app this turn belongs to, for `tool_use` hooks that filter on one app. */
@@ -162,7 +162,11 @@ export class StreamToEventMapper {
   private readonly sendEvent: (event: ServerEvent) => Promise<void>;
   private readonly logger: SessionLogger | null;
   private readonly source: ContextSource;
-  private readonly onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  private readonly onContextMessage?: (
+    role: 'user' | 'assistant',
+    content: string,
+    finalBlock?: string,
+  ) => void;
   private readonly onSessionId?: (sessionId: string) => Promise<void>;
   private readonly monitorId?: string;
   private readonly appId?: string;
@@ -641,7 +645,12 @@ export class StreamToEventMapper {
         if (this.state.responseText) {
           this.logger?.logAssistantMessage(this.state.responseText, this.role, this.source);
           await this.logger?.updateLastActivity();
-          this.onContextMessage?.('assistant', this.state.responseText);
+          // `blockText` is still the last block here (only a tool call resets it).
+          this.onContextMessage?.(
+            'assistant',
+            this.state.responseText,
+            this.blockText.trim() || undefined,
+          );
         }
         await this.sendEvent({
           type: ServerEventType.AGENT_RESPONSE,
