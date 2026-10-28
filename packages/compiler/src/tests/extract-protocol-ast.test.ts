@@ -419,6 +419,58 @@ describe('refusal', () => {
   });
 });
 
+// A command key may be `group/name`; the group is a table-of-contents entry, and
+// `.../commands/{group}` addresses it — so a group sharing a name with an ungrouped
+// command, or a key nested past one level, is refused with a location.
+describe('command group keys', () => {
+  test('group/name keys reach the manifest whole', () => {
+    const { protocol, errors } = extract({
+      'src/main.ts': `${IMPORT}
+        export default defineApp({
+          id: 'demo', name: 'Demo', state: {},
+          commands: {
+            'files/edit': { description: 'Edit', run: () => 1 },
+            'files/read': { description: 'Read', run: () => 2 },
+            ping: { description: 'Ping', run: () => 3 },
+          },
+        });`,
+    });
+
+    expect(errors).toEqual([]);
+    expect(Object.keys(protocol!.commands)).toEqual(['files/edit', 'files/read', 'ping']);
+  });
+
+  test('a group named like an ungrouped command is an error', () => {
+    const { protocol, errors } = extract({
+      'src/main.ts': `${IMPORT}
+        export default defineApp({
+          id: 'demo', name: 'Demo', state: {},
+          commands: {
+            preview: { description: 'Open the preview', run: () => 1 },
+            'preview/eval': { description: 'Eval', run: () => 2 },
+          },
+        });`,
+    });
+
+    expect(protocol).toBeNull();
+    expect(errors.map(formatProtocolError).join('\n')).toContain(
+      'group "preview" has the same name as the command "preview"',
+    );
+  });
+
+  test('more than one slash is an error', () => {
+    const { errors } = extract({
+      'src/main.ts': `${IMPORT}
+        export default defineApp({
+          id: 'demo', name: 'Demo', state: {},
+          commands: { 'a/b/c': { description: 'Deep', run: () => 1 } },
+        });`,
+    });
+
+    expect(errors.map(formatProtocolError).join('\n')).toContain('more than one "/"');
+  });
+});
+
 // The runtime builds one flat lookup from names and aliases together, and the
 // last entry wins. A duplicate therefore does not fail — it makes one command
 // unreachable while the manifest keeps advertising both, so the agent calls a

@@ -177,7 +177,12 @@ import { getAppMeta, loadAppSkill } from '../../features/apps/discovery.js';
 import type { ControlEntry } from '../../features/apps/manifest.js';
 import { describeApp } from '../../features/apps/describe.js';
 import { isSkillTopicName, loadAppDocs } from '../../features/apps/docs.js';
-import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';
+import {
+  findProtocolCommand,
+  findProtocolGroup,
+  commandDocument,
+  type CommandDescriptor,
+} from '../../handlers/apps/protocol-resource.js';
 import { renderPayloadExample } from '../../lib/command-signature.js';
 import {
   storageRead,
@@ -343,15 +348,41 @@ async function routeStorageOverride(
  */
 async function describeOneCommand(appId: string, name: string) {
   const found = await findProtocolCommand(appId, name);
-  if ('content' in found) return found;
+  if ('content' in found) {
+    // A group name passed as `command` is answered with the group rather than refused:
+    // the caller asked for the documentation of what it named, and the group is it.
+    const group = await describeOneGroup(appId, name);
+    return group ?? found;
+  }
 
   const { descriptor, defs } = found;
-  const payload = renderPayloadExample(descriptor, defs);
-  const target = `"${name}"${payload ? `, ${payload}` : ''}`;
   return okJson({
     appId,
-    ...commandDocument(name, descriptor, defs, { call: `command(${target})` }),
+    ...commandDocument(name, descriptor, defs, { call: commandCall(name, descriptor, defs) }),
   });
+}
+
+/** `command("name", { … })` — the call example in this caller's vocabulary. */
+function commandCall(
+  name: string,
+  descriptor: CommandDescriptor,
+  defs: Parameters<typeof renderPayloadExample>[1],
+): string {
+  const payload = renderPayloadExample(descriptor, defs);
+  return `command("${name}"${payload ? `, ${payload}` : ''})`;
+}
+
+/**
+ * Every command of one group, in full — the app agent's spelling of
+ * `read('yaar://apps/{id}/protocol/commands/{group}')`, and for a grouped app the one
+ * detail door it needs: signatures, schemas and full descriptions for a whole chapter in
+ * one call. `null` when the app declares no such group.
+ */
+async function describeOneGroup(appId: string, group: string) {
+  const found = await findProtocolGroup(appId, group, commandCall);
+  if (found === null) return null;
+  if ('content' in found) return found as ReturnType<typeof error>;
+  return okJson({ appId, ...found });
 }
 
 /**
@@ -898,6 +929,8 @@ export function registerAppAgentTools(server: McpServer): void {
         'and an index of its topic docs when it ships any. ' +
         'Pass `command` to get one command in full instead, with its complete parameter schema — ' +
         'that is the door to use when a signature leaves you unsure, not a second full describe. ' +
+        'Pass `group` to get every command of one group in full (an app that names its commands ' +
+        '"group/name" lists its groups in the index). ' +
         'Pass `topic` to get one topic doc in full, by the name the index shows. ' +
         'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
       inputSchema: strictInput({
@@ -912,6 +945,12 @@ export function registerAppAgentTools(server: McpServer): void {
           .optional()
           .describe(
             'One command to document in full (name as it appears in the index), instead of the whole manual.',
+          ),
+        group: z
+          .string()
+          .optional()
+          .describe(
+            'One command group to document in full — every "group/name" command in it, with schemas.',
           ),
         topic: z
           .string()
@@ -946,6 +985,21 @@ export function registerAppAgentTools(server: McpServer): void {
       // through the one tool it does hold, answering with the same builder.
       if (args.command) {
         return describeOneCommand(targetAppId, args.command);
+      }
+
+      // One group in full — `read('yaar://apps/{id}/protocol/commands/{group}')` for the
+      // caller with no `read`, by the same reasoning as `command` above.
+      if (args.group) {
+        const group = await describeOneGroup(targetAppId, args.group);
+        if (group) return group;
+        const facts = await describeApp(targetAppId, { protocol: 'index' });
+        const groups = Object.keys(
+          (facts?.protocol as { groups?: Record<string, unknown> } | undefined)?.groups ?? {},
+        );
+        return error(
+          `"${args.group}" is not a command group of "${targetAppId}". ` +
+            (groups.length ? `Groups: ${groups.join(', ')}.` : 'It groups none of its commands.'),
+        );
       }
 
       // One topic doc in full — the app agent's spelling of

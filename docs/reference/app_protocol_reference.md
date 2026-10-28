@@ -123,6 +123,15 @@ interface AppManifest {
   $defs?: Record<string, object>;               // subschemas shared by more than one descriptor
 }
 
+A command key may carry **one** `/` — `files/edit` is the command `edit` in the group `files`
+(`COMMAND_GROUP_SEPARATOR`, `listCommandKeyIssues` in `@yaar/shared`). The whole key is the
+command's name everywhere (`command("files/edit")`, `yaar://windows/{id}/commands/files/edit`);
+there is no bare-leaf alias. Groups exist for the readers: every door that lists commands shows a
+grouped app as group → command names, and opening a group (`read('…/protocol/commands/files')`,
+the app agent's `describe({ group: "files" })`, `describe('yaar://windows/{id}/commands/files')`)
+serves every command in it in full. The build refuses a key nested past one level and a group
+sharing its name with an ungrouped command (`…/commands/{name}` would address both).
+
 interface AppStateDescriptor {
   description: string;
   schema?: object;        // JSON Schema (optional)

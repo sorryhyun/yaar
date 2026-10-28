@@ -33,7 +33,7 @@
 import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import type { AppManifest } from '@yaar/shared';
-import { listKeybindingIssues } from '@yaar/shared';
+import { listCommandKeyIssues, listKeybindingIssues } from '@yaar/shared';
 import { buildAppBundle, formatBuildLogs, siblingAssetError } from '../build/build-app.js';
 import { readThreeRenderer } from '../bundled/three-renderer.js';
 
@@ -505,6 +505,13 @@ export async function foldAppSchemas(options: FoldOptions): Promise<FoldResult> 
     }
     if (reply.problems && reply.problems.length > 0) {
       return { ok: false, error: asAscii(reply.problems.join('\n')) };
+    }
+    const keyIssues = listCommandKeyIssues(Object.keys(reply.protocol.commands));
+    if (keyIssues.length > 0) {
+      return {
+        ok: false,
+        error: asAscii(keyIssues.map((i) => `commands.${i.command}: ${i.issue}`).join('\n')),
+      };
     }
     if (reply.protocol.keybindings) {
       const issues = listKeybindingIssues(

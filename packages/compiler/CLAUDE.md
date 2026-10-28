@@ -155,7 +155,9 @@ what the extractor exists to allow; `apps/devtools/src/protocol/` is the referen
 What it refuses, always with a location: a spread of a call result, a descriptor imported
 from a package (resolution is deliberately app-local), a `${...}` template description, a
 missing `description`, a method shorthand, a non-constant `params`/`schema` (outside
-`defineApp`), and **two commands reachable by the same name or alias**. One bad entry
+`defineApp`), **two commands reachable by the same name or alias**, and a command key that
+breaks the group rule (`listCommandKeyIssues`: more than one `/`, or a group named like an
+ungrouped command). One bad entry
 rejects the **whole** manifest — a partial manifest is the failure mode, not a consolation prize.
 
 ### Zod schemas (`protocol/fold-schemas.ts`)

@@ -35,7 +35,7 @@
  */
 
 import type { AppManifest } from '@yaar/shared';
-import { listKeybindingIssues } from '@yaar/shared';
+import { listCommandKeyIssues, listKeybindingIssues } from '@yaar/shared';
 import { Extractor } from './protocol-extractor.js';
 import type {
   ModuleScope,
@@ -564,6 +564,12 @@ function buildProtocol(
       };
     }
     checkAliasCollisions(extractor, commandEntries, protocol.commands);
+    // Group-path rules live in @yaar/shared so the fold path rejects identically.
+    const commandSites = new Map(commandEntries.map((e) => [e.key, e]));
+    for (const { command, issue } of listCommandKeyIssues(Object.keys(protocol.commands))) {
+      const at = commandSites.get(command);
+      if (at) extractor.error(at.scope, at.value, `\`commands.${command}\`: ${issue}`);
+    }
   }
 
   // -- keybindings ---------------------------------------------------------

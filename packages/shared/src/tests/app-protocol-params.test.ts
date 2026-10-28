@@ -202,4 +202,21 @@ describe('unknown command names', () => {
     const call = installWith(manyCommands(50, { zoomToFit: noop }));
     expect(call('zoomToFt').error).toContain('Did you mean "zoomToFit"?');
   });
+
+  it('runs a grouped command by its full key', () => {
+    const call = installWith({ 'files/edit': noop });
+    expect(call('files/edit').error).toBeUndefined();
+  });
+
+  it('names a group as a group and lists its commands by full name', () => {
+    const call = installWith({ 'files/edit': noop, 'files/read': noop, ping: noop });
+    const error = call('files').error ?? '';
+    expect(error).toContain('"files" is a command group, not a command');
+    expect(error).toContain('files/edit, files/read');
+  });
+
+  it('points a bare leaf at its grouped name', () => {
+    const call = installWith({ 'files/edit': noop, ping: noop });
+    expect(call('edit').error).toContain('Did you mean "files/edit"?');
+  });
 });

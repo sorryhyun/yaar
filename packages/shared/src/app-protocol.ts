@@ -190,6 +190,93 @@ export function listKeybindingIssues(
   return issues;
 }
 
+// ── Command groups ──────────────────────────────────────────────────
+
+/**
+ * A command key may carry one `/`: `files/edit` is the command `edit` in the group
+ * `files`. The group is a reading aid, not a namespace the runtime resolves — the whole
+ * key is the command's one name everywhere (`command("files/edit")`,
+ * `yaar://windows/{id}/commands/files/edit`), and there is no bare-leaf alias: `edit`
+ * alone is unknown. What the group buys is a table of contents an agent can open one
+ * chapter at a time (`describe({ group: "files" })`, `read(…/protocol/commands/files)`)
+ * instead of a 30 KB manual it reads whole on every turn.
+ */
+export const COMMAND_GROUP_SEPARATOR = '/';
+
+/** The group of a command key — `files` for `files/edit`, undefined for `ping`. */
+export function commandGroupOf(key: string): string | undefined {
+  const at = key.indexOf(COMMAND_GROUP_SEPARATOR);
+  return at > 0 ? key.slice(0, at) : undefined;
+}
+
+/**
+ * Command keys split into their groups and the ungrouped rest, each in declaration
+ * order. `groups` is empty for an app that declares no grouped key — every reader that
+ * renders groups falls back to its flat rendering on exactly that test.
+ */
+export function groupCommandKeys(keys: Iterable<string>): {
+  groups: Map<string, string[]>;
+  ungrouped: string[];
+} {
+  const groups = new Map<string, string[]>();
+  const ungrouped: string[] = [];
+  for (const key of keys) {
+    const group = commandGroupOf(key);
+    if (group === undefined) {
+      ungrouped.push(key);
+      continue;
+    }
+    const members = groups.get(group);
+    if (members) members.push(key);
+    else groups.set(group, [key]);
+  }
+  return { groups, ungrouped };
+}
+
+/**
+ * Validate command keys as group paths. One issue per bad key — used by both protocol
+ * readers so the AST and fold paths reject identically.
+ *
+ * - At most one `/`, with a name on both sides: the group is one level deep by design.
+ * - A group must not share its name with an ungrouped command, because
+ *   `…/commands/{name}` would then address both — a chapter and a command — and the URI
+ *   is the one place the two are spelled alike.
+ */
+export function listCommandKeyIssues(
+  keys: Iterable<string>,
+): Array<{ command: string; issue: string }> {
+  const all = [...keys];
+  const issues: Array<{ command: string; issue: string }> = [];
+  const ungrouped = new Set(all.filter((k) => !k.includes(COMMAND_GROUP_SEPARATOR)));
+  for (const key of all) {
+    if (!key.includes(COMMAND_GROUP_SEPARATOR)) continue;
+    const parts = key.split(COMMAND_GROUP_SEPARATOR);
+    if (parts.length > 2) {
+      issues.push({
+        command: key,
+        issue: `"${key}" has more than one "/" - a command key is "name" or "group/name", one level deep`,
+      });
+      continue;
+    }
+    if (!parts[0] || !parts[1]) {
+      issues.push({
+        command: key,
+        issue: `"${key}" needs a name on both sides of "/" - "group/name"`,
+      });
+      continue;
+    }
+    if (ungrouped.has(parts[0])) {
+      issues.push({
+        command: key,
+        issue:
+          `group "${parts[0]}" has the same name as the command "${parts[0]}" - ` +
+          `".../commands/${parts[0]}" would name both; rename one`,
+      });
+    }
+  }
+  return issues;
+}
+
 // ── Replay risk ─────────────────────────────────────────────────────
 
 /**

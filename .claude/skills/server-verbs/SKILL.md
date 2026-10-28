@@ -123,7 +123,10 @@ every manifest read would pay for every key.
 `describe` is counts and doors, `list` is the index, `read` is the manifest, and
 `read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. The index
 is *what `list` means*, never a truncation (rationale: `handlers/apps/protocol-resource.ts`'s
-header; the CLI result-size cliff: `mcp/result-size.ts`).
+header; the CLI result-size cliff: `mcp/result-size.ts`). **Command groups:** a key may be
+`group/name`; for such an app every index (`list`, `describeApp`, the app agent's prompt and
+`query()`) shows group → names, and the group's URI / `describe({ group })` is the chapter in
+full. "Is this a group" has one answer, `commandsInGroup` in `lib/protocol-index.ts`.
 
 **A schema may point at the manifest, so every reader has to follow the pointer.** The compiler
 hoists a repeated shape into `manifest.$defs` and leaves `{"$ref": "#/$defs/x"}` at each use.

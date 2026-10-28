@@ -142,8 +142,14 @@ Your app.json reaches further into the same tree:   ⟨if grants beyond the comm
 
 ⟨if protocol.json declares commands⟩
 ## Available Commands — run with `command(command, params)`
+⟨if any key is group/name⟩
+Commands are grouped. … call `describe({ group: "name" })` before using a group …
+- **{{group}}**: `{{group/name}}`, …              ⟵ names only; the chapter is describe({ group })
+Ungrouped:                                      ⟨if any⟩
+⟨else⟩
 Signatures below are exact — `?` marks an optional param. …
-- `{{renderSignature(name, descriptor, $defs)}}`: {{description}}
+⟨end⟩
+- `{{renderSignature(name, descriptor, $defs)}}`: {{description}}   ⟵ ungrouped commands only
 
 ⟨if agent/docs/ holds topics with audience agent|both⟩
 ## App Docs — read with `describe({ topic: "name" })`

@@ -29,6 +29,7 @@ import { sharedStorageGrants } from '../../../mcp/app-agent/shared-storage.js';
 // and one read from a verb are the same string (`lib/command-signature.ts`).
 import { renderSignature } from '../../../lib/command-signature.js';
 import { defsOf } from '../../../lib/schema-refs.js';
+import { groupCommandKeys } from '@yaar/shared';
 
 import payloadLiterals from '../prompts/payload-literals.md' with { type: 'text' };
 import intro from './prompts/intro.md' with { type: 'text' };
@@ -275,17 +276,36 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
         'These are app commands, not tools: there is no `mcp__app__{name}` tool for any of ' +
         'them. Call each through the `command` tool — `command({ command: "name", params: ' +
         '{ … } })`.\n\n';
-      systemPrompt +=
-        'Signatures below are exact — `?` marks an optional param. Pass params under the ' +
-        'names shown; an undeclared name is rejected, not ignored. ' +
-        '`describe({ command: "name" })` returns that one command with its full schema and ' +
-        'per-param descriptions when a signature leaves you unsure — ask for the command, ' +
-        'not for the whole manual again.\n\n';
+      // A grouped app (`files/edit`) is listed as a table of contents: each group with
+      // its command names, and the chapter one `describe({ group })` away. Its manual is
+      // the thing this prompt was spending half its bytes on (devtools: 32.6 KB of 70),
+      // and the agent drives a few groups per session, not all of them.
+      const { groups, ungrouped } = groupCommandKeys(Object.keys(protocol.commands));
+      if (groups.size > 0) {
+        systemPrompt +=
+          "Commands are grouped. A grouped command's name is the whole key, group included — " +
+          'run `command({ command: "files/edit", … })`, never `"edit"`. Before using a group ' +
+          'for the first time, call `describe({ group: "name" })`: it returns every command ' +
+          'in the group with its exact signature, parameter schema and full description. ' +
+          'Pass params under the names it shows; an undeclared name is rejected, not ignored.\n\n';
+        for (const [group, keys] of groups) {
+          systemPrompt += `- **${group}**: ${keys.map((k) => `\`${k}\``).join(', ')}\n`;
+        }
+        if (ungrouped.length > 0) systemPrompt += '\nUngrouped:\n\n';
+      } else {
+        systemPrompt +=
+          'Signatures below are exact — `?` marks an optional param. Pass params under the ' +
+          'names shown; an undeclared name is rejected, not ignored. ' +
+          '`describe({ command: "name" })` returns that one command with its full schema and ' +
+          'per-param descriptions when a signature leaves you unsure — ask for the command, ' +
+          'not for the whole manual again.\n\n';
+      }
       // Shared subschemas the compiler hoisted onto the manifest. A signature rendered
       // without them shows `any` for every deduplicated param, which is the one thing
       // this section exists to stop an agent from guessing.
       const defs = defsOf(protocol);
-      for (const [key, desc] of Object.entries(protocol.commands)) {
+      for (const key of ungrouped) {
+        const desc = protocol.commands[key];
         const description =
           typeof desc === 'string' ? desc : ((desc as { description?: string })?.description ?? '');
         systemPrompt += `- \`${renderSignature(key, desc, defs)}\`: ${description}\n`;

@@ -22,6 +22,7 @@
  * fragment and some prose and returns a string.
  */
 
+import { groupCommandKeys } from '@yaar/shared';
 import { renderSignature, type SchemaDefs } from './command-signature.js';
 
 /**
@@ -142,13 +143,37 @@ interface IndexableProtocol {
 /**
  * The whole protocol as index rows, plus the counts a caller needs to decide whether the
  * full manifest is worth a second call.
+ *
+ * An app that groups its commands (`files/edit`, see `COMMAND_GROUP_SEPARATOR`) gets a
+ * table of contents for them instead of rows: `groups` maps each group to its command
+ * keys, and `commands` keeps rows only for the ungrouped rest. Opening a group serves
+ * every command in it in full, so a summary row here would be read once and then read
+ * again in the chapter — the names are what the reader needs to pick one. An app with
+ * no grouped key gets exactly the flat rows it always did, and no `groups` field.
  */
 export function buildProtocolIndex(
   protocol: IndexableProtocol | undefined,
   defs?: SchemaDefs,
-): { state: string[]; commands: string[] } {
+): { state: string[]; commands: string[]; groups?: Record<string, string[]> } {
+  const table = protocol?.commands ?? {};
+  const { groups, ungrouped } = groupCommandKeys(Object.keys(table));
   return {
     state: Object.entries(protocol?.state ?? {}).map(([key, d]) => stateRow(key, d)),
-    commands: Object.entries(protocol?.commands ?? {}).map(([key, d]) => commandRow(key, d, defs)),
+    commands: ungrouped.map((key) => commandRow(key, table[key], defs)),
+    ...(groups.size > 0 ? { groups: Object.fromEntries(groups) } : {}),
   };
+}
+
+/**
+ * The commands of one group, in declaration order — empty when `group` names none.
+ *
+ * Shared by every door that opens a group (`read(…/protocol/commands/{group})`, the app
+ * agent's `describe({ group })`, a window's `describe(…/commands/{group})`), so "is this
+ * a group" has one answer.
+ */
+export function commandsInGroup(
+  commands: Record<string, unknown> | undefined,
+  group: string,
+): string[] {
+  return groupCommandKeys(Object.keys(commands ?? {})).groups.get(group) ?? [];
 }

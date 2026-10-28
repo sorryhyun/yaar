@@ -34,6 +34,11 @@ Shared types between frontend and server.
     (`compiler/src/protocol/dedupe-schemas.ts`), absent for the apps that share nothing.
     `iframe-scripts/app-protocol.ts` copies the manifest field by field, so the table has to be
     copied with them or the served schemas point at nothing.
+  - **Command groups:** a command key may be `group/name` (one `/`). `commandGroupOf`,
+    `groupCommandKeys` and `listCommandKeyIssues` are the one reading of that rule — the
+    compiler's two protocol readers gate on the last, the server's doors group by the second.
+    The whole key is the name; the bridge resolves no bare leaf, and an unknown name that is a
+    group's answers with the group's commands.
   - A command's `params` JSON Schema is **enforced** by the iframe bridge before the handler
     runs: a missing `required` key or a key absent from `properties` is rejected naming both
     the wrong keys and the accepted ones. `additionalProperties: true` opts a pass-through

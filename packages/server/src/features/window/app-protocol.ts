@@ -34,7 +34,7 @@ import {
   reservedKeyNote,
 } from '../../lib/command-signature.js';
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
-import { buildProtocolIndex } from '../../lib/protocol-index.js';
+import { buildProtocolIndex, commandsInGroup } from '../../lib/protocol-index.js';
 import { BUILTIN_STATE } from './builtin-state.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
@@ -360,10 +360,13 @@ export async function handleAppManifestIndex(
       name: manifest.name,
       state: index.state,
       commands: index.commands,
+      ...(index.groups ? { groups: index.groups } : {}),
       builtinState: Object.keys(BUILTIN_STATE),
       next:
         'query(stateKey) reads one key; describe({ command }) gives one command with its ' +
-        'full parameter schema; query("manifest") returns the complete manifest (large).',
+        'full parameter schema' +
+        (index.groups ? ', describe({ group }) every command of one group' : '') +
+        '; query("manifest") returns the complete manifest (large).',
     }),
     key,
   );
@@ -497,8 +500,17 @@ export async function handleAppDescribe(
   if (!outcome.ok) return error(noAnswer(outcome, `describe of ${target} "${key}"`, askedAt));
   const response = outcome.value;
   if (response.kind !== 'describe') return error('Unexpected response kind.');
-  // The app says this key is not in its table — the one genuine "no such resource".
-  if (response.error) return error(response.error);
+  // The app says this key is not in its table — the one genuine "no such resource",
+  // unless the key names a command group (`files` of `files/edit`): the iframe knows
+  // commands, not groups, so the chapter is assembled here from the live manifest. Only
+  // a miss pays for the manifest fetch.
+  if (response.error) {
+    if (target === 'commands') {
+      const group = await describeLiveGroup(windowState, windowId, key);
+      if (group) return group;
+    }
+    return error(response.error);
+  }
 
   const uri = buildWindowResourceUri(windowId, target, key);
   if (response.doc !== null && target === 'state') {
@@ -534,6 +546,39 @@ export async function handleAppDescribe(
       : {}),
     ...(entry?.params !== undefined ? { schema: selfContained(entry.params, defs) } : {}),
     ...(note ? { note } : {}),
+  });
+}
+
+/**
+ * `describe('yaar://windows/{id}/commands/{group}')` — every command of one group of the
+ * running window, each with the signature, schema and invoke example its per-command
+ * describe carries. Null when the live manifest has no such group.
+ */
+async function describeLiveGroup(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  group: string,
+): Promise<VerbResult | null> {
+  const manifest = await fetchLiveManifest(windowState, windowId);
+  const members = commandsInGroup(manifest?.commands, group);
+  if (!manifest || members.length === 0) return null;
+  const defs = defsOf(manifest);
+  return okJson({
+    uri: buildWindowResourceUri(windowId, 'commands', group),
+    group,
+    commands: members.map((name) => {
+      const entry = manifest.commands[name];
+      const uri = buildWindowResourceUri(windowId, 'commands', name);
+      const note = reservedKeyNote(entry, defs);
+      return {
+        name,
+        signature: renderSignature(name, entry, defs),
+        doc: entry.description ?? null,
+        invoke: renderInvokeExample(uri, entry, defs),
+        ...(entry.params !== undefined ? { schema: selfContained(entry.params, defs) } : {}),
+        ...(note ? { note } : {}),
+      };
+    }),
   });
 }
 

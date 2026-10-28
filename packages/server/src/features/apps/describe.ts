@@ -41,6 +41,7 @@ import { listApps, loadAppSkill } from './discovery.js';
 import { loadAppDocs, runtimeDocs, type AppDocTopic } from './docs.js';
 import { defsOf } from '../../lib/schema-refs.js';
 import { buildProtocolIndex } from '../../lib/protocol-index.js';
+import { groupCommandKeys } from '@yaar/shared';
 
 /**
  * How much of the protocol a describe carries inline.
@@ -195,15 +196,20 @@ function protocolSection(
   detail: ProtocolDetail,
 ): Record<string, unknown> {
   const base = `yaar://apps/${appId}/protocol`;
-  const commandNames = Object.keys(protocol.commands ?? {});
   const stateNames = Object.keys(protocol.state ?? {});
   const index = detail === 'index' ? buildProtocolIndex(protocol, defsOf(protocol)) : null;
+  // A grouped app (`files/edit`) is described by its groups at both detail levels: the
+  // `index` level keeps rows for the ungrouped rest, the `names` level names them.
+  const { groups, ungrouped } = groupCommandKeys(Object.keys(protocol.commands ?? {}));
+  const groupTable = index?.groups ?? (groups.size > 0 ? Object.fromEntries(groups) : undefined);
+  const appArg = appId ? `, appId: "${appId}"` : '';
 
   return {
     protocol: {
       uri: base,
       stateKeys: index ? index.state : stateNames,
-      commands: index ? index.commands : commandNames,
+      commands: index ? index.commands : ungrouped,
+      ...(groupTable ? { groups: groupTable } : {}),
       // Named as instructions rather than offered as options: an agent handed four doors
       // it has just learned about will pick `read` and pay for the whole manifest, which
       // is the cost this split exists to make optional. Each door's vocabulary is its
@@ -212,6 +218,11 @@ function protocolSection(
       ...(detail === 'names'
         ? {
             index: `list("${base}") — every command's signature and opening sentence.`,
+            ...(groupTable
+              ? {
+                  group: `read("${base}/commands/{group}") — every command of one group in full, schemas included. A grouped command's name is "group/name".`,
+                }
+              : {}),
             one: `read("${base}/commands/{name}") — one command in full, schema included. Brace-batch related ones: ${base}/commands/{a,b,c}`,
             full: `read("${base}") — the whole manifest verbatim. Large; prefer the two above.`,
             run:
@@ -219,8 +230,15 @@ function protocolSection(
               'invoke("yaar://windows/{windowId}/commands/{name}", { ... }).',
           }
         : {
+            ...(groupTable
+              ? {
+                  group:
+                    `describe({ group: "{group}"${appArg} }) — every command of one group in full, ` +
+                    'schemas included. A grouped command\'s name is "group/name".',
+                }
+              : {}),
             one:
-              `describe({ command: "{name}"${appId ? `, appId: "${appId}"` : ''} }) — ` +
+              `describe({ command: "{name}"${appArg} }) — ` +
               'one command in full, schema included.',
             run: `command("{name}", { ... })${appId ? ` with appId: "${appId}"` : ''} runs one.`,
           }),

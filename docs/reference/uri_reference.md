@@ -46,8 +46,9 @@ The compiled `dist/protocol.json` of the **installed** app, addressable at its o
 | `list` | `…/protocol` | **The index** — one resource link per state key and command, each carrying its rendered signature and the first sentence of its description. ~8 KB for 52 commands. Start here |
 | `read` | `…/protocol` | The manifest verbatim, `$defs` included. The one large answer, and only on request |
 | `read` | `…/protocol/commands/{name}` | One command, **self-contained**: signature, full description, `params`/`returns` carrying the `$defs` they reference, and a rendered call example. Brace-batchable: `…/commands/{a,b,c}` |
+| `read` | `…/protocol/commands/{group}` | For an app whose keys are `group/name`: **every command of the group**, each as self-contained as the per-command read. `…/commands/{group}/{name}` is one of them — the key includes the group |
 | `read` | `…/protocol/state/{key}` | One state key's documentation (its *value* is `read('yaar://windows/{windowId}/state/{key}')`) |
-| `list` | `…/protocol/{commands,state}` | The index, narrowed to one section |
+| `list` | `…/protocol/{commands,state}` | The index, narrowed to one section. A grouped app lists **one link per group** (naming its commands) instead of a row per grouped command; `list('…/commands/{group}')` is that group's rows |
 | `invoke`/`delete` | any `…/protocol` path | Refused — a protocol is documentation, and a command needs a running window to act on |
 
 Serving `protocol.json` is safe because it is a build artifact (compiler writes it from the source AST; deploy re-derives and diffs it), so it cannot drift from the code.

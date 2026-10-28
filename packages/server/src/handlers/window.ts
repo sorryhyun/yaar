@@ -68,6 +68,7 @@ import {
 import { handlePreviewFaults } from '../features/window/preview-faults.js';
 import { listApps } from '../features/apps/discovery.js';
 import { buildWindowResourceUri, parseWindowResourceUri } from '../lib/yaar-uri-server.js';
+import { groupCommandKeys } from '@yaar/shared';
 import { RESERVED_COMMAND_KEYS, declaredParamNames } from '../lib/command-signature.js';
 import { defsOf } from '../lib/schema-refs.js';
 import { commandLinkDescription, firstSentence, descriptionOf } from '../lib/protocol-index.js';
@@ -789,6 +790,7 @@ export function registerWindowHandlers(
       // The shared subschemas a hoisted `params` points at; without them a param the
       // compiler deduplicated renders as `any` and the list stops being enough to call from.
       const defs = defsOf(manifest);
+      const grouped = groupCommandKeys(Object.keys(manifest.commands ?? {}));
       const links = [
         ...builtins,
         // `__`-named app keys are shadowed by the built-ins, so they are dropped here rather
@@ -813,16 +815,26 @@ export function registerWindowHandlers(
         // 52-command app — past the size at which the CLI stops delivering a result
         // inline at all, which for a verbs-only agent means it is not delivered. The full
         // text is one `describe` away at the per-command URI each row already names.
-        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => ({
+        ...grouped.ungrouped.map((key) => ({
           uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
           name: `commands/${key}`,
-          description: commandLinkDescription(key, desc, defs),
+          description: commandLinkDescription(key, manifest.commands?.[key], defs),
+        })),
+        // A grouped app (`files/edit`) lists one link per group, naming its commands;
+        // describe on the group's URI serves the whole chapter.
+        ...[...grouped.groups].map(([group, keys]) => ({
+          uri: buildWindowResourceUri(resolved.windowId, 'commands', group),
+          name: `commands/${group}`,
+          description: `group — ${keys.join(', ')}`,
         })),
       ];
       return prependNote(
         okLinks(links),
-        'descriptions are summarized to their first sentence — ' +
-          'describe("yaar://windows/{windowId}/commands/{name}") for one in full',
+        grouped.groups.size > 0
+          ? 'describe("yaar://windows/{windowId}/commands/{group}") for every command of a ' +
+              'group in full; a grouped command runs at …/commands/{group}/{name}'
+          : 'descriptions are summarized to their first sentence — ' +
+              'describe("yaar://windows/{windowId}/commands/{name}") for one in full',
       );
     },
 

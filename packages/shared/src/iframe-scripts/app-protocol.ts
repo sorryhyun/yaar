@@ -259,6 +259,18 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         : label + '. "' + name + '" is a command, not a state key - run it with command("' + name + '").';
     }
     var own = memberNames(isCmd ? registration.commands : registration.state);
+    // A command group's name (\`files\` of \`files/edit\`) is not a command: say so and
+    // name the group's commands, rather than burying them in the full list.
+    if (isCmd) {
+      var members = [];
+      for (var g = 0; g < own.length; g++) {
+        if (own[g].indexOf(name + '/') === 0) members.push(own[g]);
+      }
+      if (members.length) {
+        return label + '. "' + name + '" is a command group, not a command - run one of its ' +
+          'commands by its full name: ' + members.join(', ');
+      }
+    }
     var noun = isCmd ? 'commands' : 'state keys';
     if (!own.length) return label + '. This app registers no ' + noun + '.';
     var shown = own.slice(0, MAX_LISTED_NAMES).join(', ');

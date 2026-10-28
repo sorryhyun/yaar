@@ -27,6 +27,17 @@
  * | `list` | the index | signature + opening sentence per command (~8 KB / 52 commands) |
  * | `read` | the manifest | `dist/protocol.json` verbatim, opt-in, the only large answer |
  * | `read` | `…/commands/{key}` | one command, self-contained, brace-batchable |
+ * | `read` | `…/commands/{group}` | every command of one group, each self-contained |
+ *
+ * ## Groups
+ *
+ * A command key may be `group/name` (`COMMAND_GROUP_SEPARATOR` in `@yaar/shared`). For
+ * an app that uses them, `list` answers with the groups — one link per chapter, naming
+ * its commands — and `read` of a group is the chapter: every command in it with its
+ * schema and full description. That is the whole detail tier for a grouped app; there
+ * is no third "now describe the one you picked" step to forget. The group is only a
+ * table of contents: the key stays the command's full name, so
+ * `…/commands/files/edit` is the command `files/edit`, never "edit inside files".
  *
  * So an agent that wants everything asks for everything and knows it did; an agent that is
  * *finding* the right command pays for an index. Nothing is truncated behind a caller's
@@ -50,7 +61,13 @@ import {
   reservedKeyNote,
 } from '../../lib/command-signature.js';
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
-import { commandLinkDescription, firstSentence, descriptionOf } from '../../lib/protocol-index.js';
+import {
+  commandLinkDescription,
+  commandsInGroup,
+  firstSentence,
+  descriptionOf,
+} from '../../lib/protocol-index.js';
+import { groupCommandKeys } from '@yaar/shared';
 
 /** The two sections a protocol has. Anything else under `/protocol/` is a typo. */
 const SECTIONS = ['state', 'commands'] as const;
@@ -83,15 +100,17 @@ function parseTarget(uri: string): Target | null {
       ),
     };
   }
-  if (tail.length > 1) {
+  // `commands/{group}/{name}` is one key, `group/name`; a deeper path names nothing.
+  if (tail.length > (section === 'commands' ? 2 : 1)) {
     return {
       ok: false,
       result: error(
-        `"${uri}" is too deep. One key per address: yaar://apps/${appId}/protocol/${section}/{name}.`,
+        `"${uri}" is too deep. One key per address: yaar://apps/${appId}/protocol/${section}/{name}` +
+          (section === 'commands' ? ` or …/commands/{group}/{name}.` : '.'),
       ),
     };
   }
-  return { ok: true, appId, section: section as Section, key: tail[0] || undefined };
+  return { ok: true, appId, section: section as Section, key: tail.join('/') || undefined };
 }
 
 /** Either the compiled protocol, or the refusal explaining why there isn't one. */
@@ -139,6 +158,18 @@ export async function describeAppProtocol(uri: string): Promise<VerbResult | nul
 
   if (target.section && target.key) {
     const entry = tableOf(protocol, target.section)[target.key];
+    const members =
+      entry === undefined && target.section === 'commands'
+        ? commandsInGroup(protocol.commands, target.key)
+        : [];
+    if (members.length > 0) {
+      return okJson({
+        uri,
+        group: target.key,
+        commands: members,
+        read: `read("${uri}") — every command of the group in full, schemas included.`,
+      });
+    }
     if (entry === undefined) {
       return error(`"${target.key}" is not a ${target.section} key of "${target.appId}".`);
     }
@@ -152,6 +183,7 @@ export async function describeAppProtocol(uri: string): Promise<VerbResult | nul
     });
   }
 
+  const grouped = groupCommandKeys(Object.keys(protocol.commands ?? {})).groups.size > 0;
   return okJson({
     uri: base,
     appId: target.appId,
@@ -164,6 +196,11 @@ export async function describeAppProtocol(uri: string): Promise<VerbResult | nul
     doors: {
       index: `list("${base}") — one row per command: its signature and its opening sentence. Start here.`,
       full: `read("${base}") — the whole manifest verbatim, every schema and every word. Large.`,
+      ...(grouped
+        ? {
+            group: `read("${base}/commands/{group}") — every command of one group in full. Commands are grouped "group/name"; list names the groups.`,
+          }
+        : {}),
       one: `read("${base}/commands/{name}") — one command, self-contained. Brace-batch related ones: ${base}/commands/{a,b,c}`,
       state: `read("${base}/state/{key}") — one state key.`,
     },
@@ -207,13 +244,15 @@ export async function readAppProtocol(uri: string): Promise<VerbResult | null> {
   }
 
   const entry = table[target.key];
+  if (entry === undefined && target.section === 'commands') {
+    const doc = groupDocument(protocol, target.key, (name, descriptor, groupDefs) =>
+      renderInvokeExample(`yaar://windows/{windowId}/commands/${name}`, descriptor, groupDefs),
+    );
+    if (doc) return okJson({ uri, ...doc });
+  }
   if (entry === undefined) {
-    const names = Object.keys(table);
     return error(
-      `"${target.key}" is not a ${target.section} key of "${target.appId}". ` +
-        (names.length
-          ? `Declared: ${names.slice(0, 40).join(', ')}${names.length > 40 ? `, … (${names.length} total)` : ''}.`
-          : `It declares no ${target.section}.`),
+      `"${target.key}" is not a ${target.section} key of "${target.appId}". ${declaredNames(table, target.section)}`,
     );
   }
 
@@ -304,15 +343,81 @@ export async function findProtocolCommand(
   const commands = loaded.protocol.commands ?? {};
   const entry = commands[name];
   if (entry === undefined) {
-    const names = Object.keys(commands);
     return error(
-      `"${name}" is not a command of "${appId}". ` +
-        (names.length
-          ? `Declared: ${names.slice(0, 40).join(', ')}${names.length > 40 ? `, … (${names.length} total)` : ''}.`
-          : 'It declares no commands.'),
+      `"${name}" is not a command of "${appId}". ${declaredNames(commands, 'commands')}`,
     );
   }
   return { descriptor: entry as CommandDescriptor, defs: defsOf(loaded.protocol) };
+}
+
+/**
+ * One group of an installed app's compiled protocol, in full — the app agent's
+ * `describe({ group })`. `null` when the app loads but declares no such group, so the
+ * caller can try the name as a command before refusing.
+ */
+export async function findProtocolGroup(
+  appId: string,
+  group: string,
+  renderCall: (
+    name: string,
+    descriptor: CommandDescriptor,
+    defs: ReturnType<typeof defsOf>,
+  ) => string,
+): Promise<Record<string, unknown> | ReturnType<typeof error> | null> {
+  const loaded = await loadProtocol(appId);
+  if (!isLoaded(loaded)) return loaded;
+  return groupDocument(loaded.protocol, group, renderCall);
+}
+
+/**
+ * Every command of one group as a document — `null` when `group` names no group, so
+ * the caller falls through to its own not-found answer.
+ *
+ * Each command is the same `commandDocument` a single read serves, self-contained, so a
+ * chapter is exactly its commands read one by one and nothing a reader learns from it
+ * differs from what the per-command door would have said. `call` is rendered per caller
+ * for the reason `commandDocument` takes it as an argument.
+ */
+export function groupDocument(
+  protocol: { commands?: Record<string, unknown>; $defs?: Record<string, unknown> },
+  group: string,
+  renderCall: (
+    name: string,
+    descriptor: CommandDescriptor,
+    defs: ReturnType<typeof defsOf>,
+  ) => string,
+): Record<string, unknown> | null {
+  const members = commandsInGroup(protocol.commands, group);
+  if (members.length === 0) return null;
+  const defs = defsOf(protocol);
+  return {
+    group,
+    commands: members.map((name) => {
+      const descriptor = protocol.commands![name] as CommandDescriptor;
+      return commandDocument(name, descriptor, defs, { call: renderCall(name, descriptor, defs) });
+    }),
+  };
+}
+
+/**
+ * The "Declared: …" tail of a not-found answer. A grouped app is listed by its groups —
+ * `files/{edit, read}` rather than every key spelled out — which is both shorter and
+ * shows the miss most likely once keys carry a group (a bare `edit`) its full name.
+ */
+function declaredNames(table: Record<string, unknown>, noun: string): string {
+  const names = Object.keys(table);
+  if (names.length === 0) return `It declares no ${noun}.`;
+  const { groups, ungrouped } = groupCommandKeys(names);
+  if (groups.size === 0) {
+    return `Declared: ${names.slice(0, 40).join(', ')}${names.length > 40 ? `, … (${names.length} total)` : ''}.`;
+  }
+  const parts = [
+    ...ungrouped,
+    ...[...groups].map(
+      ([group, keys]) => `${group}/{${keys.map((k) => k.slice(group.length + 1)).join(', ')}}`,
+    ),
+  ];
+  return `Declared: ${parts.join('; ')}. A command's name includes its group: "group/name".`;
 }
 
 /** `list` — the index: enough to pick a command from, not enough to be the manual. */
@@ -320,18 +425,35 @@ export async function listAppProtocol(uri: string): Promise<VerbResult | null> {
   const target = parseTarget(uri);
   if (!target) return null;
   if (!target.ok) return target.result;
-  if (target.key) {
-    return error(
-      `"${uri}" is one entry, not a collection. Use read("${uri}") for it, or ` +
-        `list("yaar://apps/${target.appId}/protocol") for the index.`,
-    );
-  }
-
   const loaded = await loadProtocol(target.appId);
   if (!isLoaded(loaded)) return loaded;
   const { protocol } = loaded;
   const defs = defsOf(protocol);
   const base = `yaar://apps/${target.appId}/protocol`;
+
+  // A group is a collection: its commands, as index rows.
+  const members =
+    target.key && target.section === 'commands'
+      ? commandsInGroup(protocol.commands, target.key)
+      : [];
+  if (target.key && members.length === 0) {
+    return error(
+      `"${uri}" is one entry, not a collection. Use read("${uri}") for it, or ` +
+        `list("yaar://apps/${target.appId}/protocol") for the index.`,
+    );
+  }
+  if (members.length > 0) {
+    return prependNote(
+      okLinks(
+        members.map((key) => ({
+          uri: `${base}/commands/${key}`,
+          name: `commands/${key}`,
+          description: commandLinkDescription(key, protocol.commands![key], defs),
+        })),
+      ),
+      `group "${target.key}" — read("${uri}") gives every one of them in full`,
+    );
+  }
 
   const links: Array<{ uri: string; name: string; description: string }> = [];
   if (target.section !== 'commands') {
@@ -343,23 +465,37 @@ export async function listAppProtocol(uri: string): Promise<VerbResult | null> {
       });
     }
   }
+  const commands = protocol.commands ?? {};
+  const { groups, ungrouped } = groupCommandKeys(Object.keys(commands));
   if (target.section !== 'state') {
-    for (const [key, entry] of Object.entries(protocol.commands ?? {})) {
+    for (const key of ungrouped) {
       // The signature rides in `description` rather than in a field of its own because
       // that is the part of a `resource_link` a model is certain to read — the same
       // reasoning as the window list door, which shares `commandLinkDescription`.
       links.push({
         uri: `${base}/commands/${key}`,
         name: `commands/${key}`,
-        description: commandLinkDescription(key, entry, defs),
+        description: commandLinkDescription(key, commands[key], defs),
+      });
+    }
+    // One link per group, naming its commands — the chapter list. A row per grouped
+    // command would be read here and again in the chapter.
+    for (const [group, keys] of groups) {
+      links.push({
+        uri: `${base}/commands/${group}`,
+        name: `commands/${group}`,
+        description: `group — ${keys.join(', ')}`,
       });
     }
   }
 
   return prependNote(
     okLinks(links),
-    `the index — descriptions are summarized to their first sentence; read("${base}/commands/{name}") ` +
-      'for one in full, or brace-batch: {a,b,c}',
+    groups.size > 0
+      ? `the index — read("${base}/commands/{group}") gives a group's commands in full, ` +
+          `read("${base}/commands/{group}/{name}") one; brace-batch either: {a,b,c}`
+      : `the index — descriptions are summarized to their first sentence; read("${base}/commands/{name}") ` +
+          'for one in full, or brace-batch: {a,b,c}',
   );
 }
 
