@@ -12,7 +12,7 @@ import {
 } from '../lib';
 import { evaluateRaw } from './preview';
 
-// `runTests`: build the project's src/**/*.test.ts into dist/test.html, run that page
+// `test/run`: build the project's src/**/*.test.ts into dist/test.html, run that page
 // in a window of its own, and read the report back.
 //
 // A window of its own rather than the preview: re-pointing the preview at the test page
@@ -73,7 +73,7 @@ async function waitForTestPage(wid: string): Promise<string | null> {
 
 export async function runProjectTests(opts: RunTestsOptions = {}): Promise<RunTestsResult> {
   const proj = activeProject();
-  if (!proj) throw new AppCommandError('No project open. openProject or createProject first.');
+  if (!proj) throw new AppCommandError('No project open. project/open or project/create first.');
 
   const built = await devCompileTests(projectPath(proj.id), { title: proj.name });
   const testFiles = built.files ?? [];

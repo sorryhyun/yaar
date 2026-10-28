@@ -47,8 +47,8 @@ export const devtoolsState = {
   project: {
     description:
       'Active project, with its whole file tree in `files`. For one directory, a glob, or ' +
-      'generated output included, call `listFiles` instead. With no active project this is ' +
-      'null; grep and deleteFile silently return empty in that state ' +
+      'generated output included, call `files/list` instead. With no active project this is ' +
+      'null; files/grep and files/delete silently return empty in that state ' +
       'rather than erroring. ' +
       '`lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
       'unknown). Files come with their size — { path, lines, bytes } for text, ' +
@@ -77,7 +77,7 @@ export const devtoolsState = {
   projectList: {
     description:
       'Every project as { id, name, lastModified, origin }. Distinct from `project`, the ' +
-      'active project with its files. `origin` is "clone:{appId}" for a cloneApp sandbox, ' +
+      'active project with its files. `origin` is "clone:{appId}" for a project/cloneApp sandbox, ' +
       '"new" for a scaffold, and absent for a project created before the marker existed. ' +
       'It is what makes cleanup safe: delete only what you cloned this session, and treat ' +
       'an absent `origin` as the user\'s work — never as "old enough to remove".',
@@ -86,7 +86,7 @@ export const devtoolsState = {
   openFile: {
     description:
       'The file open in the editor UI, with line numbers — what the user is looking at. ' +
-      'Not a read tool: `readFile` leaves this alone unless called with openInEditor.',
+      'Not a read tool: `files/read` leaves this alone unless called with openInEditor.',
     get: () => {
       const path = openFilePath();
       if (!path) return null;
@@ -118,10 +118,10 @@ export const devtoolsState = {
       'because Bun strips types and builds through them. `typecheck` is the ONLY place type ' +
       'errors appear: one entry per diagnostic from the last typecheck, { file, line, ' +
       'column, code, message, severity }. All paths are project-relative, ready to hand ' +
-      'back to editFile.',
-    // The reducer is pure and lives in lib/compile-status.ts, shared with the `compile`
+      'back to files/edit.',
+    // The reducer is pure and lives in lib/compile-status.ts, shared with the `build/compile`
     // command so the two cannot drift apart. Its unit checks are the `compile-status`
-    // suite in selfTest.
+    // suite in test/self.
     get: () => ({
       status: resolveCompileStatus(bundleStatus(), typecheckState()),
       bundler: [...compileErrors()],
@@ -132,9 +132,9 @@ export const devtoolsState = {
     description:
       'Whether a preview window is open right now, whether what it shows is current, and ' +
       'the URL of the last successful compile: { open, stale, url }. ' +
-      '`manifest`, `previewQuery`, `previewCommand`, `previewEval` and `previewScreenshot` ' +
+      '`build/manifest`, `preview/query`, `preview/command`, `preview/eval` and `preview/screenshot` ' +
       'all require an open preview and fail after the fact without one — read this instead ' +
-      'of guessing, and instead of calling `preview` defensively, which remounts the iframe ' +
+      'of guessing, and instead of calling `preview/open` defensively, which remounts the iframe ' +
       'and resets all in-app state. `stale: true` means a compile ran with ' +
       '`refreshPreview: false`, so the window is rendering the *previous* build. `url` is ' +
       'a *build* fact, not a window fact: it is set by compiling and survives the preview ' +
@@ -151,7 +151,7 @@ export const devtoolsState = {
     description:
       'Names importable as @bundled/{name}, plus describable pseudo-libraries like ' +
       '"design-tokens" that ship as injected CSS rather than a module. Pass any of them ' +
-      'to describeBundledLibrary.',
+      'to inspect/library.',
     get: () => [...bundledLibs()],
   },
   permissions: {
@@ -191,9 +191,9 @@ export const devtoolsState = {
   },
   worker: {
     description:
-      'The worker sub-agents (see workerTask): overall `status` (offline | spawning | idle | ' +
+      'The worker sub-agents (see worker/task): overall `status` (offline | spawning | idle | ' +
       'running | error — running if any is), `maxWorkers` (the concurrency cap, 1-3; ' +
-      'change it with workerConfig), `workers` ({ worker, status, taskId } per worker within the cap), and ' +
+      'change it with worker/config), `workers` ({ worker, status, taskId } per worker within the cap), and ' +
       'the tail of the shared transcript — tasks, tool calls, interim reports, answers, ' +
       'errors, newest last, each tagged with its `worker`. `activeTasks` lists every task in ' +
       'flight ({ taskId, worker, task, elapsedMs, reports }), empty when none — its `reports` are the ' +
@@ -201,10 +201,10 @@ export const devtoolsState = {
       'it ends; `lastResult` is the last one to finish ({ taskId, answer, error, reports, ' +
       'elapsedMs }), always carrying an answer or an error. This is the poll-shaped read: ' +
       'it never blocks, so use it to check on a task while you work. To *wait* for one, ' +
-      'call workerWait instead of polling this in a loop. `proposals` are edits the worker ' +
+      'call worker/wait instead of polling this in a loop. `proposals` are edits the worker ' +
       'submitted with its edit_request tool and cannot apply, newest last, as summaries — ' +
-      'each already verified to apply cleanly, each waiting on you: readEditRequest for the ' +
-      'body, then acceptEditRequest or rejectEditRequest.',
+      'each already verified to apply cleanly, each waiting on you: worker/readEdit for the ' +
+      'body, then worker/acceptEdit or worker/rejectEdit.',
     get: () => {
       const entries = workerEntries();
       // Tool lines are one-liners; tasks and answers can be long. Cap per entry so a

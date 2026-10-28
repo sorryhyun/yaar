@@ -165,7 +165,7 @@ export function describeDesignTokensBrief(): string {
     '',
     'Unlike a token, a y- class that does not exist fails SILENTLY: no rule, no',
     'error, unstyled markup. So before using any class not listed above, look it up.',
-    `describeBundledLibrary({ name: 'design-tokens' }) returns all ${classes.length} classes`,
+    `inspect/library({ name: 'design-tokens' }) returns all ${classes.length} classes`,
     'grouped by family, every token value, and the classes the SDK emits for you.',
   );
 
@@ -175,7 +175,7 @@ export function describeDesignTokensBrief(): string {
 /**
  * The full reference: every token with its value, every class, grouped by family.
  *
- * This is what an agent gets back from `describeBundledLibrary({ name:
+ * This is what an agent gets back from `inspect/library({ name:
  * 'design-tokens' })` — on demand, for the session that is actually writing CSS.
  * Generated from `YAAR_DESIGN_TOKENS_CSS` rather than written by hand, so it can
  * never disagree with what the compiler actually injects.

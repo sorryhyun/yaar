@@ -115,7 +115,7 @@ const remoteWorkspaceListeners: (() => void)[] = [];
  *
  * Shared per window and not through `workspace.json`: that file is one per app, so a
  * second Dev Tools window on another monitor followed it too, and each window's
- * `cloneApp` switched the other's project under its agent's next write.
+ * `project/cloneApp` switched the other's project under its agent's next write.
  */
 export const [sharedWorkspace, setSharedWorkspace, sharedWorkspaceReady] =
   createSharedSignal<Workspace | null>('workspace', null, {
@@ -148,7 +148,7 @@ const remoteBuildListeners: (() => void)[] = [];
  * `buildSerial` counts successful compiles; `previewBuildSerial` records the one the
  * preview window was last mounted from. They are equal when the preview shows current
  * code. They diverge only when a compile skipped the refresh
- * (`compile({ refreshPreview: false })`, which is how in-app state survives a build),
+ * (`build/compile({ refreshPreview: false })`, which is how in-app state survives a build),
  * and that divergence must be *reported*: a preview silently showing the previous
  * build makes a screenshot confirm a fix that is not in it.
  */

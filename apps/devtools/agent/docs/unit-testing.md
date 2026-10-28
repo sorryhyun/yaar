@@ -1,10 +1,10 @@
 ---
 name: unit-testing
-description: Read before writing tests for an app, or when a fix needs a test that pins it — src/**/*.test.ts with @bundled/test, run by runTests.
+description: Read before writing tests for an app, or when a fix needs a test that pins it — src/**/*.test.ts with @bundled/test, run by test/run.
 audience: agent
 ---
 
-## Unit tests with `runTests`
+## Unit tests with `test/run`
 
 Put tests beside the code as `src/**/*.test.ts`, written against `@bundled/test` (a subset of
 `bun:test`):
@@ -23,7 +23,7 @@ describe('runRegex', () => {
 });
 ```
 
-`runTests` builds them into `dist/test.html` and runs that page in a minimized window, so DOM,
+`test/run` builds them into `dist/test.html` and runs that page in a minimized window, so DOM,
 `@bundled/yaar` and the preview's storage are all real. Re-run one failure with
 `filter: "finds every match"`.
 
@@ -37,7 +37,7 @@ describe('runRegex', () => {
 - A test's `timeoutMs` stops a hung `await`, not a synchronous loop. A test that can hang the
   thread (a catastrophic regex) belongs in a worker, or the whole run times out.
 
-Unit tests check functions. Behaviour across commands on a running app is `previewScript` (the
+Unit tests check functions. Behaviour across commands on a running app is `preview/script` (the
 `regression-testing` topic); the two complement each other.
 
 ## Web Workers

@@ -1,6 +1,6 @@
 // Clone an installed app's source into this app's storage and compile it there, so its
 // dist/index.html sits under the agent's working directory where the Artifact tool can
-// reach it. Same clone payload and binary handling as devtools' cloneApp.
+// reach it. Same clone payload and binary handling as devtools' project/cloneApp.
 
 import { appStorage, bytesToBase64, errMsg, fonts, invoke } from '@bundled/yaar';
 import { compile } from '@bundled/yaar-dev';

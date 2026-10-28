@@ -14,7 +14,7 @@ export function runAllTests(only?: string): RunResult {
   return runSuites(libSuites, only);
 }
 
-/** Suite names, for the `selfTest` command to offer when a filter matches nothing. */
+/** Suite names, for the `test/self` command to offer when a filter matches nothing. */
 export function suiteNames(): string[] {
   return libSuites.map((s) => s.name);
 }

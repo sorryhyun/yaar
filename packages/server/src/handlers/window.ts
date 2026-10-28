@@ -352,8 +352,8 @@ export function registerWindowHandlers(
    * **Unless the command declares one of those names as a param of its own.** The three
    * were reserved on the key name alone, which made every command whose schema declares
    * `params` unreachable through this spelling — `studio-3d.setGeometryParams(id, params,
-   * points)` and `devtools.previewCommand(command, params, timeoutMs)` are the two in the
-   * tree — and, worse, made `devtools.previewEval(expression, timeoutMs, …)` *silently*
+   * points)` and devtools' `preview/command(command, params, timeoutMs)` are the two in the
+   * tree — and, worse, made devtools' `preview/eval(expression, timeoutMs, …)` *silently*
    * wrong: its `timeoutMs` says how long the preview may take to settle, and this function
    * ate it as the transport deadline and told the app nothing. So the reservation is now
    * conditional on the schema, and the schema is only consulted when one of the three

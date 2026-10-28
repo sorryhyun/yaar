@@ -6,7 +6,7 @@ audience: agent
 
 ## Media Editor Architecture (video-editor-lite)
 
-`cloneApp` video-editor-lite for the whole thing; this is its skeleton and the decisions
+`project/cloneApp` video-editor-lite for the whole thing; this is its skeleton and the decisions
 that hold it up.
 
 ### Model
@@ -89,7 +89,7 @@ the composition renderer. *Seen in:* `src/editor/media/edit-mode.ts`.
 
 ### Testing
 
-The `previewScript` suite covers CRUD, param errors, stills, and save/reopen through the
+The `preview/script` suite covers CRUD, param errors, stills, and save/reopen through the
 protocol. Pointer gestures on the timeline and the final downloaded file are outside its
 reach. DOM reads after a fade must wait out the transition, and storage URLs carry a
 per-mount token, so never assert on a `src` value.

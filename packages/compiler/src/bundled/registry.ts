@@ -147,7 +147,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   mermaid: 'mermaid',
   prismjs: 'prismjs',
   zod: 'zod/mini',
-  // First consumer: Dev Tools' `runTests`, through `compileTests`. Refused by the
+  // First consumer: Dev Tools' `test/run`, through `compileTests`. Refused by the
   // app build (`plugins.ts`), so it is test-only rather than a gated SDK.
   test: 'test',
   yaar: 'yaar',

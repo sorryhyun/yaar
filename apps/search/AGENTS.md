@@ -18,7 +18,8 @@ Full-text search over YAAR storage, plus app-source cloning and dependency analy
 - **JSON Schema params, not Zod.** `main.ts` evaluates nothing at module scope that needs a
   DOM, but the manifest extractor imports the app in a stubbed-DOM worker; the templates here
   are all inside functions, and the params stay JSON Schema so the extraction cannot be taken
-  down by a call result. Do not “upgrade” them without checking `manifest` still matches.
+  down by a call result. Do not “upgrade” them without checking devtools' `build/manifest`
+  still matches.
 - **Store values are Proxies.** Anything returned from a protocol command or state getter must
   be rebuilt from primitives (`toPlainMatch` in `protocol.ts`), or postMessage throws
   DataCloneError and the state key silently reads as broken.

@@ -17,7 +17,7 @@ Browses `yaar://history/`. Read-only over session data; the one write is
   index. Also pure and DOM-free. The UI reads only `inScope` and `countByMonitor`
   from it, so a monitor tab and `readTurns({ monitor })` hold the same turns.
 - `src/monitor.ts` — which monitor a turn belongs to, and the session-list badge
-  from meta. Pure; pinned by `src/monitor.test.ts` (`runTests`).
+  from meta. Pure; pinned by `src/monitor.test.ts` (`test/run`).
 - `src/conversations.ts` — a log → its rows (one per monitor per reset), and each
   turn's conversation number. Pure; pinned by the same test file.
 
@@ -146,7 +146,7 @@ nearly every row and the URI needs the pixels. It stays in the row's `title`.
 The preview principal **cannot read `yaar://history/`** — Dev Tools holds no
 such permission and a preview never exceeds its host's. So the preview always
 shows "Not permitted". To check layout, drive the preview-only `__debug` hook from
-`previewEval`: `__debug.setState('sessions' | 'selectedId' | 'detail', …)` then
+`preview/eval`: `__debug.setState('sessions' | 'selectedId' | 'detail', …)` then
 `__debug.applyMessages(sessionId, { messages: […] })`, which runs the real parse
 and monitor stamping. Cover: a verb tool, a non-verb tool, a tool with no recognised
 param, a very long URI, an error result, an action and an interaction — those

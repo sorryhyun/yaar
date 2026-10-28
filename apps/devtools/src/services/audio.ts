@@ -11,12 +11,12 @@ import {
   type Spectrogram,
 } from '../lib';
 
-// Reading an audio file and measuring it, for `analyzeAudio`. The measuring is
+// Reading an audio file and measuring it, for `inspect/audio`. The measuring is
 // `lib/audio-analysis.ts`; this is the I/O around it — fetch the bytes, decode, paint.
 //
 // It runs in *this* iframe, not the preview's: a render the preview wrote is a file in
 // storage by then, so no preview needs to be open, and the measurement code is ours
-// rather than something re-typed into a `previewEval` each time.
+// rather than something re-typed into a `preview/eval` each time.
 
 /**
  * Everything is decoded at one rate. Loudness and band shares do not depend on it, and a

@@ -51,10 +51,10 @@ import {
 const MAX_TEXT_BYTES = 400_000;
 
 // The deadlines this file waits on — `deadlines.appQueryMs` (reading state is near-instant),
-// `deadlines.appCommandMs` (commands do real work: devtools' compile/deploy shells out), and
-// `deadlines.appCommandMinMs` (the floor under a caller's own timeout) — live in config.ts,
-// so a liveness test can shrink them to tens of milliseconds. Read at call time, never
-// captured into a module constant.
+// `deadlines.appCommandMs` (commands do real work: devtools' `build/compile` and
+// `build/deploy` shell out), and `deadlines.appCommandMinMs` (the floor under a caller's own
+// timeout) — live in config.ts, so a liveness test can shrink them to tens of milliseconds.
+// Read at call time, never captured into a module constant.
 
 /** Ceiling for a caller-supplied command timeout. Must fit inside MAX_REQUEST_DEADLINE_MS. */
 export const MAX_COMMAND_TIMEOUT_MS = 180_000;

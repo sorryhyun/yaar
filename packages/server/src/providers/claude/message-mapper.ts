@@ -520,7 +520,7 @@ function extractToolResult(message: unknown, blocks?: ToolBlockBuffer): StreamMe
       });
 
       // Emitted whether or not the blocks yielded readable text. This used to be
-      // guarded on `resultText`, so an image-only result — `previewScreenshot`,
+      // guarded on `resultText`, so an image-only result — `preview/screenshot`,
       // every window/browser capture — produced no `tool_result` at all: no
       // TOOL_PROGRESS `complete`, so the status line stayed on `Running: …` and
       // then jumped straight to `Responding…`, never showing the pause where the

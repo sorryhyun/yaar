@@ -46,7 +46,7 @@ function loadDtsContent(): string {
  * The design tokens are injected as CSS, so they have no `@bundled/*` module and
  * no `.d.ts` block — yet an app agent has to be able to ask what they are. Before
  * this existed, the app prompt told agents to call
- * `describeBundledLibrary({ name: 'design-tokens' })`, which fell through to
+ * `inspect/library({ name: 'design-tokens' })`, which fell through to
  * `null`: the agent asked for the token list, got nothing, and invented plausible
  * names (`--yaar-space-2`) that silently render to nothing.
  */

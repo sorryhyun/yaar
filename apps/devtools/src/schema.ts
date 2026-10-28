@@ -46,7 +46,7 @@ export type PermissionEntry = z.infer<typeof PermissionEntrySchema>;
  * list, `permissions` for the preview iframe.
  *
  * Both are optional — a project whose app.json has neither is perfectly normal
- * (createProject writes only `name`, and most projects declare no permissions),
+ * (project/create writes only `name`, and most projects declare no permissions),
  * so their absence is not a validation failure. What this rejects is a non-object
  * file, or a `permissions` that is not a list of grant entries — the latter
  * matters because the value is handed straight to window creation as a grant list.
@@ -145,7 +145,7 @@ export const WorkerFrameDataSchema = z.looseObject({
  * from it because this is a boundary in a way the interface is not: the value
  * arrives as JSON a model typed into a string argument, so nothing has checked
  * it before this point. `oldString`/`newString` are accepted for the same reason
- * `editFile` accepts them — a worker that reaches for the alias should be
+ * `files/edit` accepts them — a worker that reaches for the alias should be
  * corrected by the dry run's real errors, not rejected at the parse.
  */
 const WorkerEditSpecSchema = z.looseObject({

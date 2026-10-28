@@ -96,7 +96,7 @@ function memoApp(): FakeApp {
         },
         // A command that declares two of the three names the sub-path spelling reserves.
         // Not hypothetical: `studio-3d.setGeometryParams(id, params, points)` was
-        // unreachable through this URI and `devtools.previewEval(expression, timeoutMs)`
+        // unreachable through this URI and devtools' `preview/eval(expression, timeoutMs)`
         // had its `timeoutMs` silently eaten as the transport deadline. Both of those
         // ship in the tree; this is their shape.
         applyStyle: {
@@ -442,7 +442,7 @@ describe('S10 — a reserved key belongs to the command that declares it', () =>
     await call('invoke', 'yaar://windows/memo/commands/applyStyle', { id: 'm-1', timeoutMs: 4000 });
 
     // The silent half of the bug: `timeoutMs` was deleted from the payload and used as the
-    // transport deadline, so a command that declares one (devtools' previewEval) was told
+    // transport deadline, so a command that declares one (devtools' `preview/eval`) was told
     // nothing and no error was raised. It is now both — the app learns how long it may
     // take, and the server does not cut off a wait it just authorized.
     expect(memo.ran).toEqual([{ command: 'applyStyle', params: { id: 'm-1', timeoutMs: 4000 } }]);

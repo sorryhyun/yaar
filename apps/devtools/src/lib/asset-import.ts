@@ -1,6 +1,6 @@
 export {};
 
-// Decisions behind copyFile's two import doors — storage and another app's source —
+// Decisions behind files/copy's two import doors — storage and another app's source —
 // kept apart from the I/O so the rules can be pinned without a storage round trip.
 
 /** Formats a WebP re-encode can be asked to shrink. WebP and SVG are already the target. */

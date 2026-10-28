@@ -4,7 +4,7 @@ export {};
 //
 // There is no unit-test runner in this environment (see agent/docs/regression-testing.md),
 // so nothing here runs under `bun test`. The suites are executed in-process by the
-// `selfTest` protocol command instead, which is why the harness has to be pure and
+// `test/self` protocol command instead, which is why the harness has to be pure and
 // dependency-free: it is bundled by the same build it is checking.
 
 /** One check: a name and a body that throws on failure. */

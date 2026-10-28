@@ -1,6 +1,6 @@
 export {};
 
-// What `runTests` reads back from a project's test page. Pure: the service does the
+// What `test/run` reads back from a project's test page. Pure: the service does the
 // I/O, this decides what the answer says. No signals, no @bundled/yaar.
 
 /** The window a project's test page runs in, beside (never replacing) its preview. */

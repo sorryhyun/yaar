@@ -143,7 +143,7 @@ export function bundledLibraryPluginBun(
         if (requested === 'test' && role !== 'test') {
           throw new Error(
             '"@bundled/test" is only importable from src/**/*.test.ts files, which ' +
-              'Dev Tools runTests builds separately. Do not import a test file from app code.',
+              "Dev Tools' test/run builds separately. Do not import a test file from app code.",
           );
         }
         if (role === 'worker' && (requested === 'yaar' || requested.startsWith('yaar-'))) {

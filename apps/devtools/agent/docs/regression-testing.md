@@ -1,12 +1,12 @@
 ---
 name: regression-testing
-description: Read before a refactor that must not change behavior, or when asked to test an app — previewScript's script format, baselines, and determinism.
+description: Read before a refactor that must not change behavior, or when asked to test an app — preview/script's script format, baselines, and determinism.
 audience: agent
 ---
 
-## Regression testing with `previewScript`
+## Regression testing with `preview/script`
 
-Unit tests for functions are `runTests` (the `unit-testing` topic). `previewScript` is for
+Unit tests for functions are `test/run` (the `unit-testing` topic). `preview/script` is for
 behaviour across commands: it runs a recorded sequence of protocol commands against the preview and diffs the results against a baseline **mechanically**, so the
 comparison lands in the tool result and the next agent re-runs it with one call.
 
@@ -15,20 +15,20 @@ that is the pre-change build: capture first, then touch the code.
 
 ## Workflow
 
-1. On the known-good build: `compile`, `preview`, write the script, then `previewScript` —
+1. On the known-good build: `build/compile`, `preview/open`, write the script, then `preview/script` —
    with no baseline on disk, this run captures one.
-2. Refactor. `compile`, `preview` (a fresh mount — the runner refuses a stale preview).
-3. `previewScript` again — `pass: true`, or `failures` naming each row with expected/actual.
-4. A failing group re-runs alone: `previewScript` with `groups: ["R7"]`.
+2. Refactor. `build/compile`, `preview/open` (a fresh mount — the runner refuses a stale preview).
+3. `preview/script` again — `pass: true`, or `failures` naming each row with expected/actual.
+4. A failing group re-runs alone: `preview/script` with `groups: ["R7"]`.
 5. After an **intended** behavior change, `update: true` rewrites the baseline and reports
    the delta by label — read it; every `changed` entry should be a change you meant to make.
    When only some rows were meant to move, `update: true` with `steps: ["label", ...]`
    rewrites just those rows and still compares the rest.
-6. `deploy` reports a `testWarning` when the last run in this session failed, measured an
+6. `build/deploy` reports a `testWarning` when the last run in this session failed, measured an
    older build, or predates an edit, or when `src/test/regression.json` exists and was never
    run. It warns and ships; re-run and redeploy if the warning is real.
 
-A `previewScript` call runs every step sequentially, so raise its `timeoutMs` well past the
+A `preview/script` call runs every step sequentially, so raise its `timeoutMs` well past the
 sum of its steps (a 40-step script easily wants 120000+).
 
 ## Script format
@@ -59,11 +59,11 @@ a top-level `test/` is silently dropped by deploy (`app-structure` topic).
 - `round` — decimals kept on every recorded float (per-step `round` overrides). Geometry and
   layout numbers carry float noise; without rounding they fail runs for nothing.
 - Each step carries exactly one of:
-  - `"command"` + `params` — an app protocol command, like `previewCommand`.
-  - `"state"` — a key declared in `defineApp({ state })`, read whole, like `previewQuery`.
+  - `"command"` + `params` — an app protocol command, like `preview/command`.
+  - `"state"` — a key declared in `defineApp({ state })`, read whole, like `preview/query`.
     (`{ "type": "state", "key": "…" }` is accepted as the same thing.) A `command` row only
     proves the command answered; pair a mutation with the `state` read that should reflect it.
-  - `"eval"` — a JS expression in the preview's global scope, like `previewEval`. The
+  - `"eval"` — a JS expression in the preview's global scope, like `preview/eval`. The
     fallback for what the other three cannot reach: rendered DOM, and fixture resets.
   - `"resize": [w, h]` — the preview window; setup only, never recorded.
 - `label` — how the row is named in the baseline and in failures. Auto-labels embed the step

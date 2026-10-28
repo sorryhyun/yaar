@@ -262,42 +262,45 @@ describe('S7 — one app protocol request, one responder', () => {
   it('a window keeps its responder across requests when another tab re-registers', async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
     const from = await connectBystander(h);
-    await runCommand(h, windowKey, 'cloneApp', 'm1', { from });
+    await runCommand(h, windowKey, 'project/cloneApp', 'm1', { from });
 
     // The first tab re-announces and is now the newest registration. Its copy of the
-    // iframe never ran `cloneApp`, so moving the next request there is the bug: devtools
-    // cloned a project in one copy and was then asked to deploy it from the other.
+    // iframe never ran `project/cloneApp`, so moving the next request there is the bug:
+    // devtools cloned a project in one copy and was then asked to deploy it from the other.
     await first.deliver({
       type: ClientEventType.APP_PROTOCOL_READY,
       windowId: windowKey,
       reannounce: true,
     });
-    const answeredBy = await runCommand(h, windowKey, 'deploy', 'm2', { from });
+    const answeredBy = await runCommand(h, windowKey, 'build/deploy', 'm2', { from });
 
     expect(commandFrames(first)).toHaveLength(0);
-    expect(commandFrames(second).map((r) => r.command)).toEqual(['cloneApp', 'deploy']);
+    expect(commandFrames(second).map((r) => r.command)).toEqual([
+      'project/cloneApp',
+      'build/deploy',
+    ]);
     expect(answeredBy).toBe('second');
   });
 
   it('a pinned tab that goes to the background hands over once, and says so', async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
     const from = await connectBystander(h);
-    await runCommand(h, windowKey, 'cloneApp', 'm1', { from });
+    await runCommand(h, windowKey, 'project/cloneApp', 'm1', { from });
     expect(commandFrames(second)).toHaveLength(1);
 
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
-    const switched = await runCommand(h, windowKey, 'compile', 'm2', { from });
+    const switched = await runCommand(h, windowKey, 'build/compile', 'm2', { from });
 
-    expect(commandFrames(first).map((r) => r.command)).toEqual(['compile']);
+    expect(commandFrames(first).map((r) => r.command)).toEqual(['build/compile']);
     expect(switched).toContain('first');
     expect(switched).toContain('different open copy of this app window');
 
     // The phone comes back. The window stays where it is now — switching back would be a
     // second jump between copies — and the notice is not repeated.
     await second.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
-    const after = await runCommand(h, windowKey, 'deploy', 'm3', { from });
+    const after = await runCommand(h, windowKey, 'build/deploy', 'm3', { from });
 
-    expect(commandFrames(first).map((r) => r.command)).toEqual(['compile', 'deploy']);
+    expect(commandFrames(first).map((r) => r.command)).toEqual(['build/compile', 'build/deploy']);
     expect(commandFrames(second)).toHaveLength(1);
     expect(after).toBe('first');
   });
@@ -322,7 +325,7 @@ describe('S7 — one app protocol request, one responder', () => {
     // landed on a copy that never saw the interaction — "No intervention is pending" there,
     // and a timeout in the copy the user actually answered.
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await runCommand(h, windowKey, 'project/open', 'm1', { from: second });
     expect(commandFrames(second)).toHaveLength(1);
 
     const moved = await runCommand(h, windowKey, 'answerIntervention', 'm2', {
@@ -341,16 +344,16 @@ describe('S7 — one app protocol request, one responder', () => {
 
   it("a window message from another tab moves the window to that tab's copy, and says so once", async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await runCommand(h, windowKey, 'project/open', 'm1', { from: second });
 
-    const moved = await runCommand(h, windowKey, 'compile', 'm2', { from: first });
+    const moved = await runCommand(h, windowKey, 'build/compile', 'm2', { from: first });
 
-    expect(commandFrames(first).map((r) => r.command)).toEqual(['compile']);
+    expect(commandFrames(first).map((r) => r.command)).toEqual(['build/compile']);
     expect(commandFrames(second)).toHaveLength(1);
     expect(moved).toContain('first');
     expect(moved).toContain(ACTED_NOTE);
 
-    expect(await runCommand(h, windowKey, 'deploy', 'm3', { from: first })).toBe('first');
+    expect(await runCommand(h, windowKey, 'build/deploy', 'm3', { from: first })).toBe('first');
   });
 
   it('the first request goes to the tab that acted, not the newest registration', async () => {
@@ -374,7 +377,7 @@ describe('S7 — one app protocol request, one responder', () => {
     const companion = await h.connect('0', { companion: true });
     answerAs(companion, 'companion');
     await companion.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
-    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await runCommand(h, windowKey, 'project/open', 'm1', { from: second });
 
     const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', {
       from: companion,
@@ -389,7 +392,7 @@ describe('S7 — one app protocol request, one responder', () => {
   it('an interaction from a backgrounded tab does not move the window', async () => {
     // It could not run the command — moving there would only turn it into a timeout.
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await runCommand(h, windowKey, 'project/open', 'm1', { from: second });
     await first.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'hidden' });
 
     const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', { from: first });
@@ -401,7 +404,7 @@ describe('S7 — one app protocol request, one responder', () => {
   it('an interaction from a tab running with nobody watching does not move the window', async () => {
     // The Android app out of sight keeps its page visible; nobody can have tapped it.
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await runCommand(h, windowKey, 'project/open', 'm1', { from: second });
     await first.deliver({
       type: ClientEventType.CLIENT_PRESENCE,
       state: 'visible',
@@ -419,7 +422,7 @@ describe('S7 — one app protocol request, one responder', () => {
 
   it('a message from a tab that has not registered the window does not move it', async () => {
     const { h, windowKey, first, second } = await bootTwoTabs();
-    await runCommand(h, windowKey, 'openProject', 'm1', { from: second });
+    await runCommand(h, windowKey, 'project/open', 'm1', { from: second });
     const bystander = await connectBystander(h);
 
     const answeredBy = await runCommand(h, windowKey, 'refresh', 'm2', { from: bystander });
@@ -472,14 +475,14 @@ describe('S7d — the tab the user is looking at answers, the companion covers f
     // and this is about the move the server makes by itself once the phone is back.
     const from = await connectBystander(h);
 
-    const covered = await runCommand(h, windowKey, 'compile', 'm1', { from });
+    const covered = await runCommand(h, windowKey, 'build/compile', 'm1', { from });
     expect(covered).toContain('companion');
-    expect(commandFrames(companion).map((r) => r.command)).toEqual(['compile']);
+    expect(commandFrames(companion).map((r) => r.command)).toEqual(['build/compile']);
 
     await phone.deliver({ type: ClientEventType.CLIENT_PRESENCE, state: 'visible' });
-    const back = await runCommand(h, windowKey, 'deploy', 'm2', { from });
+    const back = await runCommand(h, windowKey, 'build/deploy', 'm2', { from });
 
-    expect(commandFrames(phone).map((r) => r.command)).toEqual(['deploy']);
+    expect(commandFrames(phone).map((r) => r.command)).toEqual(['build/deploy']);
     expect(back).toContain('phone');
     // The move is a jump between copies like any other, so the agent is told.
     expect(back).toContain('different open copy of this app window');

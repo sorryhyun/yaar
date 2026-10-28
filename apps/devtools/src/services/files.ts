@@ -87,7 +87,7 @@ async function fillLineCounts(projectId: string, entries: FileEntry[]): Promise<
  * `refreshFiles()`.
  *
  * A refresh lists every directory and then reads every text file in the project to
- * count its lines. Running that after each write meant an `editFile` on one file re-read
+ * count its lines. Running that after each write meant a `files/edit` on one file re-read
  * the whole project, every time. A write already knows everything the listing holds
  * about the file it wrote, so it updates that one entry. Anything written *outside*
  * these functions (import, format, project open) still refreshes in full.
@@ -138,7 +138,7 @@ export interface ListedFile {
 
 /**
  * The project tree, narrowed to a directory and a glob, with generated output left out
- * unless asked for — the same rule `grep` applies, so the two agree on what "source" is.
+ * unless asked for — the same rule `files/grep` applies, so the two agree on what "source" is.
  *
  * Walked fresh rather than read from the `files` signal, which never holds dist/ at
  * all: `excluded` has to count what was really skipped, not what was never seen.
@@ -158,7 +158,7 @@ export async function listProjectFiles(opts: {
   if (dir) {
     const target = all.find((e) => e.path === dir);
     if (target && !target.isDirectory)
-      throw new Error(`${dir} is a file, not a directory — readFile reads it`);
+      throw new Error(`${dir} is a file, not a directory — files/read reads it`);
     if (!target) {
       const dirs = all.filter((e) => e.isDirectory).map((e) => e.path);
       const near = nearbyPaths(dir, dirs);
@@ -241,7 +241,7 @@ function readFailure(projectId: string, path: string, err: unknown): Error {
   const entry = files().find((f) => f.path === path);
   if (!entry) return missingFileError(path);
   if (entry.isDirectory)
-    return new Error(`${path} is a directory, not a file — listFiles lists what is in it`);
+    return new Error(`${path} is a directory, not a file — files/list lists what is in it`);
   const message = `could not read ${path}: ${errMsg(err)}`;
   return new Error(relativizeProjectPaths([message], projectId)[0] ?? message);
 }
@@ -307,7 +307,7 @@ const MEDIA_MIME: Record<string, string> = {
 
 /**
  * A media file's raw base64 plus its MIME type, or null if it could not be read as
- * bytes. Shared by the editor (which builds a data URL) and the `readFile` command
+ * bytes. Shared by the editor (which builds a data URL) and the `files/read` command
  * (which returns an image content block), so both agree on how an image is decoded.
  */
 export async function readMediaFile(
@@ -398,7 +398,7 @@ onRemoteOpenFile((next) => {
  *
  * Null is the create/update distinction: a failed read here means the path does
  * not exist yet, which the change history reports differently from overwriting a
- * file that happened to be empty. JSON is rendered the way readFile renders it so
+ * file that happened to be empty. JSON is rendered the way files/read renders it so
  * the recorded "before" matches what a reader was shown.
  */
 async function currentText(projectId: string, path: string): Promise<string | null> {
@@ -430,7 +430,7 @@ export interface WriteReceipt {
 /**
  * Write a file and say what landed.
  *
- * The receipt confirms what the file now holds, like `editFile`'s. A line count is also
+ * The receipt confirms what the file now holds, like `files/edit`'s. A line count is also
  * the cheapest way to catch passing a JSON object and getting a serialization you did
  * not expect.
  */
@@ -485,8 +485,8 @@ export async function editFile(
   const proj = requireProject();
   if (edits.length === 0) throw new Error('No edits given');
   const raw = await appStorage.read(projectPath(proj.id, path));
-  // JSON files can come back parsed — render them the way readFile does, so a
-  // search string copied from a readFile result matches.
+  // JSON files can come back parsed — render them the way files/read does, so a
+  // search string copied from a files/read result matches.
   const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
   const { content: updated, removals } = applyEdits(content, edits);
   await writeFile(path, updated, {

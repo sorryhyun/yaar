@@ -60,7 +60,7 @@ Conventions:
 - **`main.ts` spreads the command maps directly** (`{ ...runCommands, ... }`) rather
   than through a re-export barrel: the manifest extractor needs statically readable
   object literals, so keep descriptor maps as plain `const` objects and spreads.
-  Verify any reshuffle with devtools' `manifest` command: a pure move must not
+  Verify any reshuffle with devtools' `build/manifest` command: a pure move must not
   change the command or state list.
 - **`src/styles/` import order is the cascade.** `styles/index.ts` lists the sheets in
   the order they must apply; reordering the imports reorders the rules.
@@ -78,14 +78,14 @@ and that newline is the blank separator line between sections.** So a part start
 its section banner and ends at its last non-blank line — add a stray blank line at
 either end and every line number in a kernel stack trace shifts. When you change the
 boundaries, prove it: keep a copy of the old source, `console.log(NEW === OLD)` from
-the preview, and read it back from devtools' `previewConsole`.
+the preview, and read it back from devtools' `preview/console`.
 
 - It is `String.raw` so backslashes survive (regexes work). That means **no backticks and no
   `$` followed by `{` anywhere in the kernel body** — either one ends or interpolates the
   template. Use string concatenation, and `String.fromCharCode(96)` where the scanner needs
   to compare against a backtick.
 - It is **not type checked**. A typo there compiles fine and fails at run time. Test kernel
-  changes with `previewCommand runCode`, not with `compile`.
+  changes with `preview/command runCode`, not with `build/compile`.
 - Internals are prefixed `__lab` so a user's `var logs = ...` cannot shadow them. Only
   `store csv df stats plot http show md sleep` are meant to be visible — plus `fetch`,
   which the kernel replaces with a bridge call: the worker's own `fetch` resolves
@@ -206,10 +206,10 @@ Two GraphView invariants that are easy to break:
   `draw()` directly. Only the spec, the compiled plans and the parameter values are
   reactive.
 
-`previewScreenshot` renders a canvas at its backing-store size, not its CSS size, so a
+`preview/screenshot` renders a canvas at its backing-store size, not its CSS size, so a
 graph looks zoomed and cropped in a devtools screenshot even when it is correct. Verify a
 graph by exporting a PNG (`graph.save`) and reading that back, or by counting pixels of a
-known series colour with `previewEval` — not from a screenshot.
+known series colour with `preview/eval` — not from a screenshot.
 
 `exportChart` handles both output kinds: it takes the newest `chart` **or** `graph` part in
 the notebook and returns `{ path, uri, bytes, cellId, kind }`. Keep it one command, so the
@@ -231,9 +231,9 @@ caller need not know which kind a cell produced.
   into a drawer, moves secondary toolbar actions behind ⋯, and shows the cell bar's copy
   of the run button in place of the gutter. Pane offsets follow `--lab-head`/`--lab-foot`;
   change heights there, not in the individual rules. Test a layout by toggling the class
-  with `previewEval` — a devtools preview is never a coarse pointer.
-- `previewScreenshot` in devtools does not render textarea heights or scroll position
-  faithfully. Verify layout with `previewEval` measurements, and verify charts by exporting
+  with `preview/eval` — a devtools preview is never a coarse pointer.
+- `preview/screenshot` in devtools does not render textarea heights or scroll position
+  faithfully. Verify layout with `preview/eval` measurements, and verify charts by exporting
   a PNG and reading it back.
 
 ## store paths: two tiers, decided by form

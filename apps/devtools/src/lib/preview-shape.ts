@@ -36,7 +36,7 @@ export function clipMatchLine(content: string, pattern: string, max = GREP_LINE_
 }
 
 /**
- * Top-level fields of one state value, as `previewQuery({ stateKey, keys })` reads them.
+ * Top-level fields of one state value, as `preview/query({ stateKey, keys })` reads them.
  * Null when the value has no fields to pick (a primitive, an array, null).
  */
 export function pickFields(
@@ -114,7 +114,7 @@ export function summarizeSamples(values: unknown[]): {
 export const AUDIT_ENTRY_CHARS = 160;
 
 /**
- * An audit entry (a `previewEval` input or result, a fault-rule change) cut to one line.
+ * An audit entry (a `preview/eval` input or result, a fault-rule change) cut to one line.
  * They are replays of calls the reader made itself, so the full text is noise there;
  * `full` on the console read brings it back.
  */

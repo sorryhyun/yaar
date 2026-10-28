@@ -46,29 +46,29 @@ export function captureFailureHint(reason: string): string {
         'An external resource tainted the canvas, so the browser refuses to read its ' +
         'pixels. Retrying will not help — find the non-`data:` URL in the DOM ' +
         '(an <img>, a CSS url(), a <video>) and inline or remove it. Meanwhile use ' +
-        'previewEval to check structure instead of pixels.'
+        'preview/eval to check structure instead of pixels.'
       );
     case 'no-response':
       return (
         'The preview never answered the capture request: either no capture handler is ' +
         'installed (an old build — recompile and re-open the preview) or the page is ' +
-        'busy blocking the main thread. Check previewConsole for a stuck script.'
+        'busy blocking the main thread. Check preview/console for a stuck script.'
       );
     case 'zero-size':
       return (
         'The preview has no layout box yet — the window is not laid out, or the app ' +
         'renders into a zero-size container. Retry after a moment; if it persists, ' +
-        'check the root element has a height (resizePreview can also give it room).'
+        'check the root element has a height (preview/resize can also give it room).'
       );
     case 'serialize-error':
       return (
         'Serializing the DOM for capture threw. Usually a node the cloner cannot handle ' +
-        '(exotic embeds, a huge tree). Use previewEval to inspect structure instead.'
+        '(exotic embeds, a huge tree). Use preview/eval to inspect structure instead.'
       );
     case 'img-load-error':
       return (
         'The serialized snapshot failed to load as an image — typically malformed markup ' +
-        'in the DOM. Use previewEval to inspect structure instead.'
+        'in the DOM. Use preview/eval to inspect structure instead.'
       );
     default:
       return `Capture failed (${reason}).`;
@@ -118,13 +118,13 @@ export async function previewWindowIsOpen(): Promise<boolean> {
  * Open (or re-open) the preview window on the current build, and return where it landed.
  *
  * Re-creating the window remounts the iframe, which is how a preview picks up a new build —
- * so `compile` calls this too. Shared with the `preview` command rather than duplicated:
+ * so `build/compile` calls this too. Shared with the `preview/open` command rather than duplicated:
  * the window id and the preview principal below are both load-bearing, and a second copy
  * of them that drifted would be its own bug.
  */
 export async function openPreview(): Promise<{ previewUrl: string; windowId: string }> {
   const url = previewUrl();
-  if (!url) throw new AppCommandError('No compiled output. Run compile first.');
+  if (!url) throw new AppCommandError('No compiled output. Run build/compile first.');
   const proj = activeProject();
   const name = proj?.name ?? 'Preview';
   // The project's declared `permissions` are deliberately *not* passed here. `window.create`
@@ -134,7 +134,7 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // mints the preview's token instead (`previewPermissions` in http/iframe-tokens.ts), capped
   // by devtools' own reach, which is also how `bundles` already worked. Nothing to send.
   // Address the window by an explicit, namespaced id — see `previewWindowIdFor`, which
-  // `deleteProject` also spells the id with so it can close a window it never opened.
+  // `project/delete` also spells the id with so it can close a window it never opened.
   const previewId = previewWindowIdFor(proj?.id ?? 'scratch');
   // Give the preview a principal of its own, derived from the project. `self` then
   // resolves inside it — so appStorage, appDb and app-scoped permissions actually run
@@ -144,7 +144,7 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   const previewAppId = proj ? `preview--${proj.id}` : undefined;
   // Close before create, unconditionally. `create` on an id that already exists is a
   // hard error server-side (features/window/create.ts) — not a replace — so the create
-  // below would throw and take the whole `compile` command down with it, reported as
+  // below would throw and take the whole `build/compile` command down with it, reported as
   // "compile failing" even though the build succeeded. Gating this on previewWindowId()
   // would not be enough: that signal is ours, not the window's (see
   // `previewWindowIsOpen`). Asking the server to close is the only thing that knows the
@@ -183,7 +183,7 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
 /**
  * The warning a stale preview owes every reader of it, or null when it is current.
  *
- * `compile({ refreshPreview: false })` buys state preservation by leaving the window
+ * `build/compile({ refreshPreview: false })` buys state preservation by leaving the window
  * on the previous build. That is only a safe trade while every window onto the
  * preview says so — an unlabelled screenshot of last build's code is precisely the
  * evidence that makes a wrong fix look confirmed.
@@ -194,8 +194,8 @@ export function previewStaleNote(): string | null {
   return (
     `STALE PREVIEW: this window is showing a build ${behind} compile(s) old — ` +
     'the source has been compiled since it was mounted, without a refresh ' +
-    '(compile({ refreshPreview: false })). Anything you read here describes the ' +
-    'older build. Run `preview` to remount on the current one, at the cost of ' +
+    '(build/compile({ refreshPreview: false })). Anything you read here describes the ' +
+    'older build. Run `preview/open` to remount on the current one, at the cost of ' +
     'resetting in-app state.'
   );
 }
@@ -214,7 +214,7 @@ export async function readPreview(): Promise<{
   images: CapturedImage[];
 }> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
 
   let result: unknown;
   try {
@@ -270,7 +270,7 @@ function logPreviewEvaluation(kind: 'input' | 'result' | 'error', content: unkno
  * Split out because `inspect` evaluates on every call and also *reports* the
  * console tail: audit-logging its own probe would put an entry in the buffer that
  * the same snapshot then reads back, so each inspect would show the previous one.
- * A user-authored `previewEval` still gets the audit — that is the record of what
+ * A user-authored `preview/eval` still gets the audit — that is the record of what
  * an agent asked the preview, and it belongs in the panel.
  */
 export async function evaluateRaw(
@@ -303,8 +303,8 @@ export function previewFaultsNote(): string | null {
   const count = wid ? faultRuleCounts.get(wid) : undefined;
   if (!count) return null;
   return (
-    `FAULTS ACTIVE: ${count} fault rule(s) set by previewFaults are failing or stalling ` +
-    "this preview's matching calls. Clear them with previewFaults({ rules: [] }) before " +
+    `FAULTS ACTIVE: ${count} fault rule(s) set by preview/faults are failing or stalling ` +
+    "this preview's matching calls. Clear them with preview/faults({ rules: [] }) before " +
     'judging a failure real.'
   );
 }
@@ -319,7 +319,7 @@ export function previewFaultsNote(): string | null {
  */
 export async function setPreviewFaults(rules: unknown[] | undefined): Promise<unknown> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
   const result = await invoke<unknown>(`yaar://windows/${wid}`, {
     action: 'app_faults',
     ...(rules !== undefined ? { rules } : {}),
@@ -353,7 +353,7 @@ export async function cropToSelector(
   selector: string,
 ): Promise<{ image: CapturedImage; note?: string }> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
   const probe =
     `(function(){var e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;` +
     'var r=e.getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height,' +
@@ -424,7 +424,7 @@ export async function previewEvaluate(
   opts: { changed?: boolean } = {},
 ): Promise<unknown | EvaluateWithChanges> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
   logPreviewEvaluation('input', expression);
   const before = opts.changed === true ? await captureSnapshot(wid, { console: false }) : null;
   let result: unknown;
@@ -455,7 +455,7 @@ export async function previewEvaluate(
 // One read that puts side by side the three things a stale-render bug lives
 // between: what the app *declares* (protocol state), what it *renders* (the
 // DOM's text), and what it *said* (the console tail). Each was already reachable
-// on its own — a single-key query, an eval, previewConsole — and that is the point.
+// on its own — a single-key query, an eval, preview/console — and that is the point.
 // The failure this catches is not "the value was unreadable" but "nobody thought
 // to compare them": protocol state reading 42 under a DOM still showing 41 is a
 // derived value that was never wrapped in a thunk, and neither half alone says so.
@@ -464,7 +464,7 @@ export async function previewEvaluate(
 // an agent mid-debug is almost never "what is the state" but "what changed since
 // the thing I just did".
 //
-// This is `previewQuery` with no `stateKey`, not a command of its own. Two
+// This is `preview/query` with no `stateKey`, not a command of its own. Two
 // commands over one subsystem meant both descriptions spent their length telling
 // an agent which to reach for — and the losing branch, single-key query, is the
 // one an agent reaches for by habit when it has no idea where the bug is.
@@ -519,7 +519,7 @@ export interface InspectSnapshot {
   /** Keys the budget cut, named rather than silently dropped. */
   stateOmitted?: string[];
   dom: InspectedValue;
-  /** Absent on the internal snapshots taken around a `previewEval`, which skip it. */
+  /** Absent on the internal snapshots taken around a `preview/eval`, which skip it. */
   console?: { connected: boolean; reason?: string; entries: ConsoleEntry[] };
 }
 
@@ -725,7 +725,7 @@ async function captureSnapshot(wid: string, opts: InspectOptions = {}): Promise<
 /** Snapshot the running preview, and say what moved since the last snapshot. */
 export async function inspectPreview(opts: InspectOptions = {}): Promise<InspectResult> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
 
   const snapshot = await captureSnapshot(wid, opts);
   const changed = lastInspect ? diffSnapshots(lastInspect, snapshot) : undefined;
@@ -747,7 +747,7 @@ export async function inspectPreview(opts: InspectOptions = {}): Promise<Inspect
  */
 export async function queryPreviewState(stateKey: string, fields?: string[]): Promise<unknown> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
   return narrowState(stateKey, await readStateKey(wid, stateKey), fields);
 }
 
@@ -809,7 +809,7 @@ export interface SampledState {
  *
  * For values that only mean something while the app is running — meters during playback,
  * a playhead, a physics body — where one read is a coin toss and a hand-rolled loop of
- * `previewQuery` calls with `previewEval` sleeps between them costs a round trip per
+ * `preview/query` calls with `preview/eval` sleeps between them costs a round trip per
  * sample *through the agent*. The interval is a floor, not a clock: each read is a round
  * trip to the preview, so a sample lands at the later of the interval and the read's return.
  */
@@ -818,7 +818,7 @@ export async function samplePreviewState(
   opts: { everyMs: number; durationMs: number; fields?: string[]; series?: boolean },
 ): Promise<SampledState> {
   const wid = previewWindowId();
-  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
   if (!(opts.everyMs > 0) || !(opts.durationMs > 0)) {
     throw new AppCommandError('sampleEveryMs and durationMs must both be positive.');
   }

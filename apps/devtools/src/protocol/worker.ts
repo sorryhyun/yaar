@@ -43,14 +43,14 @@ import {
   type EditProposal,
 } from '../services';
 
-// Two audiences, one file. `workerTask`/`workerWait`/`workerInterrupt` and the
+// Two audiences, one file. `worker/task`/`worker/wait`/`worker/interrupt` and the
 // three `*EditRequest` commands are the app agent's door — the ones that appear
 // in the manifest, so the concierge can delegate survey work instead of spending
 // its own turns on reads, collect it when it has run out of work to do
 // meanwhile, and take or decline the edits that came back.
 //
-// `acceptEditRequest` is the only writer among them, and it is deliberately the
-// most guarded command in this app: it wants a token that only `readEditRequest`
+// `worker/acceptEdit` is the only writer among them, and it is deliberately the
+// most guarded command in this app: it wants a token that only `worker/readEdit`
 // hands out and a sentence the caller wrote itself, because the whole reason to
 // let a sonnet-tier explorer author edits is that a slower agent read them first. The `persona:*` entries are
 // the handler halves of the tools the worker sub-agent is spawned with
@@ -126,13 +126,13 @@ function typeErrorCount(): { count: number; reliable: boolean } {
 }
 
 export const workerCommands = {
-  workerConfig: defineAppCommand({
+  'worker/config': defineAppCommand({
     description:
       'Set how many workers may run tasks at the same time (1-3, default 2), persisted ' +
       "across reloads. Returns { maxWorkers, ceiling }. To read the cap and each worker's " +
       'status, query the `worker` state key. Lowering the cap stops nothing already running; ' +
       'it only refuses new tasks beyond it. Workers are read-only, so parallel ones never ' +
-      'clobber files — their proposed edits are applied one at a time by acceptEditRequest.',
+      'clobber files — their proposed edits are applied one at a time by worker/acceptEdit.',
     params: {
       type: 'object',
       properties: {
@@ -153,24 +153,24 @@ export const workerCommands = {
       return { maxWorkers: workerCap(), ceiling: MAX_WORKERS };
     },
   }),
-  workerTask: defineAppCommand({
+  'worker/task': defineAppCommand({
     description:
       'Start one task on the worker — a sonnet-tier sub-agent that explores the active ' +
       'project with its own read-only tools (list files, read file, grep) and reports back; ' +
       'it cannot edit, compile, or deploy. For a task that needs a change it submits the exact ' +
       'edit instead of describing it, which arrives as `proposals` — summaries of edits already ' +
-      'verified to apply cleanly, taken with acceptEditRequest and turned down with ' +
-      'rejectEditRequest, so a delegated fix costs you a read and a decision rather than ' +
+      'verified to apply cleanly, taken with worker/acceptEdit and turned down with ' +
+      'worker/rejectEdit, so a delegated fix costs you a read and a decision rather than ' +
       'retyping it. RETURNS IMMEDIATELY with a taskId. You are then ' +
       'WOKEN with the answer when it lands (an <app:event channel="worker"> message with ' +
-      'kind "result") — workerWait blocks for it instead, and the "worker" state key is the ' +
+      'kind "result") — worker/wait blocks for it instead, and the "worker" state key is the ' +
       'plain look. Interim findings arrive with the result; an urgent one wakes you early ' +
-      'as kind "report" — a cue to re-scope or call workerInterrupt, not a sign the task is ' +
+      'as kind "report" — a cue to re-scope or call worker/interrupt, not a sign the task is ' +
       'done. A very long answer can reach you with its long fields shortened — each ending ' +
       '"…[cut, N chars]", with a note after the JSON naming them — because the wakeup is a ' +
-      'prompt injection with a context budget; call workerWait with the taskId to read the ' +
+      'prompt injection with a context budget; call worker/wait with the taskId to read the ' +
       'full record, which is kept whole. Several workers run in parallel, up to the cap in ' +
-      '`workerConfig` (default 2, max 3): each call lands on a free worker and returns its ' +
+      '`worker/config` (default 2, max 3): each call lands on a free worker and returns its ' +
       '`worker` id, so fan independent surveys out as separate tasks and collect each by ' +
       'taskId. A worker keeps its memory across tasks and a task goes to the worker that ' +
       'finished last when it is free — pass `worker` to pin a follow-up to a specific one, ' +
@@ -243,7 +243,7 @@ export const workerCommands = {
         if (chunks.length > free) {
           throw new AppCommandError(
             `split needs ${chunks.length} free workers and ${free} ${free === 1 ? 'is' : 'are'} free ` +
-              `(cap ${workerCap()}). Raise the cap with workerConfig, wait for a running task, ` +
+              `(cap ${workerCap()}). Raise the cap with worker/config, wait for a running task, ` +
               'or narrow the task.',
           );
         }
@@ -265,7 +265,7 @@ export const workerCommands = {
         return {
           split: true,
           tasks,
-          collect: 'You will be woken once per task. workerWait with each taskId collects them.',
+          collect: 'You will be woken once per task. worker/wait with each taskId collects them.',
         };
       }
       // `wakeAgent` is what separates this call from the same task typed into the
@@ -283,11 +283,11 @@ export const workerCommands = {
         ...(scope.length ? { scope: { files: scope.length, kb: kb(scopeBytes) } } : {}),
         collect:
           `You will be woken with the answer (channel "worker", taskId ${started.taskId}). ` +
-          'To block for it instead, call workerWait.',
+          'To block for it instead, call worker/wait.',
       };
     },
   }),
-  workerInterrupt: defineAppCommand({
+  'worker/interrupt': defineAppCommand({
     description:
       'Stop a running worker task and take whatever it has produced so far — its ' +
       'partial answer and every interim report. Use it when a report or a state-key read ' +
@@ -309,9 +309,9 @@ export const workerCommands = {
     replay: 'never',
     run: async (p) => interruptWorker(p.taskId != null ? { taskId: Number(p.taskId) } : {}),
   }),
-  workerWait: defineAppCommand({
+  'worker/wait': defineAppCommand({
     description:
-      'Collect a task started by workerTask: returns its answer, or `done: false` if it is ' +
+      'Collect a task started by worker/task: returns its answer, or `done: false` if it is ' +
       'still working. Blocks up to waitMs (default 60000, max 170000) — always pass a ' +
       'timeoutMs at least 10s larger than waitMs, or the platform kills the call before the ' +
       'wait ends. Timing out is cheap: the task keeps running and calling again resumes the ' +
@@ -321,7 +321,7 @@ export const workerCommands = {
       'N tasks is N calls. Never re-send a task to "retry" a wait. ' +
       '`reports` carries the interim findings the worker posted, and `proposals` the edits it ' +
       'submitted; both come back on a timeout too — read them before deciding whether to keep ' +
-      'waiting or to workerInterrupt. A ' +
+      'waiting or to worker/interrupt. A ' +
       'settled task ALWAYS carries an `answer` or an `error`: an `error` saying the worker ' +
       'produced no answer means nothing was learned, never "nothing was found".',
     params: {
@@ -329,7 +329,7 @@ export const workerCommands = {
       properties: {
         taskId: {
           type: 'number',
-          description: 'The id workerTask returned. Omit for the current or most recent task.',
+          description: 'The id worker/task returned. Omit for the current or most recent task.',
         },
         waitMs: {
           type: 'number',
@@ -349,13 +349,13 @@ export const workerCommands = {
       return result;
     },
   }),
-  readEditRequest: defineAppCommand({
+  'worker/readEdit': defineAppCommand({
     description:
       'Read edits the worker proposed, whole: the file, the rationale, the exact ' +
       'search/replace steps, and `evidence` — the greps the worker ran in that task before ' +
       'proposing, with sample matches. The `worker` state key and a task result list ' +
       'proposals as summaries; this is where the bodies are. It also returns the `token` ' +
-      'that acceptEditRequest requires, which is the point of the command — an edit cannot be ' +
+      'that worker/acceptEdit requires, which is the point of the command — an edit cannot be ' +
       'applied without having been read. Pass an array of ids to read several at once. ' +
       'Reading costs nothing and does not commit you.',
     params: {
@@ -401,10 +401,10 @@ export const workerCommands = {
       return many ? { requests: bodies } : bodies[0];
     },
   }),
-  acceptEditRequest: defineAppCommand({
+  'worker/acceptEdit': defineAppCommand({
     description:
       'Apply edits the worker proposed, then type check and compile once. Requires the ' +
-      '`token` from readEditRequest for each id and a one-line `intent` in your own words, ' +
+      '`token` from worker/readEdit for each id and a one-line `intent` in your own words, ' +
       'because an accept is a judgement and not a forward. Pass arrays for `id` and `token` ' +
       '(same order) to take several proposals with ONE build; a batch skips any that no ' +
       'longer apply and names them in `stale`. When every applied change touches only ' +
@@ -427,7 +427,7 @@ export const workerCommands = {
         },
         token: {
           oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-          description: 'The token readEditRequest returned; an array matching `id` for a batch.',
+          description: 'The token worker/readEdit returned; an array matching `id` for a batch.',
         },
         intent: {
           type: 'string',
@@ -440,7 +440,7 @@ export const workerCommands = {
           items: { type: 'object' },
           description:
             'Single id only: your corrected steps, replacing the proposal’s — the same shape ' +
-            'as editFile’s `edits` (search/replace, or startLine/endLine/anchor/replace). Each ' +
+            'as files/edit’s `edits` (search/replace, or startLine/endLine/anchor/replace). Each ' +
             'search must match exactly once.',
         },
       },
@@ -505,7 +505,7 @@ export const workerCommands = {
             throw new AppCommandError(
               'Wrong token for edit request #' +
                 id +
-                '. Call readEditRequest first and pass the ' +
+                '. Call worker/readEdit first and pass the ' +
                 'token it returns — this command will not apply an edit you have not read.',
             );
           }
@@ -520,7 +520,7 @@ export const workerCommands = {
           const id = proposal.id;
           const edits = amended ?? proposal.edits;
           // The proposal was checked when it was submitted, against the file as it was
-          // then. Anything since — another accept, an editFile of your own, a project
+          // then. Anything since — another accept, a files/edit of your own, a project
           // switch — may have invalidated it.
           const recheck = await validateProposedEdits(proposal.path, edits);
           if (!recheck.ok) {
@@ -687,7 +687,7 @@ export const workerCommands = {
         };
       }),
   }),
-  rejectEditRequest: defineAppCommand({
+  'worker/rejectEdit': defineAppCommand({
     description:
       'Decline an edit the worker proposed. `reason` is required and is delivered to the ' +
       'worker at the head of its next task, so a proposal turned down for being wrong is ' +

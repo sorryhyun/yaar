@@ -53,5 +53,5 @@ harmful happens to a window nobody is driving.
 
 Place procedural content (props, particles, sample data) from a seeded PRNG
 (`mulberry32`, default seed in state), not `Math.random()`. Same seed → identical
-layout → a `previewScript` baseline can assert it (`regression-testing` topic) instead
+layout → a `preview/script` baseline can assert it (`regression-testing` topic) instead
 of eyeballing a screenshot. *Seen in:* fps-lite `src/dressing.ts`.

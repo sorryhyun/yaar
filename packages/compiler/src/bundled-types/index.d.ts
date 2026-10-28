@@ -9,7 +9,7 @@
 // ── Reactivity ───────────────────────────────────────────────────────────────
 
 // Solid's surface is split across four entry points, and `export * from` tells a
-// reader nothing about which one holds what — `describeBundledLibrary("solid-js")`
+// reader nothing about which one holds what — `inspect/library` on "solid-js"
 // returned exactly these four lines, so an agent told to look a library up before
 // writing against it learned only that the modules exist. Importing `render` or
 // `html` from '@bundled/solid-js' is the single most common first-compile failure.
@@ -551,7 +551,7 @@ declare module '@bundled/dompurify' {
 
 declare module '@bundled/test' {
   // Tests for `src/**/*.test.ts` only — the app build refuses this import, so test
-  // code never ships. Dev Tools `runTests` builds the test files into their own page
+  // code never ships. Dev Tools' `test/run` builds the test files into their own page
   // and runs it in the preview: DOM, `@bundled/yaar` and app storage are real.
   // A subset of bun:test. Tests run sequentially; a test may be async.
   export function describe(name: string, fn: () => void): void;
@@ -1021,7 +1021,7 @@ interface YaarAppDefinition<
    */
   onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
   /**
-   * Module values a devtools preview may inspect: `previewEval` sees the result as
+   * Module values a devtools preview may inspect: `preview/eval` sees the result as
    * `__debug` (e.g. `__debug.engine.voices.length`). The bundle is an ES module, so
    * nothing else lets an eval reach the app's own bindings. Prefer the function form,
    * `() => ({ engine, buildVoice })`: it is re-read on every access, so a reference the

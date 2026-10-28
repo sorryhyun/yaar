@@ -4,7 +4,7 @@
  * The schema is what an agent is shown in the manifest, but nothing used to check a
  * call against it: an undeclared key was dropped in silence and a missing required one
  * arrived as `undefined`. The handler then failed somewhere downstream with a message
- * about its own logic. devtools' `copyFile` called with `{ source, destination }` read
+ * about its own logic. devtools' `files/copy` called with `{ source, destination }` read
  * `from`/`to` as undefined, found them equal, and reported "Source and destination are
  * the same path" — an error that names neither the keys that were wrong nor the ones
  * that were right, and that reads as a bug in the file layer.
@@ -55,7 +55,7 @@ function installWith(commands: Record<string, unknown>) {
   };
 }
 
-/** devtools' copyFile, reduced to the shape that matters. */
+/** devtools' `files/copy`, reduced to the shape that matters. */
 const copyFile = {
   description: 'Copy a file',
   params: {
@@ -68,27 +68,27 @@ const copyFile = {
 
 describe('app command params validation', () => {
   it('runs a well-formed call untouched', () => {
-    const call = installWith({ copyFile });
-    expect(call('copyFile', { from: 'a.ts', to: 'b.ts' })).toMatchObject({
+    const call = installWith({ 'files/copy': copyFile });
+    expect(call('files/copy', { from: 'a.ts', to: 'b.ts' })).toMatchObject({
       result: { copied: 'a.ts->b.ts' },
     });
   });
 
   it('names the wrong keys AND the right ones, instead of reaching the handler', () => {
-    const call = installWith({ copyFile });
-    const reply = call('copyFile', { source: 'a.ts', destination: 'b.ts' });
+    const call = installWith({ 'files/copy': copyFile });
+    const reply = call('files/copy', { source: 'a.ts', destination: 'b.ts' });
     expect(reply.result).toBeNull();
     expect(reply.error).toContain('unknown param: source, destination');
     expect(reply.error).toContain('missing required param: from, to');
     expect(reply.error).toContain('Accepted params: from, to');
-    expect(reply.error).toContain('copyFile');
+    expect(reply.error).toContain('files/copy');
     // The old symptom must not be what the caller sees.
     expect(reply.error).not.toContain('same path');
   });
 
   it('reports a required param omitted rather than coercing it to "undefined"', () => {
-    const call = installWith({ copyFile });
-    const reply = call('copyFile', { from: 'a.ts' });
+    const call = installWith({ 'files/copy': copyFile });
+    const reply = call('files/copy', { from: 'a.ts' });
     expect(reply.error).toContain('missing required param: to');
     expect(reply.error).not.toContain('unknown param');
   });

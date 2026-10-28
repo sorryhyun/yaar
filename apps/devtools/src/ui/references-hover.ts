@@ -14,7 +14,7 @@ import { findReferences, openFile, type ReferencesResult } from '../services';
 import { setPendingReveal, showFiles } from './panel-state';
 
 // Hovering an identifier in the editor shows its references, from the same language-service
-// lookup the `findReferences` command runs. The lookup reads the SAVED file, so positions are
+// lookup the `files/findReferences` command runs. The lookup reads the SAVED file, so positions are
 // only trusted while the buffer is clean.
 
 const HOVER_DELAY_MS = 400;

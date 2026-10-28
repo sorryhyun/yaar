@@ -355,7 +355,7 @@ export function permissionsAllow(
  *
  * Appended to the refusal when a caller *did* name this exact path to this window and the
  * grant was withheld only because that caller was an app-role principal (`mayDelegateGrants`
- * — devtools' `previewCommand` relay is the case in the tree). Nothing about the decision
+ * — devtools' `preview/command` relay is the case in the tree). Nothing about the decision
  * changes; the reader learns which fix applies. Without it the message points at the app's
  * `app.json`, which is the wrong file, and pointed there hardest during a permission audit
  * — the one moment "not permitted" reads as confirmation that the removal broke something.

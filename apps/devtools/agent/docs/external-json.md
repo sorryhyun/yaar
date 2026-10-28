@@ -13,7 +13,7 @@ Zod Mini** — the functional API, not the chained one: `z.optional(z.string())`
 `z.string().optional()`, `z.safeParse(Schema, data)` not `Schema.safeParse(data)`; same `z` you
 use for `params` in the App Protocol. The usage patterns (`z.looseObject` for items spread
 downstream, the safeParse-log-throw shape) are in
-`command({ command: "describeBundledLibrary", params: { name: "zod" } })` — read it before
+`command({ command: "inspect/library", params: { name: "zod" } })` — read it before
 writing schemas.
 
 ### Missing is quiet, malformed is loud

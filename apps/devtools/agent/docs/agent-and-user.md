@@ -48,7 +48,7 @@ without bound). One shared cap is wrong for at least two of them.
 
 - market-apps: a failed installed-list read must **not** reconcile — an empty list would
   clear every installed card on a transient hiccup.
-- devtools: `previewConsole` and `permissions` return a structured reason ("no preview
+- devtools: `preview/console` and `permissions` return a structured reason ("no preview
   open", "preview unreachable") rather than `[]`, which would read as "the app logged
   nothing".
 - mcp-manager's port sweep swallows every error as "nothing here", so a systemic fault
@@ -76,4 +76,4 @@ user's agreement is not.
 
 A field no component reads may still ship in a state key another agent parses —
 process-explorer's `WindowInfo.uri`/`lockedBy` look dead and are not. Deleting one is a
-protocol change: check `manifest` drift and callers, not just local references.
+protocol change: check `build/manifest` drift and callers, not just local references.

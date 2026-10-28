@@ -25,7 +25,7 @@ import {
 } from '../services';
 
 export const buildCommands = {
-  compile: defineAppCommand({
+  'build/compile': defineAppCommand({
     description:
       'Type check and compile the active project; refreshes the preview window if one is ' +
       'open. `built` reflects the bundle, `status` reflects type checking too — they can ' +
@@ -54,7 +54,7 @@ export const buildCommands = {
             'when the preview holds expensive state (a loaded fixture, a scrape, a ' +
             'multi-step form) that a cold start would cost you more than the stale build ' +
             'costs — the window then keeps running the previous build, and every preview ' +
-            'read says so until you run `preview`. Skips the manifest-drift check, which ' +
+            'read says so until you run `preview/open`. Skips the manifest-drift check, which ' +
             'needs a preview on the current build.',
         },
       },
@@ -134,19 +134,19 @@ export const buildCommands = {
               manifestNote:
                 'warning: the runtime registration and the static protocol manifest ' +
                 'disagree — entries reached via spreads or computed keys are invisible to ' +
-                'agents. Run the manifest command for details.',
+                'agents. Run build/manifest for details.',
             }
           : {}),
       };
     },
   }),
-  typecheck: defineAppCommand({
+  'build/typecheck': defineAppCommand({
     description:
       'Type check the active project without bundling and without touching the preview — ' +
-      'the check to run after an edit, where `compile` also rebuilds and remounts the ' +
+      'the check to run after an edit, where `build/compile` also rebuilds and remounts the ' +
       'preview (resetting its state). Records the verdict in `compileState.typecheck` as a ' +
       'compile does. Returns { clean, errors, warnings, diagnostics: [{ file, line, column, ' +
-      'code, message, severity }] } with project-relative paths. Run `compile` when you ' +
+      'code, message, severity }] } with project-relative paths. Run `build/compile` when you ' +
       'need the build or the preview to show the change.',
     params: { type: 'object', properties: {} },
     replay: 'never',
@@ -163,7 +163,7 @@ export const buildCommands = {
       };
     },
   }),
-  format: defineAppCommand({
+  'build/format': defineAppCommand({
     description:
       "Run the host's Prettier over the project, in the repo's own style — the style " +
       'deployed apps are read and reviewed in. Formats .ts/.tsx/.js/.jsx/.css and leaves ' +
@@ -207,7 +207,7 @@ export const buildCommands = {
       };
     },
   }),
-  manifest: defineAppCommand({
+  'build/manifest': defineAppCommand({
     description:
       'Compare the STATIC manifest (from the last compile) against the RUNTIME manifest ' +
       '(what the open preview actually registered), plus a drift report. Needs a compile ' +
@@ -244,7 +244,7 @@ export const buildCommands = {
       }
       const note =
         !stat.names && !runtime.names
-          ? 'Neither side is available — compile the project (static) and open a preview ' +
+          ? 'Neither side is available — run build/compile (static) and preview/open ' +
             '(runtime), then retry.'
           : !stat.names
             ? 'Only the runtime side is available, so no drift check was possible. ' +
@@ -254,12 +254,12 @@ export const buildCommands = {
       return { ...result, note: note.trim() };
     },
   }),
-  deploy: defineAppCommand({
+  'build/deploy': defineAppCommand({
     description:
       'Deploy to apps/. Refuses type errors unless skipTypecheck, and refuses a manifest ' +
       'that drops commands the installed app has unless allowProtocolShrink. Snapshots the ' +
-      'previous version — see gitRestore. Closes the preview window on success: it shows ' +
-      'the pre-deploy build, so re-open it with `preview` if you still need it. It also ' +
+      'previous version — see git/restore. Closes the preview window on success: it shows ' +
+      'the pre-deploy build, so re-open it with `preview/open` if you still need it. It also ' +
       "closes the user's open windows of that app (listed in `closedWindows`), losing their " +
       'in-app state — say so before deploying an app the user has open. A `staleWindow` in the result means you deployed the app you are running inside: ' +
       'that window was spared (closing it would have killed this call) and is STILL ' +
@@ -315,11 +315,11 @@ export const buildCommands = {
       return {
         ...result,
         ...(testWarning ? { testWarning } : {}),
-        ...(checks.length ? { checkNotes: [...checks, 'Details: checkProject.'] } : {}),
+        ...(checks.length ? { checkNotes: [...checks, 'Details: build/check.'] } : {}),
       };
     },
   }),
-  checkProject: defineAppCommand({
+  'build/check': defineAppCommand({
     description:
       'Static checks the type checker and bundler do not make: `staleFileRefs` — source ' +
       'files (*.ts, *.css, …) named in comments or Markdown that exist nowhere in the ' +

@@ -13,7 +13,7 @@ export interface ProjectMeta {
   lastModified: number;
   /**
    * Where this project came from — `"new"` for a scaffold, `"clone:{appId}"` for a
-   * `cloneApp` sandbox — or `undefined` for one that predates the marker.
+   * `project/cloneApp` sandbox — or `undefined` for one that predates the marker.
    *
    * Exists so cleanup can be safe. Without it `projectList` carried no signal for who
    * created a project, so an agent could not tell its own throwaway clones from the

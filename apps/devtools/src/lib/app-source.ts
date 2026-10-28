@@ -48,7 +48,7 @@ export function sliceLines(
 /**
  * Regex search over in-memory files, text only, in path order. A `glob` narrows the files;
  * hits past `cap` are counted, not listed, and each line is clipped around its match the
- * way the project `grep` clips.
+ * way the project `files/grep` clips.
  */
 export function searchSources(
   files: SourceFile[],

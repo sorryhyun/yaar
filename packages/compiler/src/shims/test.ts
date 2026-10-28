@@ -7,7 +7,7 @@
  * test files from `main.ts` and exposed them through `debug`, so every test
  * shipped in the deployed bundle. Tests now live beside the code as
  * `src/**\/*.test.ts`, the compiler builds them into a separate test page
- * (`compileTests`), and Dev Tools' `runTests` loads that page in the preview and
+ * (`compileTests`), and Dev Tools' `test/run` loads that page in the preview and
  * reads back `__yaar_tests__.run()`. The app build refuses this module, so test
  * code cannot reach a deployed app by accident.
  *

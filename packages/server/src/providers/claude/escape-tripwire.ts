@@ -118,8 +118,8 @@ export function isEscapedText(fragment: string): boolean {
  * one. A short `describe` call escaping three characters is not worth the
  * restart, and the parsed-input repair covers it anyway.
  *
- * `mcp__app__command` is an app agent's write path — Dev Tools' `writeFile`
- * and `editFile` carry whole files in `params`. The CLI's own Write/Edit/
+ * `mcp__app__command` is an app agent's write path — Dev Tools' `files/write`
+ * and `files/edit` carry whole files in `params`. The CLI's own Write/Edit/
  * NotebookEdit are not listed: `sdk-options.ts` never enables them. (`query`
  * carries only a state key, so it is not worth a cancelled turn.)
  */

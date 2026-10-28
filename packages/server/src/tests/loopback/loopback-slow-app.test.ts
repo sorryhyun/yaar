@@ -90,7 +90,7 @@ describe('S6 — an app that is merely slow is heard, not timed out', () => {
       {
         kind: 'tool',
         name: 'command',
-        run: (ctx) => handleAppCommand(ctx.windowState, windowKey, { command: 'compile' }),
+        run: (ctx) => handleAppCommand(ctx.windowState, windowKey, { command: 'build/compile' }),
       },
     ]);
 
@@ -159,8 +159,8 @@ describe('S6 — an app that is merely slow is heard, not timed out', () => {
     await h.client.deliver({ type: ClientEventType.APP_PROTOCOL_READY, windowId: windowKey });
     answerSlowly(h, SLOW_ANSWER);
 
-    // A command that knows it is slow (devtools' compile/deploy is the real one) asks for
-    // longer than the default, and must get it.
+    // A command that knows it is slow (devtools' `build/compile`/`build/deploy` are the real
+    // ones) asks for longer than the default, and must get it.
     const CALLER_TIMEOUT = 1_000;
     h.registry.onTurn(() => [
       {
@@ -168,7 +168,7 @@ describe('S6 — an app that is merely slow is heard, not timed out', () => {
         name: 'command',
         run: (ctx) =>
           handleAppCommand(ctx.windowState, windowKey, {
-            command: 'deploy',
+            command: 'build/deploy',
             timeoutMs: CALLER_TIMEOUT,
           }),
       },

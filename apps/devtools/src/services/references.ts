@@ -22,10 +22,10 @@ export async function findReferences(
     result = await devFindReferences(projectPath(proj.id), query);
   } catch (err) {
     setStatusText('Find references failed');
-    throw new AppCommandError(`findReferences failed: ${errMsg(err)}`);
+    throw new AppCommandError(`files/findReferences failed: ${errMsg(err)}`);
   }
   if (!result.success) {
-    const reason = `findReferences ${result.kind ?? 'failed'}: ${result.error ?? 'unknown error'}`;
+    const reason = `files/findReferences ${result.kind ?? 'failed'}: ${result.error ?? 'unknown error'}`;
     setStatusText(reason);
     throw new AppCommandError(reason);
   }
@@ -48,7 +48,7 @@ export type TypeAtResult = Awaited<ReturnType<typeof devTypeAt>>;
 
 /**
  * The checker's hover text at one position in the active project — the same language
- * service as `findReferences`, so it reads saved files and needs no compile. Throws with
+ * service as `files/findReferences`, so it reads saved files and needs no compile. Throws with
  * the server's `kind` on failure, for the same reason.
  */
 export async function typeAt(query: TypeAtQuery): Promise<Omit<TypeAtResult, 'success'>> {
@@ -57,11 +57,11 @@ export async function typeAt(query: TypeAtQuery): Promise<Omit<TypeAtResult, 'su
   try {
     result = await devTypeAt(projectPath(proj.id), query);
   } catch (err) {
-    throw new AppCommandError(`typeAt failed: ${errMsg(err)}`);
+    throw new AppCommandError(`files/typeAt failed: ${errMsg(err)}`);
   }
   if (!result.success) {
     throw new AppCommandError(
-      `typeAt ${result.kind ?? 'failed'}: ${result.error ?? 'unknown error'}`,
+      `files/typeAt ${result.kind ?? 'failed'}: ${result.error ?? 'unknown error'}`,
     );
   }
   const { success: _ok, ...rest } = result;

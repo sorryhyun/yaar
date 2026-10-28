@@ -1,7 +1,7 @@
 export {};
 
 // The compile verdict, as one pure reducer over the two facts that make it up. Shared by
-// the `compileState` state key's `status` and the `compile` command's `status` field,
+// the `compileState` state key's `status` and the `build/compile` command's `status` field,
 // which must answer identically.
 
 export type BundleStatus = 'idle' | 'compiling' | 'success' | 'error';

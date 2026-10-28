@@ -129,7 +129,7 @@ interface WindowSideState {
    * explain one.
    *
    * The rule is correct and stays; what it lacked was a way to tell its refusal apart
-   * from an ordinary one. devtools' `previewCommand` relays a command through its own
+   * from an ordinary one. devtools' `preview/command` relays a command through its own
    * app agent, so a file the caller named reaches the preview ungranted and the app's
    * `read` comes back "Not permitted" — the same sentence a genuinely undeclared path
    * gets. An agent auditing whether a permission is still needed reads that as proof the

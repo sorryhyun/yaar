@@ -50,7 +50,7 @@ export async function compile(): Promise<void> {
   try {
     const result = await devCompile(projectPath(proj.id), { title: proj.name });
     if (result.success) {
-      // Retain the statically extracted manifest so the `manifest` command and
+      // Retain the statically extracted manifest so the `build/manifest` command and
       // the compile drift check can compare it against the running preview.
       setStaticProtocol({
         protocol: result.protocol ?? null,
@@ -70,7 +70,7 @@ export async function compile(): Promise<void> {
     } else {
       // The dev server reports bundler errors with host-absolute paths
       // (`/Users/…/storage/apps/devtools/projects/1785…/src/main.ts:6:25`). Relative
-      // to the project is the only form that can be handed back to `editFile`, and it
+      // to the project is the only form that can be handed back to `files/edit`, and it
       // is what `diagnostics` already uses — so the two agree and neither leaks where
       // the sandbox lives on this machine.
       const errors = relativizeProjectPaths(

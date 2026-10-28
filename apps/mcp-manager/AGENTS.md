@@ -34,9 +34,9 @@ are different trust domains and different failure modes; keep them apart.
 
 **The protocol is public.** `protocol.json` is regenerated on every compile and
 other agents call these commands. Renaming a state key or a command, or
-narrowing a `params` schema, is a breaking change — `deploy` will refuse a
+narrowing a `params` schema, is a breaking change — `build/deploy` will refuse a
 manifest that drops commands unless forced. After any restructuring, run the
-`manifest` command (needs a compile *and* an open preview) to confirm the
+`build/manifest` command (needs a compile *and* an open preview) to confirm the
 static and runtime manifests still match.
 
 **Descriptors must stay statically readable.** The build extracts `appState`

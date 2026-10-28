@@ -119,11 +119,11 @@ describe('EscapeTripwire', () => {
     expect(wire.observe(delta(2, HANGUL_3))).toBeNull();
   });
 
-  test("trips on an app agent's command — Dev Tools writeFile is how app agents write files", () => {
+  test("trips on an app agent's command — Dev Tools' files/write is how app agents write files", () => {
     const wire = new EscapeTripwire();
     wire.observe(startBlock(0, 'mcp__app__command'));
     wire.observe(
-      delta(0, '{"command": "writeFile", "params": {"path": "src/main.ts", "content": "'),
+      delta(0, '{"command": "files/write", "params": {"path": "src/main.ts", "content": "'),
     );
     expect(wire.observe(delta(0, HANGUL_3))?.toolName).toBe('mcp__app__command');
   });
@@ -344,7 +344,7 @@ describe('escape guard records', () => {
     wire.observe(
       delta(
         0,
-        `{"command": "writeFile", "params": {"path": "src/i18n.md", "content": "${'x'.repeat(600)}`,
+        `{"command": "files/write", "params": {"path": "src/i18n.md", "content": "${'x'.repeat(600)}`,
       ),
     );
     const record = wire.observe(delta(0, HANGUL_3));
@@ -394,7 +394,7 @@ describe('escape guard records', () => {
   test('callTarget reads the target keys off a parsed input', () => {
     expect(callTarget({ uri: 'yaar://a', file_path: '/b' })).toBe('yaar://a');
     expect(callTarget({ file_path: '/b' })).toBe('/b');
-    expect(callTarget({ command: 'writeFile', params: { path: 'src/main.ts' } })).toBe(
+    expect(callTarget({ command: 'files/write', params: { path: 'src/main.ts' } })).toBe(
       'src/main.ts',
     );
     expect(callTarget({ params: 'not an object' })).toBeUndefined();
@@ -485,7 +485,7 @@ describe('repair hook on source-file targets', () => {
   test('leaves escapes in a .ts file as written — they may be meant', async () => {
     const content = `export const hi = '${HANGUL_2}';`;
     const { seen, updated } = await run('mcp__app__command', {
-      command: 'writeFile',
+      command: 'files/write',
       params: { path: 'src/main.ts', content },
     });
     expect(seen).toEqual([]);
@@ -504,7 +504,7 @@ describe('repair hook on source-file targets', () => {
 
   test('still decodes for a non-source target', async () => {
     const { seen, updated } = await run('mcp__app__command', {
-      command: 'writeFile',
+      command: 'files/write',
       params: { path: 'notes/readme.md', content: HANGUL_2 },
     });
     expect(seen).toHaveLength(1);
@@ -514,7 +514,7 @@ describe('repair hook on source-file targets', () => {
 
   test('still repairs an under-escaped nested JSON payload in a source-file call', async () => {
     const { seen, updated } = await run('mcp__app__command', {
-      command: 'writeFile',
+      command: 'files/write',
       params: { path: 'data.json', content: `{"body":"one${NL}two"}` },
     });
     expect(seen).toHaveLength(1);

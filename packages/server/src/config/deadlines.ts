@@ -74,7 +74,10 @@ export function clampDeadline(timeoutMs: number): number {
 export interface Deadlines {
   /** Reading app state is expected to be near-instant. `handleAppQuery`. */
   appQueryMs: number;
-  /** Commands do real work (devtools compile/deploy shells out). `handleAppCommand`. */
+  /**
+   * Commands do real work (devtools' `build/compile`/`build/deploy` shell out).
+   * `handleAppCommand`.
+   */
   appCommandMs: number;
   /** Floor under a caller-supplied command timeout — a command needs *some* room. */
   appCommandMinMs: number;

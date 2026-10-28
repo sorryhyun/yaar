@@ -14,15 +14,15 @@ file**:
    An app that makes sound should own a render command, so the agent driving it can check its
    own work the same way. A preview saves to `yaar://apps/preview--{projectId}/storage/…`, or under
    `shared/preview--{projectId}/` through `sharedStorage`.
-2. `analyzeAudio({ uri })` for loudness, peak, band balance, silence, stereo image, timeline,
+2. `inspect/audio` with `{ uri }` for loudness, peak, band balance, silence, stereo image, timeline,
    tempo, and a spectrogram. Render one stem at a time (solo a track) to tell which voice owns a
    problem.
-3. Change one thing, render again, `analyzeAudio({ uri: before, compareTo: after })`. The
+3. Change one thing, render again, `inspect/audio` with `{ uri: before, compareTo: after }`. The
    `delta` is the finding. A change that moved nothing is a wrong hypothesis, so drop it rather
    than stacking another change on top.
 
 **Measure a voice, not the mix, when one sound is wrong.** Expose the engine through
-`defineApp({ debug: () => ({ Tone, buildVoice, engine }) })` and drive it from `previewEval` as
+`defineApp({ debug: () => ({ Tone, buildVoice, engine }) })` and drive it from `preview/eval` as
 `__debug` (the `preview-debugging` topic). Don't re-implement the signal chain inside an eval to
 measure it: that measures your copy, not the app.
 
@@ -36,5 +36,5 @@ the user (ask the monitor to open the preview or the files), and let the user pi
 many render cycles chasing a target you made up.
 
 **Binary assets:** a sample that decodes in storage but not in the bundle was usually corrupted
-on the way in. `analyzeAudio` names the byte size when it cannot decode, and a file about
+on the way in. `inspect/audio` names the byte size when it cannot decode, and a file about
 twice its expected size went through a text read.

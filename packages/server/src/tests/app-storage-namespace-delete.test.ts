@@ -4,7 +4,7 @@
  * This used to be refused with "Provide a file path to delete", which made one class
  * of namespace unreclaimable. Devtools previews run under a throwaway principal
  * (`preview--{projectId}`) that belongs to no installed app: nothing lists it, no GC
- * sweeps it, and the single caller that ever tried to reclaim it — `deleteProject`'s
+ * sweeps it, and the single caller that ever tried to reclaim it — `project/delete`'s
  * cleanup — passed exactly this URI and swallowed the error. Twenty-six orphaned
  * namespaces later, the guard was the bug.
  *

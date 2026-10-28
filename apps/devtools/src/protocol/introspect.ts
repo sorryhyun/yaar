@@ -5,7 +5,7 @@ import { readModelSummary } from '../services';
 import { imageBlocks, imagesFromReadResult } from './read-blocks';
 
 export const introspectCommands = {
-  inspectUri: defineAppCommand({
+  'inspect/uri': defineAppCommand({
     description:
       'Inspect a yaar:// URI. Default: describe — returns supported verbs and invoke schema. ' +
       'read: true — returns the resource content (e.g. a yaar://skills/{topic} doc). ' +
@@ -64,7 +64,7 @@ export const introspectCommands = {
       }
     },
   }),
-  inspectModel: defineAppCommand({
+  'inspect/model': defineAppCommand({
     description:
       'Read a .glb/.gltf model as data: node tree with local TRS, per-mesh local and world ' +
       'bounds, vertex/triangle counts, materials, texture sizes, extras (where files keep ' +
@@ -150,7 +150,7 @@ export const introspectCommands = {
       }
     },
   }),
-  describeBundledLibrary: defineAppCommand({
+  'inspect/library': defineAppCommand({
     description:
       'Return type info for anything in the `bundledLibraries` state key — a @bundled/* ' +
       'library, or "design-tokens" (the generated token and utility-class names). A sectioned ' +

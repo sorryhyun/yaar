@@ -34,7 +34,7 @@ const GLTF_OPTION_KEYS = [
 /**
  * The one model-facing description of the `gltf` bag — the read tool's schema names only the
  * bag. `describe` on a model and a plain model read both hand it back as
- * `readOptions: { gltf: … }`; callers that expose the reader flat (devtools' `inspectModel`)
+ * `readOptions: { gltf: … }`; callers that expose the reader flat (devtools' `inspect/model`)
  * unwrap it.
  */
 export const GLTF_READ_OPTION_HINTS: Record<keyof GltfReadOptions, string> = {

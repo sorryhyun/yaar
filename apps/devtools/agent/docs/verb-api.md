@@ -6,7 +6,7 @@ audience: agent
 
 ## App Protocol & Verb API
 
-`createProject` already scaffolds this shape — one state key and one Zod-validated command —
+`project/create` already scaffolds this shape — one state key and one Zod-validated command —
 so a new project is agent-controllable from its first compile and there is nothing to
 convert later.
 
@@ -57,4 +57,4 @@ before it mounts, which is fine: a handler only reaches the context when a comma
 runs. The context becomes module state shared by every descriptor, which fits an app that
 registers once per document — the normal case.
 
-Verify a split with the `manifest` command — a pure move must not change its diff.
+Verify a split with the `build/manifest` command — a pure move must not change its diff.

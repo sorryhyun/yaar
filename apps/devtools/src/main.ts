@@ -27,6 +27,7 @@ import {
 // The descriptor maps stay split by domain — the protocol extractor resolves
 // imported consts and spreads, so every command reaches `dist/protocol.json`
 // (a count here would be one map away from being wrong; read the manifest).
+// A command's group is the `group/` prefix of its key, not the file it lives in.
 export default defineApp({
   id: 'devtools',
   name: 'Devtools',

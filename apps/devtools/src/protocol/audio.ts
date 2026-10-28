@@ -4,7 +4,7 @@ import { analyzeAudioFile, compareReports, type AudioAnalysis } from '../service
 // Ears for an agent that has none. An app that makes sound gets checked by rendering it
 // to a file and measuring the file; this is the measuring half, so the numbers come from
 // one audited implementation (lib/audio-analysis.ts) instead of arithmetic re-typed into
-// a previewEval on every iteration.
+// a preview/eval on every iteration.
 
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
@@ -17,8 +17,9 @@ function blocks(results: AudioAnalysis[], summary: unknown) {
   ];
 }
 
+// Its own file, but the `inspect` group: a command's group comes from its key.
 export const audioCommands = {
-  analyzeAudio: defineAppCommand({
+  'inspect/audio': defineAppCommand({
     description:
       'Measure an audio file (WAV, FLAC, MP3, OGG/Opus, M4A) and return numbers plus a ' +
       'picture, in place of listening: integrated / max short-term loudness (BS.1770 LUFS) ' +

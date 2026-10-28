@@ -4,10 +4,10 @@ The IDE that builds and deploys every other YAAR app, including itself.
 
 ## Run the tests
 
-Run `selfTest` before every deploy; its descriptor says what it covers and when else to run it.
+Run `test/self` before every deploy; its descriptor says what it covers and when else to run it.
 
 Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file.
-Behaviour that needs a running app is `previewScript` (`agent/docs/regression-testing.md`).
+Behaviour that needs a running app is `preview/script` (`agent/docs/regression-testing.md`).
 
 ## Deploying devtools itself
 
@@ -15,7 +15,7 @@ Devtools compiles, deploys and rolls back apps, and it is an app. **A broken dep
 breaks the tool you would use to fix devtools.**
 
 - Never deploy this app with `skipTypecheck`.
-- Recovery is `gitRestore` against appId `devtools`, from a monitor agent or a second devtools
+- Recovery is `git/restore` against appId `devtools`, from a monitor agent or a second devtools
   window. It is the only way back, so confirm a green compile *before* deploying.
 - The agent editing this app runs the prompt in `agent/prompt.md`. Editing it takes effect at the
   *next* deploy — an agent that just rewrote its own prompt is still running the old one.
@@ -53,8 +53,13 @@ cycle through `services/preview.ts`. If a module seems to need one, it is in the
 **Every descriptor must stay statically readable** — the rule and how to verify a reshuffle are the
 `verb-api` topic (`agent/docs/verb-api.md`).
 
-**Command and state `description` strings are the agent-facing documentation**, appended verbatim
-to the prompt of every agent driving this app. Never restate one in `agent/prompt.md`.
+**Command and state `description` strings are the agent-facing documentation**: state descriptions
+are appended verbatim to the prompt of every agent driving this app, and command descriptions are
+served whole by `describe({ group })`. Never restate one in `agent/prompt.md`.
+
+**Every command key is `group/name`**, the whole key being its name (`files/edit`; `edit` alone is
+unknown). The prompt lists only each group's command names, so an ungrouped command would put its
+full description back into every prompt. A group must not share a name with an ungrouped command.
 
 ## Storage re-encodes images on read
 
@@ -74,7 +79,7 @@ import is re-encoded and under which name; the `asset-import` suite pins it.
 ## compileState is three-valued
 
 `resolveCompileStatus` in `lib/compile-status.ts` is the single reducer, shared by the
-`compileState` state key's `status` and the `compile` command's `status` so the two cannot drift.
+`compileState` state key's `status` and the `build/compile` command's `status` so the two cannot drift.
 
 Bun strips types and builds through type errors, so the bundler's verdict alone only means "it
 bundled". `unknown` is the load-bearing typecheck value and the default after **every** write — not
@@ -84,7 +89,7 @@ third value and keep it surfacing as `"unchecked"`; the `compile-status` suite p
 
 ## Failing states report *which* failure
 
-`previewConsole` and `permissions` return a structured reason on failure, never an empty result: "no
+The `preview/console` command and `permissions` state key return a structured reason on failure, never an empty result: "no
 preview open", "preview unreachable" and "the app logged nothing" must not collapse into the same
 empty array. Keep this in any new state getter that can fail.
 
@@ -92,12 +97,12 @@ empty array. Keep this in any new state getter that can fail.
 
 **Every path that mutates a file goes through `services/files.ts` and calls `recordChange`**, so
 the Changes tab can show the diff. A path that saves via `appStorage` directly is invisible there.
-`createProject` is the one deliberate exemption: skeleton files
+`project/create` is the one deliberate exemption: skeleton files
 are noise, not changes the user made.
 
 ## Worker proposals
 
-A worker reads the project and cannot write to it. **`acceptEditRequest` in `protocol/worker.ts`
+A worker reads the project and cannot write to it. **`worker/acceptEdit` in `protocol/worker.ts`
 is the only thing in this app that turns a proposal into a write.** Anything added to the worker's
 tool list that writes directly re-opens that hole.
 
@@ -105,8 +110,8 @@ tool list that writes directly re-opens that hole.
   result landing in its turn while it still has the file in context; at accept it is the staleness
   check, because the file may have moved.
 - **Proposed edits require a unique search string** (`requireUnique` in `lib/edits.ts`). Opt-in and
-  only here — do not turn it on for `editFile`.
-- **Accept needs the `token` from `readEditRequest` and a caller-written `intent`**, or delegation
+  only here — do not turn it on for `files/edit`.
+- **Accept needs the `token` from `worker/readEdit` and a caller-written `intent`**, or delegation
   degrades into a forward. A discipline gate, not a security boundary.
 - **A batch accept builds once.** Every gate (existence, status, token) is checked before the
   first write; a proposal gone stale mid-batch is skipped and named, and a failed build restores
@@ -132,10 +137,10 @@ persona, stream, watchdog and in-flight record; `workerCap()` of them may run at
   worker's turn times out while an idle one is kept alive.
 - **A slot is `reserved` from pick to in-flight.** `startWorkerTask` awaits a spawn in between;
   without the flag two quick starts land on the same slot.
-- **`acceptEditRequest` is serialized** (`serializeAccept`). Each accept writes, typechecks,
+- **`worker/acceptEdit` is serialized** (`serializeAccept`). Each accept writes, typechecks,
   compiles and may revert; two interleaved would judge each other's build. Parallel proposals to
   one file are flagged (`conflictsWith`), never merged.
-- **A task's scope is the files its text names** (`filesNamedInTask`). `workerTask` refuses a
+- **A task's scope is the files its text names** (`filesNamedInTask`). `worker/task` refuses a
   scope past `TASK_BYTES_LIMIT` unless split or `allowLarge`, and the settled result compares the
   scope with `filesRead`. The watchdog cannot learn why a turn stopped (the server sends no
   reason), so `diagnoseQuiet` infers it from the turn's tool calls and intake.

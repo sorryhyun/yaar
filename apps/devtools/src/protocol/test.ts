@@ -3,7 +3,7 @@ import { runAllTests, suiteNames } from '../test';
 import { DEFAULT_TEST_TIMEOUT_MS, runProjectTests } from '../services';
 
 export const testCommands = {
-  selfTest: defineAppCommand({
+  'test/self': defineAppCommand({
     description:
       "Run Dev Tools' OWN unit suite over its pure-logic layer (src/lib) and return " +
       '{ pass, passed, failed, suites, failures } — each failure naming its suite, its ' +
@@ -27,7 +27,7 @@ export const testCommands = {
       return { ...runAllTests(only), available: suiteNames() };
     },
   }),
-  runTests: defineAppCommand({
+  'test/run': defineAppCommand({
     description:
       "Run the ACTIVE PROJECT's unit tests: every src/**/*.test.ts, written against " +
       "`import { describe, test, expect } from '@bundled/test'` (a bun:test subset). They " +

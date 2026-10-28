@@ -70,7 +70,8 @@ export interface AstProtocolExtraction {
    * Where each state key and command is declared — the descriptor's own position, which
    * for a `const` or shorthand reference is the declaration it names, not the key.
    * Locations only, never part of the manifest: an agent reading the protocol has no use
-   * for them, while one about to edit the app needs exactly this map (`cloneApp`).
+   * for them, while one about to edit the app needs exactly this map (devtools'
+   * `project/cloneApp`).
    */
   sources: ProtocolSources;
 }

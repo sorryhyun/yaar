@@ -32,7 +32,7 @@ export function clonePath(path: string): string {
   return isClonePath(clean) ? clean : `${CLONE_ROOT}/${clean}`;
 }
 
-/** Match the JavaScript RegExp contract used by Dev Tools' grep command. */
+/** Match the JavaScript RegExp contract used by Dev Tools' `files/grep` command. */
 export function validateSearchPattern(pattern: string): void {
   new RegExp(pattern);
 }

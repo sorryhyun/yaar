@@ -58,9 +58,7 @@ describe('the brief tier', () => {
   });
 
   test('names the door to everything it left out', () => {
-    expect(describeDesignTokensBrief()).toContain(
-      "describeBundledLibrary({ name: 'design-tokens' })",
-    );
+    expect(describeDesignTokensBrief()).toContain("inspect/library({ name: 'design-tokens' })");
   });
 
   test('advertises only classes that really exist', () => {

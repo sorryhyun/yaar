@@ -33,7 +33,7 @@ import { readFileText } from './files';
 // `fresh` retires only the slot it lands on.
 //
 // Concurrency is safe because workers never write. Their only route to a change
-// is `edit_request`, which dry-runs and parks a proposal; `acceptEditRequest` is
+// is `edit_request`, which dry-runs and parks a proposal; `worker/acceptEdit` is
 // the single writer and runs accepts one at a time. Two proposals against the same
 // file are flagged `conflictsWith` each other at submission, and the second accept
 // re-checks against the file the first one left.
@@ -439,7 +439,7 @@ function settle(slot: WorkerSlot, outcome: TurnOutcome): void {
   for (const resolve of waiters) served = resolve(settled) || served;
 
   // The event always goes out; the wakeup only when the agent started this task
-  // and no `workerWait` of its own was handed the answer already.
+  // and no `worker/wait` of its own was handed the answer already.
   app?.emit(
     'worker',
     {
@@ -458,7 +458,7 @@ function settle(slot: WorkerSlot, outcome: TurnOutcome): void {
             answerChars: finished.answer.length,
             answerNote:
               `The answer is ${finished.answer.length} chars; if it arrives cut short, ` +
-              `workerWait({ taskId: ${finished.id} }) returns it whole.`,
+              `worker/wait({ taskId: ${finished.id} }) returns it whole.`,
           }
         : {}),
       elapsedMs: (finished.endedAt ?? Date.now()) - finished.startedAt,
@@ -467,7 +467,7 @@ function settle(slot: WorkerSlot, outcome: TurnOutcome): void {
   );
 }
 
-/** Answers longer than this carry a pointer to workerWait in the wakeup event. */
+/** Answers longer than this carry a pointer to worker/wait in the wakeup event. */
 const LONG_ANSWER_CHARS = 6000;
 
 /** Tool output a worker may take in before it is told to report and wrap up. */
@@ -648,7 +648,7 @@ export function addWorkerReport(finding: string, notify = false, personaId?: str
 // ── Edit requests ─────────────────────────────────────────────────────────────
 //
 // A worker reads the project but cannot write to it. `edit_request` gives the
-// edit it would make a shape: it is dry-run and parked, and `acceptEditRequest`
+// edit it would make a shape: it is dry-run and parked, and `worker/acceptEdit`
 // (protocol/worker.ts) is the only writer. The dry run's answer lands in the
 // worker's own turn, so a bad search string is fixed while it still has the file
 // in context and only proposals that apply cleanly reach the main agent.
@@ -674,8 +674,8 @@ export interface EditProposal {
   createdAt: number;
   status: 'pending' | 'accepted' | 'rejected' | 'failed';
   /**
-   * The read gate: `readEditRequest` is the only command that serves this, and
-   * `acceptEditRequest` refuses without it. A discipline gate, not a security
+   * The read gate: `worker/readEdit` is the only command that serves this, and
+   * `worker/acceptEdit` refuses without it. A discipline gate, not a security
    * boundary.
    */
   token: string;
@@ -718,7 +718,7 @@ export function pendingOnPath(path: string, exceptId?: number): EditProposal[] {
 }
 
 /**
- * A summary carries the rationale and never the edit bodies: `readEditRequest` is
+ * A summary carries the rationale and never the edit bodies: `worker/readEdit` is
  * where those live, and an accept is supposed to cost a deliberate read.
  */
 export function summarizeProposal(p: EditProposal): EditProposalSummary {
@@ -1231,13 +1231,13 @@ function pickSlot(worker?: string): { slot?: WorkerSlot; error?: string } {
     }
     if (!allowed.includes(named)) {
       return {
-        error: `${worker} is beyond the concurrency cap (${cap}). Raise it with workerConfig first.`,
+        error: `${worker} is beyond the concurrency cap (${cap}). Raise it with worker/config first.`,
       };
     }
     if (isBusy(named)) {
       return {
         error:
-          `${worker} is busy with task #${named.inflight?.record.id ?? '?'}. Collect it (workerWait), ` +
+          `${worker} is busy with task #${named.inflight?.record.id ?? '?'}. Collect it (worker/wait), ` +
           'interrupt it, or omit `worker` to use any free one.',
       };
     }
@@ -1248,7 +1248,7 @@ function pickSlot(worker?: string): { slot?: WorkerSlot; error?: string } {
     return {
       error:
         `All ${cap} worker${cap === 1 ? ' is' : 's are'} busy (${describeRunning()}). Collect one ` +
-        '(workerWait), stop one with workerInterrupt, or raise the cap with workerConfig — ' +
+        '(worker/wait), stop one with worker/interrupt, or raise the cap with worker/config — ' +
         'tasks are refused, not queued.',
     };
   }
@@ -1262,7 +1262,7 @@ function pickSlot(worker?: string): { slot?: WorkerSlot; error?: string } {
  * is answered. The stream folds frames into the slot as they arrive, and the
  * terminal frame (or the watchdog) settles the record.
  *
- * Two callers: the panel's Run button and the agent's `workerTask`. They differ
+ * Two callers: the panel's Run button and the agent's `worker/task`. They differ
  * only in `wakeAgent` — the agent's own task wakes it when the answer lands.
  */
 export async function startWorkerTask(
@@ -1337,7 +1337,7 @@ export async function startWorkerTask(
   }
 }
 
-/** Longest one `workerWait` may block, kept under the app-command ceiling (180s). */
+/** Longest one `worker/wait` may block, kept under the app-command ceiling (180s). */
 const MAX_WAIT_MS = 170_000;
 export const DEFAULT_WAIT_MS = 60_000;
 

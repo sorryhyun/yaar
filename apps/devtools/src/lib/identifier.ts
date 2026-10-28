@@ -26,7 +26,7 @@ const NOT_SYMBOLS = new Set(
   ).split(' '),
 );
 
-/** Whether findReferences can resolve symbols in `path` — it only reads `src/**\/*.ts`. */
+/** Whether files/findReferences can resolve symbols in `path` — it only reads `src/**\/*.ts`. */
 export function isReferenceLookupPath(path: string | null): boolean {
   return !!path && path.startsWith('src/') && path.endsWith('.ts') && !path.endsWith('.d.ts');
 }

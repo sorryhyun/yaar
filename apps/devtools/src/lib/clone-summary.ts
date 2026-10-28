@@ -1,6 +1,6 @@
 export {};
 
-// What `cloneApp` answers with in place of the clone's contents: a map to read from, not
+// What `project/cloneApp` answers with in place of the clone's contents: a map to read from, not
 // the territory. A clone of music-maker used to hand back its 44KB AGENTS.md inlined and an
 // unsized list of 166 paths — ~12k tokens before debugging began, of which a trace used
 // ~2KB. Everything here is pure, so the `clone-summary` suite pins it without a project.

@@ -210,7 +210,7 @@ Anything under ~120 bytes stays inline. **Consumers must resolve** — server-si
 **`compileTests(sandboxPath)`** builds every `src/**/*.test.ts` into `dist/test.html` — the app
 pipeline with a generated entry in place of `src/main.ts`, unminified. Each test file is a dynamic
 `import()` so one that throws at load is reported by name (Bun inlines them; still one file). The
-page exposes `window.__yaar_tests__.run({ filter?, verbose? })`, which Dev Tools' `runTests` evals
+page exposes `window.__yaar_tests__.run({ filter?, verbose? })`, which Dev Tools' `test/run` evals
 in a preview-principal window. It never writes `dist/index.html` or the build manifest: deploy ships
 those. `@bundled/test` resolves only in this build (`BuildRole` `'test'`); the app build refuses it,
 which is what keeps test code out of a deployed app.
@@ -333,7 +333,7 @@ Two standing bars, because everything this package exports is read by an app-aut
 agent before it is called by an app:
 
 - **No new `@bundled/yaar` export without 3+ existing hand-rolled call sites in the app
-  fleet.** The full declaration is ~65KB (hence `describeBundledLibrary('yaar')` answers with a
+  fleet.** The full declaration is ~65KB (hence `inspect/library` on `yaar` answers with a
   ~6KB index), and every export lengthens the index an agent reads. **Count call sites by
   contract, not by shape** — a grep counts the same silhouette; only reading them counts the
   same contract. Calibration: `safeParseOr` (82 call sites / 22 apps), `tryToast` (~38 real of
@@ -359,8 +359,8 @@ readers is [`docs/guides/yaar_sdk.md`](../../docs/guides/yaar_sdk.md#bundled-lib
 [`CLAUDE.md`](../../CLAUDE.md#apps-system) points at the registry.
 
 `getBundledLibraryDetail(name, query)` (in `bundled/describe-library.ts`) backs the agent-facing
-`describeBundledLibrary`. It slices the `declare module '@bundled/<name>…'` blocks out of
-`bundled-types/index.d.ts` and prepends the `Yaar*` declarations they reference, transitively. A
+devtools command `inspect/library`. It slices the `declare module '@bundled/<name>…'` blocks out
+of `bundled-types/index.d.ts` and prepends the `Yaar*` declarations they reference, transitively. A
 block carrying `// ── Title ──` section headers (`yaar`, `yaar-web`) answers with an **index** by
 default — section → export → first doc sentence — and `symbol` / `section` return one slice with
 exactly the types it references (`full: true` returns the whole block). `describe-library.test.ts` holds the two invariants: the

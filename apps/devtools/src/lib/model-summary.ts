@@ -1,12 +1,12 @@
 /**
- * A model summary as `inspectModel` hands it back.
+ * A model summary as `inspect/model` hands it back.
  *
  * The server's reader answers in grep-friendly JSON — one small record per line, number
  * arrays on the line they belong to — but the app door parses it on the way in, so printing
  * it again with `JSON.stringify(v, null, 2)` gave a vec3 three lines and a node fifteen. This
  * re-lays it out the way the server wrote it (`@yaar/lib/gltf`'s `formatSummaryJson`).
  *
- * The summary's `readOptions` hint names the storage read's `gltf` bag; `inspectModel` takes
+ * The summary's `readOptions` hint names the storage read's `gltf` bag; `inspect/model` takes
  * the same options flat, so the hint is unwrapped to the bag's contents.
  */
 

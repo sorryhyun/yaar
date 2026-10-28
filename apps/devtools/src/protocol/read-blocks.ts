@@ -1,6 +1,6 @@
 export {};
 
-// How `readFile` shapes its response: MIME typing and the text/image content
+// How `files/read` shapes its response: MIME typing and the text/image content
 // blocks the app protocol passes through. Extracted from ./files.ts, which was
 // 62 lines of this before its first descriptor.
 
@@ -22,7 +22,7 @@ export function getMimeType(path: string): string {
   return MIME_MAP[ext] || 'text/plain';
 }
 
-/** The block shapes `readFile` returns. Image blocks pass through the app protocol as-is. */
+/** The block shapes `files/read` returns. Image blocks pass through the app protocol as-is. */
 export type ReadBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string }
@@ -39,7 +39,7 @@ export function imageBlocks(
   path: string,
   images: Array<{ data: string; mimeType: string }>,
   /** What to suggest instead when an image is too big to inline. */
-  tooLargeHint = 'use readFile({ openInEditor: true }) to view it',
+  tooLargeHint = 'use files/read({ openInEditor: true }) to view it',
 ): ReadBlock[] {
   return images.flatMap((image, i) => {
     const label = images.length > 1 ? `${path} (${i + 1}/${images.length})` : path;

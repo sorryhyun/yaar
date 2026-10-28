@@ -24,13 +24,13 @@ uploads, generated output, anything that changes without a recompile.
 
 **HTML fragments:** `import panel from './panel.html'` (also `.htm`) gives the file's
 **text**, not a data URI — hand it to `innerHTML`, an iframe's `srcdoc`, or `DOMParser`.
-`copyFile` from `yaar://storage/...` brings one in like any other asset.
+`files/copy` from `yaar://storage/...` brings one in like any other asset.
 
 **3D models:** an imported `.glb` arrives as a `data:` URI for `GLTFLoader.parse`
-(`describeBundledLibrary` on `three/addons`). A `.gltf` naming a sidecar `.bin` or texture
+(`inspect/library` on `three/addons`). A `.gltf` naming a sidecar `.bin` or texture
 files cannot resolve those relative URLs against a `data:` URI — export the
 **self-contained `.glb`** rather than copying the sidecars in. Before fitting, framing or
-animating a model, `inspectModel` it: node names and TRS, each mesh's world bounds (its real
+animating a model, `inspect/model` it: node names and TRS, each mesh's world bounds (its real
 size), and which nodes every clip keys — `node` for one limb's keyframe stats, `keys` for a
 clip's keyframes (`range` + `step` to keep it short, `euler` for degrees). To check motion
 before writing any runtime code, `pose` the clip: `at` gives every node's world transform and
@@ -54,12 +54,12 @@ runtime, never from `shared/`, which the user may prune.
 
 When the user says *"the dragon image I generated in anima"* or *"the logo I edited"*, it is
 almost certainly in the shared tree (the Shared Storage section of your prompt). List the
-producer's directory with `storage:list`, then `copyFile` the `yaar://storage/...` URI into
+producer's directory with `storage:list`, then `files/copy` the `yaar://storage/...` URI into
 the project and compile; it inlines like any other asset. Nothing there means the file
 exists but was never published (app storage is private to its owner): ask the user to
 publish it from the producing app, or `relay` to the monitor, which can reach both trees.
 An asset an installed app *ships* (a sprite under its `src/`) is not in storage at all:
-`copyFile` from `yaar://apps/{appId}/src/...` copies it byte for byte (`readAppSource` lists
+`files/copy` from `yaar://apps/{appId}/src/...` copies it byte for byte (`project/readAppSource` lists
 the paths). **Never ask another app for the bytes**: `exportDataUrl` and anything shaped like it pushes
 a several-hundred-KB base64 string through the conversation; publishing and importing moves
 them server-side.

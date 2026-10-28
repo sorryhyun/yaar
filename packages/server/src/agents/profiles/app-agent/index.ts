@@ -43,7 +43,7 @@ import appStorageSection from './prompts/app-storage.md' with { type: 'text' };
  * point id and the exact set of design tokens. Both are facts the compiler
  * decides — it emits the `<div id>` and injects the token CSS — and a prompt that
  * restates them from memory drifts. It already had: devtools' prompt told the
- * agent to look tokens up via `describeBundledLibrary({ name: 'design-tokens' })`,
+ * agent to look tokens up via `inspect/library({ name: 'design-tokens' })`,
  * which returned null, so the agent guessed Tailwind-shaped names
  * (`--yaar-space-2`) that silently render to nothing.
  *
@@ -55,12 +55,12 @@ import appStorageSection from './prompts/app-storage.md' with { type: 'text' };
  * alone — whether or not the session writes a line of CSS, so what it carries has
  * to be what an agent cannot afford to look up. Names qualify (a wrong one is a
  * build error, but only if you know the real one exists); values and the long
- * class tail do not, and stay one `describeBundledLibrary({ name:
+ * class tail do not, and stay one `inspect/library({ name:
  * 'design-tokens' })` away. `describeDesignTokensBrief`'s own header has the
  * asymmetry that decides which half is which.
  *
  * The links section is here for the same reason with a different owner: `links.onOpen`
- * is one `describeBundledLibrary({ name: 'yaar' })` away, but the *handshake* that makes
+ * is one `inspect/library({ name: 'yaar' })` away, but the *handshake* that makes
  * the desktop hand an app links to a site — an `openUrl` command on the app's side, a
  * `link_open` hook on the user's — is a desktop contract with no SDK signature to look
  * up, so an agent that has not been told cannot discover it. It carries the split as

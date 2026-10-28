@@ -284,7 +284,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   // A command's \`params\` JSON Schema is what the agent is shown in the manifest, but
   // nothing checked a call against it: an undeclared key was dropped in silence and a
   // missing required one arrived as undefined. The handler then failed somewhere
-  // downstream with a message about its own logic — copyFile called with
+  // downstream with a message about its own logic — devtools' files/copy called with
   // {source, destination} read from/to as undefined and reported "Source and
   // destination are the same path", which names neither the wrong key nor the right
   // one. Name the actual mistake here, where the schema is.

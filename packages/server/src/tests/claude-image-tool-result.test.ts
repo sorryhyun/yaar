@@ -1,7 +1,7 @@
 /**
  * A tool result that carries only an image still has to *complete*.
  *
- * `previewScreenshot` (devtools) and every window/browser capture return image
+ * `preview/screenshot` (devtools) and every window/browser capture return image
  * content blocks and nothing else. The Claude mapper used to render blocks to a
  * string and then drop the whole `tool_result` when that string came out empty,
  * which is exactly the image-only case. Downstream, the missing result meant no

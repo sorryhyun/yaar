@@ -102,7 +102,7 @@ function asCommandError(err: unknown): AppCommandError {
   return err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
 }
 
-// copyFile's four doors, one function each. `run` only picks the door.
+// files/copy's four doors, one function each. `run` only picks the door.
 
 /**
  * `recompress` is refused rather than ignored outside a storage import — silently
@@ -227,18 +227,18 @@ const textOrLines = (description: string) => ({
 });
 
 export const fileCommands = {
-  readFile: defineAppCommand({
+  'files/read': defineAppCommand({
     description:
       'Read one or more files. A missing file throws `file not found: {path}` with nearby ' +
       'paths; a path that climbs out of the project throws `refused: path escapes the ' +
       'project`. Paths are normalized (`src/../app.json` is `app.json`), and results are ' +
       'labelled with the normalized path. With an array, a refused path fails the whole call ' +
       'before anything is read; a file that cannot be read becomes its own text block ' +
-      'beginning `[readFile error]`, beside the files that could, and the call throws only ' +
+      'beginning `[files/read error]`, beside the files that could, and the call throws only ' +
       'when none could. Does not change editor open state unless openInEditor is set. ' +
       'Image files come back as a viewable image block, not text; a .glb/.gltf as its ' +
-      '`inspectModel` summary. `section` reads one Markdown section by its heading — the ' +
-      'outline `cloneApp` returns for AGENTS.md names them.',
+      '`inspect/model` summary. `section` reads one Markdown section by its heading — the ' +
+      'outline `project/cloneApp` returns for AGENTS.md names them.',
     params: {
       type: 'object',
       properties: {
@@ -309,7 +309,7 @@ export const fileCommands = {
               if (image) return { blocks: imageBlocks(fp, [image]) };
               // Unreadable as bytes — fall through to the text path, which reports it.
             }
-            // A model is answered with its structure, not its bytes: `inspectModel` with
+            // A model is answered with its structure, not its bytes: `inspect/model` with
             // no options, so the tree and bounds arrive without a second call.
             if (isModelPath(fp)) {
               return { blocks: [{ type: 'text', text: await readModelSummary(fp) }] };
@@ -335,11 +335,11 @@ export const fileCommands = {
       // A plain text block, never a resource: a failure dressed as file content is
       // exactly what made a missing file read like a file holding one comment.
       return perFile.flatMap((r): ReadBlock[] =>
-        'error' in r ? [{ type: 'text', text: `[readFile error] ${r.error}` }] : r.blocks,
+        'error' in r ? [{ type: 'text', text: `[files/read error] ${r.error}` }] : r.blocks,
       );
     },
   }),
-  writeFile: defineAppCommand({
+  'files/write': defineAppCommand({
     description:
       'Write content to a file. Content may be a string, an array of lines (joined with "\\n", ' +
       'no trailing newline added), or an object (serialized as pretty-printed JSON). Prefer the ' +
@@ -369,7 +369,7 @@ export const fileCommands = {
       return await writeFile(String(p.path), content);
     },
   }),
-  editFile: defineAppCommand({
+  'files/edit': defineAppCommand({
     description:
       'Edit a file in place. Three modes: (1) search/replace — pass search + replace, first ' +
       'match only. (2) line range — pass startLine/endLine (1-based, inclusive) and anchor ' +
@@ -480,7 +480,7 @@ export const fileCommands = {
       }
     },
   }),
-  deleteFile: defineAppCommand({
+  'files/delete': defineAppCommand({
     description: 'Delete a file',
     params: {
       type: 'object',
@@ -492,7 +492,7 @@ export const fileCommands = {
       await deleteFile(String(p.path));
     },
   }),
-  copyFile: defineAppCommand({
+  'files/copy': defineAppCommand({
     description:
       'Copy a file, in any of three directions. Both `from` and `to` are project-relative ' +
       'paths by default; a `yaar://storage/...` URI on either side names the storage tree ' +
@@ -504,7 +504,7 @@ export const fileCommands = {
       'flooded transcript. Both storage directions are server-side and byte-exact: the ' +
       'bytes never enter this app or your context. `from` may also be ' +
       '`yaar://apps/{appId}/{path}` — a file of an installed app (src/, app.json, agent/; ' +
-      'the paths readAppSource lists) — to reuse its asset: copied byte for byte, never ' +
+      'the paths project/readAppSource lists) — to reuse its asset: copied byte for byte, never ' +
       're-encoded, into the project only. ONLY a `yaar://` prefix means outside the ' +
       'project, so a file in storage can never shadow one in the project. `to` is required ' +
       'except for an import (storage or app), where it defaults to src/assets/<source ' +
@@ -516,7 +516,7 @@ export const fileCommands = {
       'it as a data: URI instead of fetching it at runtime. For 3D models import a ' +
       'self-contained .glb, not a .gltf with sidecar files (the static-assets topic). ' +
       'Destination directories are created automatically. Does NOT delete the original — ' +
-      'pair with deleteFile to move.',
+      'pair with files/delete to move.',
     params: {
       type: 'object',
       properties: {
@@ -559,11 +559,11 @@ export const fileCommands = {
       return importFromStorage(from, toRef, p.recompress);
     },
   }),
-  listFiles: defineAppCommand({
+  'files/list': defineAppCommand({
     description:
       "List the active project's files as { path, isDirectory, lines?, bytes? } — `lines` " +
       'for text, `bytes` for every file, neither for a directory. Generated output is ' +
-      'skipped the way grep skips it (dist/, build/, out/, node_modules/, coverage/, .git/, ' +
+      'skipped the way files/grep skips it (dist/, build/, out/, node_modules/, coverage/, .git/, ' +
       '.min.js/.map) unless includeBuilt, and `excluded` counts what was skipped. Throws with ' +
       'no active project, or when `dir` names no directory.',
     params: {
@@ -611,14 +611,14 @@ export const fileCommands = {
       }
     },
   }),
-  grep: defineAppCommand({
+  'files/grep': defineAppCommand({
     description:
       'Search file contents with regex across the project, source only: generated output ' +
       '(dist/, build/, out/, node_modules/, coverage/, .git/, and .min.js/.map files) is ' +
       'skipped unless includeBuilt says otherwise. A hit inside a bundle is one minified ' +
       'line thousands of characters wide, which is why it is not the default. A line over ' +
       '300 characters comes back as a window around the match, marked `…[+N chars]` on ' +
-      'each cut side — readFile with a line range for the whole line.',
+      'each cut side — files/read with a line range for the whole line.',
     params: {
       type: 'object',
       properties: {
@@ -684,7 +684,7 @@ export const fileCommands = {
       return blocks;
     },
   }),
-  findReferences: defineAppCommand({
+  'files/findReferences': defineAppCommand({
     description:
       'Find every reference to a TypeScript symbol in the project via the language service, ' +
       'not a text search: follows re-exports, renamed imports and methods called through an ' +
@@ -749,12 +749,12 @@ export const fileCommands = {
       });
     },
   }),
-  typeAt: defineAppCommand({
+  'files/typeAt': defineAppCommand({
     description:
       'The type the checker reports for a symbol — the hover text an editor shows — from ' +
-      "findReferences' language service: no typecheck, bundle or preview reload. Ask it " +
+      "files/findReferences' language service: no typecheck, bundle or preview reload. Ask it " +
       'before writing a call against an API you have not checked, or to read what an ' +
-      'inferred value actually is. Named the same way as findReferences: `symbol` ' +
+      'inferred value actually is. Named the same way as files/findReferences: `symbol` ' +
       '(declared in `file`), `line`+`column`, or `line`+`symbol` for a use. Returns ' +
       '{ symbol, at, kind, type, documentation?, tags?, definition? } — `type` is the ' +
       'declaration as printed (`const rows: Accessor<Row[]>`), `definition` where it is ' +

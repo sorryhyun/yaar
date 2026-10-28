@@ -1,7 +1,7 @@
 /**
  * `bundled-types/index.d.ts` restates the wire contracts in `@yaar/shared` under
  * the names apps import. It cannot import them — the file is sliced verbatim
- * into what `describeBundledLibrary` shows an agent, and an alias with no body
+ * into what devtools' `inspect/library` shows an agent, and an alias with no body
  * would show a name and nothing else. So the two are kept identical by proof
  * instead: an app typechecked against the real declarations asserts, type by
  * type, that the app-facing shape and the server-facing shape are the same.

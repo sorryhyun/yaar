@@ -28,7 +28,7 @@ export function previewWindowIdFor(projectId: string): string {
  * The dev server compiles from disk, so its bundler errors name
  * `/Users/me/yaar/storage/apps/devtools/projects/1785…/src/main.ts:6:25`. Every
  * *input* in this protocol is a project-relative path, so that output could not be
- * pasted back into `editFile` — and it published where the sandbox lives on the
+ * pasted back into `files/edit` — and it published where the sandbox lives on the
  * host, which is not the caller's business. Anchored on `projects/{id}/` rather than
  * on a storage prefix: the projects segment is this app's own layout, while the
  * prefix above it belongs to whoever configured `YAAR_STORAGE`.
@@ -82,7 +82,7 @@ export function isGeneratedPath(path: string): boolean {
 // rather than report the size of a base64/garbled decode. `.gltf` is deliberately
 // absent for the same reason `.svg` is: it is a JSON document worth reading.
 //
-// A fast path, not the authority: `copyFile` sniffs the bytes of anything not listed,
+// A fast path, not the authority: `files/copy` sniffs the bytes of anything not listed,
 // because a missing extension here once meant a UTF-8 round-trip that corrupted it.
 const BINARY_EXT =
   /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|flac|ogg|opus|m4a|aac|webm|mp4|glb|bin|dat)$/i;

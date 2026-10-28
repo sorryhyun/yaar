@@ -2,12 +2,12 @@
  * One outbound HTTP request, for probing an API while building against it.
  *
  * Dev Tools has declared `yaar://http` since it shipped, but nothing on its protocol
- * could use it: `inspectUri` is describe/read/list against `yaar://` resources, and no
+ * could use it: `inspect/uri` is describe/read/list against `yaar://` resources, and no
  * other command issues a request. An agent that needed to see what an endpoint actually
  * answers had to drive the Lab app through `controls` and reverse-engineer its in-sandbox
  * `http` helper — two apps and a window to make one GET (issue #65).
  *
- * It runs **in the iframe**, like `copyFile`'s storage import and for the same reason: the app
+ * It runs **in the iframe**, like `files/copy`'s storage import and for the same reason: the app
  * agent holds no verb tools, so it asks this app to do what this app's declared,
  * user-visible permission already allows, through a named command that appears in
  * `dist/protocol.json`. Allowlist and SSRF checks stay server-side either way.
@@ -52,8 +52,9 @@ function headerMap(headers: Headers): Record<string, string> {
   return out;
 }
 
+// Its own file, but the `inspect` group: a command's group comes from its key.
 export const httpCommands = {
-  httpProbe: defineAppCommand({
+  'inspect/http': defineAppCommand({
     description:
       'Make one outbound HTTP request and return its status, headers and a bounded slice ' +
       'of the body — for learning what an API accepts and answers while building against ' +
@@ -93,11 +94,11 @@ export const httpCommands = {
     },
     run: async (p) => {
       const url = String(p.url ?? '').trim();
-      if (!url) throw new AppCommandError('httpProbe needs a `url`.');
+      if (!url) throw new AppCommandError('inspect/http needs a `url`.');
       if (!/^https?:\/\//i.test(url))
         throw new AppCommandError(
-          `httpProbe needs an absolute http(s) URL; got "${url}". A yaar:// resource is ` +
-            "inspectUri's job, not this one.",
+          `inspect/http needs an absolute http(s) URL; got "${url}". A yaar:// resource is ` +
+            "inspect/uri's job, not this one.",
         );
 
       const maxChars = clampChars(p.maxChars);
@@ -117,7 +118,7 @@ export const httpCommands = {
         // The allowlist denial, an SSRF refusal and a dead host all arrive here. The
         // message is the server's and already says which — passing it through beats
         // "request failed", which sends the caller back to guessing.
-        throw new AppCommandError(`httpProbe ${method} ${url} failed: ${errMsg(err)}`);
+        throw new AppCommandError(`inspect/http ${method} ${url} failed: ${errMsg(err)}`);
       }
 
       const headers = headerMap(res.headers);
@@ -147,7 +148,7 @@ export const httpCommands = {
           contentType,
           bytes: buf?.byteLength ?? null,
           note:
-            'Non-text response — bytes are not returned. Use copyFile with a yaar://storage/... ' +
+            'Non-text response — bytes are not returned. Use files/copy with a yaar://storage/... ' +
             'source to import an asset into the project, or an app that can fetch it directly.',
         };
       }

@@ -275,7 +275,7 @@ export class AppWindowCoordinator {
    * The tab whose capture of this window should win, or null when any tab's will do.
    *
    * A capture goes to every desktop, and each one rasterizes its *own* copy of the iframe.
-   * Those copies drift apart the moment an agent acts on one: devtools' `previewEval`
+   * Those copies drift apart the moment an agent acts on one: devtools' `preview/eval`
    * clicked a sheet open in the pinned copy, and the screenshot that came back first was
    * the companion tab's, where nothing had been clicked — the same picture three times
    * running while the DOM the agent was measuring changed under it. So the copy the agent

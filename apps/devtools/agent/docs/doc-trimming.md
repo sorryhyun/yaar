@@ -12,7 +12,7 @@ Use it after a command or feature is removed or renamed, when a doc has grown a 
 
 ### Never discard work that is not yours
 
-`gitRestore`, `deleteProject` and re-cloning over an open project are forbidden during a trimming pass. The project may hold uncommitted edits that are not yours and not in your context; restoring or re-cloning removes them silently. This binds hardest when a compile fails or a diff looks wrong and a clean slate looks like the way back. It is not. Stop and report: you did not break what you did not touch, and a failure you cannot explain is information for the caller. The only history commands you run are `gitHistory` and `gitDiff`.
+`git/restore`, `project/delete` and re-cloning over an open project are forbidden during a trimming pass. The project may hold uncommitted edits that are not yours and not in your context; restoring or re-cloning removes them silently. This binds hardest when a compile fails or a diff looks wrong and a clean slate looks like the way back. It is not. Stop and report: you did not break what you did not touch, and a failure you cannot explain is information for the caller. The only history commands you run are `git/history` and `git/diff`.
 
 ### The four jobs
 
@@ -63,9 +63,9 @@ Use it after a command or feature is removed or renamed, when a doc has grown a 
 - When a comment's claim changes, grep `AGENTS.md` and `agent/docs/` for the same fact (the symbol, the constant, the behaviour) and correct those too. `AGENTS.md` is read first by the next agent, so a fact fixed in code and left stale there is the worse half.
 - Every sentence you write is checked against the code like the one it replaces. A replacement that is wrong in a new way is worse than the original.
 - No work notes in comments or docs: no "(verified by grep)", "now", "no longer", "fixed:". State the fact, not how you checked it.
-- Point at code by symbol (`planDeployVersion` in `lib/app-manifest.ts`), not by file alone: a bare file name goes stale at the next folder split. Run `checkProject` and fix every `staleFileRefs` entry your pass touched.
-- `format` touched source files only, with `onlyChanged: true` so lines you did not edit keep their layout, then `compile` to confirm comment edits broke nothing.
-- Do not deploy, run `previewScript` suites or drive the app; the caller decides that.
+- Point at code by symbol (`planDeployVersion` in `lib/app-manifest.ts`), not by file alone: a bare file name goes stale at the next folder split. Run `build/check` and fix every `staleFileRefs` entry your pass touched.
+- `build/format` touched source files only, with `onlyChanged: true` so lines you did not edit keep their layout, then `build/compile` to confirm comment edits broke nothing.
+- Do not deploy, run `preview/script` suites or drive the app; the caller decides that.
 - Out of scope unless asked: `dist/`, vendored or generated files, test scripts and baselines.
 
 ### Report format

@@ -19,6 +19,6 @@ full data set and only the path comes back. `describe({ appId: "lab" })` for the
 helpers, the notebook commands and `exportChart`.
 
 **Lab's `http` helper differs from fetch — `describe({ appId: "lab" })` before first use.**
-To probe an endpoint's request/response shape, use your own `httpProbe` instead. Lab's
+To probe an endpoint's request/response shape, use your own `inspect/http` instead. Lab's
 `http` is for a *cell* that loads a remote CSV before reducing it, where the bytes should
 never leave the sandbox.

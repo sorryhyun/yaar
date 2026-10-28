@@ -7,7 +7,7 @@ audience: agent
 ## Bundled Libraries
 
 Import via `@bundled/*`; no npm install. `query("bundledLibraries")` lists what exists, and
-`describeBundledLibrary` returns a library's declarations with their doc comments — entry
+`inspect/library` returns a library's declarations with their doc comments — entry
 points, signatures, what is deliberately missing. **Read it before writing against a
 library**; guessed signatures are the usual first-compile failure.
 
@@ -15,8 +15,8 @@ library**; guessed signatures are the usual first-compile failure.
 Pull what you need from it rather than the whole library:
 
 ```ts
-command({ command: "describeBundledLibrary", params: { name: "yaar", symbol: "createSharedSignal" } })
-command({ command: "describeBundledLibrary", params: { name: "yaar", section: "storage" } })
+command({ command: "inspect/library", params: { name: "yaar", symbol: "createSharedSignal" } })
+command({ command: "inspect/library", params: { name: "yaar", section: "storage" } })
 ```
 
 A symbol slice carries every type it references; `full: true` returns everything (~65KB for

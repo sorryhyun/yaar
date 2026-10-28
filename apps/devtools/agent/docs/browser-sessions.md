@@ -80,5 +80,5 @@ key. The UI panel keeps the failing step and URL so it can offer "open in browse
 ### Testing
 
 Only pure modules (parsers, markers) are testable offline — expose them for
-`previewScript`, as thesingularity-reader's `globalThis.__readerTest` does. The login flow
+`preview/script`, as thesingularity-reader's `globalThis.__readerTest` does. The login flow
 needs the deployed app, a real desktop and a person.

@@ -303,7 +303,7 @@ export async function invokeStorage(
  * That used to be refused ("Provide a file path to delete"), which quietly made
  * a whole class of namespace unreclaimable: devtools' throwaway `preview--{id}`
  * identities belong to no installed app, so nothing lists them and no GC sweeps
- * them, and `deleteProject`'s cleanup call — the only thing that ever tried —
+ * them, and `project/delete`'s cleanup call — the only thing that ever tried —
  * hit this guard and swallowed the error. The permission check upstream is per
  * app-namespace and unchanged: a caller allowed to delete the root could already
  * delete every file under it one at a time, so this adds atomicity, not reach.

@@ -2,7 +2,7 @@ import { defineAppCommand } from '@bundled/yaar';
 import { gitHistory, gitDiff, gitRestore, gitCheckpoint } from '../services';
 
 export const gitCommands = {
-  gitHistory: defineAppCommand({
+  'git/history': defineAppCommand({
     description: "List a deployed app's version history, newest first. Each deploy is one commit.",
     params: {
       type: 'object',
@@ -15,7 +15,7 @@ export const gitCommands = {
     run: async (p) =>
       gitHistory(String(p.appId), typeof p.limit === 'number' ? p.limit : undefined),
   }),
-  gitDiff: defineAppCommand({
+  'git/diff': defineAppCommand({
     description:
       'Diff a deployed app against a commit. against="snapshot" (default): app\'s own deploy ' +
       'history. against="repo": user\'s git repo (bundled apps only). Start with ' +
@@ -76,10 +76,10 @@ export const gitCommands = {
       };
     },
   }),
-  gitRestore: defineAppCommand({
+  'git/restore': defineAppCommand({
     description:
       'Roll a deployed app back to an earlier commit and rebuild it, overwriting current files. ' +
-      'Current state is auto-snapshotted first, so this is itself undoable via another gitRestore. ' +
+      'Current state is auto-snapshotted first, so this is itself undoable via another git/restore. ' +
       'Check `recompiled` in the result: false means the source rolled back but the rebuild ' +
       'failed (`compileError` says why) and the app serves stale code until fixed and redeployed.',
     params: {
@@ -88,7 +88,7 @@ export const gitCommands = {
         appId: { type: 'string', description: 'App to roll back' },
         ref: {
           type: 'string',
-          description: 'Hash from gitHistory, or HEAD~1 for previous version.',
+          description: 'Hash from git/history, or HEAD~1 for previous version.',
         },
       },
       required: ['appId', 'ref'],
@@ -96,7 +96,7 @@ export const gitCommands = {
     replay: 'never',
     run: async (p) => gitRestore(String(p.appId), String(p.ref)),
   }),
-  gitCheckpoint: defineAppCommand({
+  'git/checkpoint': defineAppCommand({
     description: "Snapshot a deployed app's current state as a restorable commit.",
     params: {
       type: 'object',

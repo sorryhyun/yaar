@@ -14,7 +14,7 @@ audience: agent
   it** — `() => (cond() ? a() : b())`, not `` html`${() => (cond() ? a() : b())}` `` — or
   give the template markup (`` html`<span>hi ${x}</span>` ``). The usual case is a
   conditional row or panel wrapped in `` html`` ``. The guard (`solid-html-guard.ts`)
-  rejects all four, and `typecheck` reports them too.
+  rejects all four, and `build/typecheck` reports them too.
 - **`flex: 1` breaks inside reactive expressions** — Solid's `html` inserts comment markers
   that break flex chains. Use `position: absolute; inset: 0`.
 - **Zero-arg function props are invoked, not passed through** — `html` wraps any component

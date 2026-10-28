@@ -11,7 +11,7 @@ import { projectPath } from '../lib/paths';
 // RUNTIME manifest is what the running preview actually registered via
 // defineApp(). Drift between them means an entry is reached via a spread or
 // computed key: it runs fine but is invisible to agents. Shared by the
-// `manifest` command and the best-effort drift check inside `compile`.
+// `build/manifest` command and the best-effort drift check inside `build/compile`.
 
 export interface ManifestNames {
   commands: string[];
@@ -62,7 +62,7 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
   }
 
   const reason = !fromCompile
-    ? 'No successful compile yet — run compile first; its response carries the extracted protocol.'
+    ? 'No successful compile yet — run build/compile first; its response carries the extracted protocol.'
     : !fromCompile.reported
       ? 'The compile response did not include a static protocol (the dev API may predate ' +
         'extraction) and no protocol.json was found in the project — recompile, or update the server.'
@@ -83,7 +83,7 @@ export async function getRuntimeManifest(): Promise<RuntimeManifestResult> {
   if (!wid) {
     return {
       names: null,
-      reason: 'No preview window open — run preview to read the live manifest.',
+      reason: 'No preview window open — run preview/open to read the live manifest.',
     };
   }
   try {

@@ -182,7 +182,7 @@ export function formatClassFindings(findings: ClassFinding[]): string[] {
   return findings.map((f) => {
     const fix = f.suggestion
       ? `did you mean .${f.suggestion}?`
-      : `no such class - see describeBundledLibrary({ name: 'design-tokens' }), or define it in the app's own CSS`;
+      : `no such class - see inspect/library({ name: 'design-tokens' }), or define it in the app's own CSS`;
     return (
       `${f.path}:${f.line}:${f.column}: unknown class .${f.className} - ${fix} ` +
       `(an undefined class renders unstyled, with no error)`

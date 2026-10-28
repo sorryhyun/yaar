@@ -12,10 +12,10 @@ import {
 } from '../lib';
 import { writeBinaryCopy, writeFile } from './files';
 
-// Read an installed app's source without making it a project. `cloneApp` is for editing:
+// Read an installed app's source without making it a project. `project/cloneApp` is for editing:
 // it writes a sandbox, opens it, and replaces the project in front — a heavy way to read
 // one file of another app, and the session logs show it used that way (clone, read,
-// deleteProject). This answers from the same server verb and writes nothing.
+// project/delete). This answers from the same server verb and writes nothing.
 
 /** What `invoke('yaar://apps/<id>', { action: 'clone' })` answers with. */
 export interface ClonePayload {
@@ -28,7 +28,7 @@ export interface ClonePayload {
   protocolSources?: ProtocolSources;
 }
 
-/** One fresh clone payload. `cloneApp` writes it into a project, so it is never cached. */
+/** One fresh clone payload. `project/cloneApp` writes it into a project, so it is never cached. */
 export function fetchClonePayload(appId: string): Promise<ClonePayload> {
   return invoke<ClonePayload>('yaar://apps/' + appId, { action: 'clone' });
 }
@@ -83,9 +83,9 @@ function findFile(appId: string, files: SourceFile[], rawPath: string): SourceFi
 /**
  * Copy one file of an installed app into the active project, byte for byte.
  *
- * The bytes come from the same clone payload readAppSource answers from, so this is
- * the read-only counterpart of `cloneApp` for one asset: no project is created, and a
- * binary file that readAppSource refuses to show as text is still reachable. Text
+ * The bytes come from the same clone payload project/readAppSource answers from, so this is
+ * the read-only counterpart of `project/cloneApp` for one asset: no project is created, and a
+ * binary file that project/readAppSource refuses to show as text is still reachable. Text
  * goes through writeFile so the copy records a diff; binary through writeBinaryCopy.
  */
 export async function copyFromApp(
@@ -114,7 +114,7 @@ export async function readAppSource(q: AppSourceQuery): Promise<Record<string, u
     const path = file.path;
     if (file.encoding)
       throw new AppCommandError(
-        `${path} is binary and cannot be read as text. To use it, copyFile from ` +
+        `${path} is binary and cannot be read as text. To use it, files/copy from ` +
           `"yaar://apps/${q.appId}/${path}" — it lands in the project byte for byte.`,
       );
     const lines = countLines(file.content);
@@ -152,7 +152,7 @@ export async function readAppSource(q: AppSourceQuery): Promise<Record<string, u
     ...(binary
       ? {
           binaryNote:
-            'binary files cannot be read as text; copyFile from ' +
+            'binary files cannot be read as text; files/copy from ' +
             `"yaar://apps/${q.appId}/<path>" copies one into the project byte for byte.`,
         }
       : {}),

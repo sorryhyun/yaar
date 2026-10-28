@@ -136,7 +136,7 @@ export async function checkProject(): Promise<ProjectCheck> {
   };
 }
 
-/** One line per non-empty finding, for a result that only points at `checkProject`. */
+/** One line per non-empty finding, for a result that only points at `build/check`. */
 export function summarizeCheck(check: ProjectCheck): string[] {
   const lines: string[] = [];
   const missing = check.permissions?.missing.length ?? 0;

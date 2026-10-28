@@ -420,9 +420,9 @@ export async function doDeploy(
 
     // Carry the docs across — `agent/prompt.md` is the app agent's own system prompt,
     // `agent/hint.md` is what the monitor agent is told about the app, and `AGENTS.md`
-    // is what the *coding* agent reads before editing it. `cloneApp` pulls all of them
-    // into the sandbox, so a deploy that skipped one would silently discard every edit
-    // the user made to it — which is what happened to `AGENTS.md`: devtools would write
+    // is what the *coding* agent reads before editing it. devtools' `project/cloneApp` pulls
+    // all of them into the sandbox, so a deploy that skipped one would silently discard every
+    // edit the user made to it — which is what happened to `AGENTS.md`: devtools would write
     // an app's architecture notes, deploy, and the file existed nowhere but the sandbox.
     // The agent-doc paths come from the sandbox's own app.json, so a doc lands where the
     // reader will look for it; the root docs are at fixed names by definition.

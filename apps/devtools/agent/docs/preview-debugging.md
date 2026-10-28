@@ -6,7 +6,7 @@ audience: agent
 
 ## Preview & Debugging
 
-**A `previewCommand` that passes a storage path can 403 where the same command from the
+**A `preview/command` that passes a storage path can 403 where the same command from the
 session principal succeeds.** You relay as an app-role principal, and an app may not hand its
 own reach to another app (`mayDelegateGrants`) — so a file *you* can read is not delegated
 through the relay. The refusal says so ("cannot delegate grants"); read the text before
@@ -14,11 +14,11 @@ concluding a permission is missing, because the same call made by the session ag
 reach the file. It is a confinement rule, not a bug in the app under test; mind it when
 checking whether a permission is still needed.
 
-**Resource failures surface in `previewConsole`** (`[resource] failed to load <img>: ...`) —
+**Resource failures surface in `preview/console`** (`[resource] failed to load <img>: ...`) —
 that is how you catch a broken asset, which produces no `console.log` and does not fail the
 build.
 
-**`previewEval` sees your app's module scope only through `__debug`.** The bundle is an ES
+**`preview/eval` sees your app's module scope only through `__debug`.** The bundle is an ES
 module, so its top-level bindings — signals, `let`s, helper functions — are not on
 `globalThis`. Declare what you need to reach in `defineApp({ debug: () => ({ engine, buildVoice }) })`
 and an eval reads it as `__debug.engine`. The function form is re-read on every access, so a
@@ -37,15 +37,15 @@ fallback is expected. Put which mode it is in `state:`, or the only evidence is 
 deployed window, where a human's click *does* take the lock, the shell withholds Ctrl+W while
 it is held; that only holds in a Chrome opened with `--app`.
 
-**To test a failure path, break the call with `previewFaults`, not by patching `window.fetch`
-from `previewEval`.** An eval-installed wrapper dies on the next reload, so it never reaches the
-calls the app makes while booting, the "first load fails" case. `previewFaults` rules are
+**To test a failure path, break the call with `preview/faults`, not by patching `window.fetch`
+from `preview/eval`.** An eval-installed wrapper dies on the next reload, so it never reaches the
+calls the app makes while booting, the "first load fails" case. `preview/faults` rules are
 enforced by the server, match verb calls by their `yaar://` URI, and survive reloads and
-compiles. That last part cuts both ways: `preview` and `compile` say `FAULTS ACTIVE` while any
+compiles. That last part cuts both ways: `preview/open` and `build/compile` say `FAULTS ACTIVE` while any
 are set. Clear them (`rules: []`) before you trust a failure you see. Read the rules back after
 the run: a rule with 0 hits means the app never made the call you meant to break.
 
-When a `previewEval` has to wait a long or open-ended time, don't raise the timeouts
+When a `preview/eval` has to wait a long or open-ended time, don't raise the timeouts
 indefinitely — have the expression stash its result on `window` and return immediately, then
 read that global back in a later, instant eval.
 
@@ -55,7 +55,7 @@ trees: `appStorage`/`appDb` (`apps/preview--{projectId}/`) and `sharedStorage`, 
 `shared/self/…` for the server to expand — so a preview publishes to
 `shared/preview--{projectId}/`, not into the shipped app's commons directory. Reclaimed when
 the project is deleted, and any left behind by a project that is already gone are swept the
-next time `preview` runs. The preview has **no app agent** — you are the agent inside it.
+next time `preview/open` runs. The preview has **no app agent** — you are the agent inside it.
 
 **A file an app publishes under a preview is therefore in a different directory than the
 deployed app's**, so a cross-app hand-off (another app reading `shared/{appId}/`) cannot be
@@ -74,12 +74,12 @@ so test pure logic there and the spawning path on the deployed app.
 counts and lazy-load outcomes vary run to run, and the first headless-browser call after a
 cold start can come back empty; one read is not evidence.
 
-`compile` runs the manifest-drift check automatically whenever a preview is open, surfacing
+`build/compile` runs the manifest-drift check automatically whenever a preview is open, surfacing
 `manifestDrift` in its result as a warning, never a build failure.
 
 **A screenshot clones the DOM, and the clone loses inner scroll positions.** Scroll a
 container to an element, capture, and the picture shows the container's top. Assert on
-the scrolled region with `previewQuery`/`previewEval`, or keep the fixture short enough
+the scrolled region with `preview/query`/`preview/eval`, or keep the fixture short enough
 not to scroll.
 
 **A black canvas in a screenshot is usually the GPU backbuffer, not a render bug** — the

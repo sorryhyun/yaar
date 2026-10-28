@@ -102,7 +102,7 @@ notifications and pushed frames. Which door does what is
 
 Import via `@bundled/*`; there is no npm install. The authoritative list is `BUNDLED_LIBRARIES`
 in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries`.
-Devtools' `describeBundledLibrary` returns a library's declarations with their doc comments;
+Devtools' `inspect/library` returns a library's declarations with their doc comments;
 read that before guessing a signature.
 
 | Import | For |
@@ -135,7 +135,7 @@ read that before guessing a signature.
 | `@bundled/diff`, `@bundled/diff2html` | Text diffing and rendered diffs |
 | `@bundled/zod` | Zod **Mini**: validation at trust boundaries and `params` schemas |
 | `@bundled/dompurify` | Present for `sanitizeHtml`; never import it directly |
-| `@bundled/test` | `describe`/`test`/`expect` for `src/**/*.test.ts`, run by Dev Tools `runTests`. The app build refuses it, so tests never ship |
+| `@bundled/test` | `describe`/`test`/`expect` for `src/**/*.test.ts`, run by Dev Tools' `test/run`. The app build refuses it, so tests never ship |
 | `@bundled/yaar` | The SDK itself: verbs, storage, `defineApp`, helpers. Always available |
 
 A Web Worker is an import, not a library: `import MatchWorker from './match.worker.ts?worker'`
@@ -336,7 +336,7 @@ the agent. An app never calls `render()` itself, never registers from `onMount`,
 - **`id`** must equal `appId` in `app.json`; the build checks.
 - **`state.get` / `commands.run`** are the handlers. Other descriptor fields: `description`,
   `params`, `returns`, `aliases`, and on the definition `events`, `keybindings`, `onClose`,
-  `onCapture`, `debug` (module values a devtools preview's `previewEval` reads as `__debug`).
+  `onCapture`, `debug` (module values a devtools preview's `preview/eval` reads as `__debug`).
 - **Schemas.** `params` takes a Zod schema (preferred) or a JSON Schema literal. Zod types `run`'s
   parameter, validates the call before `run` sees it, and folds into `dist/protocol.json`. A JSON
   Schema literal is checked for required and unknown keys only, so `type: "string"` still admits a

@@ -49,7 +49,7 @@ const EMPTY_APP_JSON: z.infer<typeof ProjectAppJsonSchema> = {};
  * Where each project came from, keyed by project id.
  *
  * A sidecar at the appStorage root rather than a field in the project's own
- * `app.json`, because that file is the app's manifest: `deploy` ships it, so a
+ * `app.json`, because that file is the app's manifest: `build/deploy` ships it, so a
  * bookkeeping key written there would leak into every installed app. It is also not a
  * dotfile inside the project, which would show up in the file listing the agent reads.
  * Nothing outside this module writes it.
@@ -57,8 +57,8 @@ const EMPTY_APP_JSON: z.infer<typeof ProjectAppJsonSchema> = {};
 const ORIGINS_PATH = 'project-origins.json';
 
 /**
- * For each project made by `createProject` or `cloneApp`, the project that was in front
- * when it was made — where `deleteProject` returns to. A sidecar for the same reason as
+ * For each project made by `project/create` or `project/cloneApp`, the project that was in front
+ * when it was made — where `project/delete` returns to. A sidecar for the same reason as
  * {@link ORIGINS_PATH}.
  */
 const RETURN_PATH = 'project-return.json';
@@ -120,7 +120,7 @@ async function recordOrigin(id: string, origin: string): Promise<void> {
  *
  * A preview runs under `preview--{projectId}` and writes to `apps/preview--{projectId}/`,
  * a namespace nothing else in YAAR knows about: a `preview--*` app is not installed, so it
- * appears in no app list and no uninstall reclaims it. `deleteProject` drops its own, best
+ * appears in no app list and no uninstall reclaims it. `project/delete` drops its own, best
  * effort — and best effort is exactly how six of these accumulated across ten days on one
  * machine, one carrying a whole cloned source tree and another ~600KB of PDF and draft
  * data, none of them mappable back to the project that wrote them once the id is gone.
@@ -195,7 +195,7 @@ export async function reclaimOrphanedPreviewStorage(): Promise<void> {
  * must never be followed, or every Dev Tools window switches whenever any of them does.
  *
  * A sidecar at the appStorage root, alongside {@link ORIGINS_PATH} and for the same
- * reason: the projects' own `app.json` files are manifests that `deploy` ships.
+ * reason: the projects' own `app.json` files are manifests that `build/deploy` ships.
  *
  * Deliberately *not* here: which file was open. It changes on every click in the tree,
  * and a write per click buys back the one piece of state the agent can rebuild for
@@ -270,13 +270,13 @@ export async function restoreWorkspace(): Promise<void> {
  *
  * Every connected desktop mounts its own copy of Dev Tools, and the agent's commands reach
  * exactly one of them — the server pins one responder per window. With a phone and the
- * companion tab both attached, that one is the companion: `cloneApp` opened the clone
+ * companion tab both attached, that one is the companion: `project/cloneApp` opened the clone
  * there, while the copy on the phone's screen kept showing the project from before, and
  * the user watched the agent build an app that was not the one on screen.
  *
  * Copies of *this* window only. Following the app-wide file instead put two Dev Tools
- * windows on two monitors in lockstep: one agent's `cloneApp` moved the other's active
- * project, and that agent's next `writeFile` landed in the wrong app.
+ * windows on two monitors in lockstep: one agent's `project/cloneApp` moved the other's active
+ * project, and that agent's next `files/write` landed in the wrong app.
  *
  * A copy that follows does not write the set back, so two copies cannot ping-pong.
  */
@@ -335,7 +335,7 @@ export async function loadProjects(): Promise<void> {
       metas.push({ id, name, lastModified, origin: origins[id] });
     }
     setProjects(metas);
-    // Prune markers for projects that no longer exist. `deleteProject` drops its own,
+    // Prune markers for projects that no longer exist. `project/delete` drops its own,
     // but a project removed any other way (storage edited directly, an older build)
     // would otherwise leave a marker that a recycled id could inherit.
     const live = new Set(metas.map((m) => m.id));
@@ -394,7 +394,7 @@ export interface InstalledApp {
  * The installed apps, as clone targets for the toolbar's Clone button.
  *
  * `yaar://apps/` answers with `uri` and metadata, never source; the id is the last
- * segment, and it is what `cloneApp` takes. Sorted by name because this list is
+ * segment, and it is what `project/cloneApp` takes. Sorted by name because this list is
  * read by a human picking one, not by a caller matching an id.
  */
 export async function listInstalledApps(): Promise<InstalledApp[]> {
@@ -423,7 +423,7 @@ export async function listInstalledApps(): Promise<InstalledApp[]> {
 
 export interface CloneAppResult {
   id: string;
-  /** The `appId` the cloned app.json carries — the id `deploy` expects. */
+  /** The `appId` the cloned app.json carries — the id `build/deploy` expects. */
   appId: string;
   /** Root AGENTS.md content, or null when the cloned app does not provide one. */
   agentsMd: string | null;
@@ -453,7 +453,7 @@ export interface ExistingClone {
 /**
  * Clones of `appId` already in the project list, judged against the installed version.
  *
- * `cloneApp` reuses one only when asked (`reuse`) — a non-stale clone carries the
+ * `project/cloneApp` reuses one only when asked (`reuse`) — a non-stale clone carries the
  * installed version but may also carry edits, and by default a fresh copy of the live
  * source is what was asked for. It reports them either way, because nothing else did: a
  * devtools that lost track of its open project cloned the same app three times in one
@@ -498,7 +498,7 @@ async function installedVersionOfApp(appId: string): Promise<string | undefined>
   }
 }
 
-/** Reopen `clone` as `cloneApp({ reuse })` asked, answering in the same shape a fresh clone does. */
+/** Reopen `clone` as `project/cloneApp({ reuse })` asked, answering in the same shape a fresh clone does. */
 async function reopenClone(
   appId: string,
   clone: ExistingClone,
@@ -619,7 +619,7 @@ export async function openProject(
   if (record) {
     batch(() => {
       // The static manifest belongs to whichever project was last compiled — drop it
-      // on switch so the manifest command never reports another project's protocol.
+      // on switch so build/manifest never reports another project's protocol.
       setStaticProtocol(null);
       // Same reasoning for the type-check verdict: it was reached about the project
       // being switched away from. `compileState.typecheck` is left standing until the
@@ -628,7 +628,7 @@ export async function openProject(
       // The preview binding is project-scoped in the same way. Both the window id and
       // the build URL describe the project being switched *away from*; left set,
       // `previewOpen` reports `open: true, stale: false` with the other project's `url` while
-      // previewQuery/previewCommand/previewEval silently answer about a different app.
+      // preview/query, preview/command and preview/eval silently answer about a different app.
       // Unbind rather than close: the window belongs to the other project, and
       // openPreview already closes by id before it re-creates, so switching back cannot
       // collide.
@@ -698,7 +698,7 @@ export async function deleteProject(
     /* best effort */
   }
   try {
-    // And the throwaway namespace its previews wrote to (see the preview command).
+    // And the throwaway namespace its previews wrote to (see preview/open).
     // Nothing else will ever reclaim it — a `preview--*` app is not installed, so it
     // never appears anywhere an orphan could be noticed.
     await del(`yaar://apps/preview--${id}/storage/`);

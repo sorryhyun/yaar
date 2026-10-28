@@ -67,7 +67,7 @@ export function formatMcpContentBlock(block: unknown): string {
 /**
  * Format an MCP tool result into the string a `tool_result` `StreamMessage`
  * carries. The caller emits that message whether or not this produces
- * readable text — an image-only result (`previewScreenshot`, every
+ * readable text — an image-only result (`preview/screenshot`, every
  * window/browser capture) still degrades to a `[image omitted]` marker, not
  * nothing, and a result with no blocks at all degrades to `'Tool completed'`
  * rather than an empty string a UI would render as "did nothing".

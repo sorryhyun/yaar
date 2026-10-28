@@ -3,7 +3,7 @@
  *
  * Bundling does not type check — Bun strips types and builds happily around them — so
  * "compile succeeded" never implied "this type checks", and every door between a broken
- * type and a live app was open: devtools' compile reported success, and deploy asked
+ * type and a live app was open: devtools' `build/compile` reported success, and deploy asked
  * nothing. The check has to live in the deploy itself, because that is the one door every
  * caller walks through.
  *

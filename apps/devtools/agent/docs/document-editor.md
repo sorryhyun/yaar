@@ -6,7 +6,7 @@ audience: agent
 
 ## Document Editor Architecture (word-excel)
 
-`cloneApp` word-excel for the whole thing; this is its skeleton and the decisions that
+`project/cloneApp` word-excel for the whole thing; this is its skeleton and the decisions that
 hold it up. Embeds, positional addressing and the `storage:write` override are in the
 `editor-patterns`, `command-design` and `storage-overrides` topics.
 
@@ -88,7 +88,7 @@ Network fonts are never fetched (no `yaar://http`); report them as `externalFont
 
 ### Testing
 
-A `previewScript` suite of independent groups; `docx-roundtrip` writes a document, reopens
+A `preview/script` suite of independent groups; `docx-roundtrip` writes a document, reopens
 it, and compares structure — the one check of a file the app itself produced. Real-world
 fixtures live in the storage commons, and a fixture from a user's bug report is asserted
 by structural summary, never by its prose.

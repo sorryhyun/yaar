@@ -3,7 +3,7 @@ export {};
 // Measurements an agent can reason about in place of listening.
 //
 // An agent cannot hear a render. Before this existed it re-derived these numbers by hand
-// inside `previewEval` on every iteration (fetch the WAV, decode it, loop over samples), and
+// inside `preview/eval` on every iteration (fetch the WAV, decode it, loop over samples), and
 // each derivation was a fresh chance to get the arithmetic wrong. One audited implementation,
 // fed decoded PCM by `services/audio.ts`; pure, so the `audio-analysis` suite can pin it
 // against signals whose answers are known.

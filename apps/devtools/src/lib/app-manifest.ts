@@ -2,7 +2,7 @@ export {};
 
 /**
  * Reads and version arithmetic over a project's app.json text — the pure half of
- * `deploy`'s version rule and of the toolbar's Deploy button.
+ * `build/deploy`'s version rule and of the toolbar's Deploy button.
  */
 
 const SEMVER =

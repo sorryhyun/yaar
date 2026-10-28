@@ -141,7 +141,7 @@ mechanism.
 
 **One registry, many readers.** The same map drives the bundler plugin that resolves imports,
 the typechecker's view of the world, the prebundle step that builds the standalone exe, the
-`GET /api/dev/bundled-libraries` listing, `describeBundledLibrary`, which is how an agent reads a
+`GET /api/dev/bundled-libraries` listing, devtools' `inspect/library`, which is how an agent reads a
 library's API, and the doc-freshness lint that keeps written copies of the list honest. A library
 exists for apps exactly when it is in the registry, and every consumer finds out at the same
 moment.
@@ -172,7 +172,7 @@ artifacts keep them external. three.js has two builds (WebGL and WebGPU) over on
 picks exactly one with `app.json`'s `three` key, and never both.
 
 **Agents learn a library from its types.** `packages/compiler/src/bundled-types/index.d.ts`
-declares every `@bundled/*` module. `describeBundledLibrary` slices it into an index and
+declares every `@bundled/*` module. Devtools' `inspect/library` slices it into an index and
 per-symbol answers, so what an agent is told exists is what the typechecker accepts.
 
 ### Gated SDKs

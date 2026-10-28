@@ -39,7 +39,7 @@ const asText = (value: unknown): string =>
   typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 
 export const previewCommands = {
-  preview: defineAppCommand({
+  'preview/open': defineAppCommand({
     description: 'Open preview window for the compiled app.',
     params: { type: 'object', properties: {} },
     run: async () => {
@@ -48,7 +48,7 @@ export const previewCommands = {
       return faults ? { ...opened, faults } : opened;
     },
   }),
-  previewScreenshot: defineAppCommand({
+  'preview/screenshot': defineAppCommand({
     description:
       'Screenshot of the running preview. With `info: true`, also returns window ' +
       'geometry/size as a leading text block. Throws on capture failure with `reason`: ' +
@@ -121,7 +121,7 @@ export const previewCommands = {
       ];
     },
   }),
-  previewEval: defineAppCommand({
+  'preview/eval': defineAppCommand({
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
       'TypeScript syntax (`as`, `!`, annotations) is stripped first, and code with a ' +
@@ -170,7 +170,7 @@ export const previewCommands = {
       return await previewEvaluate(expression, timeoutMs, { changed: p.changed === true });
     },
   }),
-  previewFaults: defineAppCommand({
+  'preview/faults': defineAppCommand({
     description:
       "Make the preview's own verb and cross-origin fetch calls fail, stall or hang, to " +
       'exercise error and loading paths. `rules` replaces the whole list ([] clears it); ' +
@@ -240,11 +240,11 @@ export const previewCommands = {
       try {
         return await setPreviewFaults(p.rules as unknown[] | undefined);
       } catch (err) {
-        throw new AppCommandError(`previewFaults failed: ${errMsg(err)}`);
+        throw new AppCommandError(`preview/faults failed: ${errMsg(err)}`);
       }
     },
   }),
-  previewQuery: defineAppCommand({
+  'preview/query': defineAppCommand({
     description:
       'Read the running preview. With no `stateKey` this is the inspect snapshot: every ' +
       'declared protocol state value, the text the DOM is actually rendering, the console ' +
@@ -280,7 +280,7 @@ export const previewCommands = {
             'return { samples, elapsedMs, numeric: { "path.to.leaf": { min, max, last, n } }, ' +
             'last } — for values that only mean something while the app runs (meters, a ' +
             'playhead). Each read is a round trip, so the interval is a floor. Start the ' +
-            'activity first (previewCommand), then sample.',
+            'activity first (preview/command), then sample.',
         },
         durationMs: {
           type: 'number',
@@ -320,14 +320,14 @@ export const previewCommands = {
       return await inspectPreview({ ...(keys ? { keys } : {}), ...(selector ? { selector } : {}) });
     },
   }),
-  previewConsole: defineAppCommand({
+  'preview/console': defineAppCommand({
     description:
       'Console output from the preview app: { connected, logs, filtered? } — `filtered` ' +
       'counting the entries the filters dropped. `connected: false` means the preview ' +
       'buffer could not be read, and an empty `logs` then says nothing about whether the ' +
-      'app logged anything. Dev Tools audit entries (previewEval inputs and results, ' +
+      'app logged anything. Dev Tools audit entries (preview/eval inputs and results, ' +
       'fault-rule changes; `source: "evaluation"`) stay collapsed to one line each unless ' +
-      '`full`. With no arguments this is the whole recent console; `previewQuery` also ' +
+      '`full`. With no arguments this is the whole recent console; `preview/query` also ' +
       'carries its tail.',
     params: {
       type: 'object',
@@ -356,7 +356,7 @@ export const previewCommands = {
         ...(p.full === true ? { full: true } : {}),
       }),
   }),
-  previewCommand: defineAppCommand({
+  'preview/command': defineAppCommand({
     description:
       'Send an app protocol command to the preview window — or, with `batch`, several in ' +
       'order, stopping at the first that fails. A command that takes longer than 30s needs ' +
@@ -392,7 +392,7 @@ export const previewCommands = {
     replay: 'never',
     run: async (p) => {
       const wid = previewWindowId();
-      if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+      if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
       const send = (command: string, params: unknown) =>
         invoke(`yaar://windows/${wid}`, {
           action: 'app_command',
@@ -447,7 +447,7 @@ export const previewCommands = {
       return [...lead, ...lifted.blocks];
     },
   }),
-  previewScript: defineAppCommand({
+  'preview/script': defineAppCommand({
     description:
       'Run a scripted regression: execute the steps in a JSON script file from the project ' +
       'against the open preview — protocol commands, state-key reads, JS evals and window ' +
@@ -500,9 +500,9 @@ export const previewCommands = {
         ...(Array.isArray(p.steps) ? { steps: p.steps.map((s) => String(s)) } : {}),
       }),
   }),
-  resizePreview: defineAppCommand({
+  'preview/resize': defineAppCommand({
     description:
-      'Resize the preview window to width × height pixels. Unlike `preview`, this does not ' +
+      'Resize the preview window to width × height pixels. Unlike `preview/open`, this does not ' +
       'remount the iframe, so preview state is kept.',
     params: {
       type: 'object',
@@ -514,7 +514,7 @@ export const previewCommands = {
     },
     run: async (p) => {
       const wid = previewWindowId();
-      if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+      if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
       const width = Number(p.width);
       const height = Number(p.height);
       if (!(width > 0) || !(height > 0)) {
@@ -524,7 +524,7 @@ export const previewCommands = {
         return await invoke(`yaar://windows/${wid}`, { action: 'resize', width, height });
       } catch {
         setPreviewWindowId(null);
-        throw new AppCommandError('Preview window no longer exists. Run preview first.');
+        throw new AppCommandError('Preview window no longer exists. Run preview/open first.');
       }
     },
   }),

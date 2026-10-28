@@ -205,7 +205,7 @@ describe('the grant at the access gate', () => {
  *
  * Both are 403s and both were the same sentence, so an agent could not distinguish "this
  * app was never granted the path" from "the caller that named it to you is an app-role
- * principal and cannot delegate" — the second being what devtools' `previewCommand` relay
+ * principal and cannot delegate" — the second being what devtools' `preview/command` relay
  * hits. It cost a real audit two round trips and nearly recorded a correct permission
  * removal as a regression. The rule is unchanged here; only the sentence is.
  */

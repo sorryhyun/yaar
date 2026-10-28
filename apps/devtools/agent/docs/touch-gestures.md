@@ -100,5 +100,5 @@ and max-height: 500px`) because a phone on its side is wider than the narrow bre
 `MOBILE=1` (e.g. `make claude-dev-mobile`) opens a phone-shaped Chrome whose mouse drags
 arrive as real touch streams — the only way to exercise multi-touch on a PC; `curl -X POST
 localhost:9231/background` / `/foreground` reproduces Android suspension. The devtools
-preview is a desktop frame: verify layout there with a narrow `resizePreview`, and
+preview is a desktop frame: verify layout there with a narrow `preview/resize`, and
 gestures on the phone emulation or a real device.

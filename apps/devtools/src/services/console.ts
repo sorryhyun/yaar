@@ -92,7 +92,7 @@ export interface ConsoleRead {
  *
  * Pulled live from the preview window — its console-capture buffer is the source of truth
  * for what the app logged; the local signal only lags it by a poll — with the audit entries
- * (`previewEval` inputs and results, fault-rule changes) merged in by time, since those run
+ * (`preview/eval` inputs and results, fault-rule changes) merged in by time, since those run
  * from here and never reach the preview's buffer. Audit entries come back collapsed to one
  * line unless `full`: they replay calls the reader made itself, results included, and
  * returned whole they crowded out what the app logged.
@@ -105,7 +105,7 @@ export async function readPreviewConsole(opts: ConsoleReadOptions = {}): Promise
   if (!wid) {
     return {
       connected: false,
-      reason: 'No preview window is open. Run the preview command first.',
+      reason: 'No preview window is open. Run preview/open first.',
       logs: [],
     };
   }

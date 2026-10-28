@@ -39,7 +39,7 @@ one sidecar at a few MB of graph each. Probe sizes with a 1-byte Range GET
 
 ### A worker's console reaches nobody
 
-`console.*` inside a Worker is invisible to `previewConsole`, the page, and every capture.
+`console.*` inside a Worker is invisible to `preview/console`, the page, and every capture.
 Have the worker `postMessage` a `{ type: 'log' }` and re-emit it with `console.info` on
 the page side. And report *which model build ran* from a value the worker derived at
 init, never from one echoed back from the request — an echo reports the requested
@@ -57,7 +57,7 @@ All three ML apps use JSON Schema literals for every param.
 
 anima, ocr and transcribe each expose `window.__<app>` with raw pipeline stages (probe,
 download, single forward pass, adapter info) for numerics and plumbing checks driven over
-CDP or `previewEval`. It is deliberately **not** the agent protocol: protocol commands
+CDP or `preview/eval`. It is deliberately **not** the agent protocol: protocol commands
 serve a user's request; the hook verifies that stage N compiles and produces sane
 numbers. Keep internals (σ, tensor stats) there and in the console, not in the status
 line (`long-running-commands` topic).

@@ -4,7 +4,7 @@ import { createProject, openProject, deleteProject, cloneApp, readAppSource } fr
 import { markdownOutline, protocolMap, summarizeFiles } from '../lib';
 
 export const projectCommands = {
-  createProject: defineAppCommand({
+  'project/create': defineAppCommand({
     description:
       'Create a new project and open it. Scaffolds a working app — one `export default ' +
       'defineApp({...})` with a state key and a Zod-validated command — plus styles.css and ' +
@@ -30,7 +30,7 @@ export const projectCommands = {
       };
     },
   }),
-  openProject: defineAppCommand({
+  'project/open': defineAppCommand({
     description: 'Switch to an existing project',
     params: {
       type: 'object',
@@ -47,7 +47,7 @@ export const projectCommands = {
       };
     },
   }),
-  deleteProject: defineAppCommand({
+  'project/delete': defineAppCommand({
     description:
       'Permanently delete a project and its files. Not undoable. Deleting the active project ' +
       'reopens the one that was in front when it was created or cloned (else the last open ' +
@@ -69,20 +69,20 @@ export const projectCommands = {
     run: async (p) =>
       await deleteProject(String(p.id), { reopenPrevious: p.reopenPrevious !== false }),
   }),
-  cloneApp: defineAppCommand({
+  'project/cloneApp': defineAppCommand({
     description:
       'Clone an installed app source into a new project and open it — to change it; ' +
-      'readAppSource only reads it. The copy is a sandbox: ' +
+      'project/readAppSource only reads it. The copy is a sandbox: ' +
       'editing it changes nothing about the live app until you deploy. Answers with a map ' +
-      'to read from, not the contents: `appId` (from the cloned app.json — the id deploy ' +
+      'to read from, not the contents: `appId` (from the cloned app.json — the id build/deploy ' +
       'expects); `size` (file, line and byte totals, plus the five largest files); `tree` ' +
       '(the same per directory, rolled up two levels); `protocol` — where each command and ' +
       'state key is declared, as { commands: { file: { name: line } }, state: … }, the way ' +
       'from a command name to its code; and `agentsMd` — the root AGENTS.md as { bytes, ' +
       'lines, outline: [{ heading, line, lines }] } (null when the app has none). Read a ' +
-      'section with readFile({ path: "AGENTS.md", section }); `include` returns the full ' +
+      'section with files/read({ path: "AGENTS.md", section }); `include` returns the full ' +
       'text or file list instead. `previousProject` is the project the clone replaced in ' +
-      'front, which deleteProject on the clone reopens. When clones of the same app were ' +
+      'front, which project/delete on the clone reopens. When clones of the same app were ' +
       'already here, `existingClones` comes first, oldest first as { id, name, ' +
       'lastModified, version?, stale } — `stale` meaning their version is not the installed ' +
       'one. `reuse: true` reopens the newest non-stale one instead of cloning (`reused` says ' +
@@ -159,7 +159,7 @@ export const projectCommands = {
       };
     },
   }),
-  readAppSource: defineAppCommand({
+  'project/readAppSource': defineAppCommand({
     description:
       "Read an installed app's source without cloning it: no project is created and the " +
       'one in front stays in front. For looking at how another app does something; clone ' +
@@ -169,7 +169,7 @@ export const projectCommands = {
       '`startLine`/`endLine` slice; `pattern` — regex hits { file, line, content } across ' +
       'its text files, narrowed by `glob`, capped at 200 (`total` counts the rest). A ' +
       'binary file (an image, a font) is listed as { path, binary: true } and cannot be ' +
-      'read as text — copyFile from "yaar://apps/{appId}/{path}" copies it into the ' +
+      'read as text — files/copy from "yaar://apps/{appId}/{path}" copies it into the ' +
       'project byte for byte. Reads the installed copy, cached for a minute.',
     params: {
       type: 'object',

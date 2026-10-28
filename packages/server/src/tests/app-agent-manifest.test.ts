@@ -4,29 +4,51 @@ import { describe, expect, it } from 'bun:test';
 // `materialize-app-protocols` preload (bunfig.toml), which CI needs since it
 // builds shared + compiler but not the apps.
 import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
+import { findProtocolGroup } from '../handlers/apps/protocol-resource.js';
 
 /**
  * The appended manifest is the only place an app agent is told what a command's
  * params are called — devtools' `agent/prompt.md` points at it explicitly. When it
  * listed names and descriptions only, the agent guessed: `readFile({ paths: [...] })`
- * against a command whose batch form is `path: string[]`.
+ * (now `files/read`) against a command whose batch form is `path: string[]`.
+ *
+ * Devtools' commands are grouped (`files/read`), so its prompt carries a table of
+ * contents and the signatures live one `describe({ group })` away — the same
+ * `renderSignature` either way.
  */
 describe('app agent protocol manifest', () => {
-  it('renders each command as a signature with param names and types', async () => {
+  it('lists a grouped app as groups of whole command names', async () => {
     const { systemPrompt } = await buildAppAgentProfile('devtools');
 
+    expect(systemPrompt).toContain('describe({ group: "name" })');
+    expect(systemPrompt).toMatch(/- \*\*files\*\*: .*`files\/read`/);
+    expect(systemPrompt).toMatch(/- \*\*git\*\*: .*`git\/restore`/);
+    expect(systemPrompt).toMatch(/- \*\*build\*\*: .*`build\/compile`/);
+  });
+
+  it('renders each command of a group as a signature with param names and types', async () => {
+    const signatures: string[] = [];
+    for (const group of ['files', 'git', 'build']) {
+      const doc = (await findProtocolGroup('devtools', group, () => '')) as {
+        commands: { signature: string }[];
+      };
+      signatures.push(...doc.commands.map((c) => c.signature));
+    }
+
     // Union type spelled out — the exact shape that was guessed wrong.
-    expect(systemPrompt).toContain(
-      '`readFile(path: string|string[], startLine?: number, endLine?: number, ' +
-        'section?: string, lineNum?: boolean, openInEditor?: boolean)`',
+    expect(signatures).toContain(
+      'files/read(path: string|string[], startLine?: number, endLine?: number, ' +
+        'section?: string, lineNum?: boolean, openInEditor?: boolean)',
     );
     // Required params carry no marker; optional ones carry `?`.
-    expect(systemPrompt).toContain('`gitRestore(appId: string, ref: string)`');
-    expect(systemPrompt).toContain('`compile(skipTypecheck?: boolean, refreshPreview?: boolean)`');
+    expect(signatures).toContain('git/restore(appId: string, ref: string)');
+    expect(signatures).toContain(
+      'build/compile(skipTypecheck?: boolean, refreshPreview?: boolean)',
+    );
     // An enum shows its values — the type alone invites a fourth one.
-    expect(systemPrompt).toContain('against?: "snapshot"|"repo"');
+    expect(signatures.join('\n')).toContain('against?: "snapshot"|"repo"');
     // Declared-but-empty params means the command really takes none.
-    expect(systemPrompt).toContain('`manifest()`');
+    expect(signatures).toContain('build/manifest()');
   });
 
   it('leaves state keys as plain names', async () => {

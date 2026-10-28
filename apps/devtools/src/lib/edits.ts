@@ -23,7 +23,7 @@ export interface EditSpec {
 
 /**
  * A search/replace text param as the caller sent it: a string, or an array of lines joined with
- * "\n" (writeFile's array form). Anything else is refused by name — `String()` on an array
+ * "\n" (files/write's array form). Anything else is refused by name — `String()` on an array
  * comma-joins it, and that corrupted file was written without a word.
  */
 export function editText(value: unknown, field: string): string | undefined {

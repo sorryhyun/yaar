@@ -8,13 +8,13 @@ audience: agent
 
 An agent cannot see the screen the way a person does, so every silent success is a lie
 it will build on. Each pattern below turns one silent failure into a named, retryable
-error. `Seen in` names an installed app — `cloneApp` it for the full code.
+error. `Seen in` names an installed app — `project/cloneApp` it for the full code.
 
 ### Return pictures as content blocks, never as a data-URL field
 
 A command whose `run` returns a **bare array** of `{ type: 'text', text }` /
 `{ type: 'image', data, mimeType }` blocks reaches the caller as real image content —
-the same path `readFile` uses. Wrap the same bytes in an object (`{ image: dataUrl }`)
+the same path `files/read` uses. Wrap the same bytes in an object (`{ image: dataUrl }`)
 and it is JSON-stringified: the agent gets a few hundred thousand characters of base64
 it cannot see, and nothing errors. Put measurements in a text block beside the image so
 they stay greppable. *Seen in:* mesh-edit `src/protocol/shared.ts` (`captureBlocks`),
@@ -116,5 +116,15 @@ market-apps `src/actions/update-all.ts`.
 `replay: 'never'` is decided by *"does re-running this on remount duplicate or wrong an
 effect?"*, not by category: a read that re-shows a file replays harmlessly, while its
 sibling `storage:write` must not. Undo, redo, play, "reload textures" and anything that
-starts a job are `'never'` too. `compile` returns a `warnings` entry for every add*/delete*-style
+starts a job are `'never'` too. `build/compile` returns a `warnings` entry for every add*/delete*-style
 command left to the default; an explicit `replay` either way answers it.
+
+### Many commands: group them as `group/name`
+
+Every command's full description rides in the app agent's prompt, so an app with dozens of
+commands spends most of that prompt on ones the agent will not touch this session. Key them
+`group/name` instead (`files/edit`, one slash): the whole key is the command's name, and
+`edit` alone is unknown. A grouped app's agent sees a table of contents — each group with its
+command names — and opens a group with `describe({ group: "files" })` before first use. The
+compiler refuses a key nested past one level and a group named like an ungrouped command.
+*Seen in:* devtools, every command of which is grouped.

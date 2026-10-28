@@ -179,7 +179,7 @@ export function grantsFromPayload(payload: unknown): PermissionEntry[] {
  * a caller that may delegate, and empty when the payload names none.
  *
  * The refusal is right; being *unlabelled* is not. An app-role caller relaying a command
- * (devtools' `previewCommand` is the one in the tree) hands the app a path it will then be
+ * (devtools' `preview/command` is the one in the tree) hands the app a path it will then be
  * refused, and the refusal reads exactly like a missing `app.json` permission. An agent
  * auditing whether a permission is still needed cannot tell the two apart, and the honest
  * reading of "not permitted" in that moment is "the removal broke it" — which is how one

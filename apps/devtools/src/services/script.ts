@@ -358,9 +358,9 @@ export interface ScriptRunResult {
   note?: string;
 }
 
-const LABEL_WRITE = 'previewScript baseline';
+const LABEL_WRITE = 'preview/script baseline';
 
-/** The last run in this window, which `deploy` reads to say whether the build it ships was tested. */
+/** The last run in this window, which `build/deploy` reads to say whether the build it ships was tested. */
 interface ScriptRunRecord {
   projectId: string;
   script: string;
@@ -375,7 +375,7 @@ const [lastScriptRun, setLastScriptRun] = createSignal<ScriptRunRecord | null>(n
 
 /**
  * Why the regression suite does not vouch for the build about to ship, or null when it
- * does or the project has none. Advisory: `deploy` reports it and ships regardless.
+ * does or the project has none. Advisory: `build/deploy` reports it and ships regardless.
  */
 export async function regressionWarning(): Promise<string | null> {
   const proj = activeProject();
@@ -385,20 +385,20 @@ export async function regressionWarning(): Promise<string | null> {
   if (!mine) {
     return (await readFileText(DEFAULT_SCRIPT_PATH)) === null
       ? null
-      : `${DEFAULT_SCRIPT_PATH} exists but previewScript has not run in this session, so ` +
+      : `${DEFAULT_SCRIPT_PATH} exists but preview/script has not run in this session, so ` +
           'nothing checked this build against its baseline.';
   }
   if (mine.buildSerial !== buildSerial()) {
-    return `The last previewScript run (${mine.script}) measured an older build; the project was compiled since.`;
+    return `The last preview/script run (${mine.script}) measured an older build; the project was compiled since.`;
   }
   const edited = fileChanges().find(
     (c) => c.projectId === proj.id && c.timestamp > mine.at && c.label !== LABEL_WRITE,
   );
   if (edited) {
-    return `${edited.path} changed after the last previewScript run, which measured the code before it.`;
+    return `${edited.path} changed after the last preview/script run, which measured the code before it.`;
   }
-  if (!mine.pass) return `The last previewScript run (${mine.script}) failed: ${mine.summary}.`;
-  if (mine.partial) return `The last previewScript run (${mine.script}) covered only some groups.`;
+  if (!mine.pass) return `The last preview/script run (${mine.script}) failed: ${mine.summary}.`;
+  if (mine.partial) return `The last preview/script run (${mine.script}) covered only some groups.`;
   return null;
 }
 
@@ -434,7 +434,7 @@ function parseBaseline(baselinePath: string, text: string): BaselineFile {
   const doc = raw as { script?: unknown; results?: unknown };
   if (!Array.isArray(doc?.results)) {
     throw new AppCommandError(
-      `${baselinePath} is not a previewScript baseline (no "results" array). ` +
+      `${baselinePath} is not a preview/script baseline (no "results" array). ` +
         'Point the script\'s "baseline" field elsewhere, or re-capture with update: true.',
     );
   }
@@ -449,7 +449,9 @@ function inGroups(group: string | undefined, groups?: string[]): boolean {
 async function runScript(opts: ScriptRunOptions): Promise<ScriptRunResult> {
   const wid = previewWindowId();
   if (!wid || !(await previewWindowIsOpen())) {
-    throw new AppCommandError('No preview window open. Run compile, then preview, then this.');
+    throw new AppCommandError(
+      'No preview window open. Run build/compile, then preview/open, then this.',
+    );
   }
   // A stale preview is a hard refusal, not a warning: the entire value of the run is
   // knowing which build the numbers describe, and a warning riding along with 40

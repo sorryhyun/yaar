@@ -1,7 +1,7 @@
 export {};
 
 /**
- * What `createProject` writes into a new sandbox.
+ * What `project/create` writes into a new sandbox.
  *
  * Pure string building, kept out of `services/projects.ts` so it can be read and
  * tested on its own; it is the pattern most new apps copy.
