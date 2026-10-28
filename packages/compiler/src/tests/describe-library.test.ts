@@ -35,13 +35,15 @@ describe('a sectioned library answers with its index', () => {
     expect((await getBundledLibraryDetail('yaar'))!.length).toBeLessThan(10_000);
   });
 
+  // The first `three` lookup builds a TypeScript program over its upstream types: under a
+  // loaded CI runner that cold start alone has run past bun's 5s default.
   test('an unsectioned library answers in full, as before', async () => {
     for (const name of ['three', 'solid-js', 'zod']) {
       expect(await getBundledLibraryDetail(name)).toBe(
         await getBundledLibraryDetail(name, { full: true }),
       );
     }
-  });
+  }, 30_000);
 });
 
 describe('a symbol slice', () => {
