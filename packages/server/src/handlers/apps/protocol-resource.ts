@@ -305,12 +305,13 @@ export function commandDocument(
   name: string,
   descriptor: CommandDescriptor,
   defs: ReturnType<typeof defsOf>,
-  rendered: { call: string },
+  rendered: { call: string; inGroup?: boolean },
 ): Record<string, unknown> {
   // The collision note the window-side describe already carries: a command declaring
   // `action`/`params`/`timeoutMs` as a param of its own keeps it, and the reader has to be
-  // told, or the sub-path spelling looks like it claims the name.
-  const note = reservedKeyNote(descriptor, defs);
+  // told, or the sub-path spelling looks like it claims the name. A group read states it
+  // once for the chapter instead (`groupDocument`), so a member document carries none.
+  const note = rendered.inGroup ? null : reservedKeyNote([[name, descriptor]], defs);
   return {
     name,
     signature: renderSignature(name, descriptor, defs),
@@ -375,8 +376,10 @@ export async function findProtocolGroup(
  *
  * Each command is the same `commandDocument` a single read serves, self-contained, so a
  * chapter is exactly its commands read one by one and nothing a reader learns from it
- * differs from what the per-command door would have said. `call` is rendered per caller
- * for the reason `commandDocument` takes it as an argument.
+ * differs from what the per-command door would have said — with one exception: the
+ * reserved-key note is hoisted to the chapter and names its colliding commands, because
+ * the same sentence on every member is the repetition it exists to avoid. `call` is
+ * rendered per caller for the reason `commandDocument` takes it as an argument.
  */
 export function groupDocument(
   protocol: { commands?: Record<string, unknown>; $defs?: Record<string, unknown> },
@@ -390,11 +393,19 @@ export function groupDocument(
   const members = commandsInGroup(protocol.commands, group);
   if (members.length === 0) return null;
   const defs = defsOf(protocol);
+  const note = reservedKeyNote(
+    members.map((name) => [name, protocol.commands![name]] as const),
+    defs,
+  );
   return {
     group,
+    ...(note ? { note } : {}),
     commands: members.map((name) => {
       const descriptor = protocol.commands![name] as CommandDescriptor;
-      return commandDocument(name, descriptor, defs, { call: renderCall(name, descriptor, defs) });
+      return commandDocument(name, descriptor, defs, {
+        call: renderCall(name, descriptor, defs),
+        inGroup: true,
+      });
     }),
   };
 }

@@ -532,7 +532,7 @@ export async function handleAppDescribe(
   // slice with a dangling `#/$defs/...` is corrupt, and it is exactly the door an
   // agent reaches for when a signature left it unsure.
   const defs = defsOf(manifest);
-  const note = reservedKeyNote(entry, defs);
+  const note = entry ? reservedKeyNote([[key, entry]], defs) : null;
   return okJson({
     uri,
     doc: response.doc ?? entry?.description ?? null,
@@ -563,20 +563,25 @@ async function describeLiveGroup(
   const members = commandsInGroup(manifest?.commands, group);
   if (!manifest || members.length === 0) return null;
   const defs = defsOf(manifest);
+  // One note for the chapter, naming its colliding commands, rather than the same
+  // sentence on each of them.
+  const note = reservedKeyNote(
+    members.map((name) => [name, manifest.commands[name]] as const),
+    defs,
+  );
   return okJson({
     uri: buildWindowResourceUri(windowId, 'commands', group),
     group,
+    ...(note ? { note } : {}),
     commands: members.map((name) => {
       const entry = manifest.commands[name];
       const uri = buildWindowResourceUri(windowId, 'commands', name);
-      const note = reservedKeyNote(entry, defs);
       return {
         name,
         signature: renderSignature(name, entry, defs),
         doc: entry.description ?? null,
         invoke: renderInvokeExample(uri, entry, defs),
         ...(entry.params !== undefined ? { schema: selfContained(entry.params, defs) } : {}),
-        ...(note ? { note } : {}),
       };
     }),
   });

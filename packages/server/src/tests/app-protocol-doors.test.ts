@@ -32,7 +32,11 @@ import { ResourceRegistry } from '../handlers/uri-registry.js';
 import type { VerbResult } from '../lib/verb-result.js';
 import type { ResolvedUri } from '../handlers/uri-resolve.js';
 import { parseAppProtocolPath } from '../handlers/apps/paths.js';
-import { findProtocolCommand, commandDocument } from '../handlers/apps/protocol-resource.js';
+import {
+  findProtocolCommand,
+  commandDocument,
+  groupDocument,
+} from '../handlers/apps/protocol-resource.js';
 import { renderPayloadExample } from '../lib/command-signature.js';
 
 const APP_ID = 'protocol-doors-fixture';
@@ -334,5 +338,54 @@ describe('describe names SKILL.md by its headings', () => {
     const md =
       '# Title\n\n## Launch\n\n```md\n## not a heading\n```\n\n## When not to use it ##\n### deeper\n';
     expect(skillSections(md)).toEqual(['Launch', 'When not to use it']);
+  });
+});
+
+describe('the reserved-key note is stated once per answer', () => {
+  // A protocol shaped like studio-3d's: two commands of one group each declare `params`,
+  // a third declares none. The incident: the same sentence on every colliding member.
+  const protocol = {
+    commands: {
+      'node/addPrimitive': {
+        params: {
+          type: 'object',
+          properties: { kind: { type: 'string' }, params: { type: 'object' } },
+        },
+      },
+      'node/remove': { params: { type: 'object', properties: { id: { type: 'string' } } } },
+      'node/setParams': {
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string' }, params: { type: 'object' } },
+        },
+      },
+    },
+  };
+
+  test('a group read carries one chapter note naming its colliding commands', () => {
+    const doc = groupDocument(protocol, 'node', (name) => `command("${name}")`)!;
+    const note = String(doc.note);
+    expect(note).toContain('`params`');
+    expect(note).toContain('`node/addPrimitive`');
+    expect(note).toContain('`node/setParams`');
+    expect(note).not.toContain('`node/remove`');
+    for (const member of doc.commands as Array<Record<string, unknown>>) {
+      expect(member.note).toBeUndefined();
+    }
+  });
+
+  test('a single command still carries its own note, and only one', () => {
+    const descriptor = protocol.commands['node/setParams'];
+    const doc = commandDocument('node/setParams', descriptor, undefined, { call: 'x' });
+    expect(String(doc.note)).toContain('of this command');
+  });
+
+  test('a group with no collision carries no note', () => {
+    const doc = groupDocument(
+      { commands: { 'node/remove': protocol.commands['node/remove'] } },
+      'node',
+      () => 'x',
+    )!;
+    expect(doc.note).toBeUndefined();
   });
 });

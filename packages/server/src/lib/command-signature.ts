@@ -151,15 +151,30 @@ export function renderPayloadExample(descriptor: unknown, defs?: SchemaDefs): st
 }
 
 /**
- * The note a command earns by declaring a key the sub-path spelling would otherwise
- * claim. Null for every command that declares none, which is nearly all of them.
+ * The note an answer earns when a command in it declares a key the sub-path spelling
+ * would otherwise claim. Null for an answer whose commands declare none, which is nearly
+ * all of them.
+ *
+ * Once per *answer*, never per command: a group read carrying the same sentence on every
+ * colliding member says nothing the first copy did not, and the rendered example on each
+ * member already shows the key inline. So the caller hands over every command the answer
+ * documents, and a group read names the ones that collide instead of repeating itself.
  */
-export function reservedKeyNote(descriptor: unknown, defs?: SchemaDefs): string | null {
-  const collisions = reservedParamsOf(descriptor, defs);
-  if (!collisions.length) return null;
-  const names = collisions.map((k) => `\`${k}\``).join(' and ');
+export function reservedKeyNote(
+  commands: ReadonlyArray<readonly [name: string, descriptor: unknown]>,
+  defs?: SchemaDefs,
+): string | null {
+  const colliding = commands
+    .map(([name, descriptor]) => [name, reservedParamsOf(descriptor, defs)] as const)
+    .filter(([, keys]) => keys.length > 0);
+  if (!colliding.length) return null;
+  const keys = [...new Set(colliding.flatMap(([, k]) => k))];
+  const names = keys.map((k) => `\`${k}\``).join(' and ');
+  const plural = keys.length > 1;
+  const owner =
+    commands.length === 1 ? 'this command' : colliding.map(([name]) => `\`${name}\``).join(', ');
   return (
-    `${names} ${collisions.length > 1 ? 'are params of this command' : 'is a param of this command'}, ` +
+    `${names} ${plural ? 'are' : 'is'} declared as ${plural ? 'params' : 'a param'} of ${owner}, ` +
     'not a wrapper and not transport — pass it inline in the payload like any other param.'
   );
 }
