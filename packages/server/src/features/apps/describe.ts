@@ -149,9 +149,11 @@ export function skillSections(skill: string): string[] {
  * what authors write in descriptions, exactly as the protocol split intended.
  *
  * Audience-filtered to what a runtime caller can act on; `dev` topics reach their
- * reader through the cloned tree. The door named for each detail level follows the
- * protocol section's rule: a verbs caller is pointed at URIs, an app agent — who holds
- * four scoped tools and no verbs — at its own `describe({ topic })` spelling.
+ * reader through the cloned tree. Each detail level follows the protocol section's rule:
+ * a verbs caller gets the topic *names* and the URIs that serve the rest — its usual
+ * reader is a monitor about to hand the work off, and thirty trigger lines it never acts
+ * on were most of devtools' describe — while an app agent, who holds four scoped tools
+ * and no verbs, gets the trigger lines and its own `describe({ topic })` spelling.
  */
 function docsSection(
   appId: string,
@@ -161,14 +163,21 @@ function docsSection(
   const topics = runtimeDocs(allTopics);
   if (topics.length === 0) return {};
   const base = `yaar://apps/${appId}/docs`;
+  if (detail === 'names') {
+    return {
+      docs: {
+        uri: base,
+        topics: topics.map((t) => t.name),
+        index: `list("${base}") — each topic's trigger line, to know when to pull one.`,
+        one: `read("${base}/{name}") — one topic in full, markdown.`,
+      },
+    };
+  }
   return {
     docs: {
       uri: base,
       topics: topics.map((t) => ({ name: t.name, description: t.description })),
-      one:
-        detail === 'names'
-          ? `read("${base}/{name}") — one topic in full, markdown.`
-          : `describe({ topic: "{name}"${appId ? `, appId: "${appId}"` : ''} }) — one topic in full.`,
+      one: `describe({ topic: "{name}"${appId ? `, appId: "${appId}"` : ''} }) — one topic in full.`,
     },
   };
 }

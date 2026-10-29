@@ -155,31 +155,14 @@ export const workerCommands = {
   }),
   'worker/task': defineAppCommand({
     description:
-      'Start one task on the worker — a sonnet-tier sub-agent that explores the active ' +
-      'project with its own read-only tools (list files, read file, grep) and reports back; ' +
-      'it cannot edit, compile, or deploy. For a task that needs a change it submits the exact ' +
-      'edit instead of describing it, which arrives as `proposals` — summaries of edits already ' +
-      'verified to apply cleanly, taken with worker/acceptEdit and turned down with ' +
-      'worker/rejectEdit, so a delegated fix costs you a read and a decision rather than ' +
-      'retyping it. RETURNS IMMEDIATELY with a taskId. You are then ' +
-      'WOKEN with the answer when it lands (an <app:event channel="worker"> message with ' +
-      'kind "result") — worker/wait blocks for it instead, and the "worker" state key is the ' +
-      'plain look. Interim findings arrive with the result; an urgent one wakes you early ' +
-      'as kind "report" — a cue to re-scope or call worker/interrupt, not a sign the task is ' +
-      'done. A very long answer can reach you with its long fields shortened — each ending ' +
-      '"…[cut, N chars]", with a note after the JSON naming them — because the wakeup is a ' +
-      'prompt injection with a context budget; call worker/wait with the taskId to read the ' +
-      'full record, which is kept whole. Several workers run in parallel, up to the cap in ' +
-      '`worker/config` (default 2, max 3): each call lands on a free worker and returns its ' +
-      '`worker` id, so fan independent surveys out as separate tasks and collect each by ' +
-      'taskId. A worker keeps its memory across tasks and a task goes to the worker that ' +
-      'finished last when it is free — pass `worker` to pin a follow-up to a specific one, ' +
-      'and `fresh` to opt out of memory. With every worker busy the call is refused, not queued. ' +
-      'Files the task names (paths, directories, globs) are its scope: a task naming more than ' +
-      '~150 KB of them is refused with a suggested split, since one worker turn that size ' +
-      'tends to end with "went quiet" — pass `split: true` to run it as parallel chunks, or ' +
-      '`allowLarge: true` to run it whole. The result reports `filesRead` and `filesNotRead` ' +
-      'against that scope, and a turn that went quiet carries a `stopDiagnosis`.',
+      'Start one task on a worker — a sonnet-tier sub-agent with read-only tools (list, ' +
+      'read, grep) that reports back and submits needed changes as verified edit `proposals` ' +
+      '(worker/readEdit, then worker/acceptEdit or worker/rejectEdit). Returns a taskId ' +
+      'immediately and wakes you with the result (an <app:event channel="worker">); ' +
+      'worker/wait blocks instead. Refused, not queued, when every worker is busy (cap: ' +
+      'worker/config). A task naming more than ~150 KB of files is refused with a suggested ' +
+      'split: pass `split: true` for parallel chunks or `allowLarge: true` to run it whole. ' +
+      'Memory, pinning, interim reports and cut fields: the worker-delegation topic.',
     params: {
       type: 'object',
       properties: {
@@ -311,19 +294,12 @@ export const workerCommands = {
   }),
   'worker/wait': defineAppCommand({
     description:
-      'Collect a task started by worker/task: returns its answer, or `done: false` if it is ' +
-      'still working. Blocks up to waitMs (default 60000, max 170000) — always pass a ' +
-      'timeoutMs at least 10s larger than waitMs, or the platform kills the call before the ' +
-      'wait ends. Timing out is cheap: the task keeps running and calling again resumes the ' +
-      'wait, so a long survey can be collected in slices. Omit taskId to collect whichever ' +
-      'running task settles first (the result names its taskId and worker; a timeout lists ' +
-      'the ids still `running`), or the last one to finish when none runs — so a fan-out of ' +
-      'N tasks is N calls. Never re-send a task to "retry" a wait. ' +
-      '`reports` carries the interim findings the worker posted, and `proposals` the edits it ' +
-      'submitted; both come back on a timeout too — read them before deciding whether to keep ' +
-      'waiting or to worker/interrupt. A ' +
-      'settled task ALWAYS carries an `answer` or an `error`: an `error` saying the worker ' +
-      'produced no answer means nothing was learned, never "nothing was found".',
+      'Block for a worker/task result: its answer, or `done: false` on timeout (the task keeps ' +
+      'running; call again to resume, never re-send the task). Always pass timeoutMs at least ' +
+      '10s above waitMs, or the platform kills the call first. Omit taskId for whichever task ' +
+      'settles first — a fan-out of N is N calls. `reports` and `proposals` come back on a ' +
+      'timeout too. A settled task carries an `answer` or an `error`; an `error` means nothing ' +
+      'was learned, never "nothing was found". The full record, uncut, is kept here.',
     params: {
       type: 'object',
       properties: {
@@ -403,21 +379,14 @@ export const workerCommands = {
   }),
   'worker/acceptEdit': defineAppCommand({
     description:
-      'Apply edits the worker proposed, then type check and compile once. Requires the ' +
-      '`token` from worker/readEdit for each id and a one-line `intent` in your own words, ' +
-      'because an accept is a judgement and not a forward. Pass arrays for `id` and `token` ' +
-      '(same order) to take several proposals with ONE build; a batch skips any that no ' +
-      'longer apply and names them in `stale`. When every applied change touches only ' +
-      'comments (TS/JS/CSS) or Markdown outside src/, no build runs and `build` says ' +
-      '"skipped"; the type-check verdict is kept, since the code it describes is unchanged. ' +
-      'Pass `edits` with a single id to accept a corrected version of that proposal: they ' +
-      'replace its steps, are dry-run the same way, and the worker is told what you changed. ' +
-      'Each proposal is re-checked against the file first and refused without writing if it ' +
-      'no longer applies. If the bundle then fails, or type errors increase, every file ' +
-      'written is restored, the project is rebuilt clean, and the result carries ' +
-      '`rolledBack: true` and the `failure` — a broken build never survives this command. ' +
-      '`otherPendingOnPath` names proposals to the same files that were verified against the ' +
-      'bytes just replaced. Slow when it builds (up to two builds): pass timeoutMs, e.g. 120000.',
+      'Apply worker proposals, then type check and compile once. Requires the readEdit ' +
+      '`token` per id and a one-line `intent` of your own. Arrays of `id` and `token` (same ' +
+      'order) take several with one build; ones that no longer apply are skipped as `stale`. ' +
+      '`edits` with a single id accepts your corrected version. A comment- or docs-only ' +
+      'change skips the build (`build: "skipped"`). If the bundle fails or type errors ' +
+      'increase, every write is undone and the result carries `rolledBack: true` and the ' +
+      '`failure`. `otherPendingOnPath` names proposals to the same files, now stale. Slow ' +
+      'when it builds: pass timeoutMs, e.g. 120000.',
     params: {
       type: 'object',
       properties: {

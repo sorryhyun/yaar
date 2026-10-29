@@ -90,7 +90,7 @@ function applyEdit(
   if (hasSearch) {
     if (edit.replace === undefined) {
       throw new Error(
-        `${label}: missing replacement text (pass replace or newString; '' deletes the match)`,
+        `${label}: missing replacement text (pass replace; '' deletes the match)`,
       );
     }
     if (!content.includes(edit.search!)) {
@@ -155,7 +155,7 @@ function applyEdit(
     return { content: lines.join('\n'), removed: removed.join('\n') };
   }
   throw new Error(
-    `${label}: provide search/replace (aliases oldString/newString) or startLine/endLine + anchor`,
+    `${label}: provide search/replace or startLine/endLine + anchor`,
   );
 }
 

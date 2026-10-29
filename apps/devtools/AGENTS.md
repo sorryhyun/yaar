@@ -4,7 +4,9 @@ The IDE that builds and deploys every other YAAR app, including itself.
 
 ## Run the tests
 
-Run `test/self` before every deploy; its descriptor says what it covers and when else to run it.
+Run `test/run` on the project before every deploy. The pure-logic suites in
+`src/test/lib-suites.ts` run through it (`lib-suites.test.ts`), so they test this clone as it
+stands, not the installed Dev Tools.
 
 Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file.
 Behaviour that needs a running app is `preview/script` (`agent/docs/regression-testing.md`).

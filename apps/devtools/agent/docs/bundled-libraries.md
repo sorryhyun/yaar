@@ -6,8 +6,8 @@ audience: agent
 
 ## Bundled Libraries
 
-Import via `@bundled/*`; no npm install. `query("bundledLibraries")` lists what exists, and
-`inspect/library` returns a library's declarations with their doc comments — entry
+Import via `@bundled/*`; no npm install. `inspect/library` with no `name` lists what exists, and
+with one returns a library's declarations with their doc comments — entry
 points, signatures, what is deliberately missing. **Read it before writing against a
 library**; guessed signatures are the usual first-compile failure.
 

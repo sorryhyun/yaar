@@ -162,17 +162,20 @@ describe('describe on the app carries the docs index', () => {
     const docs = facts?.docs as Record<string, unknown>;
     expect(docs.uri).toBe(`yaar://apps/${APP_ID}/docs`);
 
-    const topics = docs.topics as Array<{ name: string; description: string }>;
-    // The dev topic is not indexed for a runtime caller.
-    expect(topics.map((t) => t.name)).toEqual(['solid-gotchas', 'version-history']);
-    expect(topics[0].description).toContain('Read before writing reactive view code');
+    // The dev topic is not indexed for a runtime caller. The verbs caller gets names
+    // only, like the protocol's table of contents: the trigger lines are one list away.
+    expect(docs.topics).toEqual(['solid-gotchas', 'version-history']);
+    expect(String(docs.index)).toContain(`list("yaar://apps/${APP_ID}/docs")`);
 
     // The verbs caller is pointed at a URI it can read…
     expect(String(docs.one)).toContain(`read("yaar://apps/${APP_ID}/docs/{name}")`);
 
-    // …the app agent, holding no verbs, at its own describe spelling.
+    // …the app agent, holding no verbs, gets the trigger lines and its own describe spelling.
     const agentFacts = await describeApp(APP_ID, { protocol: 'index' });
     const agentDocs = agentFacts?.docs as Record<string, unknown>;
+    const topics = agentDocs.topics as Array<{ name: string; description: string }>;
+    expect(topics.map((t) => t.name)).toEqual(['solid-gotchas', 'version-history']);
+    expect(topics[0].description).toContain('Read before writing reactive view code');
     expect(String(agentDocs.one)).toContain('describe({ topic:');
   });
 });

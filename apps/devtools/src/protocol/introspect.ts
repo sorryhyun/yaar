@@ -66,17 +66,10 @@ export const introspectCommands = {
   }),
   'inspect/model': defineAppCommand({
     description:
-      'Read a .glb/.gltf model as data: node tree with local TRS, per-mesh local and world ' +
-      'bounds, vertex/triangle counts, materials, texture sizes, extras (where files keep ' +
-      'event markers), and each animation clip with its duration and the node paths it keys. ' +
-      'Reads the file itself — no compile or preview needed. `node` scopes it to a subtree and ' +
-      'adds per-channel keyframe stats (first/last/min/max, degrees of swing, near-instant ' +
-      "jumps such as a hide by scale); `keys` returns one clip's keyframes, windowed by " +
-      '`range` and resampled by `step`. `pose` plays a clip: with `at`, every node in world ' +
-      "space and the posed mesh bounds (skinned meshes included) at that time; without, `node`'s " +
-      'world path over the clip — how you check motion without building. `units` is the glTF ' +
-      'convention; `measured` says what the bounds suggest (centimetres, a −Z front). ' +
-      'Line-oriented JSON, one record per line.',
+      'Read a .glb/.gltf file as line-oriented JSON: node tree with TRS, mesh bounds and ' +
+      'counts, materials, textures, extras, and each clip with the nodes it keys — no compile ' +
+      'needed. `node`, `keys` and `pose` drill into one subtree, clip or moment (the ' +
+      'static-assets topic); trust `measured` over `units` for scale and facing.',
     params: {
       type: 'object',
       properties: {
@@ -152,8 +145,8 @@ export const introspectCommands = {
   }),
   'inspect/library': defineAppCommand({
     description:
-      'Return type info for anything in the `bundledLibraries` state key — a @bundled/* ' +
-      'library, or "design-tokens" (the generated token and utility-class names). A sectioned ' +
+      'Type info for a @bundled/* library, or "design-tokens" (the generated token and ' +
+      'utility-class names). Without `name`, the list of names it accepts. A sectioned ' +
       'library ("yaar", "yaar-web") answers with an index of sections and exports; pass ' +
       '`symbol` for one export with the types it references, `section` for one section, or ' +
       '`full: true` for everything.',
@@ -162,8 +155,7 @@ export const introspectCommands = {
       properties: {
         name: {
           type: 'string',
-          description:
-            'A name from `bundledLibraries`, e.g. "yaar", "anime", "three", "design-tokens".',
+          description: 'e.g. "yaar", "anime", "three", "design-tokens". Omit to list them all.',
         },
         symbol: {
           type: 'string',
@@ -175,16 +167,15 @@ export const introspectCommands = {
         },
         full: { type: 'boolean', description: 'The whole declaration instead of the index.' },
       },
-      required: ['name'],
     },
     run: async (p) => {
       try {
-        const result = await bundledLibraries(String(p.name), {
+        if (typeof p.name !== 'string' || !p.name) return { libraries: await bundledLibraries() };
+        return await bundledLibraries(p.name, {
           symbol: typeof p.symbol === 'string' ? p.symbol : undefined,
           section: typeof p.section === 'string' ? p.section : undefined,
           full: p.full === true,
         });
-        return result;
       } catch (err) {
         throw new AppCommandError(errMsg(err));
       }

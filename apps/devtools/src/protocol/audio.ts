@@ -21,16 +21,10 @@ function blocks(results: AudioAnalysis[], summary: unknown) {
 export const audioCommands = {
   'inspect/audio': defineAppCommand({
     description:
-      'Measure an audio file (WAV, FLAC, MP3, OGG/Opus, M4A) and return numbers plus a ' +
-      'picture, in place of listening: integrated / max short-term loudness (BS.1770 LUFS) ' +
-      'and loudness range, sample peak, RMS, crest factor, clipped samples, DC offset, ' +
-      "leading/trailing silence, stereo correlation and side-to-mid, each mixing band's " +
-      'share of the energy in dB (sub 20-60 Hz, bass, lowMid, mid, upperMid, presence, ' +
-      'brilliance 6k+), spectral centroid, a loudness/peak timeline, and a tempo estimate ' +
-      '(half/double-time is how it is wrong). The image is a waveform over a log-frequency ' +
-      'spectrogram. To check what a change did, render before and after and pass the ' +
-      'second as `compareTo`: the answer leads with `delta` (B minus A). Measures what was ' +
-      'rendered, not whether it sounds good — ask the user to listen for a judgment call.',
+      'Measure an audio file (WAV, FLAC, MP3, OGG/Opus, M4A) in place of listening: loudness, ' +
+      'peaks, band balance, silence, stereo image, a timeline, tempo, and a spectrogram image ' +
+      '(metric list: the audio-apps topic). Pass `compareTo` for before/after; the answer ' +
+      'leads with `delta` (B minus A). It measures what was rendered, not whether it sounds good.',
     params: {
       type: 'object',
       properties: {

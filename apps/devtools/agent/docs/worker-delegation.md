@@ -7,8 +7,8 @@ audience: agent
 ## Delegating to the Worker
 
 `worker/task`, `worker/wait`, `worker/interrupt`, `worker/config` (sets the cap) and the `worker`
-state key (reads it, with each worker's status) document their own mechanics; this is the
-judgment.
+state key (reads it, with each worker's status) document their own contract; this is the
+judgment, then the mechanics they leave out.
 
 - **Start it before the work you can do without it, not after.** A `worker/task` immediately
   followed by `worker/wait` spends the whole survey waiting; find what you can do meanwhile
@@ -30,3 +30,18 @@ judgment.
   `otherPendingOnPath` name those; accept one, then re-read before taking the next.
 - Tasks the user starts from the Worker sidebar tab share the same workers and transcript —
   one they started is one you can `worker/wait` on.
+
+### Mechanics the commands leave out
+
+- **Result vs report.** The result arrives as an `<app:event channel="worker">` of kind
+  `"result"`. An urgent interim finding wakes you early as kind `"report"` — a cue to re-scope
+  or `worker/interrupt`, not a sign the task is done.
+- **Cut fields.** The wakeup is a prompt injection with a context budget, so a very long answer
+  can arrive with fields ending `…[cut, N chars]` and a note naming them. `worker/wait` with the
+  taskId returns the record whole.
+- **Memory.** A worker keeps its memory across tasks, and a task goes to the worker that
+  finished last when it is free. Pass `worker` to pin a follow-up to one, `fresh` to start it
+  with no memory.
+- **Scope.** The files a task names are its scope; the result reports `filesRead` and
+  `filesNotRead` against it, and a turn that went quiet carries a `stopDiagnosis`. One worker
+  turn over ~150 KB tends to go quiet, which is why such a task is refused unless split.

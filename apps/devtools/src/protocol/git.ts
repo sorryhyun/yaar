@@ -97,7 +97,9 @@ export const gitCommands = {
     run: async (p) => gitRestore(String(p.appId), String(p.ref)),
   }),
   'git/checkpoint': defineAppCommand({
-    description: "Snapshot a deployed app's current state as a restorable commit.",
+    description:
+      "Snapshot a deployed app's current state as a restorable commit. Deploy and restore " +
+      'already snapshot; this is for marking a state by hand with a `message`.',
     params: {
       type: 'object',
       properties: {

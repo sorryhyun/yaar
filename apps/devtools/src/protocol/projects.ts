@@ -31,7 +31,7 @@ export const projectCommands = {
     },
   }),
   'project/open': defineAppCommand({
-    description: 'Switch to an existing project',
+    description: 'Switch to an existing project. Throws when no project has that id.',
     params: {
       type: 'object',
       properties: { id: { type: 'string' } },
@@ -90,10 +90,8 @@ export const projectCommands = {
         },
         include: {
           type: 'array',
-          items: { type: 'string', enum: ['agentsMd', 'files'] },
-          description:
-            '"agentsMd": the whole AGENTS.md text in place of its outline. "files": every ' +
-            'path with its size (what the `project` state also answers).',
+          items: { type: 'string', enum: ['agentsMd'] },
+          description: '"agentsMd": the whole AGENTS.md text in place of its outline.',
         },
       },
       required: ['appId'],
@@ -134,19 +132,6 @@ export const projectCommands = {
                   lines: agentsMd.split('\n').length,
                   outline: markdownOutline(agentsMd),
                 },
-        ...(include.has('files')
-          ? {
-              files: listing.map((f) =>
-                f.isDirectory
-                  ? { path: f.path, isDirectory: true as const }
-                  : {
-                      path: f.path,
-                      ...(f.lines !== undefined ? { lines: f.lines } : {}),
-                      ...(f.bytes !== undefined ? { bytes: f.bytes } : {}),
-                    },
-              ),
-            }
-          : {}),
       };
     },
   }),

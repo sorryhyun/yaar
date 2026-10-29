@@ -28,18 +28,14 @@ import {
 export const buildCommands = {
   'build/compile': defineAppCommand({
     description:
-      'Type check and compile the active project; refreshes the preview window if one is ' +
-      'open. `built` reflects the bundle, `status` reflects type checking too — they can ' +
-      'differ, and the `compileState` state key reports the same combined verdict. ' +
-      "Failures come back as `bundler` (the bundler's errors, only when it did not build) " +
-      'and `typecheck` (type diagnostics), the same split `compileState` uses. ' +
-      '`warnings` are findings that did not fail the build: an unknown y-* class, or ' +
-      'commands named like add*/delete* that declare no `replay` — a remount re-runs them. ' +
-      '`previewErrors` ({ count, first }) is what the refreshed preview logged as an error ' +
-      "while mounting; absent means none so far, and later ones are preview/console's. " +
-      'Refreshing the preview remounts the iframe, so in-app state resets to a cold start; ' +
-      'pass `refreshPreview: false` to keep that state and leave the window on the old ' +
-      'build. Slow: pass timeoutMs (e.g. 60000).',
+      'Typecheck + bundle the active project; remounts the open preview, resetting its state ' +
+      '(`refreshPreview: false` keeps it on the old build). Result fields match `compileState`: ' +
+      '`built` is the bundle, `status` the combined verdict. Bun strips types and builds ' +
+      'through them, so `bundler` holds only what stopped the bundle (unresolved imports, ' +
+      'syntax, a failed plugin) and `typecheck` is the only place type errors appear. ' +
+      '`warnings` did not fail the build (an unknown y-* class, add*/delete* commands with no ' +
+      '`replay`); `previewErrors` ({ count, first }) is what the preview logged while ' +
+      'mounting. Slow: pass timeoutMs (e.g. 60000).',
     params: {
       type: 'object',
       properties: {
@@ -149,12 +145,9 @@ export const buildCommands = {
   }),
   'build/typecheck': defineAppCommand({
     description:
-      'Type check the active project without bundling and without touching the preview — ' +
-      'the check to run after an edit, where `build/compile` also rebuilds and remounts the ' +
-      'preview (resetting its state). Records the verdict in `compileState.typecheck` as a ' +
-      'compile does. Returns { clean, errors, warnings, diagnostics: [{ file, line, column, ' +
-      'code, message, severity }] } with project-relative paths. Run `build/compile` when you ' +
-      'need the build or the preview to show the change.',
+      'Type check the active project without bundling; the preview is left alone. The check ' +
+      'to run after an edit. Records into `compileState.typecheck`. Returns { clean, errors, ' +
+      'warnings, diagnostics: [{ file, line, column, code, message, severity }] }.',
     params: { type: 'object', properties: {} },
     replay: 'never',
     run: async () => {
@@ -172,18 +165,11 @@ export const buildCommands = {
   }),
   'build/format': defineAppCommand({
     description:
-      "Run the host's Prettier over the project, in the repo's own style — the style " +
-      'deployed apps are read and reviewed in. Formats .ts/.tsx/.js/.jsx/.css and leaves ' +
-      'dist/ and .json alone. Each rewritten file comes back as { path, lines, added, ' +
-      'removed } — `lines` being where it changed in the NEW file ("12, 40-44"), so the ' +
-      'line numbers still hold for a read or edit that follows. Not the diff text: the ' +
-      'Changes panel holds that, and every rewrite is recorded there like any other edit. ' +
-      'With `onlyChanged: true` only the lines edited this session are reformatted and the ' +
-      'rest of each file is left as it was. ' +
-      'A file Prettier cannot parse is skipped with its syntax error and the rest still ' +
-      'run — so a `skipped` entry after an edit is worth reading: it usually means that ' +
-      'edit left the file unparseable, which no amount of type checking will phrase as ' +
-      'clearly.',
+      "Run the host's Prettier (the repo's style) over .ts/.tsx/.js/.jsx/.css; dist/ and " +
+      '.json are left alone. Each rewritten file comes back as { path, lines, added, removed }, ' +
+      '`lines` being where it changed in the new file ("12, 40-44"). A file Prettier cannot ' +
+      'parse is `skipped` with its syntax error — after an edit, that usually means the edit ' +
+      'broke parsing.',
     params: {
       type: 'object',
       properties: {
@@ -216,9 +202,10 @@ export const buildCommands = {
   }),
   'build/manifest': defineAppCommand({
     description:
-      'Compare the STATIC manifest (from the last compile) against the RUNTIME manifest ' +
-      '(what the open preview actually registered), plus a drift report. Needs a compile ' +
-      '(static side) and an open preview (runtime side).',
+      'List commands and state keys declared in source but not registered by the running ' +
+      'preview, and vice versa (drift: usually a registration that threw, or a stale ' +
+      'preview). build/compile runs the same check; this is the full report. Needs a compile ' +
+      'and an open preview.',
     params: { type: 'object', properties: {} },
     run: async () => {
       const stat = await getStaticManifest();
@@ -263,21 +250,14 @@ export const buildCommands = {
   }),
   'build/deploy': defineAppCommand({
     description:
-      'Deploy to apps/. Refuses type errors unless skipTypecheck, and refuses a manifest ' +
-      'that drops commands the installed app has unless allowProtocolShrink. Snapshots the ' +
-      'previous version — see git/restore. Closes the preview window on success: it shows ' +
-      'the pre-deploy build, so re-open it with `preview/open` if you still need it. It also ' +
-      "closes the user's open windows of that app (listed in `closedWindows`), losing their " +
-      'in-app state — say so before deploying an app the user has open. A `staleWindow` in the result means you deployed the app you are running inside: ' +
-      'that window was spared (closing it would have killed this call) and is STILL ' +
-      'RUNNING THE OLD BUNDLE, so verifying the change in it reports the code from before ' +
-      "the deploy. Reload it — invoke('yaar://windows/{staleWindow}', {action:'reload'}) — " +
-      'which re-mounts the iframe without discarding its app agent. A deploy never ships the ' +
-      'installed version number again: unless app.json `version` is already above the ' +
-      'installed one, it is raised one patch step above the higher of the two and saved in ' +
-      'the project. The result carries `version` (as deployed), `installedVersion`, and ' +
-      '`bumped: { from, to, reason }` whenever it moved, and `agentModel`: the model the ' +
-      "app's agent runs on (app.json `agentType`, or the default) — name it in your report.",
+      'Deploy to apps/. Refuses type errors unless skipTypecheck, and a manifest that drops ' +
+      'installed commands unless allowProtocolShrink. Snapshots the previous version ' +
+      "(git/restore). Closes the preview and the user's open windows of the app, listed in " +
+      '`closedWindows` with their in-app state lost — say so before deploying an app the user ' +
+      'has open. Result: `version` as deployed, `installedVersion`, `bumped` when the version ' +
+      'moved (rule: the version-history topic), `agentModel`, and `staleWindow` when you ' +
+      'deployed the app you run inside — that window still runs the old bundle until ' +
+      "invoke('yaar://windows/{staleWindow}', {action:'reload'}).",
     params: {
       type: 'object',
       properties: {
@@ -294,7 +274,7 @@ export const buildCommands = {
         bump: {
           type: 'boolean',
           description:
-            'Omit for the automatic rule above. true: always raise one patch step, even over ' +
+            'Omit for the automatic rule. true: always raise one patch step, even over ' +
             'a hand-set higher version. false: deploy app.json `version` as written, for a ' +
             'pure redeploy of an unchanged build. Any bump is reverted if the deploy fails.',
         },
@@ -328,22 +308,16 @@ export const buildCommands = {
   }),
   'build/check': defineAppCommand({
     description:
-      'Static checks the type checker and bundler do not make: `staleFileRefs` — source ' +
-      'files (*.ts, *.css, …) named in comments or Markdown that exist nowhere in the ' +
-      'project; `css.unused` — classes defined in project CSS that no string in the source ' +
-      'names; `css.unstyled` — classes put on elements (class=, className, classList) with ' +
-      'no project CSS rule; `css.unknownSdk` — y-* classes the design tokens do not define, ' +
-      'which fail silently; `permissions.missing` — yaar:// uses ({ verb, uri, file, line, ' +
-      'via }) that app.json does not grant, each a 403 at runtime, judged by the ' +
-      "server's own permission check (`httpFetch` and a cross-origin `fetch` count as " +
-      'invoke yaar://http; a URI built at runtime is not read); `permissions.problems` — ' +
-      'app.json entries the server does not honour as written; `storagePolling` — a ' +
-      'setInterval, or a self-re-arming setTimeout, whose callback reads storage (a warning: ' +
-      'storage writes notify, so watch with `subscribe(uri, cb)` or ' +
-      '`appDb.createReactiveCollection` — the `multi-window-sync` topic). Lexical and ' +
-      'heuristic: a ' +
-      'class built at runtime from parts, or a path outside the project, can appear here, ' +
-      'so read each before acting on it.',
+      'Static checks the type checker and bundler do not make. `staleFileRefs`: source files ' +
+      'named in comments or Markdown that do not exist. `css.unused`: project CSS classes no ' +
+      'source string names. `css.unstyled`: classes on elements with no project rule. ' +
+      '`css.unknownSdk`: y-* classes the tokens do not define (they fail silently). ' +
+      '`permissions.missing`: yaar:// uses ({ verb, uri, file, line, via }) app.json does not ' +
+      "grant — each a runtime 403, judged by the server's own check (`httpFetch` and " +
+      'cross-origin `fetch` count as yaar://http; runtime-built URIs are not read). ' +
+      '`permissions.problems`: app.json entries not honoured as written. `storagePolling`: a ' +
+      'timer whose callback reads storage — subscribe instead (the multi-window-sync topic). ' +
+      'Lexical and heuristic: read each finding before acting on it.',
     params: { type: 'object', properties: {} },
     replay: 'never',
     run: async () => await checkProject(),

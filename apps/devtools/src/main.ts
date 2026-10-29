@@ -5,7 +5,6 @@ import {
   loadProjects,
   restoreWorkspace,
   followWorkspace,
-  loadBundledLibraries,
   loadWorkerConfig,
   startConsolePolling,
 } from './services';
@@ -65,6 +64,5 @@ export default defineApp({
 // project list, so it has to run after that list is in. Everything below is independent.
 loadProjects().then(restoreWorkspace);
 followWorkspace();
-loadBundledLibraries();
 loadWorkerConfig();
 startConsolePolling();

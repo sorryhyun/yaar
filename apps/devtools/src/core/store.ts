@@ -127,8 +127,6 @@ export function onRemoteWorkspace(fn: () => void): void {
   remoteWorkspaceListeners.push(fn);
 }
 
-export const [bundledLibs, setBundledLibs] = createSignal<string[]>([]);
-
 /**
  * Not shared: every copy polls the open preview's console itself (services/console),
  * and sharing a buffer that refreshes every poll would be a write per tick per copy.

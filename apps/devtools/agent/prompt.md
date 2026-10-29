@@ -90,7 +90,7 @@ Anything past this loop — the relay 403, `preview/eval`'s scope (and the `__de
 
 **`appId` is the field `defineApp({ id })` is checked against** — not `id`, which nothing reads. `project/create` writes it, cloning preserves it, and deploying under a *different* id is refused. To rename, change both `appId` in `app.json` and `id` in `src/main.ts`, then deploy under that name.
 
-**The `permissions` state key reports what the *installed* Dev Tools holds**, so a permission you edited into a sandbox `app.json` is not in force until you deploy.
+**Dev Tools' own permissions are the *installed* manifest's** (the `permissions` your `describe` reports), so a permission you edited into a sandbox `app.json` is not in force until you deploy.
 
 **Permissions.** Verb API calls return 403 without a declared permission; `build/check` lists the source's uses that `app.json` does not grant, before a preview hits one. Prefix matching — **never** glob. Every app already holds the commons (`yaar://storage/shared/`); never declare it:
 

@@ -144,9 +144,10 @@ export const WorkerFrameDataSchema = z.looseObject({
  * Mirrors `EditSpec` in lib/edits.ts, and is declared again rather than derived
  * from it because this is a boundary in a way the interface is not: the value
  * arrives as JSON a model typed into a string argument, so nothing has checked
- * it before this point. `oldString`/`newString` are accepted for the same reason
- * `files/edit` accepts them — a worker that reaches for the alias should be
- * corrected by the dry run's real errors, not rejected at the parse.
+ * it before this point. `oldString`/`newString` are folded into search/replace
+ * because a worker that reaches for the alias should be corrected by the dry
+ * run's real errors, not rejected at the parse. `files/edit` takes no aliases:
+ * its schema is read by the agent calling it, and a second spelling there doubles it.
  */
 const WorkerEditSpecSchema = z.looseObject({
   search: z.optional(z.string()),

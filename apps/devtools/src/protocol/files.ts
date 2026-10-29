@@ -231,11 +231,9 @@ export const fileCommands = {
     description:
       'Read one or more files. A missing file throws `file not found: {path}` with nearby ' +
       'paths; a path that climbs out of the project throws `refused: path escapes the ' +
-      'project`. Paths are normalized (`src/../app.json` is `app.json`), and results are ' +
-      'labelled with the normalized path. With an array, a refused path fails the whole call ' +
-      'before anything is read; a file that cannot be read becomes its own text block ' +
-      'beginning `[files/read error]`, beside the files that could, and the call throws only ' +
-      'when none could. Does not change editor open state unless openInEditor is set. ' +
+      'project`. Paths are normalized (`src/../app.json` is `app.json`). With an array, an ' +
+      'unreadable file becomes its own `[files/read error]` text block beside the rest; the ' +
+      'call throws only when none could be read, or a path is refused. ' +
       'Image files come back as a viewable image block, not text; a .glb/.gltf as its ' +
       '`inspect/model` summary. `section` reads one Markdown section by its heading — the ' +
       'outline `project/cloneApp` returns for AGENTS.md names them.',
@@ -344,7 +342,7 @@ export const fileCommands = {
       'Write content to a file. Content may be a string, an array of lines (joined with "\\n", ' +
       'no trailing newline added), or an object (serialized as pretty-printed JSON). Prefer the ' +
       'array form for anything longer than a few lines: one line per element keeps each JSON ' +
-      'string short and avoids the long escaped-newline blob that has been arriving truncated. ' +
+      'string short, where one long escaped-newline string risks truncation. ' +
       'Returns { path, lines, bytes } for what landed — check it when you passed an object, since ' +
       'that is where the serialization can surprise you. An array of OBJECTS is refused rather ' +
       'than stringified: the array form is for lines of text.',
@@ -378,8 +376,7 @@ export const fileCommands = {
       '(3) multi-edit — pass edits, an array of single-edit objects, applied sequentially in ' +
       'memory and written once, all-or-nothing: any failure names which edit failed, counting ' +
       'from 1 ("edit 2 of 3"), and nothing is written; later line numbers refer to content ' +
-      'after earlier edits. `oldString`/`newString` are accepted as aliases for ' +
-      'search/replace, in every mode. search and replace take a string or an array of lines ' +
+      'after earlier edits. search and replace take a string or an array of lines ' +
       '(joined with "\\n", no trailing newline added); any other type is refused. Returns ' +
       '{ editsApplied, lines, removed } — removed echoes the replaced text (truncated, middle elided).',
     params: {
@@ -392,8 +389,6 @@ export const fileCommands = {
         replace: textOrLines(
           'Replacement text. With startLine/endLine, omit or pass an empty string to delete the range.',
         ),
-        oldString: textOrLines('Alias for search.'),
-        newString: textOrLines('Alias for replace.'),
         startLine: {
           type: 'number',
           description:
@@ -417,8 +412,6 @@ export const fileCommands = {
             properties: {
               search: textOrLines('Text to find (first match).'),
               replace: textOrLines('Replacement text.'),
-              oldString: textOrLines('Alias for search.'),
-              newString: textOrLines('Alias for replace.'),
               startLine: { type: 'number' },
               endLine: { type: 'number' },
               anchor: { type: 'string', description: 'Required with startLine/endLine.' },
@@ -434,8 +427,6 @@ export const fileCommands = {
         e: {
           search?: unknown;
           replace?: unknown;
-          oldString?: unknown;
-          newString?: unknown;
           startLine?: number;
           endLine?: number;
           anchor?: unknown;
@@ -449,10 +440,8 @@ export const fileCommands = {
             throw new AppCommandError(errMsg(err));
           }
         };
-        const search =
-          e.search !== undefined ? text(e.search, 'search') : text(e.oldString, 'oldString');
-        const replace =
-          e.replace !== undefined ? text(e.replace, 'replace') : text(e.newString, 'newString');
+        const search = text(e.search, 'search');
+        const replace = text(e.replace, 'replace');
         const anchor = e.anchor;
         if (anchor !== undefined && typeof anchor !== 'string')
           throw new AppCommandError(
@@ -481,7 +470,7 @@ export const fileCommands = {
     },
   }),
   'files/delete': defineAppCommand({
-    description: 'Delete a file',
+    description: 'Delete a project file. With no project open it does nothing, without erroring.',
     params: {
       type: 'object',
       properties: { path: { type: 'string' } },
@@ -549,8 +538,7 @@ export const fileCommands = {
     description:
       "List the active project's files as { path, isDirectory, lines?, bytes? } — `lines` " +
       'for text, `bytes` for every file, neither for a directory. Generated output is ' +
-      'skipped the way files/grep skips it (dist/, build/, out/, node_modules/, coverage/, .git/, ' +
-      '.min.js/.map) unless includeBuilt, and `excluded` counts what was skipped. Throws with ' +
+      'skipped as files/grep skips it unless includeBuilt; `excluded` counts it. Throws with ' +
       'no active project, or when `dir` names no directory.',
     params: {
       type: 'object',
@@ -604,7 +592,8 @@ export const fileCommands = {
       'skipped unless includeBuilt says otherwise. A hit inside a bundle is one minified ' +
       'line thousands of characters wide, which is why it is not the default. A line over ' +
       '300 characters comes back as a window around the match, marked `…[+N chars]` on ' +
-      'each cut side — files/read with a line range for the whole line.',
+      'each cut side — files/read with a line range for the whole line. Empty with no ' +
+      'project open.',
     params: {
       type: 'object',
       properties: {

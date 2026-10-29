@@ -14,9 +14,13 @@ file**:
    An app that makes sound should own a render command, so the agent driving it can check its
    own work the same way. A preview saves to `yaar://apps/preview--{projectId}/storage/…`, or under
    `shared/preview--{projectId}/` through `sharedStorage`.
-2. `inspect/audio` with `{ uri }` for loudness, peak, band balance, silence, stereo image, timeline,
-   tempo, and a spectrogram. Render one stem at a time (solo a track) to tell which voice owns a
-   problem.
+2. `inspect/audio` with `{ uri }`. It reports integrated / max short-term loudness (BS.1770
+   LUFS) and loudness range, sample peak, RMS, crest factor, clipped samples, DC offset,
+   leading/trailing silence, stereo correlation and side-to-mid, each band's share of the energy
+   in dB (sub 20-60 Hz, bass, lowMid, mid, upperMid, presence, brilliance 6k+), spectral
+   centroid, a loudness/peak timeline, and a tempo estimate (wrong, when wrong, by half or double
+   time); the image is a waveform over a log-frequency spectrogram. Render one stem at a time
+   (solo a track) to tell which voice owns a problem.
 3. Change one thing, render again, `inspect/audio` with `{ uri: before, compareTo: after }`. The
    `delta` is the finding. A change that moved nothing is a wrong hypothesis, so drop it rather
    than stacking another change on top.

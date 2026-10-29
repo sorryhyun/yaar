@@ -42,8 +42,9 @@ const asText = (value: unknown): string =>
 export const previewCommands = {
   'preview/open': defineAppCommand({
     description:
-      'Open preview window for the compiled app. `previewErrors` ({ count, first }) is what ' +
-      'it logged as an error while mounting; absent means none so far.',
+      'Open or remount the preview on the last compile; resets in-app state (read the ' +
+      '`previewOpen` state key first). `previewErrors` ({ count, first }) is what it logged ' +
+      'as an error while mounting; absent means none so far.',
     params: { type: 'object', properties: {} },
     run: async () => {
       const opened = await openPreview();
@@ -133,16 +134,14 @@ export const previewCommands = {
   'preview/eval': defineAppCommand({
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
-      'TypeScript syntax (`as`, `!`, annotations) is stripped first, and code with a ' +
-      'top-level `await` runs in an async wrapper that answers its last expression — where ' +
-      'a `const` stays local to that call rather than visible to the next eval. ' +
-      'Module scope is not on the global: what the app declares in `defineApp({ debug })` is ' +
+      'TS syntax is stripped; a top-level `await` runs in an async wrapper, so its `const`s ' +
+      'stay local to that call. Module scope is not on the global: what the app declares in `defineApp({ debug })` is ' +
       'reachable as `__debug` (preview only, never deployed). ' +
       'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +
       "that awaits or sleeps for more than 5s needs `timeoutMs` — and this command's own " +
       'timeoutMs raised above it, or that one expires first. With `changed: true` the ' +
       'return becomes { result, changed, dom? } — what the expression moved, diffed against ' +
-      'a snapshot taken just before it ran.',
+      'a snapshot taken just before it ran (preview/query already diffs state and DOM, cheaper).',
     params: {
       type: 'object',
       properties: {
@@ -255,7 +254,8 @@ export const previewCommands = {
   }),
   'preview/query': defineAppCommand({
     description:
-      'Read the running preview. With no `stateKey` this is the inspect snapshot: every ' +
+      'Read the running preview — the cheap first look, before preview/eval. With no ' +
+      '`stateKey` this is the inspect snapshot: every ' +
       'declared protocol state value, the text the DOM is actually rendering, the console ' +
       'tail, and `changed` — a diff against the previous snapshot (absent on the first call ' +
       'after a preview opens, which means unknown, not unchanged). Start here when a bug is ' +
