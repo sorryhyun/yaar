@@ -54,6 +54,30 @@ export function pickFields(
   return { value: picked, missing, available: Object.keys(obj) };
 }
 
+/**
+ * The inner wait a command was asked for. `waitMs` wins over the older `timeoutMs` param:
+ * a direct verb call to a command URI spends the payload's `timeoutMs` as the host wait, so
+ * only `waitMs` can set the inner one apart from it.
+ */
+export function innerWaitMs(p: { waitMs?: unknown; timeoutMs?: unknown }): number | undefined {
+  if (typeof p.waitMs === 'number') return p.waitMs;
+  return typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
+}
+
+/** A serialized state value as the value it was; text that is not JSON stays text. */
+export function decodeStateText(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/** Entries of a key → size map, largest first, as an object that keeps the order. */
+export function largestFirst(sizes: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(sizes).sort((a, b) => b[1] - a[1]));
+}
+
 export interface NumericRange {
   min: number;
   max: number;

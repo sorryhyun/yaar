@@ -16,6 +16,7 @@ export * from './build';
 export * from './format';
 export * from './git';
 export * from './preview';
+export * from './storage-watch';
 export * from './script';
 export * from './tests';
 export * from './manifest';

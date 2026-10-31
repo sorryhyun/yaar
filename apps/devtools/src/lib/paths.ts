@@ -78,6 +78,11 @@ export function isGeneratedPath(path: string): boolean {
   return GENERATED_FILE.test(segments[segments.length - 1] ?? '');
 }
 
+/** Whether a deploy carries this path: `src/`, `agent/` and the files at the project root. */
+export function isShippedPath(path: string): boolean {
+  return !path.includes('/') || path.startsWith('src/') || path.startsWith('agent/');
+}
+
 // Extensions whose bytes are not meaningfully countable as text — skip metadata
 // rather than report the size of a base64/garbled decode. `.gltf` is deliberately
 // absent for the same reason `.svg` is: it is a JSON document worth reading.

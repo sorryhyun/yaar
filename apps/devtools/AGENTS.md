@@ -9,7 +9,11 @@ Run `test/run` on the project before every deploy. The pure-logic suites in
 stands, not the installed Dev Tools.
 
 Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file.
-Behaviour that needs a running app is `preview/script` (`agent/docs/regression-testing.md`).
+Behaviour that needs a running app is `preview/script` (`agent/docs/regression-testing.md`):
+`src/test/regression.json` drives this app in its own preview, whose projects live in preview
+storage. It must stay free of literal `shared/` paths, and **must never run `preview/open` inside
+that preview**: `reclaimOrphanedPreviewStorage` would judge the real `preview--*` trees against
+the preview's own project list, and delete them.
 
 ## Deploying devtools itself
 
@@ -59,6 +63,10 @@ cycle through `services/preview.ts`. If a module seems to need one, it is in the
 are appended verbatim to the prompt of every agent driving this app, and command descriptions are
 served whole by `describe({ group })`. Never restate one in `agent/prompt.md`.
 
+**`waitMs` is the inner wait, `timeoutMs` the host wait.** `innerWaitMs` in `lib/preview-shape.ts`
+is the one reading of the two; the param `timeoutMs` stays as an alias for callers that already
+pass it. The rule itself lives in `agent/docs/timeouts.md`, and a description points there.
+
 **Every command key is `group/name`**, the whole key being its name (`files/edit`; `edit` alone is
 unknown). The prompt lists only each group's command names, so an ungrouped command would put its
 full description back into every prompt. A group must not share a name with an ungrouped command.
@@ -94,6 +102,14 @@ third value and keep it surfacing as `"unchecked"`; the `compile-status` suite p
 The `preview/console` command and `permissions` state key return a structured reason on failure, never an empty result: "no
 preview open", "preview unreachable" and "the app logged nothing" must not collapse into the same
 empty array. Keep this in any new state getter that can fail.
+
+## A preview is isolated only through `self`
+
+`self` paths land in `preview--{projectId}` storage; a literal `shared/{name}/` path reaches the
+real commons, and the server keeps no record of such a write. `services/storage-watch.ts` lists
+the directories named by literal paths (`findRealStoragePaths` in `lib/storage-reach.ts`) and
+`shared/{appId}` before and after a `preview/script` run and reports the difference. It sees
+only those directories, so a runtime-built path escapes it. The real fix is a server redirect.
 
 ## Every mutation is recorded
 

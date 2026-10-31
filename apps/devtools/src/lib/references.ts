@@ -62,6 +62,60 @@ export function otherReferences<R extends Location & { isDefinition?: true }>(
   return { references, total, files, definition, declaredHere };
 }
 
+export interface CallerHit {
+  caller: string;
+  kind: string;
+  file: string;
+  line: number;
+  calls: { line: number; column: number }[];
+}
+
+/** How a caller reads when the call hierarchy could only say which module it is in. */
+export const TOP_LEVEL_CALLER = '(top level)';
+
+/**
+ * Name the callers the call hierarchy files under the module. An arrow function in an object
+ * literal is anonymous to it, so a command handler reads as `(top level)` at line 1, while the
+ * same call's reference knows its `enclosing` property path (`fileCommands.files/grep.run`).
+ * Each call moves to that name; a call really at module scope, or one whose reference a
+ * `maxResults` cap clipped, stays where it was.
+ */
+export function attributeCallers(
+  callers: CallerHit[],
+  references: { file: string; line: number; column: number; enclosing: string | null }[],
+): CallerHit[] {
+  const out: CallerHit[] = [];
+  for (const hit of callers) {
+    if (hit.caller !== TOP_LEVEL_CALLER) {
+      out.push(hit);
+      continue;
+    }
+    const named = new Map<string, CallerHit>();
+    const unnamed: CallerHit['calls'] = [];
+    for (const call of hit.calls) {
+      const onLine = references.filter((r) => r.file === hit.file && r.line === call.line);
+      const ref = onLine.find((r) => r.column === call.column) ?? onLine[0];
+      if (!ref?.enclosing) {
+        unnamed.push(call);
+        continue;
+      }
+      const row = named.get(ref.enclosing);
+      if (row) row.calls.push(call);
+      else
+        named.set(ref.enclosing, {
+          caller: ref.enclosing,
+          kind: 'property',
+          file: hit.file,
+          line: call.line,
+          calls: [call],
+        });
+    }
+    out.push(...named.values());
+    if (unnamed.length > 0) out.push({ ...hit, calls: unnamed });
+  }
+  return out;
+}
+
 export function otherReferencesSummary(total: number, files: number, declaredHere = false): string {
   if (total === 0) return declaredHere ? 'No references' : 'No other references';
   const where = `in ${files} file${files === 1 ? '' : 's'}`;

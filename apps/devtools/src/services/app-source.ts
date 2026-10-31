@@ -1,16 +1,24 @@
 export {};
-import { AppCommandError, invoke } from '@bundled/yaar';
-import { setStatusText } from '../core';
+import { AppCommandError, errMsg, invoke } from '@bundled/yaar';
+import { requireProject, setStatusText } from '../core';
 import {
   base64ByteLength,
   countLines,
+  diffTrees,
+  isGeneratedPath,
+  isShippedPath,
+  manifestString,
+  projectPath,
   protocolMap,
   searchSources,
   sliceLines,
+  treePatch,
   type ProtocolSources,
   type SourceFile,
+  type TreeDiffEntry,
 } from '../lib';
-import { writeBinaryCopy, writeFile } from './files';
+import { readFileText, readProjectBytes, writeBinaryCopy, writeFile } from './files';
+import { listAllFiles } from './fs-walk';
 
 // Read an installed app's source without making it a project. `project/cloneApp` is for editing:
 // it writes a sandbox, opens it, and replaces the project in front — a heavy way to read
@@ -103,6 +111,77 @@ export async function copyFromApp(
   await writeFile(destination, file.content, { label: `copy from ${from}` });
   setStatusText(`Copied ${from} → ${destination}`);
   return { from, bytes: new TextEncoder().encode(file.content).length };
+}
+
+/** How much patch text one `project/diffInstalled` answers with. */
+const INSTALLED_DIFF_CHARS = 40_000;
+
+export interface InstalledDiff {
+  appId: string;
+  changed: boolean;
+  files: string[];
+  stat: TreeDiffEntry[];
+  totals: { files: number; added: number; removed: number };
+  /** Project files a deploy does not carry, left out of the comparison. */
+  unshipped?: string[];
+  diff?: string;
+  /** Changed paths whose patches did not fit; ask for them with `paths`. */
+  omitted?: string[];
+}
+
+/**
+ * The active project against the installed copy of its app, by exact bytes. Fetched fresh
+ * rather than from the read cache, since a comparison right after a deploy must see that
+ * deploy. Only what a deploy carries is compared, so a scratch directory in the project does
+ * not read as a change to the app.
+ */
+export async function diffInstalled(opts: {
+  appId?: string;
+  statOnly?: boolean;
+  paths?: string[];
+}): Promise<InstalledDiff> {
+  const proj = requireProject(AppCommandError);
+  const appId = opts.appId ?? manifestString(await readFileText('app.json'), 'appId');
+  if (!appId) {
+    throw new AppCommandError("This project's app.json names no appId: pass `appId`.");
+  }
+  checkAppId(appId);
+  let payload: ClonePayload;
+  try {
+    payload = await fetchClonePayload(appId);
+  } catch (err) {
+    throw new AppCommandError(`Cannot read installed app "${appId}": ${errMsg(err)}`);
+  }
+  const base = projectPath(proj.id);
+  const listed = (await listAllFiles(base, base))
+    .filter((e) => !e.isDirectory && !isGeneratedPath(e.path))
+    .map((e) => e.path);
+  const shipped = listed.filter(isShippedPath);
+  const unshipped = listed.filter((p) => !isShippedPath(p));
+  const wanted = opts.paths ? new Set(opts.paths) : null;
+  const inScope = (path: string) => !wanted || wanted.has(path);
+  const current = await Promise.all(
+    shipped.filter(inScope).map(async (path) => ({ path, ...(await readProjectBytes(path)) })),
+  );
+  const installed = (payload?.files ?? []).filter(
+    (f) => !isGeneratedPath(f.path) && inScope(f.path),
+  );
+  const stat = diffTrees(current, installed);
+  const result: InstalledDiff = {
+    appId,
+    changed: stat.length > 0,
+    files: stat.map((s) => s.file),
+    stat,
+    totals: {
+      files: stat.length,
+      added: stat.reduce((n, s) => n + s.added, 0),
+      removed: stat.reduce((n, s) => n + s.removed, 0),
+    },
+    ...(unshipped.length > 0 ? { unshipped } : {}),
+  };
+  if (opts.statOnly || stat.length === 0) return result;
+  const { diff, omitted } = treePatch(stat, current, installed, INSTALLED_DIFF_CHARS);
+  return { ...result, diff, ...(omitted.length > 0 ? { omitted } : {}) };
 }
 
 export async function readAppSource(q: AppSourceQuery): Promise<Record<string, unknown>> {

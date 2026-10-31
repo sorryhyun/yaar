@@ -35,7 +35,7 @@ export const buildCommands = {
       'syntax, a failed plugin) and `typecheck` is the only place type errors appear. ' +
       '`warnings` did not fail the build (an unknown y-* class, add*/delete* commands with no ' +
       '`replay`); `previewErrors` ({ count, first }) is what the preview logged while ' +
-      'mounting. Slow: pass timeoutMs (e.g. 60000).',
+      'mounting. Slow: raise the host wait to ~60000 (the timeouts topic).',
     params: {
       type: 'object',
       properties: {
@@ -53,8 +53,7 @@ export const buildCommands = {
             'when the preview holds expensive state (a loaded fixture, a scrape, a ' +
             'multi-step form) that a cold start would cost you more than the stale build ' +
             'costs — the window then keeps running the previous build, and every preview ' +
-            'read says so until you run `preview/open`. Skips the manifest-drift check, which ' +
-            'needs a preview on the current build.',
+            'read says so until you run `preview/open`.',
         },
       },
     },
@@ -204,8 +203,9 @@ export const buildCommands = {
     description:
       'List commands and state keys declared in source but not registered by the running ' +
       'preview, and vice versa (drift: usually a registration that threw, or a stale ' +
-      'preview). build/compile runs the same check; this is the full report. Needs a compile ' +
-      'and an open preview.',
+      'preview). build/compile runs the same check when it refreshes a preview and reports ' +
+      '`manifestDrift` as a warning, never a failure; this is the full report. Needs a ' +
+      'compile and an open preview.',
     params: { type: 'object', properties: {} },
     run: async () => {
       const stat = await getStaticManifest();
@@ -317,7 +317,11 @@ export const buildCommands = {
       'cross-origin `fetch` count as yaar://http; runtime-built URIs are not read). ' +
       '`permissions.problems`: app.json entries not honoured as written. `storagePolling`: a ' +
       'timer whose callback reads storage — subscribe instead (the multi-window-sync topic). ' +
-      'Lexical and heuristic: read each finding before acting on it.',
+      '`previewEscapes`: literal paths into real storage, which a preview writes for real ' +
+      '(the preview-debugging topic). `protocol`: chars per group and the heaviest entries. ' +
+      '`docMentions`: commands, state keys and call params the Markdown names that the ' +
+      'protocol does not declare. The last two read the last compile. Lexical and ' +
+      'heuristic: read each finding before acting on it.',
     params: { type: 'object', properties: {} },
     replay: 'never',
     run: async () => await checkProject(),

@@ -67,6 +67,20 @@ import {
   planAssetImport,
   appSourceRef,
   base64ByteLength,
+  formatGrepHits,
+  attributeCallers,
+  innerWaitMs,
+  decodeStateText,
+  largestFirst,
+  isShippedPath,
+  diffTrees,
+  treePatch,
+  findRealStoragePaths,
+  storageDirsToWatch,
+  diffStorageListings,
+  protocolSizeReport,
+  checkDocMentions,
+  type ProtocolDoc,
 } from '../lib';
 
 // Checks over src/lib — the pure layer, which is exactly the part that can be
@@ -1465,6 +1479,321 @@ const assetImport = suite('asset-import', {
   },
 });
 
+const grepPaging = suite('grep-paging', {
+  'searchSources pages past offset and still counts every hit'() {
+    const files = [{ path: 'a.ts', content: 'hit\nmiss\nhit\nhit\nhit' }];
+    const page = searchSources(files, 'hit', undefined, 2, { offset: 1 });
+    eq(page.total, 4);
+    eq(
+      page.matches.map((m) => m.line),
+      [3, 4],
+    );
+  },
+
+  'searchSources returns context only when asked, clamped to the file'() {
+    const files = [{ path: 'a.ts', content: 'one\nhit\nthree' }];
+    const plain = searchSources(files, 'hit');
+    eq('before' in plain.matches[0], false);
+    const wide = searchSources(files, 'hit', undefined, 10, { context: 5 });
+    eq(wide.matches[0].before, ['one']);
+    eq(wide.matches[0].after, ['three']);
+  },
+
+  'formatGrepHits marks context, merges overlaps and separates runs'() {
+    const text = formatGrepHits([
+      { file: 'a', line: 2, content: 'h2', before: ['c1'], after: ['h3'] },
+      { file: 'a', line: 3, content: 'h3', before: ['h2'], after: ['c4'] },
+      { file: 'a', line: 9, content: 'h9', before: ['c8'], after: [] },
+    ]);
+    eq(text, '1-│c1\n2│h2\n3│h3\n4-│c4\n--\n8-│c8\n9│h9');
+  },
+
+  'formatGrepHits adds no separator without context'() {
+    eq(
+      formatGrepHits([
+        { file: 'a', line: 2, content: 'x' },
+        { file: 'a', line: 9, content: 'y' },
+      ]),
+      '2│x\n9│y',
+    );
+  },
+});
+
+const callers = suite('callers', {
+  'a top-level caller takes the enclosing property of each call'() {
+    const out = attributeCallers(
+      [
+        {
+          caller: '(top level)',
+          kind: 'module',
+          file: 'src/p.ts',
+          line: 1,
+          calls: [
+            { line: 10, column: 5 },
+            { line: 20, column: 5 },
+            { line: 21, column: 5 },
+            { line: 30, column: 1 },
+          ],
+        },
+      ],
+      [
+        { file: 'src/p.ts', line: 10, column: 5, enclosing: 'cmds.a.run' },
+        { file: 'src/p.ts', line: 20, column: 5, enclosing: 'cmds.b.run' },
+        { file: 'src/p.ts', line: 21, column: 5, enclosing: 'cmds.b.run' },
+        { file: 'src/p.ts', line: 30, column: 1, enclosing: null },
+      ],
+    );
+    eq(
+      out.map((c) => [c.caller, c.line, c.calls.length]),
+      [
+        ['cmds.a.run', 10, 1],
+        ['cmds.b.run', 20, 2],
+        ['(top level)', 1, 1],
+      ],
+    );
+  },
+
+  'a named caller is left alone, and a clipped reference keeps its call'() {
+    const named = { caller: 'fn', kind: 'function', file: 'a', line: 3, calls: [] };
+    const top = {
+      caller: '(top level)',
+      kind: 'module',
+      file: 'a',
+      line: 1,
+      calls: [{ line: 9, column: 1 }],
+    };
+    eq(attributeCallers([named, top], []), [named, top]);
+  },
+});
+
+const previewDecoding = suite('preview-decoding', {
+  'waitMs wins over timeoutMs, and neither is undefined'() {
+    eq(innerWaitMs({ waitMs: 5, timeoutMs: 9 }), 5);
+    eq(innerWaitMs({ timeoutMs: 9 }), 9);
+    eq(innerWaitMs({}), undefined);
+    eq(innerWaitMs({ waitMs: '5' }), undefined);
+  },
+
+  'decodeStateText gives the value back, and text stays text'() {
+    eq(decodeStateText('{\n  "a": 1\n}'), { a: 1 });
+    eq(decodeStateText('12'), 12);
+    eq(decodeStateText('error: nope'), 'error: nope');
+  },
+
+  'largestFirst keeps its order through serialization'() {
+    eq(Object.keys(largestFirst({ a: 1, b: 9, c: 5 })), ['b', 'c', 'a']);
+  },
+});
+
+const treeDiff = suite('tree-diff', {
+  'isShippedPath is src/, agent/ and the root'() {
+    eq(isShippedPath('app.json'), true);
+    eq(isShippedPath('src/main.ts'), true);
+    eq(isShippedPath('agent/hint.md'), true);
+    eq(isShippedPath('dbg/probes.json'), false);
+  },
+
+  'diffTrees reports added, removed and modified, and skips what is equal'() {
+    const entries = diffTrees(
+      [
+        { path: 'same.ts', content: 'a\n' },
+        { path: 'new.ts', content: 'x\ny\n' },
+        { path: 'mod.ts', content: 'one\ntwo\n' },
+      ],
+      [
+        { path: 'same.ts', content: 'a\n' },
+        { path: 'gone.ts', content: 'z\n' },
+        { path: 'mod.ts', content: 'one\n' },
+      ],
+    );
+    eq(entries, [
+      { file: 'gone.ts', status: 'removed', added: 0, removed: 1 },
+      { file: 'mod.ts', status: 'modified', added: 1, removed: 0 },
+      { file: 'new.ts', status: 'added', added: 2, removed: 0 },
+    ]);
+  },
+
+  'a binary change is counted as bytes, with no line counts'() {
+    eq(
+      diffTrees(
+        [{ path: 'a.png', content: 'AAAA', encoding: 'base64' }],
+        [{ path: 'a.png', content: 'BBBB', encoding: 'base64' }],
+      ),
+      [{ file: 'a.png', status: 'modified', added: 0, removed: 0, binary: true }],
+    );
+  },
+
+  'treePatch names the patches that did not fit'() {
+    const current = [
+      { path: 'a.ts', content: 'new\n' },
+      { path: 'b.ts', content: 'new\n'.repeat(500) },
+    ];
+    const base = [
+      { path: 'a.ts', content: 'old\n' },
+      { path: 'b.ts', content: 'old\n' },
+    ];
+    const { diff, omitted } = treePatch(diffTrees(current, base), current, base, 400);
+    ok(diff.includes('+new'), 'the small patch fits');
+    eq(omitted, ['b.ts']);
+  },
+});
+
+const storageReach = suite('storage-reach', {
+  'finds literal commons paths in code and scripts, not self or comments'() {
+    const found = findRealStoragePaths([
+      {
+        path: 'src/a.ts',
+        text: [
+          '// shared/comment/x.json',
+          "const a = 'shared/self/out.wav';",
+          "const b = 'shared/music-maker/out.flac';",
+          'const c = `shared/${APP_ID}/out.flac`;',
+        ].join('\n'),
+      },
+      { path: 'src/test/r.json', text: '{ "path": "yaar://storage/shared/other/x.mxl" }' },
+    ]);
+    eq(
+      found.map((f) => [f.file, f.line, f.path]),
+      [
+        ['src/a.ts', 3, 'shared/music-maker/out.flac'],
+        ['src/a.ts', 4, 'shared/${APP_ID}/out.flac'],
+        ['src/test/r.json', 1, 'shared/other/x.mxl'],
+      ],
+    );
+  },
+
+  'a bare shared prefix and a path inside another word are not reach'() {
+    eq(
+      findRealStoragePaths([
+        {
+          path: 'src/a.ts',
+          text: "const a = 'yaar://storage/shared/'; const b = 'unshared/x'; const c = 'a/shared/y';",
+        },
+      ]),
+      [],
+    );
+  },
+
+  'placeholders, runtime paths and app trees are not reach'() {
+    eq(
+      findRealStoragePaths([
+        {
+          path: 'src/a.ts',
+          text: [
+            "const a = 'a yaar://storage/... path';",
+            'const b = `yaar://storage/${sourcePath}`;',
+            'const c = `yaar://storage/apps/devtools/projects/${id}/x`;',
+            "const d = 'yaar://storage/shared/…;';",
+            "const e = 'see shared/name/file.txt.';",
+          ].join('\n'),
+        },
+      ]).map((f) => f.path),
+      ['shared/name/file.txt'],
+    );
+  },
+
+  'watched directories come from the paths, the app id standing in for an interpolation'() {
+    eq(
+      storageDirsToWatch(
+        [
+          { file: 'a', line: 1, path: 'shared/${APP_ID}/x.flac' },
+          { file: 'a', line: 2, path: 'shared/other/y/z.json' },
+          { file: 'a', line: 3, path: 'shared/x.wav' },
+          { file: 'a', line: 4, path: 'exports/a.txt' },
+        ],
+        'music-maker',
+      ),
+      ['shared/music-maker', 'shared/other', 'exports'],
+    );
+    eq(storageDirsToWatch([], null), []);
+  },
+
+  'diffStorageListings names what was created, changed and deleted'() {
+    eq(
+      diffStorageListings(
+        new Map([
+          ['s/a', '1|t1'],
+          ['s/b', '1|t1'],
+          ['s/c', '1|t1'],
+        ]),
+        new Map([
+          ['s/a', '1|t1'],
+          ['s/b', '2|t2'],
+          ['s/d', '1|t3'],
+        ]),
+      ),
+      [
+        { path: 's/b', change: 'modified' },
+        { path: 's/c', change: 'deleted' },
+        { path: 's/d', change: 'created' },
+      ],
+    );
+  },
+});
+
+const protocolReport = suite('protocol-report', {
+  'sizes count descriptions and params, by group and largest first'() {
+    const protocol: ProtocolDoc = {
+      commands: {
+        'a/one': { description: 'xx', params: { p: 1 } },
+        'a/two': { description: 'xxxx' },
+        'b/big': { description: 'x'.repeat(50) },
+      },
+      state: { s: { description: 'yyy' } },
+    };
+    const report = protocolSizeReport(protocol);
+    eq(report.commands, 3);
+    eq(report.state, 1);
+    eq(report.descriptionChars, 59);
+    eq(report.groups?.[0], { group: 'b', commands: 1, chars: 50 });
+    eq(report.largest[0].name, 'b/big');
+  },
+
+  'a flat protocol has no groups'() {
+    eq(protocolSizeReport({ commands: { save: {} } }).groups, undefined);
+  },
+
+  'mentions of what the protocol lacks are found, by every recognised form'() {
+    const protocol: ProtocolDoc = {
+      commands: {
+        'files/read': {
+          params: { type: 'object', properties: { path: {}, section: {} } },
+        },
+        'files/edit': {},
+      },
+      state: { project: {} },
+    };
+    const text = [
+      'Use `files/read({ path, section })` then `files/rename`.',
+      'Not a command: src/files/gone.ts or files/edit.ts, and files/edit is fine.',
+      'files/read({ path, lines: "1-2" })',
+      'command({ command: "files/read", params: { nope: 1 } })',
+      'command("saveDoc")',
+      'command({ command: "other", appId: "lab" })',
+      'query("missing") and query("project") and query("__console")',
+    ].join('\n');
+    eq(
+      checkDocMentions([{ path: 'd.md', text }], protocol).map((m) => [m.line, m.mention]),
+      [
+        [1, 'files/rename'],
+        [3, 'files/read lines'],
+        [4, 'files/read nope'],
+        [5, 'saveDoc'],
+        [7, 'missing'],
+      ],
+    );
+  },
+
+  'a flat protocol checks calls without any group pattern'() {
+    eq(
+      checkDocMentions([{ path: 'd.md', text: 'see build/x and command("play")' }], {
+        commands: { play: {} },
+      }),
+      [],
+    );
+  },
+});
+
 export const libSuites: Suite[] = [
   paths,
   projectPaths,
@@ -1487,4 +1816,10 @@ export const libSuites: Suite[] = [
   permissionUses,
   storagePolling,
   assetImport,
+  grepPaging,
+  callers,
+  previewDecoding,
+  treeDiff,
+  storageReach,
+  protocolReport,
 ];

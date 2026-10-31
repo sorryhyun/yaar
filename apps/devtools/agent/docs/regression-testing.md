@@ -15,9 +15,10 @@ that is the pre-change build: capture first, then touch the code.
 
 ## Workflow
 
-1. On the known-good build: `build/compile`, `preview/open`, write the script, then `preview/script` —
-   with no baseline on disk, this run captures one.
-2. Refactor. `build/compile`, `preview/open` (a fresh mount — the runner refuses a stale preview).
+1. On the known-good build: `build/compile`, `preview/open` if no preview is up, write the script,
+   then `preview/script` — with no baseline on disk, this run captures one.
+2. Refactor. `build/compile`, which remounts the open preview (the runner refuses a stale one, so
+   a compile with `refreshPreview: false` needs `preview/open` as well).
 3. `preview/script` again — `pass: true`, or `failures` naming each row with expected/actual.
 4. A failing group re-runs alone: `preview/script` with `groups: ["R7"]`.
 5. After an **intended** behavior change, `update: true` rewrites the baseline and reports
@@ -28,13 +29,18 @@ that is the pre-change build: capture first, then touch the code.
    older build, or predates an edit, or when `src/test/regression.json` exists and was never
    run. It warns and ships; re-run and redeploy if the warning is real.
 
-A `preview/script` call runs every step sequentially, so raise its `timeoutMs` well past the
-sum of its steps (a 40-step script easily wants 120000+).
+A `preview/script` call runs every step sequentially, so its host wait must pass the sum of its
+steps (the `timeouts` topic).
+
+**A preview does not isolate a literal `shared/{name}/` path**, so a suite exercising an export
+writes real files. Read `build/check`'s `previewEscapes` before a run, prefer `shared/self/` paths
+in a script, and read `realStorageWrites` in the result (the `preview-debugging` topic).
 
 ## Script format
 
-A JSON file in the project, `src/test/regression.json` by default. Keep it under `src/` —
-a top-level `test/` is silently dropped by deploy (`app-structure` topic).
+A JSON file in the project, `src/test/regression.json` by default, under `src/` so that it ships
+(the `app-structure` topic). Scripts in this file carry `steps`, a list of step objects; the
+`steps` param of `preview/script` is a different thing, a list of row labels to rewrite.
 
 ```json
 {

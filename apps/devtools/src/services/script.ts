@@ -2,8 +2,10 @@ export {};
 import { createSignal } from '@bundled/solid-js';
 import { AppCommandError, errMsg, invoke } from '@bundled/yaar';
 import { activeProject, buildSerial, fileChanges, previewWindowId } from '../core';
+import type { StorageChange } from '../lib';
 import { previewStaleNote, previewWindowIsOpen } from './preview';
 import { readFileText, writeFile } from './files';
+import { storageReport, watchRealStorage } from './storage-watch';
 
 // Scripted regression runs against the preview: execute a recorded sequence of
 // protocol commands, project each result down to the fields the script names, and
@@ -356,6 +358,10 @@ export interface ScriptRunResult {
   /** Rows a `steps` update rewrote. */
   updated?: string[];
   note?: string;
+  /** Real files this run created, changed or deleted outside preview storage. */
+  realStorageWrites?: StorageChange[];
+  /** Present when real storage changed, or the source names literal real-storage paths. */
+  storageWarning?: string;
 }
 
 const LABEL_WRITE = 'preview/script baseline';
@@ -403,7 +409,21 @@ export async function regressionWarning(): Promise<string | null> {
 }
 
 export async function runPreviewScript(opts: ScriptRunOptions): Promise<ScriptRunResult> {
-  const result = await runScript(opts);
+  const watch = await watchRealStorage(opts.path ?? DEFAULT_SCRIPT_PATH);
+  let result: ScriptRunResult;
+  try {
+    result = await runScript(opts);
+  } catch (err) {
+    // A run a setup step aborted may already have written, and this error is all that is read.
+    const report = watch ? storageReport(watch, await watch.report()) : null;
+    if (!report?.realStorageWrites) throw err;
+    throw new AppCommandError(
+      `${errMsg(err)}\n${report.storageWarning} Changed: ` +
+        report.realStorageWrites.map((c) => `${c.change} ${c.path}`).join(', '),
+    );
+  }
+  const report = watch ? storageReport(watch, await watch.report()) : null;
+  if (report) result = { ...result, ...report };
   const proj = activeProject();
   if (proj) {
     const failed = result.failures?.length ?? 0;

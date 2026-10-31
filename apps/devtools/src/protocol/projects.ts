@@ -1,6 +1,13 @@
 import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import { activeProject, files } from '../core';
-import { createProject, openProject, deleteProject, cloneApp, readAppSource } from '../services';
+import {
+  createProject,
+  openProject,
+  deleteProject,
+  cloneApp,
+  diffInstalled,
+  readAppSource,
+} from '../services';
 import { markdownOutline, protocolMap, summarizeFiles } from '../lib';
 
 export const projectCommands = {
@@ -135,18 +142,45 @@ export const projectCommands = {
       };
     },
   }),
+  'project/diffInstalled': defineAppCommand({
+    description:
+      'Compare the active project with the installed copy of its app, by exact bytes, over ' +
+      'what a deploy carries (`unshipped` lists the other project files). Returns { appId, ' +
+      'changed, files, stat: [{ file, status, added, removed, binary? }], totals }, plus ' +
+      '`diff` up to ~40KB, with `omitted` naming the paths that did not fit: start with ' +
+      'statOnly, then ask for `paths`. Throws when no app is installed under that id.',
+    params: {
+      type: 'object',
+      properties: {
+        appId: {
+          type: 'string',
+          description: "Installed app to compare against. Default: app.json's `appId`.",
+        },
+        statOnly: { type: 'boolean', description: 'Leave `diff` out.' },
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Only these project-relative paths, as `files` or `omitted` named them.',
+        },
+      },
+    },
+    replay: 'never',
+    run: async (p) =>
+      await diffInstalled({
+        ...(p.appId !== undefined ? { appId: String(p.appId) } : {}),
+        ...(p.statOnly === true ? { statOnly: true } : {}),
+        ...(Array.isArray(p.paths) ? { paths: p.paths.map((x) => String(x)) } : {}),
+      }),
+  }),
   'project/readAppSource': defineAppCommand({
     description:
       "Read an installed app's source without cloning it: no project is created and the " +
-      'one in front stays in front. For looking at how another app does something; clone ' +
-      'only to change it. Three forms, by which params are given: no `path`/`pattern` — the ' +
-      'file list { path, lines } plus `protocol` (where each command and state key is ' +
-      "declared, by file and line); `path` — that file's text, optionally a " +
-      '`startLine`/`endLine` slice; `pattern` — regex hits { file, line, content } across ' +
-      'its text files, narrowed by `glob`, capped at 200 (`total` counts the rest). A ' +
-      'binary file (an image, a font) is listed as { path, binary: true } and cannot be ' +
-      'read as text — files/copy from "yaar://apps/{appId}/{path}" copies it into the ' +
-      'project byte for byte. Reads the installed copy, cached for a minute.',
+      'active one stays. No `path`/`pattern`: the file list plus `protocol` (the file and ' +
+      "line of each command and state key). `path`: that file's text, optionally a " +
+      '`startLine`/`endLine` slice. `pattern`: regex hits { file, line, content }, narrowed ' +
+      'by `glob`, capped at 200 (`total` counts the rest). A binary file is listed as ' +
+      '{ path, binary: true }; files/copy from "yaar://apps/{appId}/{path}" copies it. Reads ' +
+      'the installed copy, cached for a minute.',
     params: {
       type: 'object',
       properties: {

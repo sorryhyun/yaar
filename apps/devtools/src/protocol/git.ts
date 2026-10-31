@@ -17,8 +17,9 @@ export const gitCommands = {
   }),
   'git/diff': defineAppCommand({
     description:
-      'Diff a deployed app against a commit. against="snapshot" (default): app\'s own deploy ' +
-      'history. against="repo": user\'s git repo (bundled apps only). Start with ' +
+      'Diff a deployed app against a commit; a sandbox project is project/diffInstalled. ' +
+      'against="snapshot" (default): app\'s own deploy history. against="repo": user\'s git ' +
+      'repo (bundled apps only). Start with ' +
       'statOnly: true — a whole-app diff runs to tens of kilobytes, and the per-file line ' +
       'counts it returns instead tell you which paths to then request in full.',
     params: {

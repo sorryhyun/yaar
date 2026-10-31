@@ -70,5 +70,4 @@ throws "enable hardware acceleration" before any weights move.
 
 ### Driving one from devtools
 
-If you must wait inside a single call, raise `timeoutMs` to the job's real budget
-(dc-comics' prompt asks for 600000) — or better, poll the state key between turns.
+Poll the state key between turns. To wait inside a single call instead, see the `timeouts` topic.

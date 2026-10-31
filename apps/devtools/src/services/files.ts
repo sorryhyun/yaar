@@ -519,6 +519,21 @@ async function readCopySource(projectId: string, path: string): Promise<Blob> {
 }
 
 /**
+ * A project file exactly as stored: its text when the bytes are valid UTF-8, else base64.
+ * For a comparison, where `readFileText`'s re-serialized JSON would differ from the disk.
+ */
+export async function readProjectBytes(
+  path: string,
+): Promise<{ content: string; encoding?: 'base64' }> {
+  const proj = requireProject();
+  const blob = await readCopySource(proj.id, path);
+  const text = decodeCopyText(await blob.arrayBuffer());
+  if (text !== null) return { content: text };
+  const dataUrl = await blobToDataUrl(blob);
+  return { content: dataUrl.slice(dataUrl.indexOf(',') + 1), encoding: 'base64' };
+}
+
+/**
  * The source's text when its bytes are valid UTF-8, or null when they are not.
  *
  * `isBinaryPath` alone decided this once, and every binary extension missing from its

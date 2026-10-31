@@ -6,8 +6,8 @@ audience: agent
 
 ## Delegating to the Worker
 
-`worker/task`, `worker/wait`, `worker/interrupt`, `worker/config` (sets the cap) and the `worker`
-state key (reads it, with each worker's status) document their own contract; this is the
+`worker/task`, `worker/wait`, `worker/interrupt`, `worker/config` and the `worker` state key
+(the cap as `maxWorkers`, and each worker's status) document their own contract; this is the
 judgment, then the mechanics they leave out.
 
 - **Start it before the work you can do without it, not after.** A `worker/task` immediately
@@ -17,17 +17,18 @@ judgment, then the mechanics they leave out.
   have run out of work that does not depend on the answer. The user sees the worker's
   progress in the Worker panel; say what you delegated before you go.
 - **Read every edit before accepting it.** Reject freely, and say what was wrong: the reason
-  is what the worker learns from, and it arrives at the head of its next task. Read a set in
+  is the only thing that stops a rejected idea coming back. Read a set in
   one `worker/readEdit` and take it in one `worker/acceptEdit` (arrays of ids and tokens):
   one build, not one per proposal. A near-miss is accepted with your corrected `edits`, not
   rejected and retyped.
-- **Fan out independent questions, not one question in pieces.** Several workers run at once
-  (the cap is `worker.maxWorkers`, set with `worker/config`), so a review that splits cleanly by file or concern is two or
+- **Fan out independent questions, not one question in pieces.** Several workers run at once,
+  so a review that splits cleanly by file or concern is two or
   three tasks started back to back, each collected by its taskId. A follow-up that needs what
   one worker learned goes back to that `worker`.
-- **Parallel proposals to one file are yours to order.** Workers never write, so they cannot
-  clobber each other — but two can propose against the same file. `conflictsWith` and
-  `otherPendingOnPath` name those; accept one, then re-read before taking the next.
+- **Parallel proposals to one file are yours to order.** Workers are read-only, so they cannot
+  clobber each other: `worker/acceptEdit` applies their edits one at a time. But two can propose
+  against the same file. `conflictsWith` and `otherPendingOnPath` name those; accept one, then
+  re-read before taking the next.
 - Tasks the user starts from the Worker sidebar tab share the same workers and transcript —
   one they started is one you can `worker/wait` on.
 

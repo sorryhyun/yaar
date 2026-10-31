@@ -7,6 +7,7 @@ import {
   openPreview,
   previewEvaluate,
   previewFaultsNote,
+  previewStateSizes,
   setPreviewFaults,
   previewStaleNote,
   queryPreviewState,
@@ -16,6 +17,7 @@ import {
   runPreviewScript,
   samplePreviewState,
 } from '../services';
+import { innerWaitMs } from '../lib';
 import { imageBlocks, imagesFromReadResult, type ReadBlock } from './read-blocks';
 
 const CAPTURE_TOO_LARGE = 'ask the command for a smaller capture';
@@ -135,13 +137,12 @@ export const previewCommands = {
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
       'TS syntax is stripped; a top-level `await` runs in an async wrapper, so its `const`s ' +
-      'stay local to that call. Module scope is not on the global: what the app declares in `defineApp({ debug })` is ' +
-      'reachable as `__debug` (preview only, never deployed). ' +
-      'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +
-      "that awaits or sleeps for more than 5s needs `timeoutMs` — and this command's own " +
-      'timeoutMs raised above it, or that one expires first. With `changed: true` the ' +
-      'return becomes { result, changed, dom? } — what the expression moved, diffed against ' +
-      'a snapshot taken just before it ran (preview/query already diffs state and DOM, cheaper).',
+      'stay local to that call. Module scope is reachable only as `__debug` (the ' +
+      'preview-debugging topic). Result is JSON-serialized and capped at 16KB. Preview ' +
+      'windows only. Slower than 5s needs `waitMs` (the timeouts topic). With ' +
+      '`changed: true` the return becomes { result, changed, dom? } — what the expression ' +
+      'moved, diffed against a snapshot taken just before it ran (preview/query already ' +
+      'diffs state and DOM, cheaper).',
     params: {
       type: 'object',
       properties: {
@@ -151,11 +152,15 @@ export const previewCommands = {
             'JS expression, e.g. "document.querySelectorAll(\'.row\').length" or ' +
             '"getComputedStyle(document.querySelector(\'#app\')).height"',
         },
-        timeoutMs: {
+        waitMs: {
           type: 'number',
           description:
-            'How long to wait for the expression to settle (default 5s, max 180s). Raise it ' +
-            'for an expression that awaits a promise, sleeps, or waits on a render.',
+            'Inner wait for the expression to settle (default 5s, floor 1s, max 180s). Raise ' +
+            'it for an expression that awaits a promise, sleeps, or waits on a render.',
+        },
+        timeoutMs: {
+          type: 'number',
+          description: 'Older name for `waitMs`, which wins when both are passed.',
         },
         changed: {
           type: 'boolean',
@@ -174,8 +179,7 @@ export const previewCommands = {
       const expression =
         typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
       if (!expression.trim()) throw new AppCommandError('expression is required.');
-      const timeoutMs = typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
-      return await previewEvaluate(expression, timeoutMs, { changed: p.changed === true });
+      return await previewEvaluate(expression, innerWaitMs(p), { changed: p.changed === true });
     },
   }),
   'preview/faults': defineAppCommand({
@@ -255,15 +259,13 @@ export const previewCommands = {
   'preview/query': defineAppCommand({
     description:
       'Read the running preview — the cheap first look, before preview/eval. With no ' +
-      '`stateKey` this is the inspect snapshot: every ' +
-      'declared protocol state value, the text the DOM is actually rendering, the console ' +
-      'tail, and `changed` — a diff against the previous snapshot (absent on the first call ' +
-      'after a preview opens, which means unknown, not unchanged). Start here when a bug is ' +
-      'unlocated: state that disagrees with the rendered text is a reactivity bug, not a ' +
-      'state bug, and one call already makes that comparison. Snapshot values are truncated ' +
-      'and any key dropped for budget is named in `stateOmitted`; pass `stateKey` to read one ' +
-      'key back whole, `keys` with it to read only some of its fields, and `sampleEveryMs` ' +
-      '+ `durationMs` to watch it over time instead of reading it once.',
+      '`stateKey`: every declared state value (decoded, not JSON text), the rendered text, ' +
+      'the console tail, `stateSizes` (chars per key, largest first) and `changed`, a diff ' +
+      'against the previous snapshot (absent on the first call after a preview opens: ' +
+      'unknown, not unchanged). State that disagrees with the rendered text is a reactivity ' +
+      'bug. A value past 2000 chars stays cut text with `truncated` and `chars`; a key past ' +
+      'the snapshot budget is named in `stateOmitted`. `stateKey` reads one key whole, ' +
+      '`sizes: true` returns only the sizes.',
     params: {
       type: 'object',
       properties: {
@@ -272,6 +274,12 @@ export const previewCommands = {
           description:
             'Read this one key, untruncated, and return its value alone. Omit for the ' +
             'full snapshot.',
+        },
+        sizes: {
+          type: 'boolean',
+          description:
+            'Snapshot mode: return only `stateSizes`, to choose what to read next. Leaves ' +
+            'the `changed` baseline alone. With `keys`, only those keys.',
         },
         keys: {
           type: 'array',
@@ -294,8 +302,8 @@ export const previewCommands = {
         durationMs: {
           type: 'number',
           description:
-            "How long to sample (max 120s, at most 300 samples). Past ~25s raise this command's " +
-            'own timeoutMs above it.',
+            'How long to sample (max 120s, at most 300 samples). Past ~25s raise the host ' +
+            'wait (the timeouts topic).',
         },
         series: {
           type: 'boolean',
@@ -325,6 +333,7 @@ export const previewCommands = {
       if (sampling) {
         throw new AppCommandError('sampleEveryMs/durationMs sample one key: pass `stateKey` too.');
       }
+      if (p.sizes === true) return await previewStateSizes(keys);
       const selector = typeof p.selector === 'string' ? p.selector : undefined;
       return await inspectPreview({ ...(keys ? { keys } : {}), ...(selector ? { selector } : {}) });
     },
@@ -369,9 +378,8 @@ export const previewCommands = {
   'preview/command': defineAppCommand({
     description:
       'Send an app protocol command to the preview window — or, with `batch`, several in ' +
-      'order, stopping at the first that fails. A command that takes longer than 30s needs ' +
-      "`timeoutMs` — and this command's own timeoutMs raised above it (above the sum, for " +
-      'a batch).',
+      'order, stopping at the first that fails unless `keepGoing`. A command slower than 30s ' +
+      'needs `waitMs`, and a batch a host wait past the sum (the timeouts topic).',
     params: {
       type: 'object',
       properties: {
@@ -384,6 +392,13 @@ export const previewCommands = {
             'result }], stopped? } — a failing step carries `error` in place of `result`, ' +
             'nothing after it runs, and `stopped` says so. For setup sequences (mute these ' +
             'tracks, set that mix) that would otherwise be one call each.',
+        },
+        keepGoing: {
+          type: 'boolean',
+          description:
+            'With `batch`: run every step whatever fails and report the count as `failed`. ' +
+            'For probing several bad inputs in one call. Steps share one app, so an earlier ' +
+            'step can leave state a later one sees.',
           items: {
             type: 'object',
             properties: {
@@ -393,9 +408,13 @@ export const previewCommands = {
             required: ['command'],
           },
         },
+        waitMs: {
+          type: 'number',
+          description: 'Inner wait per command (default 30s, floor 1s, max 180s).',
+        },
         timeoutMs: {
           type: 'number',
-          description: 'How long to wait for the preview app, per command (default 30s, max 180s).',
+          description: 'Older name for `waitMs`, which wins when both are passed.',
         },
       },
     },
@@ -403,12 +422,13 @@ export const previewCommands = {
     run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
+      const waitMs = innerWaitMs(p);
       const send = (command: string, params: unknown) =>
         invoke(`yaar://windows/${wid}`, {
           action: 'app_command',
           command,
           params: (params as Record<string, unknown>) ?? {},
-          ...(typeof p.timeoutMs === 'number' ? { timeoutMs: p.timeoutMs } : {}),
+          ...(waitMs !== undefined ? { timeoutMs: waitMs } : {}),
         });
       if (p.batch !== undefined) {
         if (p.command !== undefined) {
@@ -417,6 +437,7 @@ export const previewCommands = {
         if (!Array.isArray(p.batch) || p.batch.length === 0) {
           throw new AppCommandError('batch must be a non-empty array of { command, params }.');
         }
+        const keepGoing = p.keepGoing === true;
         const steps: { command: string; result?: unknown; error?: string }[] = [];
         const images: ReadBlock[] = [];
         // Steps stay one JSON block; a step's images follow it, labelled with its number.
@@ -431,13 +452,18 @@ export const previewCommands = {
             steps.push({ command, result: lifted ? lifted.data : result });
           } catch (err) {
             steps.push({ command, error: errMsg(err) });
+            if (keepGoing) continue;
             return done({
               steps,
               stopped: `Step ${steps.length} of ${p.batch.length} failed; the rest did not run.`,
             });
           }
         }
-        return done({ steps });
+        return done(
+          keepGoing
+            ? { steps, failed: steps.filter((s) => s.error !== undefined).length }
+            : { steps },
+        );
       }
       if (typeof p.command !== 'string' || !p.command) {
         throw new AppCommandError('command is required (or pass `batch`).');
@@ -464,17 +490,18 @@ export const previewCommands = {
       "resizes — record each result (projected through the step's `pick` " +
       "paths), and diff against the script's baseline file — failures come back as " +
       '{ step, expected, actual } rows; with no baseline yet, the run writes one. Requires an ' +
-      "open, non-stale preview on the current compile, and this command's own timeoutMs " +
-      'raised past the sum of its steps. Script format and workflow: the regression-testing ' +
-      'doc topic.',
+      'open, non-stale preview on the current compile, and a host wait past the sum of its ' +
+      'steps (the timeouts topic). `realStorageWrites` lists real files the run changed ' +
+      'outside preview storage and `storageWarning` says what to do. Script format and ' +
+      'workflow: the regression-testing topic.',
     params: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
           description:
-            'Script file in the project. Default src/test/regression.json — keep it under ' +
-            'src/, since deploy ships only src/, agent/ and the root files.',
+            'Script file in the project. Default src/test/regression.json; keep it under src/ ' +
+            '(the app-structure topic).',
         },
         update: {
           type: 'boolean',
@@ -495,9 +522,9 @@ export const previewCommands = {
           type: 'array',
           items: { type: 'string' },
           description:
-            'With update: true, rewrite only these rows (by step label; a repeated label is ' +
-            '"label (2)") and keep the rest of the baseline. The other rows are still compared ' +
-            'and reported as `failures`.',
+            'Row LABELS, not the step objects of the script file: with update: true, rewrite ' +
+            'only these rows (a repeated label is "label (2)") and keep the rest of the ' +
+            'baseline. The other rows are still compared and reported as `failures`.',
         },
       },
     },

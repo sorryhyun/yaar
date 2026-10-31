@@ -1,0 +1,70 @@
+{
+  "script": "src/test/regression.json",
+  "results": [
+    {
+      "label": "fixture project",
+      "value": {
+        "project.name": "Regression Fixture"
+      }
+    },
+    {
+      "label": "write hits",
+      "value": {
+        "lines": 7
+      }
+    },
+    {
+      "label": "grep plain",
+      "value": "── src/hits.txt (3 matches) ──\n1│hit one\n3│hit two\n7│hit three"
+    },
+    {
+      "label": "grep context",
+      "value": "── src/hits.txt (3 matches) ──\n1│hit one\n2-│miss\n3│hit two\n4-│miss\n--\n6-│miss\n7│hit three"
+    },
+    {
+      "label": "grep second page",
+      "value": "── src/hits.txt (1 matches) ──\n7│hit three"
+    },
+    {
+      "label": "grep past the end",
+      "value": "No matches past offset 9: there are 3."
+    },
+    {
+      "label": "write unshipped",
+      "value": {
+        "lines": 1
+      }
+    },
+    {
+      "label": "diff against installed",
+      "value": {
+        "changed": true,
+        "stat.0.file": "src/hits.txt",
+        "stat.0.status": "added",
+        "stat.1.status": "modified",
+        "unshipped": [
+          "dbg/scratch.txt"
+        ]
+      }
+    },
+    {
+      "label": "diff against a missing app",
+      "value": {
+        "error": "AppCommandError: Cannot read installed app \"no-such-app-here\": App \"no-such-app-here\" not found."
+      }
+    },
+    {
+      "label": "project state",
+      "value": {
+        "name": "Regression Fixture"
+      }
+    },
+    {
+      "label": "no nested preview",
+      "value": {
+        "open": false,
+        "stale": false
+      }
+    }
+  ]
+}

@@ -12,7 +12,13 @@ import {
   type ConsoleEntry,
 } from '../core';
 import { previewWindowIdFor } from '../lib/paths';
-import { pickFields, summarizeSamples, type NumericRange } from '../lib/preview-shape';
+import {
+  decodeStateText,
+  largestFirst,
+  pickFields,
+  summarizeSamples,
+  type NumericRange,
+} from '../lib/preview-shape';
 import { addConsoleEntry } from './console';
 import { getRuntimeManifest } from './manifest';
 import { reclaimOrphanedPreviewStorage } from './projects';
@@ -518,12 +524,18 @@ export interface InspectSnapshot {
   stateReason?: string;
   /** Keys the budget cut, named rather than silently dropped. */
   stateOmitted?: string[];
+  /** Serialized chars of each key read, largest first, truncated and omitted ones included. */
+  stateSizes?: Record<string, number>;
   dom: InspectedValue;
   /** Absent on the internal snapshots taken around a `preview/eval`, which skip it. */
   console?: { connected: boolean; reason?: string; entries: ConsoleEntry[] };
 }
 
-export interface InspectResult extends InspectSnapshot {
+/** A state entry as a reader gets it: a whole value decoded, a truncated one still text. */
+export type PresentedValue = Omit<InspectedValue, 'value'> & { value?: unknown };
+
+export interface InspectResult extends Omit<InspectSnapshot, 'state'> {
+  state: Record<string, PresentedValue>;
   /**
    * What moved since the last snapshot: per-key `{ from, to }` for state, plus a
    * flag for the rendered text. Absent on the first call after a preview opens —
@@ -534,7 +546,7 @@ export interface InspectResult extends InspectSnapshot {
    * left out rather than reported as having appeared or vanished.
    */
   changed?: {
-    state: Record<string, { from: string; to: string }>;
+    state: Record<string, { from: unknown; to: unknown }>;
     dom: boolean;
   };
   /**
@@ -604,7 +616,7 @@ function unquoteEvalString(raw: unknown): string {
 async function collectState(
   wid: string,
   requested?: string[],
-): Promise<Pick<InspectSnapshot, 'state' | 'stateReason' | 'stateOmitted'>> {
+): Promise<Pick<InspectSnapshot, 'state' | 'stateReason' | 'stateOmitted' | 'stateSizes'>> {
   let keys: string[];
   if (requested) {
     if (requested.length === 0) return { state: {} };
@@ -623,6 +635,7 @@ async function collectState(
 
   const state: Record<string, InspectedValue> = {};
   const omitted: string[] = [];
+  const sizes: Record<string, number> = {};
   let spent = 0;
   keys.forEach((key, i) => {
     const outcome = settled[i];
@@ -631,17 +644,23 @@ async function collectState(
       state[key] = { error: errMsg(outcome.reason) };
       return;
     }
+    const text = serializeInspected(outcome.value);
+    sizes[key] = text.length;
     if (spent >= INSPECT_TOTAL_STATE_CHARS) {
       state[key] = { omitted: true };
       omitted.push(key);
       return;
     }
-    const entry = cap(serializeInspected(outcome.value), INSPECT_STATE_CHARS);
+    const entry = cap(text, INSPECT_STATE_CHARS);
     spent += entry.value?.length ?? 0;
     state[key] = entry;
   });
 
-  return { state, ...(omitted.length ? { stateOmitted: omitted } : {}) };
+  return {
+    state,
+    ...(omitted.length ? { stateOmitted: omitted } : {}),
+    ...(Object.keys(sizes).length ? { stateSizes: largestFirst(sizes) } : {}),
+  };
 }
 
 async function collectDom(wid: string, selector?: string): Promise<InspectedValue> {
@@ -671,6 +690,22 @@ async function collectConsole(wid: string): Promise<NonNullable<InspectSnapshot[
   }
 }
 
+/** A whole value decoded for the reader; a truncated one or an error stays the text compared. */
+function presentDiffSide(entry: InspectedValue | undefined, text: string): unknown {
+  return entry?.truncated || entry?.error !== undefined ? text : decodeStateText(text);
+}
+
+function presentState(state: Record<string, InspectedValue>): Record<string, PresentedValue> {
+  const out: Record<string, PresentedValue> = {};
+  for (const [key, entry] of Object.entries(state)) {
+    out[key] =
+      entry.value === undefined || entry.truncated
+        ? entry
+        : { ...entry, value: decodeStateText(entry.value) };
+  }
+  return out;
+}
+
 /** How a value reads for diffing: its text, its error, or the fact it was cut. */
 function diffKey(entry: InspectedValue | undefined): string | undefined {
   if (!entry) return undefined;
@@ -682,7 +717,7 @@ function diffSnapshots(
   prev: InspectSnapshot,
   next: InspectSnapshot,
 ): NonNullable<InspectResult['changed']> {
-  const state: Record<string, { from: string; to: string }> = {};
+  const state: Record<string, { from: unknown; to: unknown }> = {};
   for (const key of Object.keys(next.state)) {
     const from = diffKey(prev.state[key]);
     const to = diffKey(next.state[key]);
@@ -691,7 +726,10 @@ function diffSnapshots(
     // Reported as a change it would read as "appeared"/"vanished", which is a lie
     // about an app whose declared keys do not move.
     if (from === undefined || to === undefined || from === to) continue;
-    state[key] = { from, to };
+    state[key] = {
+      from: presentDiffSide(prev.state[key], from),
+      to: presentDiffSide(next.state[key], to),
+    };
   }
   const prevDom = diffKey(prev.dom);
   const nextDom = diffKey(next.dom);
@@ -733,8 +771,31 @@ export async function inspectPreview(opts: InspectOptions = {}): Promise<Inspect
   const stale = previewStaleNote();
   return {
     ...snapshot,
+    state: presentState(snapshot.state),
     ...(changed ? { changed } : {}),
     ...(stale ? { previewStale: stale } : {}),
+  };
+}
+
+/**
+ * How big each state key is, for choosing what to read. Every key is still read once to be
+ * measured, but nothing but the sizes comes back and the diff baseline stays where it was.
+ */
+export async function previewStateSizes(keys?: string[]): Promise<{
+  stateSizes: Record<string, number>;
+  stateReason?: string;
+  stateErrors?: Record<string, string>;
+}> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview/open first.');
+  const { state, stateSizes, stateReason } = await collectState(wid, keys);
+  const errors = Object.entries(state).filter(([, entry]) => entry.error !== undefined);
+  return {
+    stateSizes: stateSizes ?? {},
+    ...(stateReason ? { stateReason } : {}),
+    ...(errors.length > 0
+      ? { stateErrors: Object.fromEntries(errors.map(([k, e]) => [k, e.error as string])) }
+      : {}),
   };
 }
 

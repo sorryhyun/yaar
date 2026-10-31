@@ -31,7 +31,7 @@ const MAX_TEST_TIMEOUT_MS = 170_000;
 export interface RunTestsOptions {
   filter?: string;
   verbose?: boolean;
-  timeoutMs?: number;
+  waitMs?: number;
 }
 
 export type RunTestsResult =
@@ -106,7 +106,7 @@ export async function runProjectTests(opts: RunTestsOptions = {}): Promise<RunTe
     if (notReady) return { pass: false, stage: 'load', testFiles, errors: [notReady] };
 
     const timeoutMs = Math.min(
-      Math.max(opts.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS, 1_000),
+      Math.max(opts.waitMs ?? DEFAULT_TEST_TIMEOUT_MS, 1_000),
       MAX_TEST_TIMEOUT_MS,
     );
     const args = JSON.stringify({ filter: opts.filter, verbose: opts.verbose === true });
@@ -121,7 +121,7 @@ export async function runProjectTests(opts: RunTestsOptions = {}): Promise<RunTe
         errors: [
           `The run did not finish within ${timeoutMs}ms: ${errMsg(err)}. A per-test timeout ` +
             'cannot stop a synchronous loop (or a catastrophic regex); narrow it down with ' +
-            '`filter`, or raise `timeoutMs` if the suite is just slow.',
+            '`filter`, or raise `waitMs` if the suite is just slow.',
         ],
       };
     }

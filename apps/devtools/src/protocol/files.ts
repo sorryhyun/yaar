@@ -4,6 +4,7 @@ import {
   appSourceRef,
   assetImportLine,
   editText,
+  formatGrepHits,
   isImagePath,
   isModelPath,
   markdownSection,
@@ -484,14 +485,12 @@ export const fileCommands = {
   'files/copy': defineAppCommand({
     description:
       'Copy a file. `from` and `to` are project-relative; ONLY a `yaar://` prefix names ' +
-      'something outside the project. A `yaar://storage/...` side imports an asset another ' +
-      'app published, or exports a project file for another app to open, server-side and ' +
-      'byte-exact; that is the only way to hand a file over, since one read into this ' +
-      'conversation and written back out is a corrupted binary. `from` may also be ' +
-      "`yaar://apps/{appId}/{path}`, an installed app's file, copied unchanged into the " +
-      'project. The result carries the import line for an asset under src/. 3D models: a ' +
-      'self-contained .glb, not a .gltf (the static-assets topic). Creates directories; ' +
-      'does not delete the original (pair with files/delete to move).',
+      'something outside the project. A `yaar://storage/...` side imports or exports ' +
+      'server-side and byte-exact, the only way to hand a file over: a binary read into ' +
+      'this conversation and written back is corrupted. `from` may also be ' +
+      "`yaar://apps/{appId}/{path}`, an installed app's file. The result carries the import " +
+      'line for an asset under src/. 3D models: a self-contained .glb, not a .gltf. Creates ' +
+      'directories; keeps the original (pair with files/delete to move).',
     params: {
       type: 'object',
       properties: {
@@ -589,11 +588,10 @@ export const fileCommands = {
     description:
       'Search file contents with regex across the project, source only: generated output ' +
       '(dist/, build/, out/, node_modules/, coverage/, .git/, and .min.js/.map files) is ' +
-      'skipped unless includeBuilt says otherwise. A hit inside a bundle is one minified ' +
-      'line thousands of characters wide, which is why it is not the default. A line over ' +
-      '300 characters comes back as a window around the match, marked `…[+N chars]` on ' +
-      'each cut side — files/read with a line range for the whole line. Empty with no ' +
-      'project open.',
+      'skipped unless includeBuilt. At most 100 matches a page: a closing note gives the ' +
+      'total and the next `offset`. A line over 300 characters comes back as a window ' +
+      'around the match, marked `…[+N chars]` on each cut side — files/read with a line ' +
+      'range for the whole line. Empty with no project open.',
     params: {
       type: 'object',
       properties: {
@@ -606,18 +604,36 @@ export const fileCommands = {
             'subject — checking what the bundler emitted, or whether a string survived into ' +
             'dist/. Expect minified lines.',
         },
+        offset: {
+          type: 'number',
+          description: 'Skip this many matches, as the closing note says. Reads every file.',
+        },
+        context: {
+          type: 'number',
+          description:
+            'Lines to show around each hit, up to 10: `12-│text` beside a hit `13│text`, `--` ' +
+            'between runs that do not touch. Reads every file.',
+        },
       },
       required: ['pattern'],
     },
     run: async (p) => {
+      const offset = typeof p.offset === 'number' ? p.offset : 0;
       const result = await grep(
         String(p.pattern),
         p.glob ? String(p.glob) : undefined,
         p.includeBuilt === true,
+        {
+          offset,
+          ...(typeof p.context === 'number' ? { context: p.context } : {}),
+        },
       );
       // An empty result after filtering is not the same answer as no match anywhere, and
       // reporting it as one sends the caller looking for a string they already found.
       if (result.matches.length === 0) {
+        if ((result.total ?? 0) > 0) {
+          return `No matches past offset ${offset}: there are ${result.total}.`;
+        }
         return result.excluded
           ? `No matches in source. ${result.excluded} match(es) were in generated output — pass includeBuilt to see them.`
           : 'No matches found.';
@@ -635,7 +651,7 @@ export const fileCommands = {
         resource: { uri: string; text: string; mimeType: string };
       }[] = [];
       for (const [file, matches] of byFile) {
-        const lines = matches.map((m) => `${m.line}│${m.content}`).join('\n');
+        const lines = formatGrepHits(matches);
         blocks.push({
           type: 'resource',
           resource: {
@@ -645,18 +661,20 @@ export const fileCommands = {
           },
         });
       }
+      const first = offset + 1;
+      const last = offset + result.matches.length;
       const notes = [
-        ...(result.truncated ? ['results truncated'] : []),
+        result.nextOffset !== undefined || offset > 0
+          ? `matches ${first}-${last} of ${result.total}`
+          : `${result.total} match(es)`,
+        ...(result.nextOffset !== undefined ? [`next page: offset ${result.nextOffset}`] : []),
         ...(result.excluded
           ? [
               `${result.excluded} match(es) in generated output skipped — pass includeBuilt for those`,
             ]
           : []),
       ];
-      if (notes.length > 0) {
-        return [...blocks, { type: 'text' as const, text: `(${notes.join('; ')})` }];
-      }
-      return blocks;
+      return [...blocks, { type: 'text' as const, text: `(${notes.join('; ')})` }];
     },
   }),
   'files/findReferences': defineAppCommand({
@@ -690,7 +708,9 @@ export const fileCommands = {
         column: { type: 'number', description: '1-based column. Needs `line`.' },
         callers: {
           type: 'boolean',
-          description: 'Also return who calls it, grouped by enclosing function.',
+          description:
+            'Also return who calls it, grouped by enclosing function, or by property path ' +
+            'for a handler in an object literal (`fileCommands.files/grep.run`).',
         },
         maxResults: {
           type: 'number',

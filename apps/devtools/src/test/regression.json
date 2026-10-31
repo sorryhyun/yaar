@@ -1,0 +1,113 @@
+{
+  "baseline": "src/test/baseline.json",
+  "steps": [
+    {
+      "command": "project/create",
+      "params": {
+        "name": "Regression Fixture"
+      },
+      "pick": [
+        "project.name"
+      ],
+      "label": "fixture project"
+    },
+    {
+      "command": "files/write",
+      "params": {
+        "path": "src/hits.txt",
+        "content": "hit one\nmiss\nhit two\nmiss\nmiss\nmiss\nhit three"
+      },
+      "pick": [
+        "lines"
+      ],
+      "label": "write hits"
+    },
+    {
+      "command": "files/grep",
+      "params": {
+        "pattern": "hit",
+        "glob": "src/hits.txt"
+      },
+      "label": "grep plain"
+    },
+    {
+      "command": "files/grep",
+      "params": {
+        "pattern": "hit",
+        "glob": "src/hits.txt",
+        "context": 1
+      },
+      "label": "grep context"
+    },
+    {
+      "command": "files/grep",
+      "params": {
+        "pattern": "hit",
+        "glob": "src/hits.txt",
+        "offset": 2
+      },
+      "label": "grep second page"
+    },
+    {
+      "command": "files/grep",
+      "params": {
+        "pattern": "hit",
+        "glob": "src/hits.txt",
+        "offset": 9
+      },
+      "label": "grep past the end"
+    },
+    {
+      "command": "files/write",
+      "params": {
+        "path": "dbg/scratch.txt",
+        "content": "unshipped"
+      },
+      "pick": [
+        "lines"
+      ],
+      "label": "write unshipped"
+    },
+    {
+      "command": "project/diffInstalled",
+      "params": {
+        "appId": "devtools",
+        "paths": [
+          "src/hits.txt",
+          "src/main.ts"
+        ],
+        "statOnly": true
+      },
+      "pick": [
+        "changed",
+        "stat.0.file",
+        "stat.0.status",
+        "stat.1.status",
+        "unshipped"
+      ],
+      "label": "diff against installed"
+    },
+    {
+      "command": "project/diffInstalled",
+      "params": {
+        "appId": "no-such-app-here"
+      },
+      "label": "diff against a missing app"
+    },
+    {
+      "state": "project",
+      "pick": [
+        "name"
+      ],
+      "label": "project state"
+    },
+    {
+      "state": "previewOpen",
+      "pick": [
+        "open",
+        "stale"
+      ],
+      "label": "no nested preview"
+    }
+  ]
+}

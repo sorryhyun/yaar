@@ -129,10 +129,8 @@ export const workerCommands = {
   'worker/config': defineAppCommand({
     description:
       'Set how many workers may run tasks at the same time (1-3, default 2), persisted ' +
-      "across reloads. Returns { maxWorkers, ceiling }. To read the cap and each worker's " +
-      'status, query the `worker` state key. Lowering the cap stops nothing already running; ' +
-      'it only refuses new tasks beyond it. Workers are read-only, so parallel ones never ' +
-      'clobber files — their proposed edits are applied one at a time by worker/acceptEdit.',
+      'across reloads. Lowering the cap stops nothing already running; it only refuses new ' +
+      'tasks beyond it. Returns { maxWorkers, ceiling }.',
     params: {
       type: 'object',
       properties: {
@@ -159,8 +157,8 @@ export const workerCommands = {
       'read, grep) that reports back and submits needed changes as verified edit `proposals` ' +
       '(worker/readEdit, then worker/acceptEdit or worker/rejectEdit). Returns a taskId ' +
       'immediately and wakes you with the result (an <app:event channel="worker">); ' +
-      'worker/wait blocks instead. Refused, not queued, when every worker is busy (cap: ' +
-      'worker/config). A task naming more than ~150 KB of files is refused with a suggested ' +
+      'worker/wait blocks instead. Refused, not queued, when every worker is busy. ' +
+      'A task naming more than ~150 KB of files is refused with a suggested ' +
       'split: pass `split: true` for parallel chunks or `allowLarge: true` to run it whole. ' +
       'Memory, pinning, interim reports and cut fields: the worker-delegation topic.',
     params: {
@@ -275,8 +273,7 @@ export const workerCommands = {
       'Stop a running worker task and take whatever it has produced so far — its ' +
       'partial answer and every interim report. Use it when a report or a state-key read ' +
       'shows the task was mis-scoped: a wrong path list, a pattern that matches nothing, an ' +
-      'instruction resting on something untrue. Stopping and re-sending a corrected task ' +
-      'beats waiting out a turn you already know is wrong. The worker keeps its memory, so ' +
+      'instruction resting on something untrue. The worker keeps its memory, so ' +
       'the retry can say "same as before, but under src/ this time" (pass the same `worker`). ' +
       'Pass taskId when several tasks run; omitted with more than one running, nothing is ' +
       'stopped and `running` lists the ids.',
@@ -295,8 +292,8 @@ export const workerCommands = {
   'worker/wait': defineAppCommand({
     description:
       'Block for a worker/task result: its answer, or `done: false` on timeout (the task keeps ' +
-      'running; call again to resume, never re-send the task). Always pass timeoutMs at least ' +
-      '10s above waitMs, or the platform kills the call first. Omit taskId for whichever task ' +
+      'running; call again to resume, never re-send the task). The host wait must exceed ' +
+      '`waitMs` by 10s (the timeouts topic). Omit taskId for whichever task ' +
       'settles first — a fan-out of N is N calls. `reports` and `proposals` come back on a ' +
       'timeout too. A settled task carries an `answer` or an `error`; an `error` means nothing ' +
       'was learned, never "nothing was found". The full record, uncut, is kept here.',
@@ -331,8 +328,8 @@ export const workerCommands = {
       'search/replace steps, and `evidence` — the greps the worker ran in that task before ' +
       'proposing, with sample matches. The `worker` state key and a task result list ' +
       'proposals as summaries; this is where the bodies are. It also returns the `token` ' +
-      'that worker/acceptEdit requires, which is the point of the command — an edit cannot be ' +
-      'applied without having been read. Pass an array of ids to read several at once. ' +
+      'that worker/acceptEdit requires: an edit cannot be applied unread. Pass an array of ' +
+      'ids to read several at once. ' +
       'Reading costs nothing and does not commit you.',
     params: {
       type: 'object',
@@ -386,7 +383,7 @@ export const workerCommands = {
       'change skips the build (`build: "skipped"`). If the bundle fails or type errors ' +
       'increase, every write is undone and the result carries `rolledBack: true` and the ' +
       '`failure`. `otherPendingOnPath` names proposals to the same files, now stale. Slow ' +
-      'when it builds: pass timeoutMs, e.g. 120000.',
+      'when it builds: raise the host wait to ~120000 (the timeouts topic).',
     params: {
       type: 'object',
       properties: {
@@ -660,8 +657,7 @@ export const workerCommands = {
     description:
       'Decline an edit the worker proposed. `reason` is required and is delivered to the ' +
       'worker at the head of its next task, so a proposal turned down for being wrong is ' +
-      'not re-sent unchanged — which is the only thing that stops a rejected idea coming ' +
-      'back. Nothing is written either way.',
+      'not re-sent unchanged. Nothing is written either way.',
     params: {
       type: 'object',
       properties: {
@@ -670,7 +666,7 @@ export const workerCommands = {
           type: 'string',
           description:
             'Why, concretely enough for the worker to do better: what it missed, or what ' +
-            'you want instead. "No" teaches it nothing.',
+            'you want instead.',
         },
       },
       required: ['id', 'reason'],
@@ -851,7 +847,11 @@ export const workerCommands = {
         lines,
       );
       const body = lines.join('\n');
-      return (result.truncated ? `${body}\n(results truncated)` : body) + nudge;
+      return (
+        (result.truncated
+          ? `${body}\n(first ${result.matches.length} of ${result.total} matches: narrow the pattern or glob)`
+          : body) + nudge
+      );
     },
   }),
 };

@@ -139,6 +139,95 @@ export function buildPatch(name: string, before: string, after: string, context 
   return createPatch(name, before, after, '', '', { context });
 }
 
+/** A file in a tree being compared: text, or base64 when `encoding` says its bytes are not. */
+export interface TreeFile {
+  path: string;
+  content: string;
+  encoding?: string;
+}
+
+export interface TreeDiffEntry {
+  file: string;
+  status: 'added' | 'removed' | 'modified';
+  added: number;
+  removed: number;
+  /** Bytes, so `added` and `removed` are zero and there is no patch. */
+  binary?: true;
+}
+
+const textLines = (text: string): number => {
+  if (text === '') return 0;
+  const n = text.split('\n').length;
+  return text.endsWith('\n') ? n - 1 : n;
+};
+
+/** What separates `current` from `base`, by path. A file identical in both is left out. */
+export function diffTrees(current: TreeFile[], base: TreeFile[]): TreeDiffEntry[] {
+  const baseBy = new Map(base.map((f) => [f.path, f]));
+  const currentPaths = new Set(current.map((f) => f.path));
+  const out: TreeDiffEntry[] = [];
+  for (const file of current) {
+    const was = baseBy.get(file.path);
+    if (!was) {
+      out.push({
+        file: file.path,
+        status: 'added',
+        added: file.encoding ? 0 : textLines(file.content),
+        removed: 0,
+        ...(file.encoding ? { binary: true as const } : {}),
+      });
+    } else if (was.content !== file.content || was.encoding !== file.encoding) {
+      const binary = !!(file.encoding || was.encoding);
+      out.push({
+        file: file.path,
+        status: 'modified',
+        ...(binary ? { added: 0, removed: 0 } : diffStats(was.content, file.content)),
+        ...(binary ? { binary: true as const } : {}),
+      });
+    }
+  }
+  for (const file of base) {
+    if (currentPaths.has(file.path)) continue;
+    out.push({
+      file: file.path,
+      status: 'removed',
+      added: 0,
+      removed: file.encoding ? 0 : textLines(file.content),
+      ...(file.encoding ? { binary: true as const } : {}),
+    });
+  }
+  return out.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+/**
+ * The entries' unified patches, whole files only, up to `maxChars`. A binary entry contributes
+ * one line. `omitted` names what did not fit, so a caller can ask for those paths alone.
+ */
+export function treePatch(
+  entries: TreeDiffEntry[],
+  current: TreeFile[],
+  base: TreeFile[],
+  maxChars: number,
+): { diff: string; omitted: string[] } {
+  const textOf = (files: TreeFile[], path: string) =>
+    files.find((f) => f.path === path)?.content ?? '';
+  const parts: string[] = [];
+  const omitted: string[] = [];
+  let used = 0;
+  for (const entry of entries) {
+    const patch = entry.binary
+      ? `Binary file ${entry.file} ${entry.status}\n`
+      : buildPatch(entry.file, textOf(base, entry.file), textOf(current, entry.file));
+    if (used + patch.length > maxChars) {
+      omitted.push(entry.file);
+      continue;
+    }
+    parts.push(patch);
+    used += patch.length;
+  }
+  return { diff: parts.join(''), omitted };
+}
+
 export interface TruncatedPatch {
   patch: string;
   /** True when lines were dropped — the panel offers "show more" only then. */

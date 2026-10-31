@@ -3,6 +3,7 @@ import { AppCommandError, errMsg } from '@bundled/yaar';
 import { findReferences as devFindReferences, typeAt as devTypeAt } from '@bundled/yaar-dev';
 import { requireProject, setStatusText } from '../core';
 import { projectPath } from '../lib/paths';
+import { attributeCallers, TOP_LEVEL_CALLER } from '../lib/references';
 
 export type ReferencesQuery = Parameters<typeof devFindReferences>[1];
 export type ReferencesResult = Awaited<ReturnType<typeof devFindReferences>>;
@@ -36,8 +37,9 @@ export async function findReferences(
   // The server names a module-scope caller by its host-absolute file path rather than the
   // documented `(top level)`, which leaks where the sandbox lives and cannot be passed back.
   if (rest.callers) {
-    rest.callers = rest.callers.map((c) =>
-      c.caller.startsWith('/') ? { ...c, caller: '(top level)' } : c,
+    rest.callers = attributeCallers(
+      rest.callers.map((c) => (c.caller.startsWith('/') ? { ...c, caller: TOP_LEVEL_CALLER } : c)),
+      rest.references ?? [],
     );
   }
   return rest;

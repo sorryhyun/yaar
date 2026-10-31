@@ -1,20 +1,16 @@
 import { defineAppCommand } from '@bundled/yaar';
+import { innerWaitMs } from '../lib';
 import { DEFAULT_TEST_TIMEOUT_MS, runProjectTests } from '../services';
 
 export const testCommands = {
   'test/run': defineAppCommand({
     description:
-      "Run the ACTIVE PROJECT's unit tests: every src/**/*.test.ts, written against " +
-      "`import { describe, test, expect } from '@bundled/test'` (a bun:test subset). They " +
-      'are built into dist/test.html — beside the app, never into it, so tests never ship ' +
-      'and the app build refuses @bundled/test — and run in a minimized window of their ' +
-      "own with the preview's principal: real DOM, real @bundled/yaar, the preview's " +
-      'throwaway storage. Returns { pass, passed, failed, skipped, files, failures, ' +
-      'loadErrors } with each failure named `describe > test` and its file; or ' +
-      '{ pass: false, stage, errors } when the tests did not build or load. The open ' +
-      'preview is untouched. Call with this command timeoutMs raised to ~120000: the build ' +
-      'and the run each take their own time. Test-only helpers belong in *.test.ts files ' +
-      'or in src/test/ imported only by them; never import a test file from main.ts.',
+      "Run the active project's unit tests (every src/**/*.test.ts, against @bundled/test; " +
+      'the unit-testing topic) in a minimized window under the preview principal; the open ' +
+      'preview is untouched. Returns { pass, passed, failed, skipped, files, failures, ' +
+      'loadErrors } with each failure named `describe > test` and its file, or { pass: false, ' +
+      'stage, errors } when the tests did not build or load. Slow: raise the host wait to ' +
+      '~120000 (the timeouts topic).',
     params: {
       type: 'object',
       properties: {
@@ -30,11 +26,13 @@ export const testCommands = {
             'Also return every test with its status and duration, not just the failures. ' +
             'Off by default: the reply is capped at 16KB.',
         },
+        waitMs: {
+          type: 'number',
+          description: 'Inner wait for the run itself (default 60000, floor 1000, max 170000).',
+        },
         timeoutMs: {
           type: 'number',
-          description:
-            "Budget for the run itself (default 60000, max 170000). Raise this command's " +
-            'own timeoutMs above it.',
+          description: 'Older name for `waitMs`, which wins when both are passed.',
         },
       },
     },
@@ -43,7 +41,7 @@ export const testCommands = {
       await runProjectTests({
         filter: typeof p.filter === 'string' && p.filter.trim() ? p.filter.trim() : undefined,
         verbose: p.verbose === true,
-        timeoutMs: typeof p.timeoutMs === 'number' ? p.timeoutMs : DEFAULT_TEST_TIMEOUT_MS,
+        waitMs: innerWaitMs(p) ?? DEFAULT_TEST_TIMEOUT_MS,
       }),
   }),
 };
