@@ -913,7 +913,9 @@ export function registerAppAgentTools(server: McpServer): void {
         ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
       });
       return {
-        ...(target.launched ? withLaunchNote(result, args.appId!, target.windowId) : result),
+        ...(target.launched
+          ? withLaunchNote(result, args.appId!, target.windowId)
+          : foldNotes(result)),
       };
     },
   );

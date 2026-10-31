@@ -168,13 +168,34 @@ export function reservedKeyNote(
     .map(([name, descriptor]) => [name, reservedParamsOf(descriptor, defs)] as const)
     .filter(([, keys]) => keys.length > 0);
   if (!colliding.length) return null;
-  const keys = [...new Set(colliding.flatMap(([, k]) => k))];
-  const names = keys.map((k) => `\`${k}\``).join(' and ');
-  const plural = keys.length > 1;
-  const owner =
-    commands.length === 1 ? 'this command' : colliding.map(([name]) => `\`${name}\``).join(', ');
-  return (
-    `${names} ${plural ? 'are' : 'is'} declared as ${plural ? 'params' : 'a param'} of ${owner}, ` +
-    'not a wrapper and not transport — pass it inline in the payload like any other param.'
-  );
+  const ownerOf = (matches: (key: string) => boolean) =>
+    commands.length === 1
+      ? 'this command'
+      : colliding
+          .filter(([, k]) => k.some(matches))
+          .map(([name]) => `\`${name}\``)
+          .join(', ');
+
+  const sentences: string[] = [];
+  const wrappers = [...new Set(colliding.flatMap(([, k]) => k))].filter((k) => k !== 'timeoutMs');
+  if (wrappers.length) {
+    const plural = wrappers.length > 1;
+    const names = wrappers.map((k) => `\`${k}\``).join(' and ');
+    const owner = ownerOf((k) => k !== 'timeoutMs');
+    sentences.push(
+      `${names} ${plural ? 'are' : 'is'} declared as ${plural ? 'params' : 'a param'} of ` +
+        `${owner}, not a wrapper — pass ${plural ? 'them' : 'it'} inline in the payload like ` +
+        'any other param.',
+    );
+  }
+  // `invokeSubResource` spends a declared `timeoutMs` on both the app and the wait, while the
+  // `command` tool keeps the two apart, so "inline, like any other param" is true of neither.
+  if (colliding.some(([, k]) => k.includes('timeoutMs'))) {
+    sentences.push(
+      `\`timeoutMs\` is declared as a param of ${ownerOf((k) => k === 'timeoutMs')}, so the app ` +
+        'receives it. On a sub-path invoke it also sets how long the call waits; on the ' +
+        '`command` tool that wait is the top-level `timeoutMs`.',
+    );
+  }
+  return sentences.join(' ');
 }

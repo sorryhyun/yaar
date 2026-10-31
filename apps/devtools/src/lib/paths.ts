@@ -23,6 +23,17 @@ export function previewWindowIdFor(projectId: string): string {
 }
 
 /**
+ * Is this document the installed Dev Tools, rather than a project's preview of it?
+ *
+ * A preview of Dev Tools runs this same code with its own project list. An installed app is
+ * served from `/api/apps/{id}/`, a build from `/api/storage/…`, so anything but the first is
+ * treated as a preview: code that deletes on the strength of that list must fail closed.
+ */
+export function isInstalledDevtools(pathname: string): boolean {
+  return pathname.startsWith('/api/apps/devtools/');
+}
+
+/**
  * Rewrite host-absolute sandbox paths in tool output to project-relative ones.
  *
  * The dev server compiles from disk, so its bundler errors name

@@ -31,7 +31,7 @@ import {
   type ProjectMeta,
   type Workspace,
 } from '../core';
-import { previewWindowIdFor, projectPath } from '../lib/paths';
+import { isInstalledDevtools, previewWindowIdFor, projectPath } from '../lib/paths';
 import { appIdFromName, scaffoldMain } from '../lib/scaffold';
 import { installedVersionOf } from '../lib/app-manifest';
 import type { ProtocolSources } from '../lib/clone-summary';
@@ -115,11 +115,16 @@ async function recordOrigin(id: string, origin: string): Promise<void> {
   }
 }
 
+/** The two trees a `preview--{projectId}` principal writes to. */
+const previewPrivateTree = (appId: string) => `yaar://apps/${appId}/storage/`;
+const previewSharedTree = (appId: string) => `yaar://storage/shared/${appId}/`;
+
 /**
- * Delete the throwaway storage tree of every preview whose project is gone.
+ * Delete the throwaway storage trees of every preview whose project is gone.
  *
- * A preview runs under `preview--{projectId}` and writes to `apps/preview--{projectId}/`,
- * a namespace nothing else in YAAR knows about: a `preview--*` app is not installed, so it
+ * A preview runs under `preview--{projectId}` and writes to `apps/preview--{projectId}/` and
+ * `shared/preview--{projectId}/`, namespaces nothing else in YAAR knows about: a `preview--*`
+ * app is not installed, so it
  * appears in no app list and no uninstall reclaims it. `project/delete` drops its own, best
  * effort — and best effort is exactly how six of these accumulated across ten days on one
  * machine, one carrying a whole cloned source tree and another ~600KB of PDF and draft
@@ -140,10 +145,15 @@ async function recordOrigin(id: string, origin: string): Promise<void> {
  * deletes. A failed listing therefore throws before any delete is attempted, which is the
  * safe direction — nothing is reclaimed this time round.
  *
+ * Only the installed Dev Tools sweeps. In a preview of Dev Tools the live set is that
+ * preview's own project list, so every real tree reads as an orphan. The server refuses a
+ * preview the `apps/` deletes, but the commons is open to every app.
+ *
  * Deliberately silent about what it removed; a toast would report platform bookkeeping to
  * someone who asked for a preview.
  */
 export async function reclaimOrphanedPreviewStorage(): Promise<void> {
+  if (!isInstalledDevtools(location.pathname)) return;
   try {
     const projectDirs = await appStorage.list('projects/');
     const live = new Set(
@@ -156,21 +166,27 @@ export async function reclaimOrphanedPreviewStorage(): Promise<void> {
     // `yaar://storage/*` answers with resource links (`uri`/`name`), not the internal
     // `path` shape `appStorage.list` maps back for its callers. Reading `path` here threw
     // on the first entry and the catch below swallowed it, so nothing was ever reclaimed.
-    const entries = await list<{ uri?: string; name?: string }[]>('yaar://storage/apps');
-    if (!Array.isArray(entries)) return;
+    const trees = [
+      { root: 'yaar://storage/apps', tree: previewPrivateTree },
+      { root: 'yaar://storage/shared', tree: previewSharedTree },
+    ];
+    for (const { root, tree } of trees) {
+      const entries = await list<{ uri?: string; name?: string }[]>(root);
+      if (!Array.isArray(entries)) continue;
 
-    for (const entry of entries) {
-      const appId = String(entry.name ?? entry.uri ?? '')
-        .replace(/\/$/, '')
-        .split('/')
-        .pop();
-      if (!appId || !appId.startsWith('preview--')) continue;
-      if (live.has(appId.slice('preview--'.length))) continue;
-      try {
-        await del(`yaar://apps/${appId}/storage/`);
-      } catch (err) {
-        // One undeletable tree must not stop the sweep reaching the rest.
-        console.error(`[devtools] reclaiming ${appId} failed`, err);
+      for (const entry of entries) {
+        const appId = String(entry.name ?? entry.uri ?? '')
+          .replace(/\/$/, '')
+          .split('/')
+          .pop();
+        if (!appId || !appId.startsWith('preview--')) continue;
+        if (live.has(appId.slice('preview--'.length))) continue;
+        try {
+          await del(tree(appId));
+        } catch (err) {
+          // One undeletable tree must not stop the sweep reaching the rest.
+          console.error(`[devtools] reclaiming ${root}/${appId} failed`, err);
+        }
       }
     }
   } catch (err) {
@@ -697,13 +713,15 @@ export async function deleteProject(
   } catch {
     /* best effort */
   }
-  try {
-    // And the throwaway namespace its previews wrote to (see preview/open).
-    // Nothing else will ever reclaim it — a `preview--*` app is not installed, so it
-    // never appears anywhere an orphan could be noticed.
-    await del(`yaar://apps/preview--${id}/storage/`);
-  } catch {
-    /* best effort — the project may never have been previewed */
+  // And the throwaway namespaces its previews wrote to (see preview/open).
+  // Nothing else will ever reclaim them — a `preview--*` app is not installed, so they
+  // never appear anywhere an orphan could be noticed.
+  for (const tree of [previewPrivateTree, previewSharedTree]) {
+    try {
+      await del(tree(`preview--${id}`));
+    } catch {
+      /* best effort — the project may never have been previewed */
+    }
   }
   try {
     // The preview window is project-scoped too — its id is namespaced by project — and it

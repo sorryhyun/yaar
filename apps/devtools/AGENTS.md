@@ -11,9 +11,9 @@ stands, not the installed Dev Tools.
 Add a check to `src/test/lib-suites.ts` rather than a verification procedure to this file.
 Behaviour that needs a running app is `preview/script` (`agent/docs/regression-testing.md`):
 `src/test/regression.json` drives this app in its own preview, whose projects live in preview
-storage. It must stay free of literal `shared/` paths, and **must never run `preview/open` inside
-that preview**: `reclaimOrphanedPreviewStorage` would judge the real `preview--*` trees against
-the preview's own project list, and delete them.
+storage. It must stay free of literal `shared/` paths. `preview/open` inside that preview skips
+`reclaimOrphanedPreviewStorage`, which would otherwise judge the real `preview--*` trees against
+the preview's own project list (`isInstalledDevtools`).
 
 ## Deploying devtools itself
 

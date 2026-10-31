@@ -11,8 +11,10 @@
 import { describe, expect, test } from 'bun:test';
 import { handleVerbRoutes, toEnvelope } from '../http/routes/verb.js';
 import {
+  appendNote,
   foldNotes,
   formatBatchResults,
+  ok,
   okJson,
   okLinks,
   prependNote,
@@ -119,8 +121,51 @@ describe('notes beside structuredContent', () => {
   test('a result without structuredContent records nothing to fold', () => {
     const result = prependNote(okLinks([{ uri: 'yaar://storage/a.txt', name: 'a.txt' }]), 'hi');
 
-    expect(result.notes).toBeUndefined();
-    expect(foldNotes(result)).toEqual(result);
+    expect(foldNotes(result).structuredContent).toBeUndefined();
+    expect(foldNotes(result).content).toEqual(result.content);
+    expect(foldNotes(result).notes).toBeUndefined();
+  });
+});
+
+describe('text blocks in the envelope', () => {
+  test("an app's several blocks all reach the caller, in order", () => {
+    const result: VerbResult = {
+      content: [
+        { type: 'resource', resource: { uri: 'yaar://storage/a', text: 'a.ts hit' } },
+        { type: 'resource', resource: { uri: 'yaar://storage/b', text: 'b.ts hit' } },
+        { type: 'text', text: '(2 match(es))' },
+      ],
+    };
+
+    expect(toEnvelope(result)).toEqual({ ok: true, data: 'a.ts hit\nb.ts hit\n(2 match(es))' });
+  });
+
+  test('one block is still parsed as JSON', () => {
+    expect(toEnvelope({ content: [{ type: 'text', text: '[1,2]' }] })).toEqual({
+      ok: true,
+      data: [1, 2],
+    });
+  });
+
+  test('a note ahead of plain text does not replace it', () => {
+    expect(toEnvelope(prependNote(ok('the file'), 'filter ignored'))).toEqual({
+      ok: true,
+      data: 'the file',
+    });
+  });
+
+  test('a note after a JSON array leaves it parseable', () => {
+    expect(toEnvelope(appendNote(okJson([1, 2]), 'answered by another tab'))).toEqual({
+      ok: true,
+      data: [1, 2],
+    });
+  });
+
+  test('an appended note reaches a model reading an object', () => {
+    expect(
+      foldNotes(appendNote(okJson({ windowId: 'w1' }), 'answered by another tab'))
+        .structuredContent,
+    ).toEqual({ _notes: ['answered by another tab'], windowId: 'w1' });
   });
 });
 

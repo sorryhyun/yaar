@@ -370,6 +370,7 @@ export class SandboxReferences {
 
     const program = this.service.getProgram()!;
     const callers = new Map<string, CallerHit>();
+    const fileLevelSites: { hit: SourceLocation; owner: Enclosing | null }[] = [];
     for (const item of items) {
       for (const call of this.service.provideCallHierarchyIncomingCalls(
         item.file,
@@ -379,19 +380,28 @@ export class SandboxReferences {
         if (!this.inProject(from.file)) continue;
         const file = program.getSourceFile(from.file);
         if (!file) continue;
-        const script = from.kind === this.ts.ScriptElementKind.scriptElement;
-        const caller = script
-          ? TOP_LEVEL
-          : from.containerName
-            ? `${from.containerName}.${from.name}`
-            : from.name;
+        // The whole file, as TS names it: `script`, or `module` (and the file's own path as
+        // the name) for anything with an import. It also lands here for an arrow function
+        // in an object literal, which it does not count as a callable scope, and that is
+        // every command handler in an app. Those are named from the call site instead.
+        const { scriptElement, moduleElement } = this.ts.ScriptElementKind;
+        if (from.kind === scriptElement || from.kind === moduleElement) {
+          for (const span of call.fromSpans) {
+            fileLevelSites.push({
+              hit: this.location(file, span.start),
+              owner: enclosingOf(this.ts, nodeAt(this.ts, file, span.start)),
+            });
+          }
+          continue;
+        }
+        const caller = from.containerName ? `${from.containerName}.${from.name}` : from.name;
         const loc = this.location(file, from.selectionSpan.start);
-        const key = `${loc.file}:${caller}:${script ? 0 : loc.line}`;
+        const key = `${loc.file}:${caller}:${loc.line}`;
         const entry = callers.get(key) ?? {
           caller,
           kind: from.kind,
           file: loc.file,
-          line: script ? this.location(file, call.fromSpans[0]?.start ?? 0).line : loc.line,
+          line: loc.line,
           calls: [],
         };
         for (const span of call.fromSpans) {
@@ -401,7 +411,7 @@ export class SandboxReferences {
         callers.set(key, entry);
       }
     }
-    return [...callers.values()];
+    return [...callers.values(), ...derivedCallers(this, fileLevelSites)];
   }
 
   private resolvePosition(
@@ -719,12 +729,13 @@ function importExportRole(ts: typeof TS, node: TS.Node): 'import' | 'export' | u
 }
 
 /**
- * Callers for a symbol call hierarchy cannot start from — a variable holding a
- * function, a signal setter — grouped from the call-site references themselves.
+ * Callers grouped from their call sites: every caller of a symbol call hierarchy cannot
+ * start from (a variable holding a function, a signal setter), and the sites it reports
+ * as file-level.
  */
 function derivedCallers(
   service: SandboxReferences,
-  callSites: { hit: ReferenceHit; owner: Enclosing | null }[],
+  callSites: { hit: SourceLocation; owner: Enclosing | null }[],
 ): CallerHit[] {
   const callers = new Map<string, CallerHit>();
   for (const { hit, owner } of callSites) {

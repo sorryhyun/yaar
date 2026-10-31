@@ -1,6 +1,7 @@
 export {};
 import { suite, eq, ok, throwsWith, type Suite } from './harness';
 import {
+  isInstalledDevtools,
   projectPath,
   previewWindowIdFor,
   relativizeProjectPaths,
@@ -92,6 +93,17 @@ const paths = suite('paths', {
   'projectPath with and without a sub-path'() {
     eq(projectPath('123'), 'projects/123');
     eq(projectPath('123', 'src/main.ts'), 'projects/123/src/main.ts');
+  },
+
+  // The preview sweep deletes on this answer, so anything unrecognised is a preview.
+  'only the installed document counts as installed Dev Tools'() {
+    ok(isInstalledDevtools('/api/apps/devtools/index.html'), 'the installed app');
+    ok(
+      !isInstalledDevtools('/api/storage/apps/devtools/projects/123/dist/index.html'),
+      "a project's build",
+    );
+    ok(!isInstalledDevtools('/api/apps/devtools-clone/index.html'), 'another app');
+    ok(!isInstalledDevtools('/'), 'an unknown document');
   },
 
   // Namespaced by project so two clones of the same app cannot collide on a window id.

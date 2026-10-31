@@ -5,6 +5,7 @@
 import type { AppManifest, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { isPreviewAppId } from '@yaar/shared';
 import {
+  appendNote,
   isContentBlocks,
   ok,
   okJson,
@@ -243,8 +244,7 @@ function withPresenceNote(message: string, waitStartedAt: number, sessionId?: st
  */
 function withResponderNote(result: VerbResult, windowKey: string): VerbResult {
   const note = takeResponderSwitchNote(getActiveSessionId(), windowKey);
-  if (!note) return result;
-  return { ...result, content: [...(result.content ?? []), { type: 'text', text: note }] };
+  return note ? appendNote(result, note) : result;
 }
 
 /** The message an agent sees when an app never answered. */
@@ -296,6 +296,18 @@ function resolveTimeout(payload: Record<string, unknown>, fallbackMs: number): n
   return typeof requested === 'number' && Number.isFinite(requested)
     ? Math.min(Math.max(requested, deadlines.appCommandMinMs), MAX_COMMAND_TIMEOUT_MS)
     : fallbackMs;
+}
+
+/**
+ * Which knob a timeout in a preview means. Dev Tools' command wraps this call, so a reader of
+ * this text holds two clocks: the name on the wrapped call is `waitMs`, and raising the
+ * `timeoutMs` beside `command` would lengthen only the outer one and fail the same way.
+ */
+function previewWaitHint(devtoolsCommand: string): string {
+  return (
+    `\`waitMs\` on Dev Tools' ${devtoolsCommand}, \`timeoutMs\` on any other call ` +
+    `(max ${MAX_COMMAND_TIMEOUT_MS / 1000}s)`
+  );
 }
 
 /**
@@ -670,7 +682,7 @@ export async function handleAppEval(
       withPresenceNote(
         `Preview did not answer the eval within ${(timeoutMs / 1000).toFixed(0)}s. If the ` +
           'expression is legitimately slow — it awaits a promise, sleeps, or waits on a ' +
-          `render — retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s). ` +
+          `render — retry with a larger wait: ${previewWaitHint('preview/eval')}. ` +
           'Note that the deadline of whatever call is wrapping this one applies too, so raise ' +
           'that at the same time.',
         askedAt,
@@ -741,7 +753,10 @@ export async function handleAppCommand(
     if (outcome.reason === 'closed') return error(windowClosedMessage(`\`${req.command}\``));
     const message = withPresenceNote(
       `App did not respond within ${(timeoutMs / 1000).toFixed(0)}s. If this command is ` +
-        `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`,
+        'legitimately slow, retry with a larger ' +
+        (isPreviewWindow(win)
+          ? `wait: ${previewWaitHint('preview/command')}.`
+          : `timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`),
       askedAt,
     );
     // A timeout is history too: the app may well have applied the command before the

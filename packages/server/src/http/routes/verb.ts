@@ -14,7 +14,7 @@ import { expandBraceUri } from '@yaar/shared';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError } from '../../handlers/utils.js';
-import { isEmptyLinkList, type VerbResult } from '../../lib/verb-result.js';
+import { isEmptyLinkList, textWithoutNotes, type VerbResult } from '../../lib/verb-result.js';
 import type { InvokePayload, Verb, VerbOptions } from '../../handlers/uri-registry.js';
 import { invokeSources, resolveInvokeSources } from '../../handlers/storage-copy.js';
 import {
@@ -212,9 +212,13 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
     return envelope;
   }
 
+  // One block is one value, so it may be JSON. Several are an app's own shaping (one block a
+  // file, then a closing note), so they are text, and all of it. Notes are not the result:
+  // counted here, a note ahead of a plain-text result used to replace it.
+  const body = textWithoutNotes(textItems, result);
   const envelope: Record<string, unknown> = {
     ok: true,
-    data: tryParseJson(textItems[0]?.text ?? ''),
+    data: body.length > 1 ? body.map((t) => t.text).join('\n') : tryParseJson(body[0]?.text ?? ''),
   };
   if (images.length > 0) envelope.images = images;
   return envelope;

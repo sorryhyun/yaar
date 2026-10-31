@@ -76,9 +76,10 @@ export interface VerbResult {
    */
   listFiltered?: boolean;
   /**
-   * Notes `prependNote` added to a result carrying `structuredContent`, newest first. Their
-   * text blocks never reach a model beside that object, so `foldNotes` moves them into it at
-   * the MCP boundary. Never set without `structuredContent`.
+   * Notes `prependNote`/`appendNote` added, newest first. They name which text blocks are
+   * about the result rather than part of it, so `toEnvelope` can leave them out of an app's
+   * `data`. Beside `structuredContent` their blocks never reach a model either, so
+   * `foldNotes` moves them into that object at the MCP boundary.
    */
   notes?: string[];
   /**
@@ -108,9 +109,27 @@ export interface VerbResult {
 export function prependNote(result: VerbResult, note: string): VerbResult {
   return {
     ...result,
-    content: [{ type: 'text', text: `(${note})` }, ...result.content],
-    ...(result.structuredContent ? { notes: [note, ...(result.notes ?? [])] } : {}),
+    content: [{ type: 'text', text: noteBlockText(note) }, ...result.content],
+    notes: [note, ...(result.notes ?? [])],
   };
+}
+
+/** {@link prependNote} for a note that reads after the result. */
+export function appendNote(result: VerbResult, note: string): VerbResult {
+  return {
+    ...result,
+    content: [...result.content, { type: 'text', text: noteBlockText(note) }],
+    notes: [note, ...(result.notes ?? [])],
+  };
+}
+
+const noteBlockText = (note: string): string => `(${note})`;
+
+/** The result's text, without the note blocks: what the result itself says. */
+export function textWithoutNotes<T extends { text: string }>(blocks: T[], result: VerbResult): T[] {
+  if (!result.notes?.length) return blocks;
+  const notes = new Set(result.notes.map(noteBlockText));
+  return blocks.filter((block) => !notes.has(block.text));
 }
 
 /**

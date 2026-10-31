@@ -27,6 +27,10 @@ export function setBlocks(blocks: string[]) {
   return blocks.length;
 }
 
+export function boot() {
+  return 1;
+}
+
 export const [count, setCount] = createSignal(0);
 `;
 
@@ -37,7 +41,7 @@ export { setBlocks as applyBlocks, Store } from './model';
 const MAIN = `
 import { errMsg } from '@bundled/yaar';
 import { applyBlocks, Store as Doc } from './barrel';
-import { setCount } from './model';
+import { boot, setCount } from './model';
 
 const doc = new Doc();
 
@@ -61,6 +65,8 @@ export function bump() {
   setCount(1);
   setCount(2);
 }
+
+boot();
 `;
 
 let sandbox: string;
@@ -107,6 +113,24 @@ describe('findReferences', () => {
     expect(result.callers?.map((c) => c.file)).toEqual(['src/main.ts', 'src/main.ts']);
     expect(result.callers?.flatMap((c) => c.calls.map((call) => call.line)).sort()).toEqual([
       14, 19,
+    ]);
+  });
+
+  test('names an arrow-function handler by its property path, not the module', async () => {
+    const result = await find({ file: 'src/model.ts', symbol: 'setBlocks', callers: true });
+
+    expect(result.callers?.map((c) => c.caller).sort()).toEqual(['commands.load.run', 'persist']);
+    const handler = result.callers?.find((c) => c.caller === 'commands.load.run');
+    expect(handler?.file).toBe('src/main.ts');
+    expect(handler?.calls.map((c) => c.line)).toEqual([14]);
+  });
+
+  test('a call at module scope stays a top-level caller, whatever TS calls the file', async () => {
+    const result = await find({ file: 'src/model.ts', symbol: 'boot', callers: true });
+
+    expect(result.callersFrom).toBe('call-hierarchy');
+    expect(result.callers?.map((c) => [c.caller, c.file])).toEqual([
+      ['(top level)', 'src/main.ts'],
     ]);
   });
 
