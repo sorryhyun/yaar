@@ -18,7 +18,7 @@ export const AGENT_TYPE_MODELS: Record<string, string> = {
 };
 
 /** The monitor agent's model in fable mode (`FABLE=1`). */
-export const FABLE_MODEL = 'claude-fable-5-1';
+export const FABLE_MODEL = 'claude-fable-5-2';
 
 /**
  * The model an agent below the monitor runs on. Identity outside fable mode; inside
