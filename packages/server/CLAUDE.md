@@ -26,6 +26,7 @@ Names and defaults. Rationale for each — read it before changing a default or 
 |---|---|---|
 | `PROVIDER` | auto-detect | Force `claude` or `codex` |
 | `FABLE` | off | `=1`: monitor agent on Fable, every other agent on Opus |
+| `ENABLE_SELF_CACHE_MANAGEMENT` | off | `=1`: Claude monitor and app agents get `remove_cache` (`providers/claude/self-cache.ts`) |
 | `YAAR_MOCK_AGENT` | off | `=1`: every provider is a scripted mock that opens real windows — load/perf runs only |
 | `YAAR_REACT_PROD` | on for Android | Dev bundler ships React's production build (`1`/`0` force) |
 | `PORT` / `MAX_AGENTS` | `8000` / `10` | Server port; global agent limit |

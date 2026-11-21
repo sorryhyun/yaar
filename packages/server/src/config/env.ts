@@ -315,6 +315,18 @@ export function isFableMode(): boolean {
 }
 
 /**
+ * Self cache management — `ENABLE_SELF_CACHE_MANAGEMENT=1` gives Claude monitor and app
+ * agents a `remove_cache` tool that drops earlier tool results and messages from their own
+ * context (`providers/claude/self-cache.ts`). Off by default: it rewrites the CLI's
+ * transcript, a format the SDK does not publish.
+ *
+ * A function for the same reason as {@link isFableMode}.
+ */
+export function isSelfCacheManagementEnabled(): boolean {
+  return process.env.ENABLE_SELF_CACHE_MANAGEMENT === '1';
+}
+
+/**
  * App-origin isolation — the origin boundary that makes an app's principal
  * unforgeable (Stages 1 + 2).
  *

@@ -5,7 +5,8 @@
 import type { AgentProfile } from './types.js';
 import { claudeModelToCodex, FABLE_MODEL } from './model-tiers.js';
 import { DEVELOPER_PROFILE } from './developer.js';
-import { isFableMode } from '../../config/env.js';
+import { isFableMode, isSelfCacheManagementEnabled } from '../../config/env.js';
+import { REMOVE_CACHE_TOOL_NAMES } from '../../mcp/system/tool-names.js';
 
 export interface TurnOptions {
   model?: string;
@@ -48,5 +49,27 @@ export function turnOptionsFor(profile: AgentProfile, providerType: string): Tur
  */
 export function getMonitorTurnOptions(providerType: string): TurnOptions {
   const profile = isFableMode() ? { ...DEVELOPER_PROFILE, model: FABLE_MODEL } : DEVELOPER_PROFILE;
-  return turnOptionsFor(profile, providerType);
+  return withSelfCacheTool(turnOptionsFor(profile, providerType), 'system');
+}
+
+/**
+ * Add `remove_cache` while `ENABLE_SELF_CACHE_MANAGEMENT=1`, under the namespace the
+ * agent connects — `system` for a monitor agent, `app` for an app agent. Read per turn,
+ * like fable mode. A Codex turn has no tool list to add to (`allowedTools` is `undefined`
+ * there) and no transcript this could edit, so it is left alone.
+ *
+ * A wrapper rather than a branch inside `turnOptionsFor` because the name depends on the
+ * tier, and a sub-agent's model is resolved through that function too. This list is only
+ * what a turn pre-approves; what an agent *sees* is every tool of each namespace it
+ * connects, so the session agent, which connects `system`, sees the tool as well.
+ */
+export function withSelfCacheTool(
+  options: TurnOptions,
+  namespace: keyof typeof REMOVE_CACHE_TOOL_NAMES,
+): TurnOptions {
+  if (!options.allowedTools || !isSelfCacheManagementEnabled()) return options;
+  return {
+    ...options,
+    allowedTools: [...options.allowedTools, REMOVE_CACHE_TOOL_NAMES[namespace]],
+  };
 }

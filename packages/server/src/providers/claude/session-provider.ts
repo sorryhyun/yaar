@@ -35,6 +35,13 @@ import { EscapeRetry } from './escape-retry.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
+import { isSelfCacheManagementEnabled } from '../../config/env.js';
+import {
+  applyPendingRemovals,
+  forgetAgent,
+  hasPendingRemovals,
+  noteAgentSession,
+} from './self-cache.js';
 import { type ImageMediaType, parseDataUrl } from '@yaar/lib/image';
 import { createLogger } from '../../observability/log.js';
 
@@ -501,7 +508,13 @@ export class ClaudeSessionProvider implements AITransport {
     options: TransportOptions,
   ): AsyncIterable<StreamMessage> {
     const fingerprint = this.turnFingerprint(options);
-    const pinnedSessionId = namedSessionId(options.conversation);
+    // Before anything reads the stream: a rewrite closes it and changes which
+    // conversation this turn runs on.
+    const rewrittenFrom = resumeSession;
+    const rewritten = await this.rewriteForSelfCache(resumeSession, options);
+    if (rewritten) resumeSession = rewritten;
+    // The fork stands in for the conversation the turn named, so it is what is pinned.
+    const pinnedSessionId = rewritten ?? namedSessionId(options.conversation);
     const existing = this.persistentSession;
     // A turn that targets a conversation this stream doesn't carry (e.g.
     // restoring a logged thread) needs a fresh process opened with resume. A
@@ -539,6 +552,8 @@ export class ClaudeSessionProvider implements AITransport {
     // Per-turn too: block indices restart with each assistant message.
     const escapeRetry = new EscapeRetry();
     const sessions = new SessionReporter();
+    // Whether the turn has produced anything of the model's — see the rewrite fallback below.
+    let modelSpoke = false;
     let inbox: InputChannel<unknown> | null = null;
     try {
       await session.mcpReady;
@@ -591,7 +606,13 @@ export class ClaudeSessionProvider implements AITransport {
         const frameSession = frameSessionId(msg);
         this.captureSessionId(frameSession, pinnedSessionId);
         const sessionReport = sessions.report(frameSession);
-        if (sessionReport) yield sessionReport;
+        if (sessionReport) {
+          yield sessionReport;
+          // `remove_cache` runs mid-turn and has to know which transcript is this agent's.
+          if (frameSession && options.agentId && isSelfCacheManagementEnabled()) {
+            noteAgentSession(options.agentId, frameSession);
+          }
+        }
 
         // Cancel a tool call whose arguments are being written as escape
         // sequences, before the rest of them are generated. The correction is
@@ -620,8 +641,9 @@ export class ClaudeSessionProvider implements AITransport {
         const mapped = mapClaudeMessage(msg as SDKMessage, turnUsage, toolBlocks);
         if (!mapped) continue;
 
-        // Detect stale session error and retry without resume
-        if (resumeSession && isStaleSessionError(mapped)) {
+        // Detect stale session error and retry without resume. Not a rewritten
+        // fork: that one has an original to return to (below), not a fresh start.
+        if (resumeSession && !rewritten && isStaleSessionError(mapped)) {
           log.warn('stale session; retrying without resume', { resumeSession });
           this.sessionId = null;
           await this.closePersistentSession();
@@ -634,6 +656,20 @@ export class ClaudeSessionProvider implements AITransport {
         // the turn below like any other.
         if (escapeRetry.swallows(msg, mapped)) continue;
 
+        // A rewritten fork that fails before the model says anything — the CLI
+        // will not resume it, or the API refuses the edited history. The
+        // conversation it was cut from is untouched, so the turn goes back there
+        // rather than leaving the agent on a transcript that cannot be continued.
+        if (rewritten && mapped.type === 'error' && !modelSpoke) {
+          log.warn('rewritten conversation failed; returning to the original', {
+            code: mapped.errorCode,
+          });
+          this.sessionId = rewrittenFrom ?? null;
+          await this.closePersistentSession();
+          yield* this.executeQuery(messageContent, rewrittenFrom, options);
+          return;
+        }
+
         escapeRetry.track(mapped);
         // 'complete'/'error' map the SDK result message: the turn is over but
         // the stream stays open for the next one.
@@ -641,6 +677,7 @@ export class ClaudeSessionProvider implements AITransport {
           yield* endTurn(mapped, messageCount);
           return;
         }
+        if (mapped.type !== 'notice' && mapped.type !== 'usage') modelSpoke = true;
         yield mapped;
       }
 
@@ -658,6 +695,30 @@ export class ClaudeSessionProvider implements AITransport {
       // caller for the full deadline.
       turn.end();
     }
+  }
+
+  /**
+   * Apply the removals this agent queued with `remove_cache` during an earlier turn
+   * (see `self-cache.ts`). Returns the id of the rewritten conversation the turn
+   * should resume instead, or undefined to carry on unchanged.
+   *
+   * Closes the stream first — the edit is to a transcript the process is still
+   * appending to, and the process holds the unedited history in memory regardless.
+   * Skipped on the bridge: claude.ai is attached to this conversation by id, and a
+   * fork would leave it talking to the one YAAR had just walked away from. The queue
+   * is kept, so the removal lands once the bridge is off.
+   */
+  private async rewriteForSelfCache(
+    resumeSession: string | undefined,
+    options: TransportOptions,
+  ): Promise<string | undefined> {
+    const agentId = options.agentId;
+    if (!agentId || !resumeSession || this.remote || !hasPendingRemovals(agentId)) return undefined;
+    await this.closePersistentSession();
+    const forkId = await applyPendingRemovals(agentId, resumeSession);
+    if (!forkId) return undefined;
+    this.sessionId = forkId;
+    return forkId;
   }
 
   private openPersistentSession(
@@ -1010,5 +1071,6 @@ export class ClaudeSessionProvider implements AITransport {
     this.externalHandlers = null;
     await this.closePersistentSession();
     this.sessionId = null;
+    if (this.lastOptions?.agentId) forgetAgent(this.lastOptions.agentId);
   }
 }

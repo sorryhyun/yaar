@@ -13,6 +13,7 @@ import { ServerEventType } from '@yaar/shared';
 import type { AppPoolContext, QueuedTask, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
 import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
+import { withSelfCacheTool } from './profiles/turn-options.js';
 import { buildReloadContext, runAgentTurn, steerIntoTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { agentLogKey, appRolePrefix, monitorRole } from './roles.js';
@@ -292,7 +293,10 @@ export class AppTaskProcessor {
         ? (agent.monitorMessages?.get(task.monitorId)?.count ?? 0)
         : 0;
 
-      const turnOptions = turnOptionsFor(profile, this.ctx.providerType ?? '');
+      const turnOptions = withSelfCacheTool(
+        turnOptionsFor(profile, this.ctx.providerType ?? ''),
+        'app',
+      );
       await runAgentTurn(this.ctx, {
         agent,
         role: agentRole,

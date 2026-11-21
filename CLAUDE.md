@@ -62,6 +62,7 @@ One line each; defaults, rationale and the full list: [`docs/reference/server_en
 
 - `PROVIDER` - Force `claude` or `codex` (auto-detected if unset)
 - `FABLE` - `1`: monitor agent on Fable, every agent below it on Opus
+- `ENABLE_SELF_CACHE_MANAGEMENT` - `1`: Claude monitor and app agents get `remove_cache`, to drop earlier tool results and messages from their own context
 - `PORT` - Server port (default 8000)
 - `MAX_AGENTS` - Global agent limit (default 10)
 - `APP_AGENT_IDLE_MINUTES` - Idle minutes before an app agent is reclaimed (default 60, `0` disables)

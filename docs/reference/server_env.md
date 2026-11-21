@@ -18,6 +18,7 @@ dirs.
 |---|---|---|
 | `PROVIDER` | auto-detect | Force `claude` or `codex` |
 | `FABLE` | off | `=1`: monitor agent on Fable, every other agent on Opus |
+| `ENABLE_SELF_CACHE_MANAGEMENT` | off | `=1`: Claude monitor and app agents get a `remove_cache` tool for their own context |
 | `PORT` | `8000` | Server port |
 | `MAX_AGENTS` | `10` | Global agent limit (process-wide) |
 | `CODEX_WS_PORT` | `4510` | Codex app-server WebSocket listener |
@@ -125,6 +126,40 @@ and Opus to `gpt-6.1-sol`, so the monitor agent runs on Astra and app and sub-ag
 Luna to Sol.
 
 **Source:** `packages/server/src/agents/profiles/model-tiers.ts`, `packages/server/src/agents/profiles/turn-options.ts`
+
+### `ENABLE_SELF_CACHE_MANAGEMENT`
+
+`=1` gives Claude monitor and app agents a `remove_cache` tool: the agent names earlier tool
+results or its own earlier messages by position (`-1` is the most recent one before the call)
+and they are replaced by a one-line marker. Called with no positions it lists what is
+addressable, with sizes. Off, the tool is neither registered nor named in any turn's tool list.
+
+It is off by default because of how it has to work. The Agent SDK can cut a conversation's tail
+but not take an item out of the middle, and a running CLI holds its history in memory. So a
+removal is queued by the tool and applied **before the agent's next turn**: the provider closes
+the stream, forks the session (`forkSession`), rewrites the fork's transcript, and resumes on
+it. Three consequences worth knowing before turning it on:
+
+- **It edits the CLI's transcript**, a format the SDK does not publish. `claude-self-cache.test.ts`
+  runs a real fork to catch the part an SDK bump could break — a fork must keep tool_use ids and
+  API message ids — but a format change can still land between releases. The original
+  transcript is never written to, and a rewritten conversation that fails before the model
+  answers falls back to it.
+- **It costs a process restart and a cache write.** The turn after a removal reopens the CLI
+  (as a prompt or tool-set change does), and everything after the earliest removed item is
+  written to the prompt cache again instead of read from it. It pays off on a large item
+  dropped soon after it arrived, not on tidying.
+- **It does nothing within a turn.** A long turn that reads fifty files is as large as it was;
+  the removal lands on the turn after.
+
+The marker is deliberate: deleting a tool call and its result outright left the agent no trace
+of having read anything, and it made the same call again. Codex agents see the tool listed in
+the `system` namespace while the flag is on (Codex does not filter tools per thread) and get a
+refusal from it; nothing is edited. The session agent connects `system` too and can use it.
+While Remote Control is on, queued removals wait — claude.ai is attached to the conversation by
+id, and a fork would leave it behind.
+
+**Source:** `packages/server/src/providers/claude/self-cache.ts`, `packages/server/src/providers/claude/context-items.ts`, `packages/server/src/mcp/system/remove-cache.ts`
 
 ### `CODEX_HOME`
 

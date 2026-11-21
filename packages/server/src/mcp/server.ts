@@ -41,6 +41,7 @@ import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';
+import { registerSelfCacheTools } from './system/remove-cache.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
@@ -52,6 +53,7 @@ import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.
 import { registerSubAgentTools } from './sub-agent/index.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 import { createLogger } from '../observability/log.js';
+import { isSelfCacheManagementEnabled } from '../config/env.js';
 import { resolveExternalShare } from '../features/window/external-share.js';
 import {
   envelope,
@@ -165,12 +167,15 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
   switch (name) {
     case 'system':
       registerReloadTools(server, getReloadCache, getWindowState);
+      if (isSelfCacheManagementEnabled()) registerSelfCacheTools(server);
       break;
     case 'verbs':
       registerVerbTools(server);
       break;
     case 'app':
       registerAppAgentTools(server);
+      // Here as well as under `system`: an app agent never connects that namespace.
+      if (isSelfCacheManagementEnabled()) registerSelfCacheTools(server);
       break;
     case 'messaging':
       registerMessagingTools(server);
